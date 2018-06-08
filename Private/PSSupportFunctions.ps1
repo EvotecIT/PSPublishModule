@@ -16,7 +16,10 @@ function Add-FilesWithFolders($file, $FullProjectPath, $directory) {
 }
 function Set-LinkedFiles($LinkFiles, $FullModulePath, $FullProjectPath) {
     foreach ($file in $LinkFiles) {
-        cmd /c mklink $FullModulePath\$file $FullProjectPath\$file
+        $Path = "$FullModulePath\$file"
+        $Path2 = "$FullProjectPath\$file"
+        Write-Color 'Creating symlink from ', $path2, ' (source) to ', $path, ' (target)' -Color White, Yellow, White, Yellow, White
+        $linkingFiles = cmd /c mklink $path $path2
     }
 }
 function Add-Directory {
