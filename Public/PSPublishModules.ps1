@@ -21,11 +21,9 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
     $FullModulePath = "$modulePath\$projectName"
     $FullProjectPath = "$projectPath\$projectName"
 
-    Remove-Item $FullModulePath -Confirm:$false -Recurse
-    $exists = Test-Path $FullModulePath
-    if (-not $exists) {
-        mkdir $FullModulePath
-    }
+    Remove-Directory $FullModulePath
+    Add-Directory $FullModulePath
+
     $LinkFiles = @()
     $LinkDirectories = @()
     $LinkPrivatePublicFiles = @()
@@ -69,10 +67,8 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
     }
     foreach ($directory in $LinkDirectories) {
         $dir = "$FullModulePath\$directory"
-        $exists = Test-Path -Path $dir
-        if ($exists -eq $false) {
-            mkdir $dir
-        }
+        Add-Directory $Dir
+
     }
     Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
     Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
