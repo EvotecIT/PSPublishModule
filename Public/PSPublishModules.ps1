@@ -1,3 +1,17 @@
+function New-CreateModule {
+    param (
+        $ProjectName,
+        $ModulePath,
+        $ProjectPath
+    )
+    $FullProjectPath = "$projectPath\$projectName"
+    Add-Directory $FullProjectPath
+    Add-Directory "$FullProjectPath\Private"
+    Add-Directory "$FullProjectPath\Public"
+    Add-Directory "$FullProjectPath\Examples"
+    Add-Directory "$FullProjectPath\Ignore"
+}
+
 function New-PrepareManifest($ProjectName, $modulePath, $projectPath, $functionToExport, $projectUrl) {
     Set-Location "$projectPath\$ProjectName"
     $manifest = @{
