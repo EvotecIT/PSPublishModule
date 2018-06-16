@@ -10,6 +10,12 @@ function New-CreateModule {
     Add-Directory "$FullProjectPath\Public"
     Add-Directory "$FullProjectPath\Examples"
     Add-Directory "$FullProjectPath\Ignore"
+    Add-Directory "$FullProjectPath\Publish"
+    Add-Directory "$FullProjectPath\Enums"
+
+    Copy-Item -Path "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
+    Copy-Item -Path "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
+    Copy-Item -Path "$PSScriptRoot\..\Data\Example-ModuleStarter.psm1" -Destination "$FullProjectPath\$ProjectName.psm1"
 }
 
 function New-PrepareManifest($ProjectName, $modulePath, $projectPath, $functionToExport, $projectUrl) {
@@ -56,6 +62,9 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
             'Bin' {
                 $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
             }
+            'Enums' {
+                $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
+            }
 
         }
     }
@@ -75,7 +84,7 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Bin'
             }
             '*.ps1' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public'
+                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
             }
         }
     }
