@@ -30,7 +30,7 @@
     Copyright         = 'Evotec (c) 2018. All rights reserved.'
 
     # Description of the functionality provided by this module
-    Description       = 'Simple project allowing preparing, managing and pubslishing modules to PowerShellGallery'
+    Description       = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
 
     # Minimum version of the Windows PowerShell engine required by this module
     # PowerShellVersion = ''
@@ -69,7 +69,7 @@
     # NestedModules = @()
 
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = 'New-PrepareManifest', 'New-PrepareModule', 'New-PublishModule', 'New-CreateModule'
+    FunctionsToExport = '*'
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
     CmdletsToExport   = @()
