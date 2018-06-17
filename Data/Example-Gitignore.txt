@@ -1,3 +1,4 @@
 Ignore/*
 Publish/*
 .gitignore
+.vs/*

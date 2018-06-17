@@ -5,20 +5,26 @@ function New-CreateModule {
         $ProjectPath
     )
     $FullProjectPath = "$projectPath\$projectName"
+    $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data'
     Add-Directory $FullProjectPath
-    Add-Directory "$FullProjectPath\Private"
-    Add-Directory "$FullProjectPath\Public"
-    Add-Directory "$FullProjectPath\Examples"
-    Add-Directory "$FullProjectPath\Ignore"
-    Add-Directory "$FullProjectPath\Publish"
-    Add-Directory "$FullProjectPath\Enums"
+    foreach ($folder in $Folders) {
+        Add-Directory "$FullProjectPath\$folder"
+    }
 
     Copy-Item -Path "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
     Copy-Item -Path "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
     Copy-Item -Path "$PSScriptRoot\..\Data\Example-ModuleStarter.psm1" -Destination "$FullProjectPath\$ProjectName.psm1"
 }
 
-function New-PrepareManifest($ProjectName, $modulePath, $projectPath, $functionToExport, $projectUrl) {
+function New-PrepareManifest {
+    param(
+        $ProjectName,
+        $modulePath,
+        $projectPath,
+        $functionToExport,
+        $projectUrl
+    )
+
     Set-Location "$projectPath\$ProjectName"
     $manifest = @{
         Path              = ".\$ProjectName.psd1"
