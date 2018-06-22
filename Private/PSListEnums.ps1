@@ -1,8 +1,11 @@
 function Find-EnumsList {
+    [CmdletBinding()]
     param (
         [string] $ProjectPath
     )
+
     $Enums = @( Get-ChildItem -Path $ProjectPath\Enums\*.ps1 -ErrorAction SilentlyContinue )
+    Write-Verbose "Find-EnumsList - $ProjectPath\Enums"
 
     $Opening = '@('
     $Closing = ')'
