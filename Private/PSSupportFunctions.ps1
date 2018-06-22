@@ -51,36 +51,3 @@ function Remove-Directory {
         Write-Color 'Removing directory ', $dir, ' skipped.' -Color White, Yellow, Red
     }
 }
-
-
-function New-ArrayList {
-    [CmdletBinding()]
-    param(
-
-    )
-    $List = New-Object System.Collections.ArrayList
-    return $List
-}
-
-function Add-ToArray {
-    [CmdletBinding()]
-    param(
-        $List,
-        [ValidateNotNullOrEmpty()][Object] $Element
-    )
-    Write-Verbose $Element
-    $List.Add($Element) > $null
-}
-function Remove-FromArray {
-    param(
-        [System.Collections.ArrayList] $List,
-        [Object] $Element,
-        [switch] $LastElement
-    )
-    if ($LastElement) {
-        $LastID = $List.Count - 1
-        $List.RemoveAt($LastID) > $null
-    } else {
-        $List.Remove($Element) > $null
-    }
-}

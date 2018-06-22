@@ -8,7 +8,7 @@ function Find-EnumsList {
     $Closing = ')'
     $Adding = ','
 
-    $EnumsList = New-Object System.Collections.ArrayList #New-ArrayList
+    $EnumsList = New-ArrayList
     Add-ToArray -List $EnumsList -Element $Opening
     Foreach ($import in @($Enums)) {
         $Entry = "'Enums\$($import.Name)'"
