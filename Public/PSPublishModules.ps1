@@ -92,6 +92,12 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
             '*.ps1' {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
             }
+            'License*' {
+                $LinkFiles += Add-ObjectTo -Object $File -Type 'Files List'
+            }
+            '*license*' {
+                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
+            }
         }
     }
     foreach ($directory in $LinkDirectories) {
