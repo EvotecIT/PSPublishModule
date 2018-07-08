@@ -50,28 +50,15 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
     Remove-Directory $FullModulePath
     Add-Directory $FullModulePath
 
+    $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images'
+
     $LinkFiles = @()
     $LinkDirectories = @()
     $LinkPrivatePublicFiles = @()
     $Directories = Get-ChildItem -Path $FullProjectPath -Directory
     foreach ($directory in $Directories) {
-        switch -Wildcard ($directory.Name) {
-            'Public' {
-                $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
-            }
-            'Private' {
-                $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
-            }
-            'Lib' {
-                $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
-            }
-            'Bin' {
-                $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
-            }
-            'Enums' {
-                $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
-            }
-
+        if ($DirectoryTypes -contains $directory.Name) {
+            $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
         }
     }
     $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
@@ -97,6 +84,12 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
             }
             '*license*' {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
+            }
+            '*jpg' {
+                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
+            }
+            '*png' {
+                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
             }
         }
     }
