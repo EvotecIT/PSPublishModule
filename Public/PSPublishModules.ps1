@@ -1,6 +1,6 @@
 function New-CreateModule {
     param (
-        $ProjectName,
+        [string] $ProjectName,
         $ModulePath,
         $ProjectPath
     )
@@ -43,14 +43,16 @@ function New-PrepareManifest {
     }
     New-ModuleManifest @manifest
 }
-function New-PrepareModule ($projectName, $modulePath, $projectPath) {
+function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModulePath) {
     $FullModulePath = "$modulePath\$projectName"
     $FullProjectPath = "$projectPath\$projectName"
+    $FullModulePathDelete = "$DeleteModulePath\$projectName"
 
+    Remove-Directory $FullModulePathDelete
     Remove-Directory $FullModulePath
     Add-Directory $FullModulePath
 
-    $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images'
+    $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates'
 
     $LinkFiles = @()
     $LinkDirectories = @()
@@ -85,11 +87,14 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath) {
             '*license*' {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
             }
-            '*jpg' {
+            '*.jpg' {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
             }
-            '*png' {
+            '*.png' {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
+            }
+            '*.xml' {
+                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
             }
         }
     }
