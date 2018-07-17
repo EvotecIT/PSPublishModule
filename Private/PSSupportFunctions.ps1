@@ -14,11 +14,25 @@ function Add-FilesWithFolders($file, $FullProjectPath, $directory) {
     }
     return $LinkPrivatePublicFiles
 }
-function Set-LinkedFiles($LinkFiles, $FullModulePath, $FullProjectPath) {
+function Set-LinkedFiles {
+    param(
+        $LinkFiles,
+        $FullModulePath,
+        $FullProjectPath,
+        [switch] $Delete
+    )
 
     foreach ($file in $LinkFiles) {
         $Path = "$FullModulePath\$file"
         $Path2 = "$FullProjectPath\$file"
+
+        if ($Delete) {
+            if (Test-ReparsePoint -path $Path) {
+                Write-Color 'Removing symlink first ', $path  -Color White, Yellow
+                Remove-Item $Path -Confirm:$false
+            }
+
+        }
         Write-Color 'Creating symlink from ', $path2, ' (source) to ', $path, ' (target)' -Color White, Yellow, White, Yellow, White
         $linkingFiles = cmd /c mklink $path $path2
     }
@@ -50,4 +64,34 @@ function Remove-Directory {
     } else {
         Write-Color 'Removing directory ', $dir, ' skipped.' -Color White, Yellow, Red
     }
+}
+
+function Test-ReparsePoint([string]$path) {
+    $file = Get-Item $path -Force -ea SilentlyContinue
+    return [bool]($file.Attributes -band [IO.FileAttributes]::ReparsePoint)
+}
+
+function Find-EnumsList {
+    [CmdletBinding()]
+    param (
+        [string] $ProjectPath
+    )
+
+    $Enums = @( Get-ChildItem -Path $ProjectPath\Enums\*.ps1 -ErrorAction SilentlyContinue )
+    Write-Verbose "Find-EnumsList - $ProjectPath\Enums"
+
+    $Opening = '@('
+    $Closing = ')'
+    $Adding = ','
+
+    $EnumsList = New-ArrayList
+    Add-ToArray -List $EnumsList -Element $Opening
+    Foreach ($import in @($Enums)) {
+        $Entry = "'Enums\$($import.Name)'"
+        Add-ToArray -List $EnumsList -Element $Entry
+        Add-ToArray -List $EnumsList -Element $Adding
+    }
+    Remove-FromArray -List $EnumsList -LastElement
+    Add-ToArray -List $EnumsList -Element $Closing
+    return [string] $EnumsList
 }

@@ -43,7 +43,7 @@ function New-PrepareManifest {
     }
     New-ModuleManifest @manifest
 }
-function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModulePath) {
+function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModulePath, $AdditionalModulePath) {
     $FullModulePath = "$modulePath\$projectName"
     $FullProjectPath = "$projectPath\$projectName"
     $FullModulePathDelete = "$DeleteModulePath\$projectName"
@@ -57,6 +57,7 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModu
     $LinkFiles = @()
     $LinkDirectories = @()
     $LinkPrivatePublicFiles = @()
+    $LinkFilesSpecial = @()
     $Directories = Get-ChildItem -Path $FullProjectPath -Directory
     foreach ($directory in $Directories) {
         if ($DirectoryTypes -contains $directory.Name) {
@@ -98,6 +99,21 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModu
             }
         }
     }
+    <#
+    $AddPrivate = "$AdditionalModulePath\Private"
+    $PrivateProjectPath = "$FullProjectPath\Private"
+
+    $FilesSupportive = Get-ChildItem -Path $AddPrivate -File -Recurse
+    foreach ($file in $FilesSupportive) {
+        switch -Wildcard ($file.Name) {
+            '*.ps1' {
+                $LinkFilesSpecial += Add-ObjectTo -Object $File -Type 'Files List'
+            }
+
+        }
+    }
+
+#>
     foreach ($directory in $LinkDirectories) {
         $dir = "$FullModulePath\$directory"
         Add-Directory $Dir
@@ -105,6 +121,8 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModu
     }
     Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
     Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+    #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
+    #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
 }
 function New-PublishModule($projectName, $apikey) {
     Publish-Module -Name $projectName -Repository PSGallery -NuGetApiKey $apikey -verbose
