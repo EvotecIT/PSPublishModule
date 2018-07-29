@@ -11,11 +11,19 @@ function New-CreateModule {
         Add-Directory "$FullProjectPath\$folder"
     }
 
-    Copy-Item -Path "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
-    Copy-Item -Path "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-    Copy-Item -Path "$PSScriptRoot\..\Data\Example-ModuleStarter.psm1" -Destination "$FullProjectPath\$ProjectName.psm1"
+    Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
+    Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
+    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.psm1" -Destination  "$FullProjectPath\$ProjectName.psm1"
 }
-
+function Copy-File {
+    param (
+        $Source,
+        $Destination
+    )
+    if ((Test-Path $Source) -and !(Test-Path $Destination)) {
+        Copy-Item -Path $Source -Destination $Destination
+    }
+}
 function New-PrepareManifest {
     param(
         $ProjectName,
@@ -95,6 +103,9 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModu
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
             }
             '*.xml' {
+                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
+            }
+            '*.docx' {
                 $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
             }
         }
