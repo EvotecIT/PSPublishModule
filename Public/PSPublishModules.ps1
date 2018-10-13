@@ -1,4 +1,5 @@
 function New-CreateModule {
+    [CmdletBinding()]
     param (
         [string] $ProjectName,
         $ModulePath,
@@ -13,9 +14,10 @@ function New-CreateModule {
 
     Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
     Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.psm1" -Destination  "$FullProjectPath\$ProjectName.psm1"
+    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.ps1" -Destination  "$FullProjectPath\$ProjectName.psm1"
 }
 function Copy-File {
+    [CmdletBinding()]
     param (
         $Source,
         $Destination
@@ -25,6 +27,7 @@ function Copy-File {
     }
 }
 function New-PrepareManifest {
+    [CmdletBinding()]
     param(
         $ProjectName,
         $modulePath,
@@ -51,7 +54,35 @@ function New-PrepareManifest {
     }
     New-ModuleManifest @manifest
 }
-function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModulePath, $AdditionalModulePath) {
+
+function Add-FilesWithFoldersNew {
+    [CmdletBinding()]
+    param($File, $FullProjectPath, $directory)
+
+    <#
+    $LinkPrivatePublicFiles = @()
+    $path = $file.FullName.Replace("$FullProjectPath\", '')
+    foreach ($dir in $directory) {
+        if ($path.StartsWith($dir)) {
+            $LinkPrivatePublicFiles += $path
+            Write-Color 'Adding file to ', 'linking list', ' of files ', $path -Color White, Yellow, White, Yellow
+
+        }
+    }
+    return $LinkPrivatePublicFiles
+
+    #>
+}
+
+function New-PrepareModule {
+    [CmdletBinding()]
+    param (
+        $projectName,
+        $modulePath,
+        $projectPath,
+        $DeleteModulePath,
+        $AdditionalModulePath
+    )
     $FullModulePath = "$modulePath\$projectName"
     $FullProjectPath = "$projectPath\$projectName"
     $FullModulePathDelete = "$DeleteModulePath\$projectName"
@@ -73,12 +104,27 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModu
         }
     }
     $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
+    <#
+    foreach ($File in $Files) {
+        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType '.ps1' -Folders 'Private', 'Public', 'Enums'
+        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType '.psm1', '.psd1' -Folders ''
+        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType '.dll', '.md'  -Folders 'Lib'
+        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType -Folders 'Lib'
+
+    }
+#>
+
+
+
+    #$Files.FullName
     foreach ($file in $Files) {
         switch -Wildcard ($file.Name) {
             '*.psd1' {
+                #Write-Color $File -Color Red
                 $LinkFiles += Add-ObjectTo -Object $File -Type 'Files List'
             }
             '*.psm1' {
+                # Write-Color $File.FulllName -Color Red
                 $LinkFiles += Add-ObjectTo -Object $File -Type 'Files List'
             }
             "*.dll" {
@@ -110,6 +156,7 @@ function New-PrepareModule ($projectName, $modulePath, $projectPath, $DeleteModu
             }
         }
     }
+
     <#
     $AddPrivate = "$AdditionalModulePath\Private"
     $PrivateProjectPath = "$FullProjectPath\Private"
