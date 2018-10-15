@@ -7,102 +7,117 @@ function New-PrepareModule {
         $DeleteModulePath,
         $AdditionalModulePath
     )
-    $FullModulePath = "$modulePath\$projectName"
-    $FullProjectPath = "$projectPath\$projectName"
-    $FullModulePathDelete = "$DeleteModulePath\$projectName"
+    Begin {
+        $FullModulePath = "$modulePath\$projectName"
+        $FullProjectPath = "$projectPath\$projectName"
+        $FullModulePathDelete = "$DeleteModulePath\$projectName"
 
-    Remove-Directory $FullModulePathDelete
-    Remove-Directory $FullModulePath
-    Add-Directory $FullModulePath
+        $CurrentLocation = (Get-Location).Path
+        Set-Location -Path $FullProjectPath
 
-    $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates'
+        Remove-Directory $FullModulePathDelete
+        Remove-Directory $FullModulePath
+        Add-Directory $FullModulePath
 
-    $LinkFiles = @()
-    $LinkDirectories = @()
-    $LinkPrivatePublicFiles = @()
-    $LinkFilesSpecial = @()
-    $Directories = Get-ChildItem -Path $FullProjectPath -Directory
-    foreach ($directory in $Directories) {
-        if ($DirectoryTypes -contains $directory.Name) {
-            $LinkDirectories += Add-ObjectTo -Object $Directory -Type 'Directory List'
-        }
-    }
-    $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
-    <#
-    foreach ($File in $Files) {
-        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType '.ps1' -Folders 'Private', 'Public', 'Enums'
-        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType '.psm1', '.psd1' -Folders ''
-        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType '.dll', '.md'  -Folders 'Lib'
-        $LinkPrivatePublicFiles += Add-FilesWithFolders -File $File -ProjectPath $FullProjectPath -FileType -Folders 'Lib'
+        $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates'
+
+        $LinkFiles = @()
+        $LinkDirectories = @()
+        $LinkPrivatePublicFiles = @()
+        $LinkFilesSpecial = @()
 
     }
-#>
+    Process {
 
-
-
-    #$Files.FullName
-    foreach ($file in $Files) {
-        switch -Wildcard ($file.Name) {
-            '*.psd1' {
-                #Write-Color $File -Color Red
-                $LinkFiles += Add-ObjectTo -Object $File -Type 'Files List'
-            }
-            '*.psm1' {
-                # Write-Color $File.FulllName -Color Red
-                $LinkFiles += Add-ObjectTo -Object $File -Type 'Files List'
-            }
-            "*.dll" {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
-            }
-            "*.exe" {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Bin'
-            }
-            '*.ps1' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
-            }
-            'License*' {
-                $LinkFiles += Add-ObjectTo -Object $File -Type 'Files List'
-            }
-            '*license*' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
-            }
-            '*.jpg' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
-            }
-            '*.png' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
-            }
-            '*.xml' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
-            }
-            '*.docx' {
-                $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
+        $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse
+        foreach ($directory in $Directories) {
+            $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
+            $RelativeDirectoryPath = "$RelativeDirectoryPath\"
+            foreach ($LookupDir in $DirectoryTypes) {
+                #Write-Verbose "New-PrepareModule - RelativeDirectoryPath: $RelativeDirectoryPath LookupDir: $LookupDir\"
+                if ($RelativeDirectoryPath -like "$LookupDir\*" ) {
+                    $LinkDirectories += Add-ObjectTo -Object $RelativeDirectoryPath -Type 'Directory List'
+                }
             }
         }
-    }
+        #return
 
-    <#
-    $AddPrivate = "$AdditionalModulePath\Private"
-    $PrivateProjectPath = "$FullProjectPath\Private"
+        $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
+        $AllFiles = @()
+        foreach ($File in $Files) {
+            $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            $AllFiles += $RelativeFilePath
+        }
 
-    $FilesSupportive = Get-ChildItem -Path $AddPrivate -File -Recurse
-    foreach ($file in $FilesSupportive) {
-        switch -Wildcard ($file.Name) {
-            '*.ps1' {
-                $LinkFilesSpecial += Add-ObjectTo -Object $File -Type 'Files List'
+        $RootFiles = @()
+        $Files = Get-ChildItem -Path $FullProjectPath -File
+        foreach ($File in $Files) {
+            $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            $RootFiles += $RelativeFilePath
+        }
+
+        $LinkFilesRoot = @()
+        # Link only files in Root Directory
+        foreach ($File in $RootFiles) {
+            switch -Wildcard ($file) {
+                '*.psd1' {
+                    #Write-Color $File -Color Red
+                    $LinkFilesRoot += Add-ObjectTo -Object $File -Type 'Root Files List'
+                }
+                '*.psm1' {
+                    # Write-Color $File.FulllName -Color Red
+                    $LinkFilesRoot += Add-ObjectTo -Object $File -Type 'Root Files List'
+                }
+                'License*' {
+                    $LinkFilesRoot += Add-ObjectTo -Object $File -Type 'Root Files List'
+                }
             }
+        }
+
+        # Link only files from subfolers
+        foreach ($file in $AllFiles) {
+            switch -Wildcard ($file) {
+                "*.dll" {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
+                }
+                "*.exe" {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Bin'
+                }
+                '*.ps1' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
+                }
+                '*license*' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
+                }
+                '*.jpg' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
+                }
+                '*.png' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images'
+                }
+                '*.xml' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
+                }
+                '*.docx' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
+                }
+            }
+        }
+
+        foreach ($directory in $LinkDirectories) {
+            $dir = "$FullModulePath\$directory"
+            Add-Directory $Dir
 
         }
-    }
 
-#>
-    foreach ($directory in $LinkDirectories) {
-        $dir = "$FullModulePath\$directory"
-        Add-Directory $Dir
-
+        Write-Verbose '[+] Linking files from Root Dir'
+        Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        Write-Verbose '[+] Linking files from Sub Dir'
+        Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
+        #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
     }
-    Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-    Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-    #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
-    #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+    end {
+        Set-Location -Path $CurrentLocation
+    }
 }
