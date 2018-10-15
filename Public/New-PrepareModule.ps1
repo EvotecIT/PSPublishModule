@@ -1,79 +1,3 @@
-function New-CreateModule {
-    [CmdletBinding()]
-    param (
-        [string] $ProjectName,
-        $ModulePath,
-        $ProjectPath
-    )
-    $FullProjectPath = "$projectPath\$projectName"
-    $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data'
-    Add-Directory $FullProjectPath
-    foreach ($folder in $Folders) {
-        Add-Directory "$FullProjectPath\$folder"
-    }
-
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.ps1" -Destination  "$FullProjectPath\$ProjectName.psm1"
-}
-function Copy-File {
-    [CmdletBinding()]
-    param (
-        $Source,
-        $Destination
-    )
-    if ((Test-Path $Source) -and !(Test-Path $Destination)) {
-        Copy-Item -Path $Source -Destination $Destination
-    }
-}
-function New-PrepareManifest {
-    [CmdletBinding()]
-    param(
-        $ProjectName,
-        $modulePath,
-        $projectPath,
-        $functionToExport,
-        $projectUrl
-    )
-
-    Set-Location "$projectPath\$ProjectName"
-    $manifest = @{
-        Path              = ".\$ProjectName.psd1"
-        RootModule        = "$ProjectName.psm1"
-        Author            = 'Przemyslaw Klys'
-        CompanyName       = 'Evotec'
-        Copyright         = 'Evotec (c) 2018. All rights reserved.'
-        Description       = "Simple project"
-        FunctionsToExport = $functionToExport
-        CmdletsToExport   = ''
-        VariablesToExport = ''
-        AliasesToExport   = ''
-        FileList          = "$ProjectName.psm1", "$ProjectName.psd1"
-        HelpInfoURI       = $projectUrl
-        ProjectUri        = $projectUrl
-    }
-    New-ModuleManifest @manifest
-}
-
-function Add-FilesWithFoldersNew {
-    [CmdletBinding()]
-    param($File, $FullProjectPath, $directory)
-
-    <#
-    $LinkPrivatePublicFiles = @()
-    $path = $file.FullName.Replace("$FullProjectPath\", '')
-    foreach ($dir in $directory) {
-        if ($path.StartsWith($dir)) {
-            $LinkPrivatePublicFiles += $path
-            Write-Color 'Adding file to ', 'linking list', ' of files ', $path -Color White, Yellow, White, Yellow
-
-        }
-    }
-    return $LinkPrivatePublicFiles
-
-    #>
-}
-
 function New-PrepareModule {
     [CmdletBinding()]
     param (
@@ -181,7 +105,4 @@ function New-PrepareModule {
     Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
     #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
     #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-}
-function New-PublishModule($projectName, $apikey) {
-    Publish-Module -Name $projectName -Repository PSGallery -NuGetApiKey $apikey -verbose
 }
