@@ -1,23 +1,29 @@
 function New-PrepareModule {
     [CmdletBinding()]
     param (
-        $projectName,
-        $modulePath,
-        $projectPath,
-        $DeleteModulePath,
-        $AdditionalModulePath
+        [string] $ProjectName,
+        [string] $ProjectPath,
+        [string] $ModulePath,
+        [string] $DeleteModulePath,
+        $Configuration
     )
     Begin {
+
+
+
         $FullModulePath = "$modulePath\$projectName"
         $FullProjectPath = "$projectPath\$projectName"
         $FullModulePathDelete = "$DeleteModulePath\$projectName"
+        $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
 
         $CurrentLocation = (Get-Location).Path
         Set-Location -Path $FullProjectPath
 
         Remove-Directory $FullModulePathDelete
         Remove-Directory $FullModulePath
+        Remove-Directory $FullTemporaryPath
         Add-Directory $FullModulePath
+        Add-Directory $FullTemporaryPath
 
         $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates'
 
@@ -40,7 +46,6 @@ function New-PrepareModule {
                 }
             }
         }
-        #return
 
         $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
         $AllFiles = @()
@@ -104,18 +109,38 @@ function New-PrepareModule {
             }
         }
 
-        foreach ($directory in $LinkDirectories) {
-            $dir = "$FullModulePath\$directory"
-            Add-Directory $Dir
-
+        if ($Configuration.Options.Merge.Use) {
+            foreach ($Directory in $LinkDirectories) {
+                $Dir = "$FullTemporaryPath\$Directory"
+                Add-Directory $Dir
+            }
+        } else {
+            foreach ($Directory in $LinkDirectories) {
+                $Dir = "$FullModulePath\$Directory"
+                Add-Directory $Dir
+            }
         }
 
-        Write-Verbose '[+] Linking files from Root Dir'
-        Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-        Write-Verbose '[+] Linking files from Sub Dir'
-        Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-        #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
-        #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+
+
+        if ($Configuration.Options.Merge.Use) {
+            Write-Verbose '[+] Linking files from Root Dir'
+            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+            Write-Verbose '[+] Linking files from Sub Dir'
+            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+
+            Merge-Module -ModuleName $ProjectName -ModulePathSource $FullTemporaryPath -ModulePathTarget $FullModulePath
+
+        } else {
+            Write-Verbose '[+] Linking files from Root Dir'
+            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+            Write-Verbose '[+] Linking files from Sub Dir'
+            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+            #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
+            #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        }
+
+
     }
     end {
         Set-Location -Path $CurrentLocation
