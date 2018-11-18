@@ -9,12 +9,17 @@ function New-PrepareModule {
     )
     Begin {
 
-
-
-        $FullModulePath = "$modulePath\$projectName"
-        $FullProjectPath = "$projectPath\$projectName"
-        $FullModulePathDelete = "$DeleteModulePath\$projectName"
-        $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
+        if ($Configuration) {
+            $FullModulePath = "$modulePath\$projectName"
+            $FullModulePathDelete = "$DeleteModulePath\$projectName"
+            $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
+            $FullProjectPath = "$($Configuration.Path.Projects)\$($Configuration.Name)"
+        } else {
+            $FullModulePath = "$modulePath\$projectName"
+            $FullProjectPath = "$projectPath\$projectName"
+            $FullModulePathDelete = "$DeleteModulePath\$projectName"
+            $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
+        }
 
         $CurrentLocation = (Get-Location).Path
         Set-Location -Path $FullProjectPath
@@ -34,6 +39,20 @@ function New-PrepareModule {
 
     }
     Process {
+
+
+        if ($Configuration.Manifest) {
+
+            $Configuration.Manifest.FunctionsToExport = ''
+            $Configuration.Manifest.AliasesToExport = ''
+
+
+            $Manifest = $Configuration.Manifest
+            New-ModuleManifest @Manifest
+
+            Write-Verbose "Converting $($Configuration.Manifest.Path)"
+            (Get-Content $Configuration.Manifest.Path) | Out-FileUtf8NoBom $Configuration.Manifest.Path
+        }
 
         $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse
         foreach ($directory in $Directories) {
@@ -129,7 +148,11 @@ function New-PrepareModule {
             Write-Verbose '[+] Linking files from Sub Dir'
             Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
 
-            Merge-Module -ModuleName $ProjectName -ModulePathSource $FullTemporaryPath -ModulePathTarget $FullModulePath
+
+            Merge-Module -ModuleName $ProjectName `
+            -ModulePathSource $FullTemporaryPath `
+            -ModulePathTarget $FullModulePath `
+            -Sort $Configuration.Options.Merge.Sort
 
         } else {
             Write-Verbose '[+] Linking files from Root Dir'
@@ -140,7 +163,9 @@ function New-PrepareModule {
             #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
         }
 
-
+        if ($Configuration.Steps.Publish) {
+            New-PublishModule -ProjectName $Configuration.Name -ApiKey $Configuration.PowershellGallery.ApiKey
+        }
     }
     end {
         Set-Location -Path $CurrentLocation
