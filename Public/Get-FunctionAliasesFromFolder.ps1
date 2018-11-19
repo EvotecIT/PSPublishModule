@@ -9,8 +9,8 @@ function Get-FunctionAliasesFromFolder {
         $Files = Get-ChildItem -Path $Path -File -Recurse
 
         $AliasesToExport = foreach ($file in $Files) {
-            Get-FunctionAliases -Path $File.FullName
-
+            #Get-FunctionAliases -Path $File.FullName
+            Get-AliasTarget -Path $File.FullName | Select-Object -ExpandProperty Alias
         }
         $AliasesToExport
     }

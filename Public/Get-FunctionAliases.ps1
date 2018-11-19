@@ -4,11 +4,16 @@ function Get-FunctionAliases {
     param(
         [string] $Path
     )
-    Import-Module $Path -Force
+    Import-Module $Path -Force -Verbose:$False
 
     $Names = Get-FunctionNames -Path $Path
     $Aliases = foreach ($Name in $Names) {
        Get-Alias | Where-Object {$_.Definition -eq $Name}
     }
-    return $Aliases.Name
+    #$MyAliases = foreach ($Alias in $Aliases) {
+    #    if ($Alias -ne '') {
+    #        $Alias.Name
+    #    }
+    #}
+    return $Aliases
 }

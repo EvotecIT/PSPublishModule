@@ -13,7 +13,7 @@ function New-PrepareModule {
             $FullModulePath = "$modulePath\$projectName"
             $FullModulePathDelete = "$DeleteModulePath\$projectName"
             $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
-            $FullProjectPath = "$($Configuration.Path.Projects)\$($Configuration.Name)"
+            $FullProjectPath = "$($Configuration.Information.DirectoryProjects)\$($Configuration.Information.ModuleName)"
         } else {
             $FullModulePath = "$modulePath\$projectName"
             $FullProjectPath = "$projectPath\$projectName"
@@ -41,17 +41,23 @@ function New-PrepareModule {
     Process {
 
 
-        if ($Configuration.Manifest) {
+        if ($Configuration.Information.Manifest) {
 
-            $Configuration.Manifest.FunctionsToExport = ''
-            $Configuration.Manifest.AliasesToExport = ''
+            $Functions = Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
+            if ($Functions) {
+                $Configuration.Information.Manifest.FunctionsToExport = $Functions
+            }
+            $Aliases = Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
+            if ($Aliases) {
+                $Configuration.Information.Manifest.AliasesToExport = $Aliases
+            }
 
-
-            $Manifest = $Configuration.Manifest
+            $Manifest = $Configuration.Information.Manifest
             New-ModuleManifest @Manifest
+            #Update-ModuleManifest @Manifest
 
             Write-Verbose "Converting $($Configuration.Manifest.Path)"
-            (Get-Content $Configuration.Manifest.Path) | Out-FileUtf8NoBom $Configuration.Manifest.Path
+            (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path
         }
 
         $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse
@@ -152,7 +158,9 @@ function New-PrepareModule {
             Merge-Module -ModuleName $ProjectName `
             -ModulePathSource $FullTemporaryPath `
             -ModulePathTarget $FullModulePath `
-            -Sort $Configuration.Options.Merge.Sort
+            -Sort $Configuration.Options.Merge.Sort `
+            -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
+            -AliasesToExport $Configuration.Information.Manifest.AliasesToExport
 
         } else {
             Write-Verbose '[+] Linking files from Root Dir'
@@ -163,8 +171,8 @@ function New-PrepareModule {
             #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
         }
 
-        if ($Configuration.Steps.Publish) {
-            New-PublishModule -ProjectName $Configuration.Name -ApiKey $Configuration.PowershellGallery.ApiKey
+        if ($Configuration.Publish.Use) {
+            New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Publish.ApiKey
         }
     }
     end {

@@ -5,7 +5,9 @@ function Merge-Module {
         [string] $ModulePathTarget,
         [Parameter(Mandatory = $false,ValueFromPipeline = $false)]
         [ValidateSet("ASC", "DESC", "NONE")]
-        [string] $Sort = 'NONE'
+        [string] $Sort = 'NONE',
+        [string[]] $FunctionsToExport,
+        [string[]] $AliasesToExport
     )
     $ScriptFunctions = @( Get-ChildItem -Path $ModulePathSource\*.ps1 -ErrorAction SilentlyContinue -Recurse )
    # $ModulePSM = @( Get-ChildItem -Path $ModulePathSource\*.psm1 -ErrorAction SilentlyContinue -Recurse )
@@ -18,6 +20,8 @@ function Merge-Module {
     foreach ($FilePath in $ScriptFunctions) {
        Get-Content -Path $FilePath | Add-Content $ModulePathTarget\$ModuleName.psm1
     }
+
+    New-PSMFile -Path $ModulePathTarget\$ModuleName.psm1 -FunctionNames $FunctionsToExport -FunctionAliaes $AliasesToExport
 
     <#
     foreach ($FilePath in $ScriptFunctions) {
