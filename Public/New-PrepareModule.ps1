@@ -10,10 +10,11 @@ function New-PrepareModule {
     Begin {
 
         if ($Configuration) {
-            $FullModulePath = "$modulePath\$projectName"
-            $FullModulePathDelete = "$DeleteModulePath\$projectName"
-            $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
-            $FullProjectPath = "$($Configuration.Information.DirectoryProjects)\$($Configuration.Information.ModuleName)"
+            $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules,$Configuration.Information.ModuleName)
+            $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules,$Configuration.Information.ModuleName)
+            $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
+            $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
+            $ProjectName = $Configuration.Information.ModuleName
         } else {
             $FullModulePath = "$modulePath\$projectName"
             $FullProjectPath = "$projectPath\$projectName"
@@ -55,6 +56,14 @@ function New-PrepareModule {
             $Manifest = $Configuration.Information.Manifest
             New-ModuleManifest @Manifest
             #Update-ModuleManifest @Manifest
+
+            if ($Configuration.Information.Versioning.Prerelease -ne '') {
+                #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
+                $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
+                $Data.PrivateData.PSData.Prerelease = $Configuration.Versioning.Prerelease
+                $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
+
+            }
 
             Write-Verbose "Converting $($Configuration.Manifest.Path)"
             (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path
@@ -139,20 +148,21 @@ function New-PrepareModule {
                 $Dir = "$FullTemporaryPath\$Directory"
                 Add-Directory $Dir
             }
-        } else {
-            foreach ($Directory in $LinkDirectories) {
+            # Workaround to link files that are not ps1/psd1
+            $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -ne 'Public\' -and $_ -ne 'Private\' }
+            foreach ($Directory in $LinkDirectoriesWithSupportFiles) {
                 $Dir = "$FullModulePath\$Directory"
                 Add-Directory $Dir
             }
-        }
 
-
-
-        if ($Configuration.Options.Merge.Use) {
             Write-Verbose '[+] Linking files from Root Dir'
             Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
             Write-Verbose '[+] Linking files from Sub Dir'
             Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+
+            # Workaround to link files that are not ps1/psd1
+            $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
+            Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
 
 
             Merge-Module -ModuleName $ProjectName `
@@ -163,6 +173,11 @@ function New-PrepareModule {
             -AliasesToExport $Configuration.Information.Manifest.AliasesToExport
 
         } else {
+            foreach ($Directory in $LinkDirectories) {
+                $Dir = "$FullModulePath\$Directory"
+                Add-Directory $Dir
+            }
+
             Write-Verbose '[+] Linking files from Root Dir'
             Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
             Write-Verbose '[+] Linking files from Sub Dir'
@@ -170,12 +185,25 @@ function New-PrepareModule {
             #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
             #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
         }
-
         if ($Configuration.Publish.Use) {
             New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Publish.ApiKey
         }
     }
     end {
+
+        # Revers Path to current locatikon
         Set-Location -Path $CurrentLocation
+
+        # Import Modules Section
+        if ($Configuration) {
+            if ($Configuration.Options.ImportModules.RequiredModules) {
+                foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
+                    Import-Module -Name $Module -Force
+                }
+            }
+            if ($Configuration.Options.ImportModules.Self) {
+                Import-Module -Name $ProjectName -Force
+            }
+        }
     }
 }
