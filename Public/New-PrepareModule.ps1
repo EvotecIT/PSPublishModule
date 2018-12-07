@@ -46,11 +46,18 @@ function New-PrepareModule {
 
             $Functions = Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
             if ($Functions) {
+                Write-Verbose "Functions export: $Functions"
                 $Configuration.Information.Manifest.FunctionsToExport = $Functions
             }
             $Aliases = Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
             if ($Aliases) {
+                Write-Verbose "Aliases export: $Aliases"
                 $Configuration.Information.Manifest.AliasesToExport = $Aliases
+            }
+
+            if ($Configuration.Options.Merge.Use) {
+                # Removes this as it's not needed during merge operation
+                $Configuration.Information.Manifest.ScriptsToProcess = @()
             }
 
             $Manifest = $Configuration.Information.Manifest
