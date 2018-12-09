@@ -24,8 +24,11 @@ function New-PrepareModule {
         Write-Verbose '----------------------------------------------------'
         Write-Verbose "Project Name: $ProjectName"
         Write-Verbose "Full module path: $FullModulePath"
+        Write-Verbose "Full project path: $FullProjectPath"
         Write-Verbose "Full module path to delete: $FullModulePathDelete"
         Write-Verbose "Full temporary path: $FullTemporaryPath"
+        Write-Verbose "PSScriptRoot: $PSScriptRoot"
+        Write-Verbose '----------------------------------------------------'
 
         $CurrentLocation = (Get-Location).Path
         Set-Location -Path $FullProjectPath
@@ -208,7 +211,12 @@ function New-PrepareModule {
         }
     }
     end {
-
+        if ($Configuration.Documentation.Use) {
+            $DocumentationPath = "$FullProjectPath\$($Configuration.Documentation.PathDocs)"
+            $ReadMePath = "$FullProjectPath\$($Configuration.Documentation.PathReadme)"
+            Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
+            Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
+        }
         # Revers Path to current locatikon
         Set-Location -Path $CurrentLocation
 
@@ -223,5 +231,6 @@ function New-PrepareModule {
                 Import-Module -Name $ProjectName -Force
             }
         }
+
     }
 }
