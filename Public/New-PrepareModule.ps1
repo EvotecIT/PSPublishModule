@@ -5,13 +5,13 @@ function New-PrepareModule {
         [string] $ProjectPath,
         [string] $ModulePath,
         [string] $DeleteModulePath,
-        $Configuration
+        [System.Collections.IDictionary] $Configuration
     )
     Begin {
 
         if ($Configuration) {
-            $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules,$Configuration.Information.ModuleName)
-            $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules,$Configuration.Information.ModuleName)
+            $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
+            $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
             $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
             $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
             $ProjectName = $Configuration.Information.ModuleName
@@ -21,6 +21,11 @@ function New-PrepareModule {
             $FullModulePathDelete = "$DeleteModulePath\$projectName"
             $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
         }
+        Write-Verbose '----------------------------------------------------'
+        Write-Verbose "Project Name: $ProjectName"
+        Write-Verbose "Full module path: $FullModulePath"
+        Write-Verbose "Full module path to delete: $FullModulePathDelete"
+        Write-Verbose "Full temporary path: $FullTemporaryPath"
 
         $CurrentLocation = (Get-Location).Path
         Set-Location -Path $FullProjectPath
@@ -41,40 +46,6 @@ function New-PrepareModule {
     }
     Process {
 
-
-        if ($Configuration.Information.Manifest) {
-
-            $Functions = Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
-            if ($Functions) {
-                Write-Verbose "Functions export: $Functions"
-                $Configuration.Information.Manifest.FunctionsToExport = $Functions
-            }
-            $Aliases = Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
-            if ($Aliases) {
-                Write-Verbose "Aliases export: $Aliases"
-                $Configuration.Information.Manifest.AliasesToExport = $Aliases
-            }
-
-            if ($Configuration.Options.Merge.Use) {
-                # Removes this as it's not needed during merge operation
-                $Configuration.Information.Manifest.ScriptsToProcess = @()
-            }
-
-            $Manifest = $Configuration.Information.Manifest
-            New-ModuleManifest @Manifest
-            #Update-ModuleManifest @Manifest
-
-            if ($Configuration.Information.Versioning.Prerelease -ne '') {
-                #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
-                $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
-                $Data.PrivateData.PSData.Prerelease = $Configuration.Versioning.Prerelease
-                $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
-
-            }
-
-            Write-Verbose "Converting $($Configuration.Manifest.Path)"
-            (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path
-        }
 
         $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse
         foreach ($directory in $Directories) {
@@ -150,6 +121,34 @@ function New-PrepareModule {
             }
         }
 
+        if ($Configuration.Information.Manifest) {
+
+            $Functions = Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
+            if ($Functions) {
+                Write-Verbose "Functions export: $Functions"
+                $Configuration.Information.Manifest.FunctionsToExport = $Functions
+            }
+            $Aliases = Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
+            if ($Aliases) {
+                Write-Verbose "Aliases export: $Aliases"
+                $Configuration.Information.Manifest.AliasesToExport = $Aliases
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
+                $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
+                $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
+
+                if ($FilesEnums.Count -gt 0) {
+                Write-Verbose "ScriptsToProcess export: $FilesEnums"
+                    $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
+                }
+            }
+
+            New-PersonalManifest -Configuration $Configuration -ManifestPath $FullProjectPath\$ProjectName.psd1 -AddScriptsToProcess
+        }
+
+
+
         if ($Configuration.Options.Merge.Use) {
             foreach ($Directory in $LinkDirectories) {
                 $Dir = "$FullTemporaryPath\$Directory"
@@ -171,13 +170,25 @@ function New-PrepareModule {
             $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
             Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
 
+            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
+                $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
+                $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+                #$FilesLibrariesCore
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
+                $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
+                $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+                #$FilesLibrariesDefault
+            }
 
             Merge-Module -ModuleName $ProjectName `
-            -ModulePathSource $FullTemporaryPath `
-            -ModulePathTarget $FullModulePath `
-            -Sort $Configuration.Options.Merge.Sort `
-            -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
-            -AliasesToExport $Configuration.Information.Manifest.AliasesToExport
+                -ModulePathSource $FullTemporaryPath `
+                -ModulePathTarget $FullModulePath `
+                -Sort $Configuration.Options.Merge.Sort `
+                -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
+                -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
+                -LibrariesCore $FilesLibrariesCore `
+                -LibrariesDefault $FilesLibrariesDefault
 
         } else {
             foreach ($Directory in $LinkDirectories) {
