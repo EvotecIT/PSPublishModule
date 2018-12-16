@@ -21,7 +21,10 @@ function Merge-Module {
     }
 
     foreach ($FilePath in $ScriptFunctions) {
-        Get-Content -Path $FilePath | Add-Content $ModulePathTarget\$ModuleName.psm1
+        $Content = Get-Content -Path $FilePath
+        $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')
+        $Content = $Content.Replace('$PSScriptRoot\..\', '$PSScriptRoot\')
+        $Content | Add-Content $ModulePathTarget\$ModuleName.psm1
     }
 
     New-PSMFile -Path $ModulePathTarget\$ModuleName.psm1 `
