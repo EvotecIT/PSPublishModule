@@ -107,13 +107,13 @@ function New-PrepareModule {
                     $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
                 }
                 '*license*' {
-                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib','Resources'
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib', 'Resources'
                 }
                 '*.jpg' {
-                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images','Resources'
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images', 'Resources'
                 }
                 '*.png' {
-                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images','Resources'
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images', 'Resources'
                 }
                 '*.xml' {
                     $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
@@ -154,7 +154,7 @@ function New-PrepareModule {
                 $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
 
                 if ($FilesEnums.Count -gt 0) {
-                Write-Verbose "ScriptsToProcess export: $FilesEnums"
+                    Write-Verbose "ScriptsToProcess export: $FilesEnums"
                     $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
                 }
             }
@@ -218,17 +218,38 @@ function New-PrepareModule {
             #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
             #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
         }
+        if ($Configuration.Steps.BuildDocumentation) {
+            $DocumentationPath = "$FullProjectPath\$($Configuration.Options.Documentation.Path)"
+            $ReadMePath = "$FullProjectPath\$($Configuration.Options.Documentation.PathReadme)"
+            Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
+
+            if (-not (Test-Path -Path $DocumentationPath)) {
+                New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
+            }
+            $Files = Get-ChildItem -Path $DocumentationPath
+            if ($Files.Count -gt 0) {
+                Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
+            } else {
+                New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath #-ModulePagePath $ReadMePath
+                Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
+            }
+
+
+        }
+        if ($Configuration.Steps.PublishModule) {
+            if ($Configuration.Options.PowerShellGallery.FromFile) {
+                $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
+                New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey
+            } else {
+                New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Options.PowerShellGallery.ApiKey
+            }
+        }
+
         if ($Configuration.Publish.Use) {
             New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Publish.ApiKey
         }
     }
     end {
-        if ($Configuration.Documentation.Use) {
-            $DocumentationPath = "$FullProjectPath\$($Configuration.Documentation.PathDocs)"
-            $ReadMePath = "$FullProjectPath\$($Configuration.Documentation.PathReadme)"
-            Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
-            Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
-        }
         # Revers Path to current locatikon
         Set-Location -Path $CurrentLocation
 
