@@ -133,6 +133,9 @@ function New-PrepareModule {
                 '*.gif' {
                     $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
                 }
+                '*.html' {
+                    $LinkPrivatePublicFiles += Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
+                }
             }
         }
 
@@ -228,10 +231,16 @@ function New-PrepareModule {
             }
             $Files = Get-ChildItem -Path $DocumentationPath
             if ($Files.Count -gt 0) {
-                Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
+                $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
             } else {
-                New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath #-ModulePagePath $ReadMePath
-                Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
+                $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath #-ModuleName $ProjectName #-ModulePagePath $ReadMePath
+                $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
+                #Start-Sleep -Seconds 1
+                # this is temporary workaround - due to diff output on update
+                if ($Configuration.Options.Documentation.UpdateWhenNew) {
+                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
+                }
+                #
             }
 
 
