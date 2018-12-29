@@ -153,12 +153,15 @@ function New-PrepareModule {
             }
 
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
-                $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
-                $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
 
-                if ($FilesEnums.Count -gt 0) {
-                    Write-Verbose "ScriptsToProcess export: $FilesEnums"
-                    $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
+                if (-not $Configuration.Options.Merge.Use) {
+                    $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
+                    $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
+
+                    if ($FilesEnums.Count -gt 0) {
+                        Write-Verbose "ScriptsToProcess export: $FilesEnums"
+                        $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
+                    }
                 }
             }
 
