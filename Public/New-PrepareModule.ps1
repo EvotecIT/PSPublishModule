@@ -224,30 +224,7 @@ function New-PrepareModule {
             #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
             #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
         }
-        if ($Configuration.Steps.BuildDocumentation) {
-            $DocumentationPath = "$FullProjectPath\$($Configuration.Options.Documentation.Path)"
-            $ReadMePath = "$FullProjectPath\$($Configuration.Options.Documentation.PathReadme)"
-            Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
 
-            if (-not (Test-Path -Path $DocumentationPath)) {
-                New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
-            }
-            $Files = Get-ChildItem -Path $DocumentationPath
-            if ($Files.Count -gt 0) {
-                $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
-            } else {
-                $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath #-ModuleName $ProjectName #-ModulePagePath $ReadMePath
-                $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
-                #Start-Sleep -Seconds 1
-                # this is temporary workaround - due to diff output on update
-                if ($Configuration.Options.Documentation.UpdateWhenNew) {
-                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
-                }
-                #
-            }
-
-
-        }
         if ($Configuration.Steps.PublishModule) {
             if ($Configuration.Options.PowerShellGallery.FromFile) {
                 $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
@@ -274,6 +251,28 @@ function New-PrepareModule {
             }
             if ($Configuration.Options.ImportModules.Self) {
                 Import-Module -Name $ProjectName -Force
+            }
+            if ($Configuration.Steps.BuildDocumentation) {
+                $DocumentationPath = "$FullProjectPath\$($Configuration.Options.Documentation.Path)"
+                $ReadMePath = "$FullProjectPath\$($Configuration.Options.Documentation.PathReadme)"
+                Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
+
+                if (-not (Test-Path -Path $DocumentationPath)) {
+                    New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
+                }
+                $Files = Get-ChildItem -Path $DocumentationPath
+                if ($Files.Count -gt 0) {
+                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
+                } else {
+                    $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath #-ModuleName $ProjectName #-ModulePagePath $ReadMePath
+                    $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
+                    #Start-Sleep -Seconds 1
+                    # this is temporary workaround - due to diff output on update
+                    if ($Configuration.Options.Documentation.UpdateWhenNew) {
+                        $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath #-Verbose
+                    }
+                    #
+                }
             }
         }
 

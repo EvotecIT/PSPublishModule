@@ -6,9 +6,18 @@ function New-PSMFile {
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault
     )
-    $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
-    $Aliases = ($FunctionAliaes | Sort-Object -Unique) -join "','"
+    if ($FunctionNames.Count -gt 0) {
+        $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
+        $Functions = "'$Functions'"
+    } else {
+        $Functions = @()
+    }
 
+    if ($FunctionAliaes.Count -gt 0) {
+        $Aliases = ($FunctionAliaes | Sort-Object -Unique) -join "','"
+    } else {
+        $Aliases = @()
+    }
     "" | Add-Content -Path $Path
 
     if ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
@@ -37,11 +46,11 @@ function New-PSMFile {
         }
     }
 
-@"
+    @"
 
 Export-ModuleMember ``
-    -Function @('$Functions') ``
-    -Alias @('$Aliases')
+    -Function @($Functions) ``
+    -Alias @($Aliases)
 "@ | Add-Content -Path $Path
 
 }
