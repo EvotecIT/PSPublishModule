@@ -15,6 +15,7 @@ function New-PSMFile {
 
     if ($FunctionAliaes.Count -gt 0) {
         $Aliases = ($FunctionAliaes | Sort-Object -Unique) -join "','"
+        $Aliases = "'$Aliases'"
     } else {
         $Aliases = @()
     }
