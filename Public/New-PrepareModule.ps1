@@ -41,10 +41,8 @@ function New-PrepareModule {
 
         $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates', 'Resources'
 
-        $LinkFiles = @()
         $LinkDirectories = @()
         $LinkPrivatePublicFiles = @()
-        $LinkFilesSpecial = @()
 
     }
     Process {
