@@ -1,4 +1,4 @@
-using Namespace System.Management.Automation.Language
+#using Namespace System.Management.Automation.Language
 
 Function Get-AliasTarget {
     [cmdletbinding()]
@@ -10,18 +10,18 @@ Function Get-AliasTarget {
 
     process {
         foreach ($File in $Path) {
-            $FileAst = [Parser]::ParseFile($File, [ref]$null, [ref]$null)
+            $FileAst = [System.Management.Automation.Language.Parser]::ParseFile($File, [ref]$null, [ref]$null)
 
             $FunctionName = $FileAst.FindAll( {
                     param ($ast)
 
-                    $ast -is [FunctionDefinitionAst]
+                    $ast -is [System.Management.Automation.Language.FunctionDefinitionAst]
                 }, $true).Name
 
             $AliasDefinitions = $FileAst.FindAll( {
                     param ($ast)
 
-                    $ast -is [StringConstantExpressionAst] -And $ast.Value -match '(New|Set)-Alias'
+                    $ast -is [System.Management.Automation.Language.StringConstantExpressionAst] -And $ast.Value -match '(New|Set)-Alias'
                 }, $true)
 
             $AliasTarget = $AliasDefinitions.Parent.CommandElements.Where( {
@@ -32,16 +32,16 @@ Function Get-AliasTarget {
             $Attributes = $FileAst.FindAll( {
                     param ($ast)
 
-                    $ast -is [AttributeAst]
+                    $ast -is [System.Management.Automation.Language.AttributeAst]
                 }, $true)
 
-            $AliasDefinitions = $Attributes.Where( {$_.TypeName.Name -eq 'Alias' -and $_.Parent -is [ParamBlockAst]})
+            $AliasDefinitions = $Attributes.Where( {$_.TypeName.Name -eq 'Alias' -and $_.Parent -is [System.Management.Automation.Language.ParamBlockAst]})
 
             $AliasTarget += $AliasDefinitions.PositionalArguments.Value
 
             [PsCustomObject]@{
                 Function = $FunctionName
-                Alias = $AliasTarget
+                Alias    = $AliasTarget
             }
         }
     }
