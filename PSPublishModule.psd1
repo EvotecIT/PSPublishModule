@@ -12,7 +12,7 @@
 RootModule = 'PSPublishModule.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.6'
+ModuleVersion = '0.7'
 
 # Supported PSEditions
 CompatiblePSEditions = 'Desktop', 'Core'
@@ -69,7 +69,7 @@ PowerShellVersion = '5.1'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = 'New-PrepareManifest', 'New-PrepareModule'
+FunctionsToExport = 'New-PrepareModule'
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = @()
@@ -104,7 +104,7 @@ PrivateData = @{
         ProjectUri = 'https://github.com/EvotecIT/PSPublishModule'
 
         # A URL to an icon representing this module.
-        # IconUri = ''
+        IconUri = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
 
         # ReleaseNotes of this module
         # ReleaseNotes = ''
