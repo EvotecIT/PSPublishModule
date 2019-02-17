@@ -20,7 +20,7 @@ function New-PersonalManifest {
     if ($Configuration.Information.Versioning.Prerelease -ne '') {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
         $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
-        $Data.PrivateData.PSData.Prerelease = $Configuration.Versioning.Prerelease
+        $Data.PrivateData.PSData.Prerelease = $Configuration.Information.Versioning.Prerelease
         $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
 
     }

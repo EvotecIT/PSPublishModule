@@ -1,26 +1,20 @@
 function New-PrepareModule {
     [CmdletBinding()]
     param (
-        [string] $ProjectName,
-        [string] $ProjectPath,
-        [string] $ModulePath,
-        [string] $DeleteModulePath,
-        [System.Collections.IDictionary] $Configuration
+        [System.Collections.IDictionary] $Configuration,
+        [string] $FullProjectPath # overwrites settings
     )
     Begin {
-
-        if ($Configuration) {
-            $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
-            $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
-            $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
+        if (-not $Configuration) { return }
+     
+        [string] $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
+        [string] $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
+        [string] $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
+        if ($FullProjectPath -eq '') {
             $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
-            $ProjectName = $Configuration.Information.ModuleName
-        } else {
-            $FullModulePath = "$modulePath\$projectName"
-            $FullProjectPath = "$projectPath\$projectName"
-            $FullModulePathDelete = "$DeleteModulePath\$projectName"
-            $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $ProjectName
         }
+        [string] $ProjectName = $Configuration.Information.ModuleName
+   
         Write-Verbose '----------------------------------------------------'
         Write-Verbose "Project Name: $ProjectName"
         Write-Verbose "Full module path: $FullModulePath"
