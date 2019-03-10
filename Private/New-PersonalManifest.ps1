@@ -17,7 +17,7 @@ function New-PersonalManifest {
     New-ModuleManifest @Manifest
     #Update-ModuleManifest @Manifest
 
-    if ($Configuration.Information.Versioning.Prerelease -ne '') {
+    if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
         $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path        
         if ($Data.ScriptsToProcess.Count -eq 0) {

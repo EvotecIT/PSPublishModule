@@ -1,3 +1,8 @@
-function New-PublishModule($projectName, $apikey) {
-    Publish-Module -Name $projectName -Repository PSGallery -NuGetApiKey $apikey -verbose
+function New-PublishModule {
+    param(
+        $projectName,
+        $apikey, 
+        [bool] $RequireForce
+    ) 
+    Publish-Module -Name $projectName -Repository PSGallery -NuGetApiKey $apikey -Force:$RequireForce -verbose
 }

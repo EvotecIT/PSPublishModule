@@ -215,17 +215,13 @@ function New-PrepareModule {
                 #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
             }
         }
-        if ($Configuration.Steps.PublishModule) {
+        if ($Configuration.Steps.PublishModule.Use) {
             if ($Configuration.Options.PowerShellGallery.FromFile) {
                 $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
-                New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey
+                New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
             } else {
-                New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Options.PowerShellGallery.ApiKey
+                New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Options.PowerShellGallery.ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
             }
-        }
-
-        if ($Configuration.Publish.Use) {
-            New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Publish.ApiKey
         }
     }
     end {
@@ -248,7 +244,7 @@ function New-PrepareModule {
                 Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
 
                 if (-not (Test-Path -Path $DocumentationPath)) {
-                    New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
+                    $null = New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
                 }
                 $Files = Get-ChildItem -Path $DocumentationPath
                 if ($Files.Count -gt 0) {
