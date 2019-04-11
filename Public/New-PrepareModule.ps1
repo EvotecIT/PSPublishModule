@@ -6,7 +6,7 @@ function New-PrepareModule {
     )
     Begin {
         if (-not $Configuration) { return }
-     
+
         [string] $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
         [string] $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
         [string] $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
@@ -14,7 +14,7 @@ function New-PrepareModule {
             $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
         }
         [string] $ProjectName = $Configuration.Information.ModuleName
-   
+
         Write-Verbose '----------------------------------------------------'
         Write-Verbose "Project Name: $ProjectName"
         Write-Verbose "Full module path: $FullModulePath"
@@ -38,6 +38,15 @@ function New-PrepareModule {
         $LinkDirectories = @()
         $LinkPrivatePublicFiles = @()
 
+        # Fix required fields:
+        $Configuration.Information.Manifest.RootModule = "$($ProjectName).psm1"
+        $Configuration.Information.Manifest.FunctionsToExport = @() #$FunctionToExport
+        # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
+        $Configuration.Information.Manifest.CmdletsToExport = @()
+        # Variables to export from this module
+        $Configuration.Information.Manifest.VariablesToExport = @()
+        # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
+        $Configuration.Information.Manifest.AliasesToExport = @()
     }
     Process {
 
@@ -130,7 +139,7 @@ function New-PrepareModule {
                     }
                 }
             }
-        
+
             if ($Configuration.Information.Manifest) {
 
                 $Functions = Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
@@ -159,7 +168,7 @@ function New-PrepareModule {
 
                 New-PersonalManifest -Configuration $Configuration -ManifestPath $FullProjectPath\$ProjectName.psd1 -AddScriptsToProcess
             }
-       
+
             if ($Configuration.Options.Merge.Use) {
                 foreach ($Directory in $LinkDirectories) {
                     $Dir = "$FullTemporaryPath\$Directory"
