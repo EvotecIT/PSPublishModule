@@ -155,7 +155,7 @@ function New-PrepareModule {
 
                 if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
 
-                    if (-not $Configuration.Options.Merge.Enabled) {
+                    #if (-not $Configuration.Options.Merge.Enabled) {
                         $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
                         $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
 
@@ -163,7 +163,7 @@ function New-PrepareModule {
                             Write-Verbose "ScriptsToProcess export: $FilesEnums"
                             $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
                         }
-                    }
+                    #}
                 }
 
                 $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
