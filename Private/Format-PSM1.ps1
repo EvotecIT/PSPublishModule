@@ -22,6 +22,6 @@
                 $O.Trim()
             }
         }
-        $Output | Set-Content -LiteralPath $FilePath -NoNewline -Encoding utf8
+        $Output | Out-File -LiteralPath $FilePath -NoNewline -Encoding utf8
     }
 }
