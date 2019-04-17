@@ -155,7 +155,7 @@ function New-PrepareModule {
 
                 if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
 
-                    if (-not $Configuration.Options.Merge.Use) {
+                    if (-not $Configuration.Options.Merge.Enabled) {
                         $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
                         $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
 
@@ -166,10 +166,27 @@ function New-PrepareModule {
                     }
                 }
 
-                New-PersonalManifest -Configuration $Configuration -ManifestPath $FullProjectPath\$ProjectName.psd1 -AddScriptsToProcess
+                $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
+                New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+
+                Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
+                <#
+                if ($Configuration.Options.Standard.FormatCodePSD1.Enabled) {
+                    Write-Verbose "Formatting - $PSD1FilePath"
+                    $Output = Get-Content -LiteralPath "$PSD1FilePath" -Raw
+
+                    if ($null -eq $Configuration.Options.Standard.FormatCodePSD1.FormatterSettings) {
+                        $Configuration.Options.Standard.FormatCodePSD1.FormatterSettings = $Script:FormatterSettings
+                    }
+
+
+                    $Output = Invoke-Formatter -ScriptDefinition $Output -Settings $Configuration.Options.Standard.FormatCodePSD1.FormatterSettings
+                    $Output | Set-Content -LiteralPath $PSD1FilePath
+                }
+                #>
             }
 
-            if ($Configuration.Options.Merge.Use) {
+            if ($Configuration.Options.Merge.Enabled) {
                 foreach ($Directory in $LinkDirectories) {
                     $Dir = "$FullTemporaryPath\$Directory"
                     Add-Directory $Dir
@@ -208,7 +225,9 @@ function New-PrepareModule {
                     -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
                     -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
                     -LibrariesCore $FilesLibrariesCore `
-                    -LibrariesDefault $FilesLibrariesDefault
+                    -LibrariesDefault $FilesLibrariesDefault `
+                    -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
+                    -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1
 
             } else {
                 foreach ($Directory in $LinkDirectories) {
@@ -224,7 +243,7 @@ function New-PrepareModule {
                 #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
             }
         }
-        if ($Configuration.Steps.PublishModule.Use) {
+        if ($Configuration.Steps.PublishModule.Enabled) {
             if ($Configuration.Options.PowerShellGallery.FromFile) {
                 $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
                 New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce

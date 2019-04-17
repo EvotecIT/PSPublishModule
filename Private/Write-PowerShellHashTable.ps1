@@ -23,29 +23,29 @@ function Write-PowerShellHashtable {
     #>
     [OutputType([string], [ScriptBlock])]
     param(
-    [Parameter(Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
-    [PSObject]
-    $InputObject,
+        [Parameter(Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+        [PSObject]
+        $InputObject,
 
-    # Returns the content as a script block, rather than a string
-    [Alias('ScriptBlock')]
-    [switch]$AsScriptBlock,
+        # Returns the content as a script block, rather than a string
+        [Alias('ScriptBlock')]
+        [switch]$AsScriptBlock,
 
-    # If set, items in the hashtable will be sorted alphabetically
-    [Switch]$Sort
+        # If set, items in the hashtable will be sorted alphabetically
+        [Switch]$Sort
     )
 
     process {
         $callstack = @(foreach ($_ in (Get-PSCallStack)) {
-            if ($_.Command -eq "Write-PowerShellHashtable") {
-                $_
-            }
-        })
+                if ($_.Command -eq "Write-PowerShellHashtable") {
+                    $_
+                }
+            })
         $depth = $callStack.Count
         if ($inputObject -isnot [Hashtable]) {
 
             $newInputObject = @{
-                PSTypeName=@($inputobject.pstypenames)[-1]
+                PSTypeName = @($inputobject.pstypenames)[-1]
             }
             foreach ($prop in $inputObject.psobject.properties) {
                 $newInputObject[$prop.Name] = $prop.Value
@@ -57,7 +57,7 @@ function Write-PowerShellHashtable {
             #region Indent
             $scriptString = ""
             $indent = $depth * 4
-            $scriptString+= "@{
+            $scriptString += "@{
 "
             #endregion Indent
             #region Include
@@ -69,17 +69,17 @@ function Write-PowerShellHashtable {
 
 
             foreach ($kv in $items) {
-                $scriptString+=" " * $indent
+                $scriptString += " " * $indent
 
                 $keyString = "$($kv.Key)"
                 if ($keyString.IndexOfAny(" _.#-+:;()'!?^@#$%&".ToCharArray()) -ne -1) {
                     if ($keyString.IndexOf("'") -ne -1) {
-                        $scriptString+="'$($keyString.Replace("'","''"))'="
+                        $scriptString += "'$($keyString.Replace("'","''"))'="
                     } else {
-                        $scriptString+="'$keyString'="
+                        $scriptString += "'$keyString'="
                     }
                 } elseif ($keyString) {
-                    $scriptString+="$keyString="
+                    $scriptString += "$keyString="
                 }
 
 
@@ -88,7 +88,7 @@ function Write-PowerShellHashtable {
                 # Write-Verbose "$value"
                 if ($value -is [string]) {
 
-                    $value = "'"  + $value.Replace("'","''").Replace("’", "’’").Replace("‘", "‘‘") + "'"
+                    $value = "'" + $value.Replace("'", "''").Replace("’", "’’").Replace("‘", "‘‘") + "'"
                 } elseif ($value -is [ScriptBlock]) {
                     $value = "{$value}"
                 } elseif ($value -is [switch]) {
@@ -104,12 +104,11 @@ function Write-PowerShellHashtable {
                         } elseif ($v -is [Object] -and $v -isnot [string]) {
                             Write-PowerShellHashtable $v
                         } else {
-                            ("'"  + "$v".Replace("'","''").Replace("’", "’’").Replace("‘", "‘‘") + "'")
+                            ("'" + "$v".Replace("'", "''").Replace("’", "’’").Replace("‘", "‘‘") + "'")
                         }
                     }
                     $oldOfs = $ofs
-                    $ofs = ",
-$(' ' * ($indent + 4))"
+                    $ofs = ",$(' ' * ($indent + 4))"
                     $value = "$value"
                     $ofs = $oldOfs
                 } elseif ($value -as [Hashtable[]]) {
@@ -132,7 +131,7 @@ $(' ' * ($indent + 4))"
                     }
 
                 }
-               $scriptString+="$value
+                $scriptString += "$value
 "
             }
             $scriptString += " " * ($depth - 1) * 4
@@ -144,5 +143,5 @@ $(' ' * ($indent + 4))"
             }
             #endregion Include
         }
-   }
+    }
 }
