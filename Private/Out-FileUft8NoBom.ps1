@@ -33,9 +33,6 @@ function Out-FileUtf8NoBom {
         [AllowNull()] [int] $Width,
         [Parameter(ValueFromPipeline)] $InputObject
     )
-
-    #requires -version 3
-
     # Make sure that the .NET framework sees the same working dir. as PS
     # and resolve the input path to a full path.
     [System.IO.Directory]::SetCurrentDirectory($PWD) # Caveat: .NET Core doesn't support [Environment]::CurrentDirectory
