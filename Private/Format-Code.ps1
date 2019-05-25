@@ -15,7 +15,7 @@
             $FormatCode.FormatterSettings = $Script:FormatterSettings
         }
         Write-Verbose "Formatting - $FilePath"
-        $Output = Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings
+        $Output = Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings -Verbose:$false
 
         # Resave
         $Output = foreach ($O in $Output) {

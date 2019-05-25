@@ -5,7 +5,9 @@ function New-PSMFile {
         [string[]] $FunctionNames,
         [string[]] $FunctionAliaes,
         [Array] $LibrariesCore,
-        [Array] $LibrariesDefault
+        [Array] $LibrariesDefault,
+        [string] $ModuleName,
+        [switch] $UsingNamespaces
     )
     if ($FunctionNames.Count -gt 0) {
         $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
@@ -46,6 +48,10 @@ function New-PSMFile {
             $Output = 'Add-Type -Path $PSScriptRoot\' + $File
             $Output | Add-Content -Path $Path
         }
+    }
+
+    if ($UsingNamespaces) {
+        '. $PSScriptRoot\' + "$ModuleName.ps1" | Add-Content -Path $Path
     }
 
     @"

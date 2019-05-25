@@ -35,13 +35,26 @@ function Merge-Module {
         $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
     }
 
+
+    # Using file is needed if there are 'using namespaces' - this is a workaround provided by seeminglyscience
+    $FilePathUsing = "$ModulePathTarget\$ModuleName.ps1"
+
+    $UsingInPlace = Format-UsingNamespace -FilePath $PSM1FilePath -FilePathUsing $FilePathUsing
+    if ($UsingInPlace) {
+        Format-Code -FilePath $FilePathUsing -FormatCode $FormatCodePSM1
+    }
+
     New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
         -FunctionAliaes $AliasesToExport `
         -LibrariesCore $LibrariesCore `
-        -LibrariesDefault $LibrariesDefault
+        -LibrariesDefault $LibrariesDefault `
+        -ModuleName $ModuleName `
+        -UsingNamespaces:$UsingInPlace
 
     Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
     New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath
     Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
+
+
 }
