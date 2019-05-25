@@ -19,14 +19,14 @@ function New-PersonalManifest {
 
     if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
-        $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path        
+        $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
         if ($Data.ScriptsToProcess.Count -eq 0) {
             $Data.Remove('ScriptsToProcess')
         }
         if ($Data.CmdletsToExport.Count -eq 0) {
             $Data.Remove('CmdletsToExport')
         }
-        $Data.PrivateData.PSData.Prerelease = $Configuration.Information.Versioning.Prerelease
+        $Data.PrivateData.PSData.Prerelease = $Configuration.Steps.PublishModule.Prerelease
         $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
 
     }

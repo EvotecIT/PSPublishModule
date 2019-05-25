@@ -1,4 +1,5 @@
 function Write-PowerShellHashtable {
+    [cmdletbinding()]
     <#
     .Synopsis
         Takes an creates a script to recreate a hashtable

@@ -1,4 +1,5 @@
 function Get-FunctionNames {
+    [cmdletbinding()]
     param(
         [string] $Path,
         [switch] $Recurse

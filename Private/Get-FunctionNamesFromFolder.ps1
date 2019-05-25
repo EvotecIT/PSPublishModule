@@ -1,4 +1,5 @@
 function Get-FunctionNamesFromFolder {
+    [cmdletbinding()]
     param(
         [string] $FullProjectPath,
         [string[]] $Folder
@@ -6,8 +7,11 @@ function Get-FunctionNamesFromFolder {
 
     foreach ($F in $Folder) {
         $Path = [IO.Path]::Combine($FullProjectPath, $F)
-        $Files = Get-ChildItem -Path $Path -File -Recurse
-
+        if ($PSEdition -eq 'Core') {
+            $Files = Get-ChildItem -Path $Path -File -Recurse -FollowSymlink
+        } else {
+            $Files = Get-ChildItem -Path $Path -File -Recurse
+        }
         $FunctionToExport = foreach ($file in $Files) {
             Get-FunctionNames -Path $File.FullName
         }

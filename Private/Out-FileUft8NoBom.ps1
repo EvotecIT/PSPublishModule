@@ -27,11 +27,11 @@ function Out-FileUtf8NoBom {
 
     [CmdletBinding()]
     param(
-      [Parameter(Mandatory, Position=0)] [string] $LiteralPath,
-      [switch] $Append,
-      [switch] $NoClobber,
-      [AllowNull()] [int] $Width,
-      [Parameter(ValueFromPipeline)] $InputObject
+        [Parameter(Mandatory, Position = 0)] [string] $LiteralPath,
+        [switch] $Append,
+        [switch] $NoClobber,
+        [AllowNull()] [int] $Width,
+        [Parameter(ValueFromPipeline)] $InputObject
     )
 
     #requires -version 3
@@ -44,7 +44,7 @@ function Out-FileUtf8NoBom {
     # If -NoClobber was specified, throw an exception if the target file already
     # exists.
     if ($NoClobber -and (Test-Path $LiteralPath)) {
-      Throw [IO.IOException] "The file '$LiteralPath' already exists."
+        Throw [IO.IOException] "The file '$LiteralPath' already exists."
     }
 
     # Create a StreamWriter object.
@@ -55,7 +55,7 @@ function Out-FileUtf8NoBom {
 
     $htOutStringArgs = @{}
     if ($Width) {
-      $htOutStringArgs += @{ Width = $Width }
+        $htOutStringArgs += @{ Width = $Width }
     }
 
     # Note: By not using begin / process / end blocks, we're effectively running
@@ -65,9 +65,9 @@ function Out-FileUtf8NoBom {
     #       in each iteration of a process block would format each input object
     #       with an indvidual header.
     try {
-      $Input | Out-String -Stream @htOutStringArgs | % { $sw.WriteLine($_) }
+        $Input | Out-String -Stream @htOutStringArgs | % { $sw.WriteLine($_) }
     } finally {
-      $sw.Dispose()
+        $sw.Dispose()
     }
 
-  }
+}

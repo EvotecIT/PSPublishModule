@@ -1,4 +1,5 @@
 ﻿function Format-Code {
+    [cmdletbinding()]
     param(
         [string] $FilePath,
         $FormatCode

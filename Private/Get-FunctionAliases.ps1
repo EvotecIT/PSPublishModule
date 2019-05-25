@@ -1,6 +1,7 @@
 #$Path = 'C:\Support\GitHub\PSSharedGoods\Public\Objects\Format-Stream.ps1'
 #Get-FunctionAliases -Path $path
 function Get-FunctionAliases {
+    [cmdletbinding()]
     param(
         [string] $Path
     )
@@ -8,7 +9,7 @@ function Get-FunctionAliases {
 
     $Names = Get-FunctionNames -Path $Path
     $Aliases = foreach ($Name in $Names) {
-       Get-Alias | Where-Object {$_.Definition -eq $Name}
+        Get-Alias | Where-Object {$_.Definition -eq $Name}
     }
     #$MyAliases = foreach ($Alias in $Aliases) {
     #    if ($Alias -ne '') {

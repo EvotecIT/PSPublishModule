@@ -1,4 +1,5 @@
 ﻿function Format-PSD1 {
+    [cmdletbinding()]
     param(
         [string] $PSD1FilePath,
         $FormatCode

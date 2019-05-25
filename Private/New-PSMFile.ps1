@@ -1,4 +1,5 @@
 function New-PSMFile {
+    [cmdletbinding()]
     param(
         [string] $Path,
         [string[]] $FunctionNames,

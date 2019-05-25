@@ -14,7 +14,7 @@ function New-PrepareManifest {
         RootModule        = "$ProjectName.psm1"
         Author            = 'Przemyslaw Klys'
         CompanyName       = 'Evotec'
-        Copyright         = 'Evotec (c) 2018. All rights reserved.'
+        Copyright         = 'Evotec (c) 2011-2019. All rights reserved.'
         Description       = "Simple project"
         FunctionsToExport = $functionToExport
         CmdletsToExport   = ''

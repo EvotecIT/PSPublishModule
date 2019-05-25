@@ -3,8 +3,11 @@ function Find-EnumsList {
     param (
         [string] $ProjectPath
     )
-
-    $Enums = @( Get-ChildItem -Path $ProjectPath\Enums\*.ps1 -ErrorAction SilentlyContinue )
+    if ($PSEdition -eq 'Core') {
+        $Enums = Get-ChildItem -Path $ProjectPath\Enums\*.ps1 -ErrorAction SilentlyContinue  -FollowSymlink
+    } else {
+        $Enums = Get-ChildItem -Path $ProjectPath\Enums\*.ps1 -ErrorAction SilentlyContinue
+    }
     #Write-Verbose "Find-EnumsList - $ProjectPath\Enums"
 
     $Opening = '@('
