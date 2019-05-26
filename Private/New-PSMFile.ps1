@@ -9,56 +9,64 @@ function New-PSMFile {
         [string] $ModuleName,
         [switch] $UsingNamespaces
     )
-    if ($FunctionNames.Count -gt 0) {
-        $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
-        $Functions = "'$Functions'"
-    } else {
-        $Functions = @()
-    }
-
-    if ($FunctionAliaes.Count -gt 0) {
-        $Aliases = ($FunctionAliaes | Sort-Object -Unique) -join "','"
-        $Aliases = "'$Aliases'"
-    } else {
-        $Aliases = @()
-    }
-    "" | Add-Content -Path $Path
-
-    if ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
-
-        'if ($PSEdition -eq ''Core'') {' | Add-Content -Path $Path
-        foreach ($File in $LibrariesCore) {
-            $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-            $Output | Add-Content -Path $Path
+    try {
+        if ($FunctionNames.Count -gt 0) {
+            $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
+            $Functions = "'$Functions'"
+        } else {
+            $Functions = @()
         }
-        '} else {' | Add-Content -Path $Path
-        foreach ($File in $LibrariesDefault) {
-            $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-            $Output | Add-Content -Path $Path
-        }
-        '}' | Add-Content -Path $Path
 
-    } elseif ($LibrariesCore.Count -gt 0) {
-        foreach ($File in $LibrariesCore) {
-            $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-            $Output | Add-Content -Path $Path
+        if ($FunctionAliaes.Count -gt 0) {
+            $Aliases = ($FunctionAliaes | Sort-Object -Unique) -join "','"
+            $Aliases = "'$Aliases'"
+        } else {
+            $Aliases = @()
         }
-    } elseif ($LibrariesDefault.Count -gt 0) {
-        foreach ($File in $LibrariesDefault) {
-            $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-            $Output | Add-Content -Path $Path
+        "" | Add-Content -Path $Path
+
+        if ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
+
+            'if ($PSEdition -eq ''Core'') {' | Add-Content -Path $Path
+            foreach ($File in $LibrariesCore) {
+                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                $Output | Add-Content -Path $Path
+            }
+            '} else {' | Add-Content -Path $Path
+            foreach ($File in $LibrariesDefault) {
+                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                $Output | Add-Content -Path $Path
+            }
+            '}' | Add-Content -Path $Path
+
+        } elseif ($LibrariesCore.Count -gt 0) {
+            foreach ($File in $LibrariesCore) {
+                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                $Output | Add-Content -Path $Path
+            }
+        } elseif ($LibrariesDefault.Count -gt 0) {
+            foreach ($File in $LibrariesDefault) {
+                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                $Output | Add-Content -Path $Path
+            }
         }
-    }
 
-    if ($UsingNamespaces) {
-        '. $PSScriptRoot\' + "$ModuleName.ps1" | Add-Content -Path $Path
-    }
+        if ($UsingNamespaces) {
+            '. $PSScriptRoot\' + "$ModuleName.ps1" | Add-Content -Path $Path
+        }
 
-    @"
+        @"
 
 Export-ModuleMember ``
     -Function @($Functions) ``
     -Alias @($Aliases)
 "@ | Add-Content -Path $Path
 
+
+    } catch {
+        $ErrorMessage = $_.Exception.Message
+        #Write-Warning "New-PSM1File from $ModuleName failed build. Error: $ErrorMessage"
+        Write-Error "New-PSM1File from $ModuleName failed build. Error: $ErrorMessage"
+        Exit
+    }
 }

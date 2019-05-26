@@ -15,14 +15,27 @@
             $FormatCode.FormatterSettings = $Script:FormatterSettings
         }
         Write-Verbose "Formatting - $FilePath"
-        $Output = Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings -Verbose:$false
-
+        try {
+            $Output = Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings -Verbose:$false
+        } catch {
+            $ErrorMessage = $_.Exception.Message
+            #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
+            Write-Error "Format-Code - Formatting on file $FilePath failed. Error: $ErrorMessage"
+            Exit
+        }
         # Resave
         $Output = foreach ($O in $Output) {
             if ($O.Trim() -ne '') {
                 $O.Trim()
             }
         }
-        $Output | Out-File -LiteralPath $FilePath -NoNewline -Encoding utf8
+        try {
+            $Output | Out-File -LiteralPath $FilePath -NoNewline -Encoding utf8
+        } catch {
+            $ErrorMessage = $_.Exception.Message
+            #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
+            Write-Error "Format-Code - Resaving file $FilePath failed. Error: $ErrorMessage"
+            Exit
+        }
     }
 }

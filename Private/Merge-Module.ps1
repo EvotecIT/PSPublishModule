@@ -32,7 +32,15 @@ function Merge-Module {
         $Content = Get-Content -Path $FilePath -Raw
         $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')
         $Content = $Content.Replace('$PSScriptRoot\..\', '$PSScriptRoot\')
-        $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
+
+        try {
+            $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
+        } catch {
+            $ErrorMessage = $_.Exception.Message
+            #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
+            Write-Error "Merge-Module - Merge on file $FilePath failed. Error: $ErrorMessage"
+            Exit
+        }
     }
 
 
