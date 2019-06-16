@@ -56,8 +56,11 @@
             $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse -FollowSymlink
             $FilesRoot = Get-ChildItem -Path $FullProjectPath -File -FollowSymlink
         } else {
+            Write-Verbose 'Getting directories'
             $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse
+            Write-Verbose 'Getting files'
             $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
+            Write-Verbose 'Getting files root'
             $FilesRoot = Get-ChildItem -Path $FullProjectPath -File
         }
 
@@ -95,7 +98,7 @@
                 }
             }
         }
-
+        Write-Verbose 'Linking private public files'
         # Link only files from subfolers
         $LinkPrivatePublicFiles = foreach ($file in $AllFiles) {
             switch -Wildcard ($file) {
