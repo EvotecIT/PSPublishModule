@@ -102,30 +102,49 @@
         # Link only files from subfolers
         $LinkPrivatePublicFiles = foreach ($file in $AllFiles) {
             switch -Wildcard ($file) {
+                '*.ps1' {
+                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
+                    continue
+                }
+                <#
+                'License*' {
+                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib', 'Resources'
+                    continue
+                }
+                #>
+                <#
                 "*.dll" {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
+                    continue
                 }
                 "*.exe" {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Bin'
-                }
-                '*.ps1' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
-                }
-                '*license*' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib', 'Resources'
+                    continue
                 }
                 '*.jpg' {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images', 'Resources'
+                    continue
                 }
                 '*.png' {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images', 'Resources'
+                    continue
                 }
+                #>
+                <#
                 '*.xml' {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
+                    continue
                 }
                 '*.docx' {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
+                    continue
                 }
+                #>
+                '*.*' {
+                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\'
+                    continue
+                }
+                <#
                 '*.js' {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
                 }
@@ -144,8 +163,13 @@
                 '*.txt' {
                     Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
                 }
+                '*.sql' {
+                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
+                }
+                #>
             }
         }
+        $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
 
         if ($Configuration.Information.Manifest) {
 
