@@ -5,16 +5,18 @@ function Get-FunctionNamesFromFolder {
         [string[]] $Folder
     )
 
-    foreach ($F in $Folder) {
+    $Files = foreach ($F in $Folder) {
         $Path = [IO.Path]::Combine($FullProjectPath, $F)
         if ($PSEdition -eq 'Core') {
-            $Files = Get-ChildItem -Path $Path -File -Recurse -FollowSymlink
+            Get-ChildItem -Path $Path -File -Recurse -FollowSymlink
         } else {
-            $Files = Get-ChildItem -Path $Path -File -Recurse
+            Get-ChildItem -Path $Path -File -Recurse
         }
-        $FunctionToExport = foreach ($file in $Files) {
-            Get-FunctionNames -Path $File.FullName
-        }
-        $FunctionToExport
     }
+    $Files = $Files | Sort-Object -Unique
+    $FunctionToExport = foreach ($file in $Files) {
+        Get-FunctionNames -Path $File.FullName
+    }
+    $FunctionToExport
+
 }

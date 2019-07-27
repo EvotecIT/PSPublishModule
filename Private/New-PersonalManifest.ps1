@@ -15,7 +15,6 @@ function New-PersonalManifest {
 
 
     New-ModuleManifest @Manifest
-    #Update-ModuleManifest @Manifest
 
     if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
@@ -30,7 +29,7 @@ function New-PersonalManifest {
         $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
 
     }
-
-    Write-Verbose "Converting $($Configuration.Information.Manifest.Path)"
-    (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path
+    Write-TextWithTime -Text "Converting $($Configuration.Information.Manifest.Path) UTF8 without BOM" {
+        (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path
+    }
 }

@@ -51,26 +51,40 @@
 
 
     if ($Configuration.Steps.BuildModule) {
+
         if ($PSEdition -eq 'core') {
-            $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse -FollowSymlink
-            $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse -FollowSymlink
-            $FilesRoot = Get-ChildItem -Path $FullProjectPath -File -FollowSymlink
+            $Directories = Write-TextWithTime -Text "Getting directories list" {
+                Get-ChildItem -Path $FullProjectPath -Directory -Recurse -FollowSymlink
+            }
+            $Files = Write-TextWithTime -Text "Getting files list" {
+                Get-ChildItem -Path $FullProjectPath -File -Recurse -FollowSymlink
+            }
+            $FilesRoot = Write-TextWithTime -Text "Getting files list - root" {
+                Get-ChildItem -Path $FullProjectPath -File -FollowSymlink
+            }
         } else {
-            Write-Verbose 'Getting directories'
-            $Directories = Get-ChildItem -Path $FullProjectPath -Directory -Recurse
-            Write-Verbose 'Getting files'
-            $Files = Get-ChildItem -Path $FullProjectPath -File -Recurse
-            Write-Verbose 'Getting files root'
-            $FilesRoot = Get-ChildItem -Path $FullProjectPath -File
+            $Directories = Write-TextWithTime -Text "Getting directories list" {
+                Get-ChildItem -Path $FullProjectPath -Directory -Recurse
+            }
+            $Files = Write-TextWithTime -Text "Getting files list" {
+                Get-ChildItem -Path $FullProjectPath -File -Recurse
+            }
+            $FilesRoot = Write-TextWithTime -Text "Getting files list - root" {
+                Get-ChildItem -Path $FullProjectPath -File
+            }
         }
 
-        $LinkDirectories = foreach ($directory in $Directories) {
-            $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
-            $RelativeDirectoryPath = "$RelativeDirectoryPath\"
-            foreach ($LookupDir in $DirectoryTypes) {
-                #Write-Verbose "New-PrepareModule - RelativeDirectoryPath: $RelativeDirectoryPath LookupDir: $LookupDir\"
-                if ($RelativeDirectoryPath -like "$LookupDir\*" ) {
-                    Add-ObjectTo -Object $RelativeDirectoryPath -Type 'Directory List'
+        $LinkDirectories = Write-TextWithTime -Text "Adding Directories to Directory List" {
+            foreach ($directory in $Directories) {
+                $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
+                $RelativeDirectoryPath = "$RelativeDirectoryPath\"
+                foreach ($LookupDir in $DirectoryTypes) {
+                    #Write-Verbose "New-PrepareModule - RelativeDirectoryPath: $RelativeDirectoryPath LookupDir: $LookupDir\"
+                    if ($RelativeDirectoryPath -like "$LookupDir\*" ) {
+                        # Add-ObjectTo -Object $RelativeDirectoryPath -Type 'Directory List'
+
+                        $RelativeDirectoryPath
+                    }
                 }
             }
         }
@@ -83,104 +97,58 @@
             $RelativeFilePath
         }
         # Link only files in Root Directory
-        $LinkFilesRoot = foreach ($File in $RootFiles) {
-            switch -Wildcard ($file) {
-                '*.psd1' {
-                    #Write-Color $File -Color Red
-                    Add-ObjectTo -Object $File -Type 'Root Files List'
-                }
-                '*.psm1' {
-                    # Write-Color $File.FulllName -Color cd
-                    Add-ObjectTo -Object $File -Type 'Root Files List'
-                }
-                'License*' {
-                    Add-ObjectTo -Object $File -Type 'Root Files List'
+        $LinkFilesRoot = Write-TextWithTime -Text "Adding Files to Root Files List" {
+            foreach ($File in $RootFiles | Sort-Object -Unique) {
+                switch -Wildcard ($file) {
+                    '*.psd1' {
+                        #Write-Color $File -Color Red
+                        # Add-ObjectTo -Object $File -Type 'Root Files List'
+                        $File
+                    }
+                    '*.psm1' {
+                        # Write-Color $File.FulllName -Color cd
+                        #Add-ObjectTo -Object $File -Type 'Root Files List'
+                        $File
+                    }
+                    'License*' {
+                        #Add-ObjectTo -Object $File -Type 'Root Files List'
+                        $File
+                    }
                 }
             }
         }
-        Write-Verbose 'Linking private public files'
         # Link only files from subfolers
-        $LinkPrivatePublicFiles = foreach ($file in $AllFiles) {
-            switch -Wildcard ($file) {
-                '*.ps1' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
-                    continue
+        $LinkPrivatePublicFiles = Write-TextWithTime -Text "Adding Files from subfolders" {
+            foreach ($file in $AllFiles | Sort-Object -Unique) {
+                switch -Wildcard ($file) {
+                    '*.ps1' {
+                        Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
+                        continue
+                    }
+                    '*.*' {
+                        Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\'
+                        continue
+                    }
                 }
-                <#
-                'License*' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib', 'Resources'
-                    continue
-                }
-                #>
-                <#
-                "*.dll" {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Lib'
-                    continue
-                }
-                "*.exe" {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Bin'
-                    continue
-                }
-                '*.jpg' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images', 'Resources'
-                    continue
-                }
-                '*.png' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images', 'Resources'
-                    continue
-                }
-                #>
-                <#
-                '*.xml' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
-                    continue
-                }
-                '*.docx' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Templates'
-                    continue
-                }
-                #>
-                '*.*' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\'
-                    continue
-                }
-                <#
-                '*.js' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                '*.css' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                '*.rcs' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                '*.gif' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                '*.html' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                '*.txt' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                '*.sql' {
-                    Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Resources'
-                }
-                #>
             }
         }
         $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
 
         if ($Configuration.Information.Manifest) {
 
-            $Functions = Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
+            $Functions = Write-TextWithTime -Text 'Preparing functions to export' {
+                Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
+            }
             if ($Functions) {
-                Write-Verbose "Functions export: $Functions"
+                Write-TextWithTime -Text "Exported functions $Functions"
                 $Configuration.Information.Manifest.FunctionsToExport = $Functions
             }
-            $Aliases = Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
+
+            $Aliases = Write-TextWithTime -Text 'Preparing aliases' {
+                Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
+            }
             if ($Aliases) {
-                Write-Verbose "Aliases export: $Aliases"
+                Write-TextWithTime -Text "Exported aliases $Aliases"
                 $Configuration.Information.Manifest.AliasesToExport = $Aliases
             }
 
@@ -189,7 +157,8 @@
                 $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
 
                 if ($FilesEnums.Count -gt 0) {
-                    Write-Verbose "ScriptsToProcess export: $FilesEnums"
+                    #Write-Verbose "ScriptsToProcess export: $FilesEnums"
+                    Write-TextWithTime -Text "ScriptsToProcess export $FilesEnums"
                     $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
                 }
                 #}
@@ -213,10 +182,14 @@
                 Add-Directory $Dir
             }
 
-            Write-Verbose '[+] Linking files from Root Dir'
-            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
-            Write-Verbose '[+] Linking files from Sub Dir'
-            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+            #Write-Verbose '[+] Linking files from Root Dir'
+            Write-TextWithTime -Text "Linking files from Root Dir" {
+                Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+            }
+            Write-TextWithTime -Text "Linking files from Sub Dir" {
+                #Write-Verbose '[+] Linking files from Sub Dir'
+                Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+            }
 
             # Workaround to link files that are not ps1/psd1
             $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
@@ -272,14 +245,20 @@
 
     # Import Modules Section
     if ($Configuration) {
+
         if ($Configuration.Options.ImportModules.RequiredModules) {
-            foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
-                Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$Configuration.Options.ImportModules.Verbose
+            Write-TextWithTime -Text 'Importing modules - REQUIRED' {
+                foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
+                    Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false  #$Configuration.Options.ImportModules.Verbose
+                }
             }
         }
         if ($Configuration.Options.ImportModules.Self) {
-            Import-Module -Name $ProjectName -Force -ErrorAction Stop
+            Write-TextWithTime -Text 'Importing module - SELF' {
+                Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$false
+            }
         }
+
         if ($Configuration.Steps.BuildDocumentation) {
             $DocumentationPath = "$FullProjectPath\$($Configuration.Options.Documentation.Path)"
             $ReadMePath = "$FullProjectPath\$($Configuration.Options.Documentation.PathReadme)"
