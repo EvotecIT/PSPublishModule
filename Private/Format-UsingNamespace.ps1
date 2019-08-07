@@ -13,7 +13,7 @@
     $ReadFile = New-Object -TypeName System.IO.StreamReader -ArgumentList ($FileStream, [System.Text.Encoding]::UTF8, $true);
     # Read Lines
     $UsingNamespaces = [System.Collections.Generic.List[string]]::new()
-    $AddTypes = [System.Collections.Generic.List[string]]::new()
+    #$AddTypes = [System.Collections.Generic.List[string]]::new()
 
     $Content = while (!$ReadFile.EndOfStream) {
         $Line = $ReadFile.ReadLine()
