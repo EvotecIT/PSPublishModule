@@ -140,7 +140,7 @@
                 Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
             }
             if ($Functions) {
-                Write-TextWithTime -Text "Exported functions $Functions"
+                #Write-TextWithTime -Text "Exported functions $Functions"
                 $Configuration.Information.Manifest.FunctionsToExport = $Functions
             }
 
@@ -148,7 +148,7 @@
                 Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
             }
             if ($Aliases) {
-                Write-TextWithTime -Text "Exported aliases $Aliases"
+                #Write-TextWithTime -Text "Exported aliases $Aliases"
                 $Configuration.Information.Manifest.AliasesToExport = $Aliases
             }
 
