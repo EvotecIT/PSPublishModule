@@ -21,14 +21,14 @@ Foreach ($import in @($Assembly)) {
 
 Export-ModuleMember -Function '*'
 
-[string] $ManifestFile = '{0}.psd1' -f (Get-Item $PSCommandPath).BaseName;
+[string] $ManifestFile = '{0}.psd1' -f (Get-Item -Path $PSCommandPath).BaseName;
 $ManifestPathAndFile = Join-Path -Path $PSScriptRoot -ChildPath $ManifestFile;
-if ( Test-Path -Path $ManifestPathAndFile) {
-    $Manifest = (Get-Content -raw $ManifestPathAndFile) | iex;
+if (Test-Path -Path $ManifestPathAndFile) {
+    $Manifest = (Get-Content -Raw $ManifestPathAndFile) | Invoke-Expression;
     foreach ( $ScriptToProcess in $Manifest.ScriptsToProcess) {
         $ModuleToRemove = (Get-Item (Join-Path -Path $PSScriptRoot -ChildPath $ScriptToProcess)).BaseName;
-        if (Get-Module $ModuleToRemove) {
-            Remove-Module $ModuleToRemove;
+        if (Get-Module -Name $ModuleToRemove) {
+            Remove-Module -Name $ModuleToRemove;
         }
     }
 }

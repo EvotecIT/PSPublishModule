@@ -3,7 +3,8 @@ function New-PersonalManifest {
     param(
         [System.Collections.IDictionary] $Configuration,
         [string] $ManifestPath,
-        [switch] $AddScriptsToProcess
+        [switch] $AddScriptsToProcess,
+        [switch] $AddUsingsToProcess
     )
 
     $Manifest = $Configuration.Information.Manifest
@@ -12,7 +13,9 @@ function New-PersonalManifest {
     if (-not $AddScriptsToProcess) {
         $Manifest.ScriptsToProcess = @()
     }
-
+    if ($AddUsingsToProcess -and $Configuration.UsingInPlace) {
+        $Manifest.ScriptsToProcess = @($Configuration.UsingInPlace)
+    }
 
     New-ModuleManifest @Manifest
 

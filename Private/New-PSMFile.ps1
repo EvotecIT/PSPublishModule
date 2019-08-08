@@ -51,9 +51,9 @@ function New-PSMFile {
             }
         }
 
-        if ($UsingNamespaces) {
-            '. $PSScriptRoot\' + "$ModuleName.ps1" | Add-Content -Path $Path
-        }
+        #if ($UsingNamespaces) {
+        #    '. $PSScriptRoot\' + "$ModuleName.ps1" | Add-Content -Path $Path
+        #}
 
         @"
 

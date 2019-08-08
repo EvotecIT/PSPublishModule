@@ -2,8 +2,8 @@ function New-CreateModule {
     [CmdletBinding()]
     param (
         [string] $ProjectName,
-        $ModulePath,
-        $ProjectPath
+        [string] $ModulePath,
+        [string] $ProjectPath
     )
     $FullProjectPath = "$projectPath\$projectName"
     $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data'

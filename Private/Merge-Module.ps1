@@ -11,8 +11,9 @@ function Merge-Module {
         [string[]] $AliasesToExport,
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
-        $FormatCodePSM1,
-        $FormatCodePSD1
+        [System.Collections.IDictionary] $FormatCodePSM1,
+        [System.Collections.IDictionary] $FormatCodePSD1,
+        [System.Collections.IDictionary] $Configuration
     )
     $PSM1FilePath = "$ModulePathTarget\$ModuleName.psm1"
     $PSD1FilePath = "$ModulePathTarget\$ModuleName.psd1"
@@ -45,11 +46,12 @@ function Merge-Module {
 
 
     # Using file is needed if there are 'using namespaces' - this is a workaround provided by seeminglyscience
-    $FilePathUsing = "$ModulePathTarget\$ModuleName.ps1"
+    $FilePathUsing = "$ModulePathTarget\$ModuleName.Usings.ps1"
 
     $UsingInPlace = Format-UsingNamespace -FilePath $PSM1FilePath -FilePathUsing $FilePathUsing
     if ($UsingInPlace) {
         Format-Code -FilePath $FilePathUsing -FormatCode $FormatCodePSM1
+        $Configuration.UsingInPlace = "$ModuleName.Usings.ps1"
     }
 
     New-PSMFile -Path $PSM1FilePath `
@@ -61,8 +63,6 @@ function Merge-Module {
         -UsingNamespaces:$UsingInPlace
 
     Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
-    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath
+    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess
     Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
-
-
 }

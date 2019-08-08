@@ -134,41 +134,46 @@
         }
         $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
 
-        if ($Configuration.Information.Manifest) {
+        #if ($Configuration.Information.Manifest) {
 
-            $Functions = Write-TextWithTime -Text 'Preparing functions to export' {
-                Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
-            }
-            if ($Functions) {
-                #Write-TextWithTime -Text "Exported functions $Functions"
-                $Configuration.Information.Manifest.FunctionsToExport = $Functions
-            }
-
-            $Aliases = Write-TextWithTime -Text 'Preparing aliases' {
-                Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
-            }
-            if ($Aliases) {
-                #Write-TextWithTime -Text "Exported aliases $Aliases"
-                $Configuration.Information.Manifest.AliasesToExport = $Aliases
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
-                $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
-                $FilesEnums = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
-
-                if ($FilesEnums.Count -gt 0) {
-                    #Write-Verbose "ScriptsToProcess export: $FilesEnums"
-                    Write-TextWithTime -Text "ScriptsToProcess export $FilesEnums"
-                    $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
-                }
-                #}
-            }
-
-            $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
-            New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
-
-            Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
+        $Functions = Write-TextWithTime -Text 'Preparing functions to export' {
+            Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
         }
+        if ($Functions) {
+            #Write-TextWithTime -Text "Exported functions $Functions"
+            $Configuration.Information.Manifest.FunctionsToExport = $Functions
+        }
+
+        $Aliases = Write-TextWithTime -Text 'Preparing aliases' {
+            Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
+        }
+        if ($Aliases) {
+            #Write-TextWithTime -Text "Exported aliases $Aliases"
+            $Configuration.Information.Manifest.AliasesToExport = $Aliases
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
+            $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
+            $FilesEnums = @(
+                $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
+            )
+
+            if ($FilesEnums.Count -gt 0) {
+                #Write-Verbose "ScriptsToProcess export: $FilesEnums"
+                Write-TextWithTime -Text "ScriptsToProcess export $FilesEnums"
+                $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
+            }
+            #}
+        }
+
+        $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
+        New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+
+        Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
+
+    }
+
+        #}
 
         if ($Configuration.Steps.BuildModule.Merge) {
             foreach ($Directory in $LinkDirectories) {
@@ -215,7 +220,8 @@
                 -LibrariesCore $FilesLibrariesCore `
                 -LibrariesDefault $FilesLibrariesDefault `
                 -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
-                -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1
+                -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
+                -Configuration $Configuration
 
         } else {
             foreach ($Directory in $LinkDirectories) {
@@ -230,7 +236,8 @@
             #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
             #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
         }
-    }
+
+
     if ($Configuration.Steps.PublishModule.Enabled) {
         if ($Configuration.Options.PowerShellGallery.FromFile) {
             $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey

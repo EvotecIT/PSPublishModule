@@ -36,7 +36,8 @@
         #$UsingNamespaces | Add-Content -LiteralPath $FilePathUsing -Encoding utf8
 
 
-        $Content | Add-Content -LiteralPath $FilePathUsing -Encoding utf8
+        #$Content | Add-Content -LiteralPath $FilePathUsing -Encoding utf8
+        $Content | Add-Content -LiteralPath $FilePathSave -Encoding utf8
         return $true
     } else {
         $Content | Add-Content -LiteralPath $FilePathSave -Encoding utf8
