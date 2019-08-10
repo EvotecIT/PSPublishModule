@@ -65,4 +65,9 @@ function Merge-Module {
     Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
     New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess
     Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
+
+    # cleans up empty directories
+    Get-ChildItem $ModulePathTarget -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
+        Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
+        Remove-Item -Verbose
 }

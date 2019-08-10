@@ -4,8 +4,7 @@ Function Get-AliasTarget {
     [cmdletbinding()]
     param (
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
-        [Alias('PSPath', 'FullName')]
-        [string[]]$Path
+        [Alias('PSPath', 'FullName')][string[]]$Path
     )
 
     process {
@@ -19,10 +18,13 @@ Function Get-AliasTarget {
                 }, $true).Name
 
             $AliasDefinitions = $FileAst.FindAll( {
-                    param ($ast)
+                    param ( $ast )
 
-                    $ast -is [System.Management.Automation.Language.StringConstantExpressionAst] -And $ast.Value -match '(New|Set)-Alias'
-                }, $true)
+                    $ast -is [System.Management.Automation.Language.AttributeAst] -and
+                    $ast.TypeName.Name -eq 'Alias' -and
+                    $ast.Parent -is [System.Management.Automation.Language.ParamBlockAst]
+                }, $false).PositionalArguments.Value
+
 
             $AliasTarget = $AliasDefinitions.Parent.CommandElements.Where( {
                     $_.StringConstantType -eq 'BareWord' -and
@@ -35,7 +37,7 @@ Function Get-AliasTarget {
                     $ast -is [System.Management.Automation.Language.AttributeAst]
                 }, $true)
 
-            $AliasDefinitions = $Attributes.Where( {$_.TypeName.Name -eq 'Alias' -and $_.Parent -is [System.Management.Automation.Language.ParamBlockAst]})
+            $AliasDefinitions = $Attributes.Where( { $_.TypeName.Name -eq 'Alias' -and $_.Parent -is [System.Management.Automation.Language.ParamBlockAst] })
 
             $AliasTarget += $AliasDefinitions.PositionalArguments.Value
 
@@ -47,7 +49,22 @@ Function Get-AliasTarget {
     }
 }
 
-#Get-AliasTarget -Path 'C:\Support\GitHub\PSSharedGoods\Public\Objects\Format-Stream.ps1' | Select-Object -ExpandProperty Alias
+<#
+            $AliasDefinitions = $FileAst.FindAll( {
+                    param ($ast)
 
+                    $ast -is [System.Management.Automation.Language.StringConstantExpressionAst] -And $ast.Value -match '(New|Set)-Alias'
+                }, $true)
+            #>
+
+#Measure-Command {
+# Get-AliasTarget -Path 'C:\Support\GitHub\PSSharedGoods\Public\Objects\Format-Stream.ps1' #| Select-Object -ExpandProperty Alias
+#Get-AliasTarget -path 'C:\Support\GitHub\PSPublishModule\Private\Get-AliasTarget.ps1'
+# get-aliastarget -path 'C:\Support\GitHub\PSPublishModule\Private\Start-ModuleBuilding.ps1'
+#}
+#Get-AliasTarget -Path 'C:\Add-TableContent.ps1'
+
+#Get-AliasTarget -Path 'C:\Support\GitHub\PSWriteHTML\Private\Add-TableContent.ps1'
+#Get-FunctionNames -Path 'C:\Support\GitHub\PSWriteHTML\Private\Add-TableContent.ps1'
 
 #Get-FunctionAliases -Path 'C:\Support\GitHub\PSSharedGoods\Public\Objects\Format-Stream.ps1'

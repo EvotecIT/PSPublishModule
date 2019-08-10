@@ -34,7 +34,7 @@
     Add-Directory $FullModulePath
     Add-Directory $FullTemporaryPath
 
-    $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates', 'Resources'
+    # $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates', 'Resources'
 
     $LinkDirectories = @()
     $LinkPrivatePublicFiles = @()
@@ -49,28 +49,50 @@
     # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
     $Configuration.Information.Manifest.AliasesToExport = @()
 
+    $Exclude = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
 
     if ($Configuration.Steps.BuildModule) {
 
         if ($PSEdition -eq 'core') {
             $Directories = Write-TextWithTime -Text "Getting directories list" {
-                Get-ChildItem -Path $FullProjectPath -Directory -Recurse -FollowSymlink
+                #Get-ChildItem -Path $FullProjectPath -Directory -Recurse -FollowSymlink
+                #Get-ChildItem -Path $FullProjectPath -Directory -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' -FollowSymlink | Get-ChildItem -Directory -Recurse -FollowSymlink
+                $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude -FollowSymlink
+                @(
+                    $TempDirectories
+                    $TempDirectories | Get-ChildItem -Directory -Recurse -FollowSymlink
+                )
             }
             $Files = Write-TextWithTime -Text "Getting files list" {
-                Get-ChildItem -Path $FullProjectPath -File -Recurse -FollowSymlink
+                #Get-ChildItem -Path $FullProjectPath -File -Recurse -FollowSymlink
+                Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
             }
             $FilesRoot = Write-TextWithTime -Text "Getting files list - root" {
-                Get-ChildItem -Path $FullProjectPath -File -FollowSymlink
+                # Get-ChildItem -Path $FullProjectPath -File -FollowSymlink
+                # Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -FollowSymlink
+                Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File -FollowSymlink
             }
         } else {
             $Directories = Write-TextWithTime -Text "Getting directories list" {
-                Get-ChildItem -Path $FullProjectPath -Directory -Recurse
+                # Get-ChildItem -Path $FullProjectPath -Directory -Recurse
+                #Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples', 'package.json' -Directory | Get-ChildItem -Directory -Recurse
+                #Get-ChildItem -Path $FullProjectPath -Directory -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' | Get-ChildItem -Directory -Recurse
+
+                $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
+                @(
+                    $TempDirectories
+                    $TempDirectories | Get-ChildItem -Directory -Recurse
+                )
             }
             $Files = Write-TextWithTime -Text "Getting files list" {
-                Get-ChildItem -Path $FullProjectPath -File -Recurse
+                #Get-ChildItem -Path $FullProjectPath -File -Recurse
+                #Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples','package.json' | Get-ChildItem -File -Recurse
+                Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' | Get-ChildItem -File -Recurse
             }
             $FilesRoot = Write-TextWithTime -Text "Getting files list - root" {
-                Get-ChildItem -Path $FullProjectPath -File
+                # Get-ChildItem -Path $FullProjectPath -File
+                #Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples','package.json' | Get-ChildItem -File -Recurse
+                Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File
             }
         }
 
@@ -78,16 +100,16 @@
             foreach ($directory in $Directories) {
                 $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
                 $RelativeDirectoryPath = "$RelativeDirectoryPath\"
-                foreach ($LookupDir in $DirectoryTypes) {
-                    #Write-Verbose "New-PrepareModule - RelativeDirectoryPath: $RelativeDirectoryPath LookupDir: $LookupDir\"
-                    if ($RelativeDirectoryPath -like "$LookupDir\*" ) {
-                        # Add-ObjectTo -Object $RelativeDirectoryPath -Type 'Directory List'
+                #foreach ($LookupDir in $DirectoryTypes) {
+                #Write-Verbose "New-PrepareModule - RelativeDirectoryPath: $RelativeDirectoryPath LookupDir: $LookupDir\"
+                #   if ($RelativeDirectoryPath -like "$LookupDir\*" ) {
+                # Add-ObjectTo -Object $RelativeDirectoryPath -Type 'Directory List'
 
-                        $RelativeDirectoryPath
-                    }
-                }
+                $RelativeDirectoryPath
             }
+            #}
         }
+
         $AllFiles = foreach ($File in $Files) {
             $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
             $RelativeFilePath
@@ -97,6 +119,7 @@
             $RelativeFilePath
         }
         # Link only files in Root Directory
+
         $LinkFilesRoot = Write-TextWithTime -Text "Adding Files to Root Files List" {
             foreach ($File in $RootFiles | Sort-Object -Unique) {
                 switch -Wildcard ($file) {
@@ -117,6 +140,7 @@
                 }
             }
         }
+
         # Link only files from subfolers
         $LinkPrivatePublicFiles = Write-TextWithTime -Text "Adding Files from subfolders" {
             foreach ($file in $AllFiles | Sort-Object -Unique) {
@@ -137,7 +161,7 @@
         #if ($Configuration.Information.Manifest) {
 
         $Functions = Write-TextWithTime -Text 'Preparing functions to export' {
-            Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.FunctionsToExport
+            Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.FunctionsToExport
         }
         if ($Functions) {
             #Write-TextWithTime -Text "Exported functions $Functions"
@@ -145,7 +169,7 @@
         }
 
         $Aliases = Write-TextWithTime -Text 'Preparing aliases' {
-            Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Folder $Configuration.Information.AliasesToExport
+            Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
         }
         if ($Aliases) {
             #Write-TextWithTime -Text "Exported aliases $Aliases"
@@ -170,72 +194,68 @@
         New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
 
         Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
-
     }
-
-        #}
-
-        if ($Configuration.Steps.BuildModule.Merge) {
-            foreach ($Directory in $LinkDirectories) {
-                $Dir = "$FullTemporaryPath\$Directory"
-                Add-Directory $Dir
-            }
-            # Workaround to link files that are not ps1/psd1
-            $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -ne 'Public\' -and $_ -ne 'Private\' }
-            foreach ($Directory in $LinkDirectoriesWithSupportFiles) {
-                $Dir = "$FullModulePath\$Directory"
-                Add-Directory $Dir
-            }
-
-            #Write-Verbose '[+] Linking files from Root Dir'
-            Write-TextWithTime -Text "Linking files from Root Dir" {
-                Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
-            }
-            Write-TextWithTime -Text "Linking files from Sub Dir" {
-                #Write-Verbose '[+] Linking files from Sub Dir'
-                Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
-            }
-
-            # Workaround to link files that are not ps1/psd1
-            $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
-            Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
-                $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
-                $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
-                #$FilesLibrariesCore
-            }
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
-                $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
-                $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
-                #$FilesLibrariesDefault
-            }
-
-            Merge-Module -ModuleName $ProjectName `
-                -ModulePathSource $FullTemporaryPath `
-                -ModulePathTarget $FullModulePath `
-                -Sort $Configuration.Options.Merge.Sort `
-                -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
-                -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
-                -LibrariesCore $FilesLibrariesCore `
-                -LibrariesDefault $FilesLibrariesDefault `
-                -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
-                -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
-                -Configuration $Configuration
-
-        } else {
-            foreach ($Directory in $LinkDirectories) {
-                $Dir = "$FullModulePath\$Directory"
-                Add-Directory $Dir
-            }
-
-            Write-Verbose '[+] Linking files from Root Dir'
-            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-            Write-Verbose '[+] Linking files from Sub Dir'
-            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-            #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
-            #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+    if ($Configuration.Steps.BuildModule.Merge) {
+        foreach ($Directory in $LinkDirectories) {
+            $Dir = "$FullTemporaryPath\$Directory"
+            Add-Directory $Dir
         }
+        # Workaround to link files that are not ps1/psd1
+        $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -ne 'Public\' -and $_ -ne 'Private\' }
+        foreach ($Directory in $LinkDirectoriesWithSupportFiles) {
+            $Dir = "$FullModulePath\$Directory"
+            Add-Directory $Dir
+        }
+
+        #Write-Verbose '[+] Linking files from Root Dir'
+        Write-TextWithTime -Text "Linking files from Root Dir" {
+            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+        }
+        Write-TextWithTime -Text "Linking files from Sub Dir" {
+            #Write-Verbose '[+] Linking files from Sub Dir'
+            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+        }
+
+        # Workaround to link files that are not ps1/psd1
+        $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
+        Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+
+        if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
+            $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
+            $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+            #$FilesLibrariesCore
+        }
+        if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
+            $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
+            $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+            #$FilesLibrariesDefault
+        }
+
+        Merge-Module -ModuleName $ProjectName `
+            -ModulePathSource $FullTemporaryPath `
+            -ModulePathTarget $FullModulePath `
+            -Sort $Configuration.Options.Merge.Sort `
+            -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
+            -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
+            -LibrariesCore $FilesLibrariesCore `
+            -LibrariesDefault $FilesLibrariesDefault `
+            -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
+            -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
+            -Configuration $Configuration
+
+    } else {
+        foreach ($Directory in $LinkDirectories) {
+            $Dir = "$FullModulePath\$Directory"
+            Add-Directory $Dir
+        }
+
+        Write-Verbose '[+] Linking files from Root Dir'
+        Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        Write-Verbose '[+] Linking files from Sub Dir'
+        Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
+        #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+    }
 
 
     if ($Configuration.Steps.PublishModule.Enabled) {
