@@ -29,25 +29,37 @@ function New-PSMFile {
 
             'if ($PSEdition -eq ''Core'') {' | Add-Content -Path $Path
             foreach ($File in $LibrariesCore) {
-                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                $Output | Add-Content -Path $Path
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output | Add-Content -Path $Path
+                }
             }
             '} else {' | Add-Content -Path $Path
             foreach ($File in $LibrariesDefault) {
-                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                $Output | Add-Content -Path $Path
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output | Add-Content -Path $Path
+                }
             }
             '}' | Add-Content -Path $Path
 
         } elseif ($LibrariesCore.Count -gt 0) {
             foreach ($File in $LibrariesCore) {
-                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                $Output | Add-Content -Path $Path
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output | Add-Content -Path $Path
+                }
             }
         } elseif ($LibrariesDefault.Count -gt 0) {
             foreach ($File in $LibrariesDefault) {
-                $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                $Output | Add-Content -Path $Path
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output | Add-Content -Path $Path
+                }
             }
         }
 
