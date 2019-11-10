@@ -4,8 +4,7 @@ Function Get-AliasTarget {
 
         [Alias('PSPath', 'FullName')][Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName)][string[]]$Path,
         [string] $Content,
-        [switch] $RecurseFunctionNames,
-        [switch] $RecurseAliases
+        [switch] $RecurseFunctionNames
     )
 
     process {
@@ -17,26 +16,45 @@ Function Get-AliasTarget {
             $Code = $false
         }
         foreach ($File in $ProcessData) {
+            $Ast = $null
             if ($Code) {
                 $FileAst = [System.Management.Automation.Language.Parser]::ParseInput($File, [ref]$null, [ref]$null)
             } else {
                 $FileAst = [System.Management.Automation.Language.Parser]::ParseFile($File , [ref]$null, [ref]$null)
             }
-            [Array] $FunctionName = $FileAst.FindAll( {
+            $FunctionName = $FileAst.FindAll( {
                     param ($ast)
                     $ast -is [System.Management.Automation.Language.FunctionDefinitionAst]
                 }, $RecurseFunctionNames).Name
+
+
+            $Ast = $Null
             $AliasDefinitions = $FileAst.FindAll( {
                     param ( $ast )
                     $ast -is [System.Management.Automation.Language.AttributeAst] -and
                     $ast.TypeName.Name -eq 'Alias' -and
                     $ast.Parent -is [System.Management.Automation.Language.ParamBlockAst]
-                }, $RecurseAliases).PositionalArguments.Value
+                }, $true)
+
+            $AliasTarget = @(
+                $AliasDefinitions.PositionalArguments.Value
+                foreach ($_ in  $AliasDefinitions.Parent.CommandElements) {
+                    if ($_.StringConstantType -eq 'BareWord' -and $_.Value -notin ('New-Alias', 'Set-Alias', $FunctionName)) {
+                        $_.Value
+                    }
+                }
+            )
+
+            <#
             [Array] $AliasTarget = @(
-                $AliasDefinitions.Parent.CommandElements.Where( {
-                        $_.StringConstantType -eq 'BareWord' -and
-                        $_.Value -notin ('New-Alias', 'Set-Alias', $FunctionName)
-                    }).Value
+                if ($AliasDefinitions) {
+                    $AliasDefinitions.Parent.CommandElements.Where( {
+                            $_.StringConstantType -eq 'BareWord' -and
+                            $_.Value -notin ('New-Alias', 'Set-Alias', $FunctionName)
+                        }).Value
+                }
+
+
                 $Attributes = $FileAst.FindAll( {
                         param ($ast)
 
@@ -45,6 +63,8 @@ Function Get-AliasTarget {
                 $AliasDefinitions = $Attributes.Where( { $_.TypeName.Name -eq 'Alias' -and $_.Parent -is [System.Management.Automation.Language.ParamBlockAst] })
                 $AliasDefinitions.PositionalArguments.Value
             )
+            #>
+
             $AliasTarget = foreach ($_ in $AliasTarget) {
                 if ($_ -ne $null) {
                     $_
@@ -56,6 +76,27 @@ Function Get-AliasTarget {
             }
         }
     }
+}
+
+
+Measure-Command {
+    $Files = Get-ChildItem -LiteralPath 'C:\Support\GitHub\PSWriteHTML\Public'
+
+    $Functions = foreach ($_ in $Files) {
+        Get-AliasTarget -Path $_.FullName
+    }
+}
+
+
+return
+
+Measure-Command {
+    $Files = Get-ChildItem -LiteralPath 'C:\Support\GitHub\PSWriteHTML\Public'
+
+    $Functions = foreach ($_ in $Files) {
+        [System.Management.Automation.Language.Parser]::ParseFile($_ , [ref]$null, [ref]$null)
+    }
+
 }
 
 <#
