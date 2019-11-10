@@ -78,6 +78,7 @@ Function Get-AliasTarget {
     }
 }
 
+<#
 
 Measure-Command {
     $Files = Get-ChildItem -LiteralPath 'C:\Support\GitHub\PSWriteHTML\Public'
@@ -88,7 +89,7 @@ Measure-Command {
 }
 
 
-return
+
 
 Measure-Command {
     $Files = Get-ChildItem -LiteralPath 'C:\Support\GitHub\PSWriteHTML\Public'
@@ -98,6 +99,8 @@ Measure-Command {
     }
 
 }
+
+#>
 
 <#
             $AliasDefinitions = $FileAst.FindAll( {
