@@ -40,10 +40,10 @@
             CheckSeparator  = $true
         }
 
-        #PSAlignAssignmentStatement = @{
-        #    Enable         = $true
-        #    CheckHashtable = $true
-        #}
+        PSAlignAssignmentStatement = @{
+            Enable         = $true
+            CheckHashtable = $true
+        }
 
         PSUseCorrectCasing         = @{
             Enable = $true

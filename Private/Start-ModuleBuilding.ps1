@@ -1,29 +1,35 @@
 ﻿function Start-ModuleBuilding {
     [CmdletBinding()]
     param(
-        [System.Collections.IDictionary] $Configuration,
-        [switch] $Core
+        [System.Collections.IDictionary] $Configuration
     )
-    if ($Core) {
-        [string] $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
-        # [string] $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
-    } else {
-        [string] $FullModulePath = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
-        # [string] $FullModulePathDelete = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
+
+    $DestinationPaths = @{ }
+    if ($Configuration.Information.Manifest.CompatiblePSEditions) {
+        if ($Configuration.Information.Manifest.CompatiblePSEditions -contains 'Desktop') {
+            $DestinationPaths.Desktop = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
+        }
+        if ($Configuration.Information.Manifest.CompatiblePSEditions -contains 'Core') {
+            $DestinationPaths.Core = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
+        }
     }
+
+    [string] $Random = Get-Random 10000000000
+    [string] $FullModulePath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName + "_TEMP_$Random"
     [string] $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
     [string] $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
     [string] $ProjectName = $Configuration.Information.ModuleName
 
-    Write-Verbose '----------------------------------------------------'
-    Write-Verbose "Project Name: $ProjectName"
-    Write-Verbose "Full module path: $FullModulePath"
-    Write-Verbose "Full project path: $FullProjectPath"
-    Write-Verbose "Full module path to delete: $FullModulePathDelete"
-    Write-Verbose "Full temporary path: $FullTemporaryPath"
-    Write-Verbose "PSScriptRoot: $PSScriptRoot"
-    Write-Verbose "PSEdition: $PSEdition"
-    Write-Verbose '----------------------------------------------------'
+    Write-Text '----------------------------------------------------'
+    Write-Text "[i] Project Name: $ProjectName" -Color Yellow
+    Write-Text "[i] Full module temporary path: $FullModulePath" -Color Yellow
+    Write-Text "[i] Full project path: $FullProjectPath" -Color Yellow
+    Write-Text "[i] Full temporary path: $FullTemporaryPath" -Color Yellow
+    Write-Text "[i] PSScriptRoot: $PSScriptRoot" -Color Yellow
+    Write-Text "[i] Current PSEdition: $PSEdition" -Color Yellow
+    Write-Text "[i] Destination Desktop: $($DestinationPaths.Desktop)" -Color Yellow
+    Write-Text "[i] Destination Core: $($DestinationPaths.Desktop)" -Color Yellow
+    Write-Text '----------------------------------------------------'
 
     $CurrentLocation = (Get-Location).Path
     Set-Location -Path $FullProjectPath
@@ -52,64 +58,36 @@
     $Exclude = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
 
     if ($Configuration.Steps.BuildModule) {
+        $PreparingFilesTime = Write-Text "[+] Preparing files and folders" -Start
 
         if ($PSEdition -eq 'core') {
-            $Directories = Write-TextWithTime -Text "Getting directories list" {
-                #Get-ChildItem -Path $FullProjectPath -Directory -Recurse -FollowSymlink
-                #Get-ChildItem -Path $FullProjectPath -Directory -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' -FollowSymlink | Get-ChildItem -Directory -Recurse -FollowSymlink
+            $Directories = @(
                 $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude -FollowSymlink
                 @(
                     $TempDirectories
                     $TempDirectories | Get-ChildItem -Directory -Recurse -FollowSymlink
                 )
-            }
-            $Files = Write-TextWithTime -Text "Getting files list" {
-                #Get-ChildItem -Path $FullProjectPath -File -Recurse -FollowSymlink
-                Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
-            }
-            $FilesRoot = Write-TextWithTime -Text "Getting files list - root" {
-                # Get-ChildItem -Path $FullProjectPath -File -FollowSymlink
-                # Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -FollowSymlink
-                Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File -FollowSymlink
-            }
+            )
+            $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
+            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File -FollowSymlink
         } else {
-            $Directories = Write-TextWithTime -Text "Getting directories list" {
-                # Get-ChildItem -Path $FullProjectPath -Directory -Recurse
-                #Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples', 'package.json' -Directory | Get-ChildItem -Directory -Recurse
-                #Get-ChildItem -Path $FullProjectPath -Directory -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' | Get-ChildItem -Directory -Recurse
-
+            $Directories = @(
                 $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
                 @(
                     $TempDirectories
                     $TempDirectories | Get-ChildItem -Directory -Recurse
                 )
-            }
-            $Files = Write-TextWithTime -Text "Getting files list" {
-                #Get-ChildItem -Path $FullProjectPath -File -Recurse
-                #Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples','package.json' | Get-ChildItem -File -Recurse
-                Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' | Get-ChildItem -File -Recurse
-            }
-            $FilesRoot = Write-TextWithTime -Text "Getting files list - root" {
-                # Get-ChildItem -Path $FullProjectPath -File
-                #Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples','package.json' | Get-ChildItem -File -Recurse
-                Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File
-            }
+            )
+            $Files = Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' | Get-ChildItem -File -Recurse
+            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File
         }
-
-        $LinkDirectories = Write-TextWithTime -Text "Adding Directories to Directory List" {
+        $LinkDirectories = @(
             foreach ($directory in $Directories) {
                 $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
                 $RelativeDirectoryPath = "$RelativeDirectoryPath\"
-                #foreach ($LookupDir in $DirectoryTypes) {
-                #Write-Verbose "New-PrepareModule - RelativeDirectoryPath: $RelativeDirectoryPath LookupDir: $LookupDir\"
-                #   if ($RelativeDirectoryPath -like "$LookupDir\*" ) {
-                # Add-ObjectTo -Object $RelativeDirectoryPath -Type 'Directory List'
-
                 $RelativeDirectoryPath
             }
-            #}
-        }
-
+        )
         $AllFiles = foreach ($File in $Files) {
             $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
             $RelativeFilePath
@@ -120,7 +98,7 @@
         }
         # Link only files in Root Directory
 
-        $LinkFilesRoot = Write-TextWithTime -Text "Adding Files to Root Files List" {
+        $LinkFilesRoot = @(
             foreach ($File in $RootFiles | Sort-Object -Unique) {
                 switch -Wildcard ($file) {
                     '*.psd1' {
@@ -139,10 +117,10 @@
                     }
                 }
             }
-        }
+        )
 
         # Link only files from subfolers
-        $LinkPrivatePublicFiles = Write-TextWithTime -Text "Adding Files from subfolders" {
+        $LinkPrivatePublicFiles = @(
             foreach ($file in $AllFiles | Sort-Object -Unique) {
                 switch -Wildcard ($file) {
                     '*.ps1' {
@@ -155,25 +133,19 @@
                     }
                 }
             }
-        }
+        )
         $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
 
-        #if ($Configuration.Information.Manifest) {
-
-        $Functions = Write-TextWithTime -Text 'Preparing functions to export' {
-            Get-FunctionNamesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.FunctionsToExport
-        }
-        if ($Functions) {
-            #Write-TextWithTime -Text "Exported functions $Functions"
-            $Configuration.Information.Manifest.FunctionsToExport = $Functions
-        }
-
-        $Aliases = Write-TextWithTime -Text 'Preparing aliases' {
+        Write-Text -End -Time $PreparingFilesTime
+        $AliasesAndFunctions = Write-TextWithTime -Text '[+] Preparing function and aliases names' {
             Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
         }
-        if ($Aliases) {
-            #Write-TextWithTime -Text "Exported aliases $Aliases"
-            $Configuration.Information.Manifest.AliasesToExport = $Aliases
+
+        if ($AliasesAndFunctions.Function) {
+            $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Function
+        }
+        if ($AliasesAndFunctions.Alias) {
+            $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias
         }
 
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
@@ -184,7 +156,7 @@
 
             if ($FilesEnums.Count -gt 0) {
                 #Write-Verbose "ScriptsToProcess export: $FilesEnums"
-                Write-TextWithTime -Text "ScriptsToProcess export $FilesEnums"
+                Write-TextWithTime -Text "[+] ScriptsToProcess export $FilesEnums"
                 $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
             }
             #}
@@ -207,18 +179,14 @@
             Add-Directory $Dir
         }
 
-        #Write-Verbose '[+] Linking files from Root Dir'
-        Write-TextWithTime -Text "Linking files from Root Dir" {
-            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
-        }
-        Write-TextWithTime -Text "Linking files from Sub Dir" {
-            #Write-Verbose '[+] Linking files from Sub Dir'
-            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
-        }
+        $LinkingFilesTime = Write-Text "[+] Linking files from root and sub directories" -Start
+        Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+        Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+        Write-Text -End -Time $LinkingFilesTime
 
         # Workaround to link files that are not ps1/psd1
-        $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
-        Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        # $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
+        # Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
 
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
             $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
@@ -248,13 +216,10 @@
             $Dir = "$FullModulePath\$Directory"
             Add-Directory $Dir
         }
-
-        Write-Verbose '[+] Linking files from Root Dir'
+        $LinkingFilesTime = Write-Text "[+] Linking files from root and sub directories" -Start
         Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-        Write-Verbose '[+] Linking files from Sub Dir'
         Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
-        #Set-LinkedFiles -LinkFiles $LinkFilesSpecial -FullModulePath $PrivateProjectPath -FullProjectPath $AddPrivate -Delete
-        #Set-LinkedFiles -LinkFiles $LinkFiles -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
+        Write-Text -End -Time $LinkingFilesTime
     }
 
 
@@ -270,43 +235,73 @@
     # Revers Path to current locatikon
     Set-Location -Path $CurrentLocation
 
+
+    if ($DestinationPaths.Desktop) {
+        Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
+            Remove-Directory $$DestinationPaths.Desktop
+            #Add-Directory $$DestinationPaths.Desktop
+            Get-ChildItem -LiteralPath $FullModulePath | Copy-Item -Destination $DestinationPaths.Desktop -Recurse
+        }
+    }
+    if ($DestinationPaths.Core) {
+        Write-TextWithTime -Text "[+] Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
+            Remove-Directory $$DestinationPaths.Core
+            #Add-Directory $$DestinationPaths.Core
+            Get-ChildItem -LiteralPath $FullModulePath | Copy-Item -Destination $DestinationPaths.Core -Recurse
+        }
+    }
+
+
     # Import Modules Section
     if ($Configuration) {
 
+        $TemporaryVerbosePreference = $VerbosePreference
+        $VerbosePreference = $false
+
         if ($Configuration.Options.ImportModules.RequiredModules) {
-            Write-TextWithTime -Text 'Importing modules - REQUIRED' {
+            Write-TextWithTime -Text '[+] Importing modules - REQUIRED' {
                 foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
                     Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false  #$Configuration.Options.ImportModules.Verbose
                 }
             }
         }
         if ($Configuration.Options.ImportModules.Self) {
-            Write-TextWithTime -Text 'Importing module - SELF' {
+            Write-TextWithTime -Text '[+] Importing module - SELF' {
+
                 Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$false
             }
         }
+        $VerbosePreference = $TemporaryVerbosePreference
 
         if ($Configuration.Steps.BuildDocumentation) {
+            $WarningVariablesMarkdown = @()
             $DocumentationPath = "$FullProjectPath\$($Configuration.Options.Documentation.Path)"
             $ReadMePath = "$FullProjectPath\$($Configuration.Options.Documentation.PathReadme)"
-            Write-Verbose "Generating documentation to $DocumentationPath with $ReadMePath"
+            Write-Text "[+] Generating documentation to $DocumentationPath with $ReadMePath" -Color Yellow
 
             if (-not (Test-Path -Path $DocumentationPath)) {
                 $null = New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
             }
             $Files = Get-ChildItem -Path $DocumentationPath
             if ($Files.Count -gt 0) {
-                $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop
+                $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue
             } else {
-                $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop
+                $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue
                 $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
                 #Start-Sleep -Seconds 1
                 # this is temporary workaround - due to diff output on update
                 if ($Configuration.Options.Documentation.UpdateWhenNew) {
-                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop
+                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue
                 }
                 #
             }
+            foreach ($_ in $WarningVariablesMarkdown) {
+                Write-Text "[-] Documentation warning: $_" -Color Yellow
+            }
         }
     }
+    # Cleanup temp directory
+    Write-Text "[+] Cleaning up directories created in TEMP directory" -Color Yellow
+    Remove-Directory $FullModulePath
+    Remove-Directory $FullTemporaryPath
 }

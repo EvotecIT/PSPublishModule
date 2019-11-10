@@ -6,7 +6,6 @@ Function Get-AliasTarget {
         [string] $Content,
         [switch] $RecurseFunctionNames
     )
-
     process {
         if ($Content) {
             $ProcessData = $Content
@@ -44,27 +43,6 @@ Function Get-AliasTarget {
                     }
                 }
             )
-
-            <#
-            [Array] $AliasTarget = @(
-                if ($AliasDefinitions) {
-                    $AliasDefinitions.Parent.CommandElements.Where( {
-                            $_.StringConstantType -eq 'BareWord' -and
-                            $_.Value -notin ('New-Alias', 'Set-Alias', $FunctionName)
-                        }).Value
-                }
-
-
-                $Attributes = $FileAst.FindAll( {
-                        param ($ast)
-
-                        $ast -is [System.Management.Automation.Language.AttributeAst]
-                    }, $true)
-                $AliasDefinitions = $Attributes.Where( { $_.TypeName.Name -eq 'Alias' -and $_.Parent -is [System.Management.Automation.Language.ParamBlockAst] })
-                $AliasDefinitions.PositionalArguments.Value
-            )
-            #>
-
             $AliasTarget = foreach ($_ in $AliasTarget) {
                 if ($_ -ne $null) {
                     $_

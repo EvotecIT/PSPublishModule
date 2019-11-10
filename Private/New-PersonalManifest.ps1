@@ -32,7 +32,7 @@ function New-PersonalManifest {
         $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
 
     }
-    Write-TextWithTime -Text "Converting $($Configuration.Information.Manifest.Path) UTF8 without BOM" {
+    Write-TextWithTime -Text "[+] Converting $($Configuration.Information.Manifest.Path) UTF8 without BOM" {
         (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path
     }
 }

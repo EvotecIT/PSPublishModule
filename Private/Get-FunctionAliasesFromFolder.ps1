@@ -30,12 +30,22 @@ function Get-FunctionAliasesFromFolder {
             }
         }
     }
+
+    [Array] $Content = foreach ($File in $FilesPS1) {
+        ''
+        Get-Content -LiteralPath $File.FullName -Raw -Encoding Default
+    }
+    $Code = $Content -join [System.Environment]::NewLine
+
+    $AliasesToExport = Get-AliasTarget -Content $Code
+    <#
     $AliasesToExport = foreach ($file in $FilesPS1) {
         #Get-FunctionAliases -Path $File.FullName
 
         #Write-TextWithTime -Text "Alias $($File.FullName)" {
-        Get-AliasTarget -Path $File.FullName | Select-Object -ExpandProperty Alias
+        Get-AliasTarget -Path $File.FullName #| Select-Object -ExpandProperty Alias
         # }
     }
+    #>
     $AliasesToExport
 }

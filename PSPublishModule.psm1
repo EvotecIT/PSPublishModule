@@ -1,6 +1,3 @@
-#Get public and private function definition files.
-
-
 if ($PSEdition -eq 'Core') {
     $Public = @( Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink )
     $Private = @( Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink )

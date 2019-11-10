@@ -5,7 +5,7 @@ function Merge-Module {
         [string] $ModulePathSource,
         [string] $ModulePathTarget,
         [Parameter(Mandatory = $false, ValueFromPipeline = $false)]
-        [ValidateSet("ASC", "DESC", "NONE")]
+        [ValidateSet("ASC", "DESC", "NONE", '')]
         [string] $Sort = 'NONE',
         [string[]] $FunctionsToExport,
         [string[]] $AliasesToExport,
@@ -69,5 +69,5 @@ function Merge-Module {
     # cleans up empty directories
     Get-ChildItem $ModulePathTarget -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
         Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
-        Remove-Item -Verbose
+        Remove-Item #-Verbose
 }
