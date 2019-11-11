@@ -223,18 +223,8 @@
     }
 
 
-    if ($Configuration.Steps.PublishModule.Enabled) {
-        if ($Configuration.Options.PowerShellGallery.FromFile) {
-            $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
-            New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
-        } else {
-            New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Options.PowerShellGallery.ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
-        }
-    }
-
     # Revers Path to current locatikon
     Set-Location -Path $CurrentLocation
-
 
     if ($DestinationPaths.Desktop) {
         Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
@@ -281,14 +271,54 @@
                     $GitHubRepositoryName = $ProjectName
                 }
                 if (Test-Path -LiteralPath $ZipPath) {
-                    #$StatusGithub = New-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath
-                    #Write-Text "[+] $($StatusGithub.ReleaseCreationSucceeded)"
-                    #Write-Text "[+] $($statusGithub.Succeeded)"
-                    #Write-Text "[+] $($statusGithub.AllAssetUploadsSucceeded)"
-                    #Write-Text "[+] $($statusGithub.ErrorMessage)"
-                    #Write-Text "[+] $($statusGitHub.ReleaseUrl)"
+                    <#
+                    $newGitHubReleaseParameters =
+                    @{
+                        GitHubUsername = 'deadlydog'
+                        GitHubRepositoryName = 'New-GitHubRelease'
+                        GitHubAccessToken = 'SomeLongHexidecimalString'
+                        ReleaseName = "New-GitHubRelease v1.0.0"
+                        TagName = "v1.0.0"
+                        ReleaseNotes = "This release contains the following changes: ..."
+                        AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
+                        IsPreRelease = $false
+                        IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
+                    }
+                    #>
+
+                    if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
+                        $IsPreRelease = $true
+                    } else {
+                        $IsPreRelease = $false
+                    }
+
+                    $StatusGithub = New-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath -IsPreRelease $IsPreRelease
+                    if ($StatusGithub.ReleaseCreationSucceeded -and $statusGithub.Succeeded) {
+                        $GithubColor = 'Green'
+                        $GitHubText = '+'
+                    } else {
+                        $GithubColor = 'Red'
+                        $GitHubText = '-'
+                    }
+
+                    Write-Text "[$GitHubText] GitHub Release Creation Status: $($StatusGithub.ReleaseCreationSucceeded)" -Color $GithubColor
+                    Write-Text "[$GitHubText] GitHub Release Succeeded: $($statusGithub.Succeeded)" -Color $GithubColor
+                    Write-Text "[$GitHubText] GitHub Release Asset Upload Succeeded: $($statusGithub.AllAssetUploadsSucceeded)" -Color $GithubColor
+                    Write-Text "[$GitHubText] GitHub Release URL: $($statusGitHub.ReleaseUrl)" -Color $GithubColor
+                    if ($statusGithub.ErrorMessage) {
+                        Write-Text "[$GitHubText] GitHub Release ErrorMessage: $($statusGithub.ErrorMessage)" -Color $GithubColor
+                    }
                 }
             }
+        }
+    }
+
+    if ($Configuration.Steps.PublishModule.Enabled) {
+        if ($Configuration.Options.PowerShellGallery.FromFile) {
+            $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
+            New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
+        } else {
+            New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Options.PowerShellGallery.ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
         }
     }
 
