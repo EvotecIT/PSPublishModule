@@ -131,35 +131,37 @@ function Merge-Module {
 
 
     if ($Configuration.Steps.BuildModule.MergeMissing -eq $true) {
+        if (Test-Path -LiteralPath $PSM1FilePath) {
+            $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
+            Write-Text "[+] 5th stage merge mergable commands" -Color Blue
 
-        $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-        Write-Text "[+] 5th stage merge mergable commands" -Color Blue
 
-        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
-        $IntegrateContent = @(
-            $MissingFunctions.Functions
-            $PSM1Content
-        )
-        $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
+            $IntegrateContent = @(
+                $MissingFunctions.Functions
+                $PSM1Content
+            )
+            $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding UTF8
 
-        # Overwrite Required Modules
-        $NewRequiredModules = foreach ($_ in $Configuration.Information.Manifest.RequiredModules) {
-            if ($_ -is [System.Collections.IDictionary]) {
-                if ($_.ModuleName -notin $ApprovedModules) {
-                    $_
-                }
-            } else {
-                if ($_ -notin $ApprovedModules) {
-                    $_
+            # Overwrite Required Modules
+            $NewRequiredModules = foreach ($_ in $Configuration.Information.Manifest.RequiredModules) {
+                if ($_ -is [System.Collections.IDictionary]) {
+                    if ($_.ModuleName -notin $ApprovedModules) {
+                        $_
+                    }
+                } else {
+                    if ($_ -notin $ApprovedModules) {
+                        $_
+                    }
                 }
             }
-        }
-        $Configuration.Information.Manifest.RequiredModules = $NewRequiredModules
+            $Configuration.Information.Manifest.RequiredModules = $NewRequiredModules
 
 
-        #$MissingFunctions.Functions
-        #$MissingFunctions.Summary | Format-Table -AutoSize
-        <#
+
+            #$MissingFunctions.Functions
+            #$MissingFunctions.Summary | Format-Table -AutoSize
+            <#
         Name                      Source                       CommandType Error ScriptBlock
         ----                      ------                       ----------- ----- -----------
         cmd.exe                   C:\Windows\system32\cmd.exe  Application
@@ -174,8 +176,9 @@ function Merge-Module {
         Update-MarkdownHelp       platyPS                         Function       ...
         #>
 
-        $TimeToExecute.Stop()
-        Write-Text "[+] 5th stage merge mergable commands [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+            $TimeToExecute.Stop()
+            Write-Text "[+] 5th stage merge mergable commands [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+        }
     }
 
     New-PSMFile -Path $PSM1FilePath `

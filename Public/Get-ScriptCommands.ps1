@@ -37,18 +37,22 @@ function Get-ScriptCommands {
         if ($Code) {
             $CodeRead = $Code
         } else {
-            $CodeRead = Get-Content -Path $FilePath -Raw -Encoding Default
-        }
-        $Tokens = [System.Management.Automation.PSParser]::Tokenize($CodeRead, [ref]$Errors)
-        $Commands = foreach ($_ in $Tokens) {
-            if ($_.Type -eq 'Command') {
-                $_
+            if (Test-Path -LiteralPath $FilePath) {
+                $CodeRead = Get-Content -Path $FilePath -Raw -Encoding Default
             }
         }
-        if ($CommandsOnly) {
-            $Commands.Content | Sort-Object -Unique
-        } else {
-            $Commands
+        if ($CodeRead) {
+            $Tokens = [System.Management.Automation.PSParser]::Tokenize($CodeRead, [ref]$Errors)
+            $Commands = foreach ($_ in $Tokens) {
+                if ($_.Type -eq 'Command') {
+                    $_
+                }
+            }
+            if ($CommandsOnly) {
+                $Commands.Content | Sort-Object -Unique
+            } else {
+                $Commands
+            }
         }
     }
 }

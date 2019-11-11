@@ -12,6 +12,10 @@
         if ($Configuration.Information.Manifest.CompatiblePSEditions -contains 'Core') {
             $DestinationPaths.Core = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
         }
+    } else {
+        # Means missing from config - send to both
+        $DestinationPaths.Desktop = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
+        $DestinationPaths.Core = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
     }
 
     [string] $Random = Get-Random 10000000000
