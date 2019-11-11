@@ -61,7 +61,7 @@ function Merge-Module {
     Write-Text "[+] 1st stage merging [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 3rd stage required modules" -Color Blue
+    Write-Text "[+] 2nd stage required modules" -Color Blue
 
     $RequiredModules = @(
         if ($Configuration.Information.Manifest.RequiredModules[0] -is [System.Collections.IDictionary]) {
