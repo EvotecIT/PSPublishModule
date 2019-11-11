@@ -238,19 +238,59 @@
 
     if ($DestinationPaths.Desktop) {
         Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
-            Remove-Directory $$DestinationPaths.Desktop
-            #Add-Directory $$DestinationPaths.Desktop
+            Remove-Directory -Directory $DestinationPaths.Desktop
+            Add-Directory -Directory $DestinationPaths.Desktop
             Get-ChildItem -LiteralPath $FullModulePath | Copy-Item -Destination $DestinationPaths.Desktop -Recurse
         }
     }
     if ($DestinationPaths.Core) {
         Write-TextWithTime -Text "[+] Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
-            Remove-Directory $$DestinationPaths.Core
-            #Add-Directory $$DestinationPaths.Core
+            Remove-Directory -Directory $DestinationPaths.Core
+            Add-Directory -Directory $DestinationPaths.Core
             Get-ChildItem -LiteralPath $FullModulePath | Copy-Item -Destination $DestinationPaths.Core -Recurse
         }
     }
 
+    if ($Configuration.Steps.BuildModule.Releases) {
+        $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
+        $FileName = -join ("$TagName", '.zip')
+        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+
+        Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
+            $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
+            if ($DestinationPaths.Desktop) {
+                $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
+                Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+            }
+            if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
+                $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
+                Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+            }
+        }
+        if ($Configuration.Steps.PublishModule.GitHub) {
+            if ($Configuration.Options.GitHub.FromFile) {
+                $GitHubAccessToken = Get-Content -LiteralPath $Configuration.Options.GitHub.ApiKey
+            } else {
+                $GitHubAccessToken = $Configuration.Options.GitHub.ApiKey
+            }
+            if ($GitHubAccessToken) {
+                if ($Configuration.Options.GitHub.RepositoryName) {
+                    $GitHubRepositoryName = $Configuration.Options.GitHub.RepositoryName
+                } else {
+                    $GitHubRepositoryName = $ProjectName
+                }
+                if (Test-Path -LiteralPath $ZipPath) {
+                    #$StatusGithub = New-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath
+                    #Write-Text "[+] $($StatusGithub.ReleaseCreationSucceeded)"
+                    #Write-Text "[+] $($statusGithub.Succeeded)"
+                    #Write-Text "[+] $($statusGithub.AllAssetUploadsSucceeded)"
+                    #Write-Text "[+] $($statusGithub.ErrorMessage)"
+                    #Write-Text "[+] $($statusGitHub.ReleaseUrl)"
+                }
+            }
+        }
+    }
 
     # Import Modules Section
     if ($Configuration) {

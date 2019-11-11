@@ -1,10 +1,10 @@
 function Add-Directory {
     [CmdletBinding()]
     param(
-        $dir
+        [string] $Directory
     )
-    $exists = Test-Path -Path $dir
+    $exists = Test-Path -Path $Directory
     if ($exists -eq $false) {
-        $null = mkdir $dir
+        $null = New-Item -Path $Directory -ItemType Directory -Force  #$Directory
     }
 }

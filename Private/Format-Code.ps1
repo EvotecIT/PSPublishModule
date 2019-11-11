@@ -18,7 +18,7 @@
         if ($null -eq $FormatCode.FormatterSettings) {
             $FormatCode.FormatterSettings = $Script:FormatterSettings
         }
-        $Output = Write-TextWithTime -Text "[+] Formatting file - $FilePath" {
+        $Data = Write-TextWithTime -Text "[+] Formatting file - $FilePath" {
             # Write-Verbose "Formatting - $FilePath"
             try {
                 Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings -Verbose:$false
@@ -29,15 +29,15 @@
                 Exit
             }
         }
-        # Resave
-        $Output = foreach ($O in $Output) {
-            if ($O.Trim() -ne '') {
-                $O.Trim()
-            }
-        }
         Write-TextWithTime -Text "[+] Saving file - $FilePath" {
+            # Resave
+            $Final = foreach ($O in $Data) {
+                if ($O.Trim() -ne '') {
+                    $O.Trim()
+                }
+            }
             try {
-                $Output | Out-File -LiteralPath $FilePath -NoNewline -Encoding utf8
+                $Final | Out-File -LiteralPath $FilePath -NoNewline -Encoding utf8
             } catch {
                 $ErrorMessage = $_.Exception.Message
                 #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"

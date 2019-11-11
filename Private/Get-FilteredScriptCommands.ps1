@@ -4,6 +4,7 @@
         [Array] $Commands,
         [switch] $NotCmdlet,
         [switch] $NotUnknown,
+        [switch] $NotApplication,
         [string[]] $Functions
     )
     if ($Functions.Count -eq 0) {
@@ -32,7 +33,11 @@
         }
     }
     $Filtered = foreach ($Command in $Scan) {
-        if ($NotCmdlet -and $NotUnknown) {
+        if ($NotCmdlet -and $NotUnknown -and $NotApplication) {
+            if ($Command.CommandType -ne 'Cmdlet' -and $Command.Source -ne '' -and $Command.CommandType -ne 'Application') {
+                $Command
+            }
+        } elseif ($NotCmdlet -and $NotUnknown) {
             if ($Command.CommandType -ne 'Cmdlet' -and $Command.Source -ne '') {
                 $Command
             }
@@ -42,6 +47,10 @@
             }
         } elseif ($NotUnknown) {
             if ($Command.Source -ne '') {
+                $Command
+            }
+        } elseif ($NotApplication) {
+            if ($Command.CommandType -ne 'Application') {
                 $Command
             }
         } else {

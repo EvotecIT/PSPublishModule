@@ -1,5 +1,4 @@
-﻿Import-Module ".\PSPublishModule.psm1" -Force
-
+﻿Import-Module "PSPublishModule" -Force
 
 $Module = Get-Module -Name PSWritehtml -ListAvailable
 $ModulePSM1 = [System.IO.Path]::Combine($Module.ModuleBase, $Module.RootModule)

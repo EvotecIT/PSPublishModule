@@ -1,0 +1,1 @@
+﻿$Output = Remove-Comments -FilePath 'C:\Users\przemyslaw.klys\Documents\WindowsPowerShell\Modules\PSWriteHTML\PSWriteHTML.psm1'
