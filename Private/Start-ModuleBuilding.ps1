@@ -15,8 +15,8 @@
     }
 
     [string] $Random = Get-Random 10000000000
-    [string] $FullModulePath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName + "_TEMP_$Random"
-    [string] $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
+    [string] $FullModulePath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
+    [string] $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName + "_TEMP_$Random"
     [string] $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
     [string] $ProjectName = $Configuration.Information.ModuleName
 
@@ -185,8 +185,8 @@
         Write-Text -End -Time $LinkingFilesTime
 
         # Workaround to link files that are not ps1/psd1
-        # $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
-        # Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+        $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
+        Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModulePath -FullProjectPath $FullProjectPath
 
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
             $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
