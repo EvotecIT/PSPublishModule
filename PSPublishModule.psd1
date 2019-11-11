@@ -12,7 +12,7 @@
     RootModule           = 'PSPublishModule.psm1'
 
     # Version number of this module.
-    ModuleVersion        = '0.9.3'
+    ModuleVersion        = '0.9.4'
 
     # Supported PSEditions
     CompatiblePSEditions = 'Desktop', 'Core'
