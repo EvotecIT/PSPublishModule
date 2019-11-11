@@ -4,7 +4,8 @@
         [alias('Path')][string] $FilePath,
         [string[]] $Functions,
         [switch] $Summary,
-        [switch] $SummaryWithCommands
+        [switch] $SummaryWithCommands,
+        [Array] $ApprovedModules
     )
     $ListCommands = [System.Collections.Generic.List[Object]]::new()
     $Result = Get-ScriptCommands -FilePath $FilePath -CommandsOnly
@@ -17,7 +18,12 @@
     Get-RecursiveCommands -Commands $FilteredCommands
 
     $FunctionsOutput = foreach ($_ in $ListCommands) {
-        "function $($_.Name) { $($_.ScriptBlock) }"
+        if ($ApprovedModules.Count -gt 0 -and $_.Source -in $ApprovedModules) {
+            "function $($_.Name) { $($_.ScriptBlock) }"
+        }
+        if ($ApprovedModules.Count -eq 0) {
+            "function $($_.Name) { $($_.ScriptBlock) }"
+        }
     }
     if ($SummaryWithCommands) {
         $Hash = @{

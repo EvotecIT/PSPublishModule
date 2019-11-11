@@ -61,16 +61,6 @@ function Merge-Module {
     Write-Text "[+] 1st stage merging [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 2nd stage missing functions" -Color Blue
-
-    $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
-
-    $MissingFunctions = Get-MissingFunctions -FilePath $PSM1FilePath -SummaryWithCommands
-
-    $TimeToExecute.Stop()
-    Write-Text "[+] 2nd stage missing functions [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
-
-    $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] 3rd stage required modules" -Color Blue
 
     $RequiredModules = @(
@@ -86,7 +76,18 @@ function Merge-Module {
     $DependantRequiredModules = $DependantRequiredModules | Sort-Object -Unique
 
     $TimeToExecute.Stop()
-    Write-Text "[+] 3rd stage required modules [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] 2nd stage required modules [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+
+
+    $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Text "[+] 3rd stage missing functions" -Color Blue
+
+    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
+
+    $MissingFunctions = Get-MissingFunctions -FilePath $PSM1FilePath -SummaryWithCommands -ApprovedModules $ApprovedModules
+
+    $TimeToExecute.Stop()
+    Write-Text "[+] 3rd stage missing functions [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] 4th stage commands used" -Color Blue
