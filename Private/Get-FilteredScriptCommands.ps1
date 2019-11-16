@@ -5,7 +5,8 @@
         [switch] $NotCmdlet,
         [switch] $NotUnknown,
         [switch] $NotApplication,
-        [string[]] $Functions
+        [string[]] $Functions,
+        [string] $FilePath
     )
     if ($Functions.Count -eq 0) {
         $Functions = Get-FunctionNames -Path $FilePath
@@ -14,11 +15,17 @@
     $Commands = $Commands | Sort-Object -Unique
     $Scan = foreach ($Command in $Commands) {
         try {
+            $IsAlias = $false
             $Data = Get-Command -Name $Command -ErrorAction Stop
+            if ($Data.CommandType -eq 'Alias') {
+                $Data = Get-Command -Name $Data.Definition
+                $IsAlias = $true
+            }
             [PSCustomObject] @{
                 Name        = $Data.Name
                 Source      = $Data.Source
                 CommandType = $Data.CommandType
+                IsAlias     = $IsAlias
                 Error       = ''
                 ScriptBlock = $Data.ScriptBlock
             }
@@ -27,6 +34,7 @@
                 Name        = $Command
                 Source      = ''
                 CommandType = ''
+                IsAlias     = $IsAlias
                 Error       = $_.Exception.Message
                 ScriptBlock = ''
             }

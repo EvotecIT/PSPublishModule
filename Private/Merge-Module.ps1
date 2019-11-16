@@ -95,33 +95,33 @@ function Merge-Module {
     foreach ($Module in $MissingFunctions.Summary.Source | Sort-Object -Unique) {
         if ($Module -in $RequiredModules -and $Module -in $ApprovedModules) {
             Write-Text "[+] Module $Module is in required modules with ability to merge." -Color Green
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }).Name #-join ','
+            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $F" -Color Yellow
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Yellow
             }
         } elseif ($Module -in $DependantRequiredModules -and $Module -in $ApprovedModules) {
             Write-Text "[+] Module $Module is in dependant required module within required modules with ability to merge." -Color Green
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }).Name #-join ','
+            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $F" -Color Yellow
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Yellow
             }
         } elseif ($Module -in $DependantRequiredModules) {
             Write-Text "[+] Module $Module is in dependant required module within required modules." -Color Green
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }).Name #-join ','
+            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $F" -Color Green
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Green
             }
         } elseif ($Module -in $RequiredModules) {
             Write-Text "[+] Module $Module is in required modules." -Color Green
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }).Name #-join ','
+            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $F" -Color Green
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Green
             }
         } else {
             Write-Text "[-] Module $Module is missing in required modules. Potential issue." -Color Red
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }).Name #-join ','
+            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command affected $F" -Color Red
+                Write-Text "   [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Red
             }
         }
     }

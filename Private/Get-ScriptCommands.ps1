@@ -1,27 +1,32 @@
-﻿<#
-function Get-ScriptCommands {
+﻿
+function Get-ScriptCommandsOld {
     param(
-        [string] $Path
+        [string] $FilePath,
+        [switch] $CommandsOnly
     )
-    New-Variable astTokens -force
-    New-Variable astErr -force
+    $astTokens = $null
+    $astErr = $null
 
-    $null = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$astTokens, [ref]$astErr)
+    $null = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref]$astTokens, [ref]$astErr)
 
     $Commands = [System.Collections.Generic.List[Object]]::new()
 
     foreach ($_ in $astTokens) {
         if ($_.TokenFlags -eq 'Command' -and $_.Kind -eq 'Generic') {
             if ($_.Value -notin $Commands) {
-                $Commands.Add($_.Value)
+                $Commands.Add($_)
             }
         }
     }
-    $Commands | Sort-Object
+    if ($CommandsOnly) {
+        $Commands.Value | Sort-Object -Unique
+    } else {
+        $Commands
+    }
     # $astTokens | Group-Object tokenflags -AsHashTable -AsString
     #$Commands = $astTokens | Where-Object { $_.TokenFlags -eq 'Command' } | Sort-Object -Property Value -Unique
 }
-#>
+
 function Get-ScriptCommands {
     [cmdletBinding(DefaultParameterSetName = 'File')]
     param (
@@ -37,8 +42,12 @@ function Get-ScriptCommands {
         if ($Code) {
             $CodeRead = $Code
         } else {
-            if (Test-Path -LiteralPath $FilePath) {
-                $CodeRead = Get-Content -Path $FilePath -Raw -Encoding Default
+            if ($FilePath -eq '') {
+                Write-Text "[-] Something went wrong. FilePath for Get-ScriptCommands was empty. Rerun tool to verify." -Color Red
+            } else {
+                if (Test-Path -LiteralPath $FilePath) {
+                    $CodeRead = Get-Content -Path $FilePath -Raw -Encoding Default
+                }
             }
         }
         if ($CodeRead) {
@@ -56,3 +65,4 @@ function Get-ScriptCommands {
         }
     }
 }
+
