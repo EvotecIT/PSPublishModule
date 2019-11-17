@@ -32,8 +32,13 @@
     Write-Text "[i] PSScriptRoot: $PSScriptRoot" -Color Yellow
     Write-Text "[i] Current PSEdition: $PSEdition" -Color Yellow
     Write-Text "[i] Destination Desktop: $($DestinationPaths.Desktop)" -Color Yellow
-    Write-Text "[i] Destination Core: $($DestinationPaths.Desktop)" -Color Yellow
+    Write-Text "[i] Destination Core: $($DestinationPaths.Core)" -Color Yellow
     Write-Text '----------------------------------------------------'
+
+    if ($Configuration.Steps.BuildModule.DeleteBefore) {
+        Remove-Directory $($DestinationPaths.Desktop)
+        Remove-Directory $($DestinationPaths.Core)
+    }
 
     $CurrentLocation = (Get-Location).Path
     Set-Location -Path $FullProjectPath
