@@ -64,10 +64,12 @@ function Merge-Module {
     Write-Text "[+] 2nd stage required modules" -Color Blue
 
     $RequiredModules = @(
-        if ($Configuration.Information.Manifest.RequiredModules[0] -is [System.Collections.IDictionary]) {
-            $Configuration.Information.Manifest.RequiredModules.ModuleName
-        } else {
-            $Configuration.Information.Manifest.RequiredModules
+        if ($Configuration.Information.Manifest.RequiredModules.Count -gt 0) {
+            if ($Configuration.Information.Manifest.RequiredModules[0] -is [System.Collections.IDictionary]) {
+                $Configuration.Information.Manifest.RequiredModules.ModuleName
+            } else {
+                $Configuration.Information.Manifest.RequiredModules
+            }
         }
     )
     $DependantRequiredModules = foreach ($_ in $RequiredModules) {
@@ -181,17 +183,27 @@ function Merge-Module {
         }
     }
 
+    if ($Configuration.Steps.BuildModule.LibrarySeparateFile) {
+        $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
+        $ScriptsToProcessLibrary = "$ModuleName.Libraries.ps1"
+
+
+
+    } else {
+        $LibariesPath = ''
+    }
     New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
         -FunctionAliaes $AliasesToExport `
         -LibrariesCore $LibrariesCore `
         -LibrariesDefault $LibrariesDefault `
         -ModuleName $ModuleName `
-        -UsingNamespaces:$UsingInPlace
+        -UsingNamespaces:$UsingInPlace `
+        -LibariesPath $LibariesPath
 
 
     Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
-    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess
+    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary
     Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
 
     # cleans up empty directories

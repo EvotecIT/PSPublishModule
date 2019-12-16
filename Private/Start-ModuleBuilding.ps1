@@ -64,7 +64,27 @@
     # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
     $Configuration.Information.Manifest.AliasesToExport = @()
 
-    $Exclude = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
+    if ($Configuration.Information.Exclude) {
+        $Exclude = $Configuration.Information.Exclude
+    } else {
+        $Exclude = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
+    }
+    if ($Configuration.Information.IncludeRoot) {
+        $IncludeFilesRoot = $Configuration.Information.IncludeRoot
+    } else {
+        $IncludeFilesRoot = '*.psm1', '*.psd1', 'License*'
+    }
+    if ($Configuration.Information.IncludePS1) {
+        $DirectoriesWithPS1 = $Configuration.Information.IncludePS1
+    } else {
+        $DirectoriesWithPS1 = 'Private', 'Public', 'Enums'
+    }
+    if ($Configuration.Information.IncludeAll) {
+        $DirectoriesWithAll = $Configuration.Information.IncludeAll
+    } else {
+        $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\'
+    }
+
 
     if ($Configuration.Steps.BuildModule) {
         $PreparingFilesTime = Write-Text "[+] Preparing files and folders" -Start
@@ -78,7 +98,7 @@
                 )
             )
             $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
-            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File -FollowSymlink
+            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File -FollowSymlink
         } else {
             $Directories = @(
                 $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
@@ -87,8 +107,8 @@
                     $TempDirectories | Get-ChildItem -Directory -Recurse
                 )
             )
-            $Files = Get-ChildItem -Path $FullProjectPath -Exclude '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs' | Get-ChildItem -File -Recurse
-            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include '*.psm1', '*.psd1', 'License*' -File
+            $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude | Get-ChildItem -File -Recurse
+            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File
         }
         $LinkDirectories = @(
             foreach ($directory in $Directories) {
@@ -106,22 +126,16 @@
             $RelativeFilePath
         }
         # Link only files in Root Directory
-
         $LinkFilesRoot = @(
             foreach ($File in $RootFiles | Sort-Object -Unique) {
                 switch -Wildcard ($file) {
                     '*.psd1' {
-                        #Write-Color $File -Color Red
-                        # Add-ObjectTo -Object $File -Type 'Root Files List'
                         $File
                     }
                     '*.psm1' {
-                        # Write-Color $File.FulllName -Color cd
-                        #Add-ObjectTo -Object $File -Type 'Root Files List'
                         $File
                     }
                     'License*' {
-                        #Add-ObjectTo -Object $File -Type 'Root Files List'
                         $File
                     }
                 }
@@ -133,11 +147,21 @@
             foreach ($file in $AllFiles | Sort-Object -Unique) {
                 switch -Wildcard ($file) {
                     '*.ps1' {
-                        Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Private', 'Public', 'Enums'
+                        foreach ($dir in $DirectoriesWithPS1) {
+                            if ($file -like "$dir*") {
+                                $file
+                            }
+                        }
+                       # Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithPS1
                         continue
                     }
                     '*.*' {
-                        Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\'
+                        #Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithAll
+                        foreach ($dir in $DirectoriesWithAll) {
+                            if ($file -like "$dir*") {
+                                $file
+                            }
+                        }
                         continue
                     }
                 }
@@ -164,7 +188,6 @@
             )
 
             if ($FilesEnums.Count -gt 0) {
-                #Write-Verbose "ScriptsToProcess export: $FilesEnums"
                 Write-TextWithTime -Text "[+] ScriptsToProcess export $FilesEnums"
                 $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
             }
@@ -182,7 +205,12 @@
             Add-Directory $Dir
         }
         # Workaround to link files that are not ps1/psd1
-        $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -ne 'Public\' -and $_ -ne 'Private\' }
+        [Array] $CompareWorkaround = foreach ($_ in $DirectoriesWithPS1) {
+            -join ($_, '\')
+        }
+
+        $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -notin $CompareWorkaround }
+        #$LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -ne 'Public\' -and $_ -ne 'Private\' }
         foreach ($Directory in $LinkDirectoriesWithSupportFiles) {
             $Dir = "$FullModulePath\$Directory"
             Add-Directory $Dir
@@ -280,21 +308,6 @@
                     $GitHubRepositoryName = $ProjectName
                 }
                 if (Test-Path -LiteralPath $ZipPath) {
-                    <#
-                    $newGitHubReleaseParameters =
-                    @{
-                        GitHubUsername = 'deadlydog'
-                        GitHubRepositoryName = 'New-GitHubRelease'
-                        GitHubAccessToken = 'SomeLongHexidecimalString'
-                        ReleaseName = "New-GitHubRelease v1.0.0"
-                        TagName = "v1.0.0"
-                        ReleaseNotes = "This release contains the following changes: ..."
-                        AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
-                        IsPreRelease = $false
-                        IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
-                    }
-                    #>
-
                     if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
                         $IsPreRelease = $true
                     } else {
