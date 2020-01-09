@@ -152,7 +152,7 @@
                                 $file
                             }
                         }
-                       # Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithPS1
+                        # Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithPS1
                         continue
                     }
                     '*.*' {
@@ -228,12 +228,14 @@
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
             $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
             $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
-            #$FilesLibrariesCore
         }
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
             $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
             $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
-            #$FilesLibrariesDefault
+        }
+        if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesStandard)) {
+            $StartsWithStandard = "$($Configuration.Information.LibrariesDefault)\"
+            $FilesLibrariesStandard = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
         }
 
         Merge-Module -ModuleName $ProjectName `
@@ -242,6 +244,7 @@
             -Sort $Configuration.Options.Merge.Sort `
             -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
             -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
+            -LibrariesStandard $FilesLibrariesStandard `
             -LibrariesCore $FilesLibrariesCore `
             -LibrariesDefault $FilesLibrariesDefault `
             -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
@@ -293,6 +296,20 @@
             if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
                 $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
                 Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+            }
+        }
+        if ($Configuration.Steps.BuildModule.ReleasesUnpacked) {
+            $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
+            Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
+                $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
+                if ($DestinationPaths.Desktop) {
+                    Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                    Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                }
+                if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
+                    Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                    Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                }
             }
         }
         if ($Configuration.Steps.PublishModule.GitHub) {

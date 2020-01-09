@@ -4,6 +4,7 @@ function New-PSMFile {
         [string] $Path,
         [string[]] $FunctionNames,
         [string[]] $FunctionAliaes,
+        [Array] $LibrariesStandard,
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
         [string] $ModuleName,
@@ -14,7 +15,15 @@ function New-PSMFile {
         # $Content = Get-Content -LiteralPath $Path -Raw
 
         $LibraryContent = @(
-            if ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
+            if ($LibrariesStandard.Count -gt 0) {
+                foreach ($File in $LibrariesStandard) {
+                    $Extension = $File.Substring($File.Length - 4, 4)
+                    if ($Extension -eq '.dll') {
+                        $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                        $Output
+                    }
+                }
+            } elseif ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
 
                 'if ($PSEdition -eq ''Core'') {'
                 foreach ($File in $LibrariesCore) {

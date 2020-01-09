@@ -9,6 +9,7 @@ function Merge-Module {
         [string] $Sort = 'NONE',
         [string[]] $FunctionsToExport,
         [string[]] $AliasesToExport,
+        [Array] $LibrariesStandard,
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
         [System.Collections.IDictionary] $FormatCodePSM1,
@@ -195,6 +196,7 @@ function Merge-Module {
     New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
         -FunctionAliaes $AliasesToExport `
+        -LibrariesStandard $LibrariesStandard `
         -LibrariesCore $LibrariesCore `
         -LibrariesDefault $LibrariesDefault `
         -ModuleName $ModuleName `
