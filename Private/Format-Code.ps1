@@ -25,7 +25,7 @@
             } catch {
                 $ErrorMessage = $_.Exception.Message
                 #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
-                Write-Error "Format-Code - Formatting on file $FilePath failed. Error: $ErrorMessage"
+                Write-Text "[-] Format-Code - Formatting on file $FilePath failed. Error: $ErrorMessage" -Color Red
                 Exit
             }
         }
