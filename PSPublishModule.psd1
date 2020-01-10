@@ -51,8 +51,8 @@
     # ProcessorArchitecture = ''
 
     # Modules that must be imported into the global environment prior to importing this module
-    RequiredModules      = @('platyps', 
-        'powershellget')
+    RequiredModules      = @(@{ModuleName = 'platyps'; GUID = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'; ModuleVersion = '0.14.0'; }, 
+        @{ModuleName = 'powershellget'; GUID = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'; ModuleVersion = '2.2.3'; })
 
     # Assemblies that must be loaded prior to importing this module
     # RequiredAssemblies = @()
