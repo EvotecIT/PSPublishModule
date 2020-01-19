@@ -1,5 +1,4 @@
 function Export-PSData {
-    [cmdletbinding()]
     <#
     .Synopsis
         Exports property bags into a data file
@@ -13,7 +12,7 @@ function Export-PSData {
             Export-PSData .\PipeworksQuickstart.video.psd1
     #>
     [OutputType([IO.FileInfo])]
-
+    [cmdletbinding()]
     param(
         # The data that will be exported
         [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
@@ -35,12 +34,8 @@ function Export-PSData {
 
     end {
         #region Convert to Hashtables and export
-        $text = $AllObjects |
-            Write-PowerShellHashtable
-
-        $text |
-            Set-Content -Path $DataFile
-        Get-Item -Path $DataFile
+        $text = $AllObjects | Write-PowerShellHashtable
+        $text | Set-Content -Path $DataFile
         #endregion Convert to Hashtables and export
     }
 
