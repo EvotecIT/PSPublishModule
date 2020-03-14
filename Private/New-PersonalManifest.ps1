@@ -8,6 +8,7 @@ function New-PersonalManifest {
         [string] $ScriptsToProcessLibrary
     )
 
+    $TemporaryManifest = @{ }
     $Manifest = $Configuration.Information.Manifest
     $Manifest.Path = $ManifestPath
 
@@ -22,6 +23,11 @@ function New-PersonalManifest {
         $Manifest.ScriptsToProcess = @($ScriptsToProcessLibrary)
     }
 
+    if ($Manifest.ExternalModuleDependencies) {
+        $TemporaryManifest.ExternalModuleDependencies = $Manifest.ExternalModuleDependencies
+        $Manifest.Remove('ExternalModuleDependencies')
+    }
+
 
     if ($Manifest.RequiredModules) {
         foreach ($SubModule in $Manifest.RequiredModules) {
@@ -31,11 +37,9 @@ function New-PersonalManifest {
             }
         }
     }
-
-
     New-ModuleManifest @Manifest
 
-    if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
+    if ($Configuration.Steps.PublishModule.Prerelease -ne '' -or $TemporaryManifest.ExternalModuleDependencies) {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
         $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
         if ($Data.ScriptsToProcess.Count -eq 0) {
@@ -44,9 +48,24 @@ function New-PersonalManifest {
         if ($Data.CmdletsToExport.Count -eq 0) {
             $Data.Remove('CmdletsToExport')
         }
-        $Data.PrivateData.PSData.Prerelease = $Configuration.Steps.PublishModule.Prerelease
-        $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path
 
+        if ($Configuration.Steps.PublishModule.Prerelease) {
+            $Data.PrivateData.PSData.Prerelease = $Configuration.Steps.PublishModule.Prerelease
+        }
+        if ($TemporaryManifest.ExternalModuleDependencies) {
+            # Add External Module Dependencies
+            $Data.PrivateData.PSData.ExternalModuleDependencies = $TemporaryManifest.ExternalModuleDependencies
+            # Make sure Required Modules contains ExternalModuleDependencies
+            $Data.RequiredModules = @(
+                foreach ($Module in $Manifest.RequiredModules) {
+                    $Module
+                }
+                foreach ($Module in $TemporaryManifest.ExternalModuleDependencies) {
+                    $Module
+                }
+            )
+        }
+        $Data | Export-PSData -DataFile $Configuration.Information.Manifest.Path -Sort
     }
     Write-TextWithTime -Text "[+] Converting $($Configuration.Information.Manifest.Path) UTF8 without BOM" {
         (Get-Content $Manifest.Path) | Out-FileUtf8NoBom $Manifest.Path

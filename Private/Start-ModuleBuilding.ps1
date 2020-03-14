@@ -195,7 +195,14 @@
         }
 
         $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
+
+        # Copy Configuration
+        $SaveConfiguration = Copy-Dictionary -Dictionary $Configuration
+
         New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+
+        # Restore configuration, as some PersonalManifest plays with those
+        $Configuration = $SaveConfiguration
 
         Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
     }

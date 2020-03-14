@@ -22,7 +22,8 @@ function Export-PSData {
         # The path to the data file
         [Parameter(Mandatory = $true, Position = 0)]
         [string]
-        $DataFile
+        $DataFile,
+        [switch] $Sort
     )
     begin {
         $AllObjects = New-Object Collections.ArrayList
@@ -34,7 +35,7 @@ function Export-PSData {
 
     end {
         #region Convert to Hashtables and export
-        $text = $AllObjects | Write-PowerShellHashtable
+        $text = $AllObjects | Write-PowerShellHashtable -Sort:$Sort.IsPresent
         $text | Set-Content -Path $DataFile
         #endregion Convert to Hashtables and export
     }
