@@ -1,5 +1,4 @@
-﻿
-function Get-GitLog {
+﻿function Get-GitLog {
     # Source https://gist.github.com/thedavecarroll/3245449f5ff893e51907f7aa13e33ebe
     # Author: thedavecarroll/Get-GitLog.ps1
     [CmdLetBinding(DefaultParameterSetName='Default')]

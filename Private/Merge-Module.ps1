@@ -72,6 +72,9 @@ function Merge-Module {
                 $Configuration.Information.Manifest.RequiredModules
             }
         }
+        if ($Configuration.Information.Manifest.ExternalModuleDependencies.Count -gt 0) {
+            $Configuration.Information.Manifest.ExternalModuleDependencies
+        }
     )
     $DependantRequiredModules = foreach ($_ in $RequiredModules) {
         Find-RequiredModules -Name $_
@@ -95,18 +98,29 @@ function Merge-Module {
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] 4th stage commands used" -Color Blue
 
-    foreach ($Module in $MissingFunctions.Summary.Source | Sort-Object -Unique) {
+
+    #[Array] $CommandsWithoutType = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq '' } | Sort-Object -Unique -Property 'Source'
+    [Array] $ApplicationsCheck = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq 'Application' } | Sort-Object -Unique -Property 'Source'
+    [Array] $ModulesToCheck = $MissingFunctions.Summary | Where-Object { $_.CommandType -ne 'Application' -and $_.CommandType -ne '' } | Sort-Object -Unique -Property 'Source'
+
+    if ($ApplicationsCheck.Source) {
+        Write-Text "[i] Applications used by this module. Make sure those are present on destination system. " -Color Yellow
+        foreach ($Application in $ApplicationsCheck.Source) {
+            Write-Text "   [>] Application $Application " -Color Yellow
+        }
+    }
+    foreach ($Module in $ModulesToCheck.Source) {
         if ($Module -in $RequiredModules -and $Module -in $ApprovedModules) {
-            Write-Text "[+] Module $Module is in required modules with ability to merge." -Color Green
+            Write-Text "[+] Module $Module is in required modules with ability to merge." -Color DarkYellow
             $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Yellow
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color DarkYellow
             }
         } elseif ($Module -in $DependantRequiredModules -and $Module -in $ApprovedModules) {
-            Write-Text "[+] Module $Module is in dependant required module within required modules with ability to merge." -Color Green
+            Write-Text "[+] Module $Module is in dependant required module within required modules with ability to merge." -Color DarkYellow
             $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Yellow
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color DarkYellow
             }
         } elseif ($Module -in $DependantRequiredModules) {
             Write-Text "[+] Module $Module is in dependant required module within required modules." -Color Green

@@ -1,5 +1,4 @@
 function New-PrepareModule {
-    [alias('New-BuildModule')]
     [CmdletBinding()]
     param (
         [System.Collections.IDictionary] $Configuration
