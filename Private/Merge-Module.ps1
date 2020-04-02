@@ -35,16 +35,19 @@ function Merge-Module {
 
     foreach ($FilePath in $ScriptFunctions) {
         $Content = Get-Content -Path $FilePath -Raw
-        $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')
-        $Content = $Content.Replace('$PSScriptRoot\..\', '$PSScriptRoot\')
+        if ($Content.Count -gt 0) {
+            # Ensure file has content
+            $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')
+            $Content = $Content.Replace('$PSScriptRoot\..\', '$PSScriptRoot\')
 
-        try {
-            $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
-        } catch {
-            $ErrorMessage = $_.Exception.Message
-            #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
-            Write-Error "Merge-Module - Merge on file $FilePath failed. Error: $ErrorMessage"
-            Exit
+            try {
+                $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
+            } catch {
+                $ErrorMessage = $_.Exception.Message
+                #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
+                Write-Error "Merge-Module - Merge on file $FilePath failed. Error: $ErrorMessage"
+                Exit
+            }
         }
     }
 
