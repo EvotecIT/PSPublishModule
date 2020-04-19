@@ -1,13 +1,19 @@
 ﻿Function Test-ScriptFile {
     <#
     .Synopsis
+
     Test a PowerShell script for cmdlets
+
     .Description
+
     This command will analyze a PowerShell script file and display a list of detected commands such as PowerShell cmdlets and functions. Commands will be compared to what is installed locally. It is recommended you run this on a Windows 8.1 client with the latest version of RSAT installed. Unknown commands could also be internally defined functions. If in doubt view the contents of the script file in the PowerShell ISE or a script editor.
     You can test any .ps1, .psm1 or .txt file.
     .Parameter Path
+
     The path to the PowerShell script file. You can test any .ps1, .psm1 or .txt file.
+
     .Example
+
     PS C:\> test-scriptfile C:\scripts\Remove-MyVM2.ps1
 
     CommandType Name                                   ModuleName
@@ -28,10 +34,14 @@
         Cmdlet Write-Verbose                           Microsoft.PowerShell.Utility
         Cmdlet Write-Warning                           Microsoft.PowerShell.Utility
 
+    .EXAMPLE
+
+    PS C:\> Test-ScriptFile -Path 'C:\Users\przemyslaw.klys\Documents\WindowsPowerShell\Modules\PSWinReportingV2\PSWinReportingV2.psm1' | Sort-Object -Property Source, Name | ft -AutoSize
+
     .Notes
-    Original script provided by Jeff Hicks at (https://www.petri.com/powershell-problem-solver-find-script-commands)
-    # https://twitter.com/donnie_taylor/status/1160920407031058432
-    Test-ScriptFile -Path 'C:\Users\przemyslaw.klys\Documents\WindowsPowerShell\Modules\PSWinReportingV2\PSWinReportingV2.psm1' | Sort-Object -Property Source, Name | ft -AutoSize
+
+    Original script provided by Jeff Hicks at (https://www.petri.com/powershell-problem-solver-find-script-commands) and https://twitter.com/donnie_taylor/status/1160920407031058432
+
     #>
 
     [cmdletbinding()]

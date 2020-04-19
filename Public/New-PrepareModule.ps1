@@ -14,7 +14,7 @@ function New-PrepareModule {
     if (-not $Configuration.Information.DirectoryModules) {
         $Configuration.Information.DirectoryModules = "$Env:USERPROFILE\Documents\WindowsPowerShell\Modules"
     }
-    if ($Configuration.Steps.BuildModule.Enable -or $Configuration.Steps.BuildModule.EnableDesktop -or $Configuration.Steps.BuildModule.EnableCore) {
+    if ($Configuration.Steps.BuildModule.Enable -or $Configuration.Steps.BuildModule.EnableDesktop -or $Configuration.Steps.BuildModule.EnableCore -or $Configuration.Steps.BuildDocumentation -eq $true) {
         Start-ModuleBuilding -Configuration $Configuration
     }
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"

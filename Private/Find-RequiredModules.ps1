@@ -1,4 +1,5 @@
 ﻿function Find-RequiredModules {
+    [cmdletbinding()]
     param(
         [string] $Name
     )
@@ -10,7 +11,7 @@
         }
         $RequiredModules
         foreach ($_ in $RequiredModules) {
-            Find-RequiredModules -Path $Path -Name $_
+            Find-RequiredModules -Name $_
         }
     }
 

@@ -1,8 +1,7 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version: https://github.com/StartAutomating/Pipeworks
-Import-PSData
+online version:
 schema: 2.0.0
 ---
 

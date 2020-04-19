@@ -10,7 +10,7 @@
     $ListCommands = [System.Collections.Generic.List[Object]]::new()
     $Result = Get-ScriptCommands -FilePath $FilePath -CommandsOnly
     #$FilteredCommands = Get-FilteredScriptCommands -Commands $Result -NotUnknown -NotCmdlet -Functions $Functions -NotApplication -FilePath $FilePath
-    $FilteredCommands = Get-FilteredScriptCommands -Commands $Result -NotCmdlet -Functions $Functions -NotApplication -FilePath $FilePath
+    $FilteredCommands = Get-FilteredScriptCommands -Commands $Result -Functions $Functions -FilePath $FilePath
     foreach ($_ in $FilteredCommands) {
         $ListCommands.Add($_)
     }

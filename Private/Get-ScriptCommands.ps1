@@ -1,5 +1,6 @@
 ﻿
 function Get-ScriptCommandsOld {
+    [CmdletBinding()]
     param(
         [string] $FilePath,
         [switch] $CommandsOnly

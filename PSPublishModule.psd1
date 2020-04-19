@@ -13,7 +13,7 @@
         PSData = @{
             Tags                       = 'Windows', 'MacOS', 'Linux', 'Build', 'Module'
             ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
-            ExternalModuleDependencies = 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive'
+            ExternalModuleDependencies = 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management'
             IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
         }
     }
@@ -25,6 +25,10 @@
         ModuleVersion = '2.2.1'
         ModuleName    = 'powershellget'
         Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
-    }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive'
+    }, @{
+        ModuleVersion = '1.18.3'
+        ModuleName    = 'PSScriptAnalyzer'
+        Guid          = 'd6245802-193d-4068-a631-8863a4342a18'
+    }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management'
     RootModule           = 'PSPublishModule.psm1'
 }

@@ -49,6 +49,11 @@ CommandType Name                                   ModuleName
     Cmdlet Write-Verbose                           Microsoft.PowerShell.Utility
     Cmdlet Write-Warning                           Microsoft.PowerShell.Utility
 
+### EXAMPLE 2
+```
+Test-ScriptFile -Path 'C:\Users\przemyslaw.klys\Documents\WindowsPowerShell\Modules\PSWinReportingV2\PSWinReportingV2.psm1' | Sort-Object -Property Source, Name | ft -AutoSize
+```
+
 ## PARAMETERS
 
 ### -Path
@@ -75,8 +80,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## OUTPUTS
 
 ## NOTES
-Original script provided by Jeff Hicks at (https://www.petri.com/powershell-problem-solver-find-script-commands)
-# https://twitter.com/donnie_taylor/status/1160920407031058432
-Test-ScriptFile -Path 'C:\Users\przemyslaw.klys\Documents\WindowsPowerShell\Modules\PSWinReportingV2\PSWinReportingV2.psm1' | Sort-Object -Property Source, Name | ft -AutoSize
+Original script provided by Jeff Hicks at (https://www.petri.com/powershell-problem-solver-find-script-commands) and https://twitter.com/donnie_taylor/status/1160920407031058432
 
 ## RELATED LINKS

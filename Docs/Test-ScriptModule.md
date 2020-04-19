@@ -8,6 +8,7 @@ schema: 2.0.0
 # Test-ScriptModule
 
 ## SYNOPSIS
+
 {{ Fill in the Synopsis }}
 
 ## SYNTAX
@@ -17,11 +18,13 @@ Test-ScriptModule [[-ModuleName] <String>] [[-SortName] <Object>] [-Unique] [<Co
 ```
 
 ## DESCRIPTION
+
 {{ Fill in the Description }}
 
 ## EXAMPLES
 
 ### Example 1
+
 ```powershell
 PS C:\> {{ Add example code here }}
 ```
@@ -31,6 +34,7 @@ PS C:\> {{ Add example code here }}
 ## PARAMETERS
 
 ### -ModuleName
+
 {{ Fill ModuleName Description }}
 
 ```yaml
@@ -46,6 +50,7 @@ Accept wildcard characters: False
 ```
 
 ### -SortName
+
 {{ Fill SortName Description }}
 
 ```yaml
@@ -62,6 +67,7 @@ Accept wildcard characters: False
 ```
 
 ### -Unique
+
 {{ Fill Unique Description }}
 
 ```yaml
@@ -86,6 +92,7 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## OUTPUTS
 
 ### System.Object
+
 ## NOTES
 
 ## RELATED LINKS

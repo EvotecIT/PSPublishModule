@@ -41,6 +41,10 @@
         }
     }
     $Filtered = foreach ($Command in $Scan) {
+        if ($Command.Source -eq 'Microsoft.PowerShell.Core') {
+            # skipping because otherwise Import-Module fails if part of RequiredModules
+            continue
+        }
         if ($NotCmdlet -and $NotUnknown -and $NotApplication) {
             if ($Command.CommandType -ne 'Cmdlet' -and $Command.Source -ne '' -and $Command.CommandType -ne 'Application') {
                 $Command

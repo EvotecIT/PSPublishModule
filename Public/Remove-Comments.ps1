@@ -1,5 +1,6 @@
 ﻿function Remove-Comments {
     # We are not restricting scriptblock type as Tokenize() can take several types
+    [CmdletBinding()]
     Param (
         [string] $FilePath,
         [parameter( ValueFromPipeline = $True )] $Scriptblock,
