@@ -211,6 +211,10 @@
             $Configuration = $SaveConfiguration
 
             Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
+
+            if ($Configuration.Steps.BuildModule.RefreshPSD1Only) {
+                Exit
+            }
         }
         if ($Configuration.Steps.BuildModule.Enable -and $Configuration.Steps.BuildModule.Merge) {
             foreach ($Directory in $LinkDirectories) {
@@ -264,7 +268,8 @@
                 -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
                 -Configuration $Configuration
 
-        } else {
+        }
+        if ($Configuration.Steps.BuildModule.Enable -and (-not $Configuration.Steps.BuildModule.Merge)) {
             foreach ($Directory in $LinkDirectories) {
                 $Dir = "$FullModuleTemporaryPath\$Directory"
                 Add-Directory $Dir
@@ -279,74 +284,78 @@
         # Revers Path to current locatikon
         Set-Location -Path $CurrentLocation
 
-        if ($DestinationPaths.Desktop) {
-            Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
-                Remove-Directory -Directory $DestinationPaths.Desktop
-                Add-Directory -Directory $DestinationPaths.Desktop
-                Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Desktop -Recurse
-                # cleans up empty directories
-                Get-ChildItem $DestinationPaths.Desktop -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
-                    Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
-                    Remove-Item #-Verbose
+        if ($Configuration.Steps.BuildModule.Enable) {
+            if ($DestinationPaths.Desktop) {
+                Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
+                    Remove-Directory -Directory $DestinationPaths.Desktop
+                    Add-Directory -Directory $DestinationPaths.Desktop
+                    Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Desktop -Recurse
+                    # cleans up empty directories
+                    Get-ChildItem $DestinationPaths.Desktop -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
+                        Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
+                        Remove-Item #-Verbose
+                }
+
+
             }
-
-
-        }
-        if ($DestinationPaths.Core) {
-            Write-TextWithTime -Text "[+] Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
-                Remove-Directory -Directory $DestinationPaths.Core
-                Add-Directory -Directory $DestinationPaths.Core
-                Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Core -Recurse
-                # cleans up empty directories
-                Get-ChildItem $DestinationPaths.Core -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
-                    Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
-                    Remove-Item #-Verbose
+            if ($DestinationPaths.Core) {
+                Write-TextWithTime -Text "[+] Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
+                    Remove-Directory -Directory $DestinationPaths.Core
+                    Add-Directory -Directory $DestinationPaths.Core
+                    Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Core -Recurse
+                    # cleans up empty directories
+                    Get-ChildItem $DestinationPaths.Core -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
+                        Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
+                        Remove-Item #-Verbose
+                }
             }
         }
     }
-    if ($Configuration.Steps.BuildModule.Releases -or $Configuration.Steps.BuildModule.ReleasesUnpacked) {
-        $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
-        $FileName = -join ("$TagName", '.zip')
-        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+    if ($Configuration.Steps.BuildModule.Enable) {
+        if ($Configuration.Steps.BuildModule.Releases -or $Configuration.Steps.BuildModule.ReleasesUnpacked) {
+            $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
+            $FileName = -join ("$TagName", '.zip')
+            $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+            $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
 
-        Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
-            $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
-            if ($DestinationPaths.Desktop) {
-                $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
-                Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-            }
-            if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
-                Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-            }
-        }
-        if ($Configuration.Steps.BuildModule.ReleasesUnpacked) {
-            $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
-            Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
-                $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
+            Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
+                $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
                 if ($DestinationPaths.Desktop) {
-                    Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
-                    Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                    $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
+                    Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
                 }
                 if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                    Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
-                    Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                    $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
+                    Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+                }
+            }
+            if ($Configuration.Steps.BuildModule.ReleasesUnpacked) {
+                $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
+                Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
+                    $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
+                    if ($DestinationPaths.Desktop) {
+                        Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                        Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                    }
+                    if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
+                        Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                        Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                    }
                 }
             }
         }
     }
 
     # Import Modules Section, useful to check before publishing
-    if ($Configuration.Options.ImportModules) {
+    if ($Configuration.Steps.ImportModules) {
         $TemporaryVerbosePreference = $VerbosePreference
         $VerbosePreference = $false
 
-        if ($Configuration.Options.ImportModules.RequiredModules) {
+        if ($Configuration.Steps.ImportModules.RequiredModules) {
             Write-TextWithTime -Text '[+] Importing modules - REQUIRED' {
                 foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
                     try {
-                        Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false  #$Configuration.Options.ImportModules.Verbose
+                        Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false  #$Configuration.Steps.ImportModules.Verbose
                     } catch {
                         $ErrorMessage = $_.Exception.Message
                         Write-Error "Start-ModuleBuilding - ImportingModule $Module failed. Error: $ErrorMessage"
@@ -355,7 +364,7 @@
                 }
             }
         }
-        if ($Configuration.Options.ImportModules.Self) {
+        if ($Configuration.Steps.ImportModules.Self) {
             Write-TextWithTime -Text '[+] Importing module - SELF' {
                 try {
                     Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$false
