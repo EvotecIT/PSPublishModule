@@ -1,5 +1,4 @@
-﻿
-function Get-ScriptCommandsOld {
+﻿function Get-ScriptCommandsOld {
     [CmdletBinding()]
     param(
         [string] $FilePath,

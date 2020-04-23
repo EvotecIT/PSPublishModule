@@ -94,6 +94,15 @@ function Merge-Module {
     [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
 
     $MissingFunctions = Get-MissingFunctions -FilePath $PSM1FilePath -SummaryWithCommands -ApprovedModules $ApprovedModules
+    #if ($MissingFunctions.Functions) {
+        #$IgnoreAlreadyKnownCommands = $MissingFunctions.Summary.Name | Sort-Object -Unique
+
+        #$ScriptBlockMissing = [scriptblock]::Create($MissingFunctions.Functions)
+        #$TemporaryMissing = Get-MissingFunctions -SummaryWithCommands -ApprovedModules $ApprovedModules -Code $ScriptBlockMissing -IgnoreFunctions $IgnoreAlreadyKnownCommands
+    #}
+    #$MissingFunctions = @(
+
+   #)
 
     $TimeToExecute.Stop()
     Write-Text "[+] 3rd stage missing functions [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue

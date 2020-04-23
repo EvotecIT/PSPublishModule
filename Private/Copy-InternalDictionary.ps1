@@ -1,5 +1,4 @@
-﻿function Copy-Dictionary {
-    [alias('Copy-Hashtable','Copy-OrderedHashtable')]
+﻿function Copy-InternalDictionary {
     [cmdletbinding()]
     param(
         [System.Collections.IDictionary] $Dictionary

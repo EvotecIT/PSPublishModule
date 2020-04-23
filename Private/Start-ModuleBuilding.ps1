@@ -203,7 +203,7 @@
             $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
 
             # Copy Configuration
-            $SaveConfiguration = Copy-Dictionary -Dictionary $Configuration
+            $SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
 
             New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
 
