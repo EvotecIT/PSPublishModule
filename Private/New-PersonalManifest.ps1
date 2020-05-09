@@ -23,13 +23,13 @@ function New-PersonalManifest {
         $Manifest.ScriptsToProcess = @($ScriptsToProcessLibrary)
     }
 
-    if ($Manifest.ExternalModuleDependencies) {
+    if ($Manifest.Contains('ExternalModuleDependencies')) {
         $TemporaryManifest.ExternalModuleDependencies = $Manifest.ExternalModuleDependencies
         $Manifest.Remove('ExternalModuleDependencies')
     }
 
 
-    if ($Manifest.RequiredModules) {
+    if ($Manifest.Contains('RequiredModules')) {
         foreach ($SubModule in $Manifest.RequiredModules) {
             if ($SubModule.ModuleVersion -eq 'Latest') {
                 [Array] $AvailableModule = Get-Module -ListAvailable $SubModule.ModuleName

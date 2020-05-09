@@ -7,7 +7,7 @@
         [switch] $Summary,
         [switch] $SummaryWithCommands,
         [Array] $ApprovedModules,
-        [string[]] $IgnoreFunctions
+        [Array] $IgnoreFunctions
     )
     $ListCommands = [System.Collections.Generic.List[Object]]::new()
     if ($FilePath) {
@@ -32,20 +32,19 @@
         $ListCommands.Add($_)
     }
     # this gets commands along their ScriptBlock
-    Get-RecursiveCommands -Commands $FilteredCommands
-
+    # $FilteredCommands = Get-RecursiveCommands -Commands $FilteredCommands
     [Array] $FunctionsOutput = foreach ($_ in $ListCommands) {
         if ($_.ScriptBlock) {
             if ($ApprovedModules.Count -gt 0 -and $_.Source -in $ApprovedModules) {
                 "function $($_.Name) { $($_.ScriptBlock) }"
             } elseif ($ApprovedModules.Count -eq 0) {
-                "function $($_.Name) { $($_.ScriptBlock) }"
+                #"function $($_.Name) { $($_.ScriptBlock) }"
             }
         }
     }
 
     if ($FunctionsOutput.Count -gt 0) {
-        $IgnoreAlreadyKnownCommands = $FilteredCommands.Name | Sort-Object -Unique
+        $IgnoreAlreadyKnownCommands = ($FilteredCommands.Name + $IgnoreFunctions) | Sort-Object -Unique
         $ScriptBlockMissing = [scriptblock]::Create($FunctionsOutput)
         $AnotherRun = Get-MissingFunctions -SummaryWithCommands -ApprovedModules $ApprovedModules -Code $ScriptBlockMissing -IgnoreFunctions $IgnoreAlreadyKnownCommands
     }

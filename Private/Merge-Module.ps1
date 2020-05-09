@@ -79,30 +79,42 @@ function Merge-Module {
             $Configuration.Information.Manifest.ExternalModuleDependencies
         }
     )
-    $DependantRequiredModules = foreach ($_ in $RequiredModules) {
-        Find-RequiredModules -Name $_
+    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
+
+    $ModulesThatWillMissBecauseOfIntegrating = [System.Collections.Generic.List[string]]::new()
+    [Array] $DependantRequiredModules = foreach ($_ in $RequiredModules) {
+        [Array] $TemporaryDependant = Find-RequiredModules -Name $_
+        if ($_ -in $ApprovedModules) {
+            # We basically skip dependant modules and tell the user to use it separatly
+            # This is because if the module PSSharedGoods has requirements like PSWriteColor
+            # and we don't integrate PSWriteColor separatly it would be skipped
+            foreach ($ModulesTemp in $TemporaryDependant) {
+                $ModulesThatWillMissBecauseOfIntegrating.Add($ModulesTemp)
+            }
+        } else {
+            $TemporaryDependant
+        }
     }
     $DependantRequiredModules = $DependantRequiredModules | Sort-Object -Unique
 
     $TimeToExecute.Stop()
     Write-Text "[+] 2nd stage required modules [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
-
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] 3rd stage missing functions" -Color Blue
 
-    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
+
 
     $MissingFunctions = Get-MissingFunctions -FilePath $PSM1FilePath -SummaryWithCommands -ApprovedModules $ApprovedModules
     #if ($MissingFunctions.Functions) {
-        #$IgnoreAlreadyKnownCommands = $MissingFunctions.Summary.Name | Sort-Object -Unique
+    #$IgnoreAlreadyKnownCommands = $MissingFunctions.Summary.Name | Sort-Object -Unique
 
-        #$ScriptBlockMissing = [scriptblock]::Create($MissingFunctions.Functions)
-        #$TemporaryMissing = Get-MissingFunctions -SummaryWithCommands -ApprovedModules $ApprovedModules -Code $ScriptBlockMissing -IgnoreFunctions $IgnoreAlreadyKnownCommands
+    #$ScriptBlockMissing = [scriptblock]::Create($MissingFunctions.Functions)
+    #$TemporaryMissing = Get-MissingFunctions -SummaryWithCommands -ApprovedModules $ApprovedModules -Code $ScriptBlockMissing -IgnoreFunctions $IgnoreAlreadyKnownCommands
     #}
     #$MissingFunctions = @(
 
-   #)
+    #)
 
     $TimeToExecute.Stop()
     Write-Text "[+] 3rd stage missing functions [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
@@ -146,6 +158,12 @@ function Merge-Module {
             foreach ($F in $MyFunctions) {
                 Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Green
             }
+        } elseif ($Module -notin $RequiredModules -and $Module -in $ApprovedModules) {
+            Write-Text "[+] Module $Module is missing in required module, but it's in approved modules." -Color Magenta
+            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
+            foreach ($F in $MyFunctions) {
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Magenta
+            }
         } else {
             Write-Text "[-] Module $Module is missing in required modules. Potential issue." -Color Red
             $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
@@ -153,6 +171,9 @@ function Merge-Module {
                 Write-Text "   [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias))" -Color Red
             }
         }
+    }
+    foreach ($Module in $ModulesThatWillMissBecauseOfIntegrating) {
+        #Write-Text "[-] Module $Module is missing in required modules due to integration of some approved module. Potential issue." -Color Red
     }
 
     $TimeToExecute.Stop()
