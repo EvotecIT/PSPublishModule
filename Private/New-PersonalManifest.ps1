@@ -32,7 +32,7 @@ function New-PersonalManifest {
     if ($Manifest.Contains('RequiredModules')) {
         foreach ($SubModule in $Manifest.RequiredModules) {
             if ($SubModule.ModuleVersion -eq 'Latest') {
-                [Array] $AvailableModule = Get-Module -ListAvailable $SubModule.ModuleName
+                [Array] $AvailableModule = Get-Module -ListAvailable $SubModule.ModuleName -Verbose:$false
                 $SubModule.ModuleVersion = $AvailableModule[0].Version
             }
         }

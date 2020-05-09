@@ -27,7 +27,7 @@
         $Result = $CommandsUsedInCode
     }
     #$FilteredCommands = Get-FilteredScriptCommands -Commands $Result -NotUnknown -NotCmdlet -Functions $Functions -NotApplication -FilePath $FilePath
-    $FilteredCommands = Get-FilteredScriptCommands -Commands $Result -Functions $Functions -FilePath $FilePath
+    $FilteredCommands = Get-FilteredScriptCommands -Commands $Result -Functions $Functions -FilePath $FilePath -ApprovedModules $ApprovedModules
     foreach ($_ in $FilteredCommands) {
         $ListCommands.Add($_)
     }

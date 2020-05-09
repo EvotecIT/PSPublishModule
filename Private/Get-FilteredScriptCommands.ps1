@@ -6,7 +6,8 @@
         [switch] $NotUnknown,
         [switch] $NotApplication,
         [string[]] $Functions,
-        [string] $FilePath
+        [string] $FilePath,
+        [string[]] $ApprovedModules
     )
     if ($Functions.Count -eq 0) {
         $Functions = Get-FunctionNames -Path $FilePath
@@ -26,18 +27,50 @@
                 Source      = $Data.Source
                 CommandType = $Data.CommandType
                 IsAlias     = $IsAlias
+                IsPrivate   = $false
                 Error       = ''
                 ScriptBlock = $Data.ScriptBlock
             }
         } catch {
-            [PSCustomObject] @{
+            $CurrentOutput = [PSCustomObject] @{
                 Name        = $Command
                 Source      = ''
                 CommandType = ''
                 IsAlias     = $IsAlias
+                IsPrivate   = $false
                 Error       = $_.Exception.Message
                 ScriptBlock = ''
             }
+            # So we caught exception, we know the command doesn't exists
+            # so now we check if it's one of the private commands from Approved Modules
+            # this will allow us to integrate it regardless how it's done.
+            foreach ($ApprovedModule in $ApprovedModules) {
+                $ImportModuleWithPrivateCommands = Import-Module -PassThru -Name $ApprovedModule -ErrorAction Stop -Verbose:$false
+                try {
+                    $Data = & $ImportModuleWithPrivateCommands { param($command); Get-Command $command -Verbose:$false -ErrorAction Stop } $command
+                    $CurrentOutput = [PSCustomObject] @{
+                        Name        = $Data.Name
+                        Source      = $Data.Source
+                        CommandType = $Data.CommandType
+                        IsAlias     = $IsAlias
+                        IsPrivate   = $true
+                        Error       = ''
+                        ScriptBlock = $Data.ScriptBlock
+                    }
+                    break
+                } catch {
+                    $CurrentOutput = [PSCustomObject] @{
+                        Name        = $Command
+                        Source      = ''
+                        CommandType = ''
+                        IsAlias     = $IsAlias
+                        IsPrivate   = $false
+                        Error       = $_.Exception.Message
+                        ScriptBlock = ''
+                    }
+                }
+            }
+            $CurrentOutput
         }
     }
     $Filtered = foreach ($Command in $Scan) {
