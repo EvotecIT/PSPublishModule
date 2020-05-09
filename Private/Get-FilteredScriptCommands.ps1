@@ -45,8 +45,8 @@
             # so now we check if it's one of the private commands from Approved Modules
             # this will allow us to integrate it regardless how it's done.
             foreach ($ApprovedModule in $ApprovedModules) {
-                $ImportModuleWithPrivateCommands = Import-Module -PassThru -Name $ApprovedModule -ErrorAction Stop -Verbose:$false
                 try {
+                    $ImportModuleWithPrivateCommands = Import-Module -PassThru -Name $ApprovedModule -ErrorAction Stop -Verbose:$false
                     $Data = & $ImportModuleWithPrivateCommands { param($command); Get-Command $command -Verbose:$false -ErrorAction Stop } $command
                     $CurrentOutput = [PSCustomObject] @{
                         Name        = $Data.Name
