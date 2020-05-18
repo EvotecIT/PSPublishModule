@@ -332,14 +332,22 @@
             if ($Configuration.Steps.BuildModule.ReleasesUnpacked) {
                 $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
                 Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
-                    $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
-                    if ($DestinationPaths.Desktop) {
-                        Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
-                        Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
-                    }
-                    if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                        Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
-                        Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                    try {
+                        $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
+                        if ($DestinationPaths.Desktop) {
+                            Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                            Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                        }
+                        if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
+                            Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                            Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                        }
+                    } catch {
+                        $ErrorMessage = $_.Exception.Message
+                        #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
+                        Write-Host # This is to add new line, because the first line was opened up.
+                        Write-Text "[-] Format-Code - Copying final merged release to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
+                        Exit
                     }
                 }
             }
