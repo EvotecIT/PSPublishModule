@@ -362,25 +362,13 @@
         if ($Configuration.Steps.ImportModules.RequiredModules) {
             Write-TextWithTime -Text '[+] Importing modules - REQUIRED' {
                 foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
-                    try {
-                        Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false  #$Configuration.Steps.ImportModules.Verbose
-                    } catch {
-                        $ErrorMessage = $_.Exception.Message
-                        Write-Error "Start-ModuleBuilding - ImportingModule $Module failed. Error: $ErrorMessage"
-                        Exit
-                    }
+                    Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false
                 }
             }
         }
         if ($Configuration.Steps.ImportModules.Self) {
             Write-TextWithTime -Text '[+] Importing module - SELF' {
-                try {
-                    Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$false
-                } catch {
-                    $ErrorMessage = $_.Exception.Message
-                    Write-Error "Start-ModuleBuilding - ImportingModule $ProjectName failed. Error: $ErrorMessage"
-                    Exit
-                }
+                Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$false
             }
         }
         $VerbosePreference = $TemporaryVerbosePreference
