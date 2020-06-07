@@ -333,13 +333,14 @@
                 $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
                 Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
                     try {
+                        if (Test-Path -Path $FolderPathReleasesUnpacked) {
+                            Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                        }
                         $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
                         if ($DestinationPaths.Desktop) {
-                            Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
                             Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
                         }
                         if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                            Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
                             Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
                         }
                     } catch {
