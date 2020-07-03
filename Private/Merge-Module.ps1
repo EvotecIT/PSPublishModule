@@ -233,12 +233,13 @@ function Merge-Module {
         }
     }
 
+    $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Text "[+] 6th finalizing PSM1/PSD1" -Color Blue
+
+
     if ($Configuration.Steps.BuildModule.LibrarySeparateFile) {
         $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
         $ScriptsToProcessLibrary = "$ModuleName.Libraries.ps1"
-
-
-
     } else {
         $LibariesPath = ''
     }
@@ -261,4 +262,7 @@ function Merge-Module {
     Get-ChildItem $ModulePathTarget -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
         Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
         Remove-Item #-Verbose
+
+    $TimeToExecuteSign.Stop()
+    Write-Text "[+] 6th finalizing PSM1/PSD1 [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
 }

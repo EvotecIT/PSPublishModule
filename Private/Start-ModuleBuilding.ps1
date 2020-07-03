@@ -268,6 +268,16 @@
                 -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
                 -Configuration $Configuration
 
+            if ($Configuration.Steps.BuildModule.SignMerged) {
+                $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
+                Write-Text "[+] 7th stage signing files" -Color Blue
+                $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll') -TimeStampServer 'http://timestamp.digicert.com'
+                foreach ($File in $SignedFiles) {
+                    Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
+                }
+                $TimeToExecuteSign.Stop()
+                Write-Text "[+] 7th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+            }
         }
         if ($Configuration.Steps.BuildModule.Enable -and (-not $Configuration.Steps.BuildModule.Merge)) {
             foreach ($Directory in $LinkDirectories) {
