@@ -7,7 +7,7 @@
         [Parameter(Mandatory)][string] $Path,
         [string] $TimeStampServer = 'http://timestamp.digicert.com',
         [ValidateSet('All', 'NonRoot', 'Signer')] [string] $IncludeChain = 'All',
-        [string[]] $Include = @('*.ps1', '*.psd1', '*.psm1', '*.dll')
+        [string[]] $Include = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
     )
     if ($PSBoundParameters.Keys -contains 'LocalStore') {
         $cert = Get-ChildItem -Path "Cert:\$LocalStore\My" -CodeSigningCert

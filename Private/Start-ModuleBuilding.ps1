@@ -17,6 +17,9 @@
         $DestinationPaths.Desktop = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
         $DestinationPaths.Core = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
     }
+    $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced
+
+    $Configuration.Information.Manifest.ModuleVersion = $Versioning.Version
 
     [string] $Random = Get-Random 10000000000
     [string] $FullModuleTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
@@ -26,6 +29,8 @@
 
     Write-Text '----------------------------------------------------'
     Write-Text "[i] Project Name: $ProjectName" -Color Yellow
+    Write-Text "[i] PSGallery Version: $($Versioning.PSGalleryVersion)" -Color Yellow
+    Write-Text "[i] Expected Version: $($Configuration.Information.Manifest.ModuleVersion)" -Color Yellow
     Write-Text "[i] Full module temporary path: $FullModuleTemporaryPath" -Color Yellow
     Write-Text "[i] Full project path: $FullProjectPath" -Color Yellow
     Write-Text "[i] Full temporary path: $FullTemporaryPath" -Color Yellow
@@ -39,6 +44,7 @@
         Write-Text 'Section BuildModule is missing. Terminating.'
         return
     }
+
 
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
 
@@ -268,15 +274,37 @@
                 -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
                 -Configuration $Configuration
 
+            if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
+                # Something is wrong here for folders other than root, need investigation
+                $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
+                Write-Text "[+] 7th stage creating file catalog" -Color Blue
+                $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
+                $CategoryPaths = @(
+                    $FullModuleTemporaryPath
+                    $NotEmptyPaths = (Get-ChildItem -Directory -Path $FullModuleTemporaryPath -Recurse).FullName
+                    if ($NotEmptyPaths) {
+                        $NotEmptyPaths
+                    }
+                )
+                foreach ($CatPath in $CategoryPaths) {
+                    $CatalogFile = [io.path]::Combine($CatPath, "$ProjectName.cat")
+                    $FileCreated = New-FileCatalog -Path $CatPath -CatalogFilePath $CatalogFile -CatalogVersion 2.0
+                    if ($FileCreated) {
+                        Write-Text "   [>] Catalog file covering $CatPath was created $($FileCreated.Name)" -Color Yellow
+                    }
+                }
+                $TimeToExecuteSign.Stop()
+                Write-Text "[+] 7th stage creating file catalog [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+            }
             if ($Configuration.Steps.BuildModule.SignMerged) {
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
-                Write-Text "[+] 7th stage signing files" -Color Blue
-                $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll') -TimeStampServer 'http://timestamp.digicert.com'
+                Write-Text "[+] 8th stage signing files" -Color Blue
+                $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat') -TimeStampServer 'http://timestamp.digicert.com'
                 foreach ($File in $SignedFiles) {
                     Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
                 }
                 $TimeToExecuteSign.Stop()
-                Write-Text "[+] 7th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+                Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
             }
         }
         if ($Configuration.Steps.BuildModule.Enable -and (-not $Configuration.Steps.BuildModule.Merge)) {

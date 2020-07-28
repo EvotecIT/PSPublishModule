@@ -2,20 +2,80 @@
     [cmdletBinding()]
     param(
         [string] $Module,
-        [ValidateSet('Major', 'Minor', 'Build', 'Revision')][string] $Update = 'Build'
+        [Parameter(Mandatory)][string] $ExpectedVersion,
+        [switch] $Advanced
     )
-    $ModuleGallery = Find-Module -Name $Module
-    [version] $CurrentVersion = [version] $ModuleGallery.Version
-    $Types = @('Major', 'Minor', 'Build', 'Revision')
-    $NewVersion = foreach ($Type in $Types) {
-        if ($Type -eq $Update) {
-            $CurrentVersion.$Update + 1
+    $Version = $null
+    $VersionCheck = [version]::TryParse($ExpectedVersion, [ref] $Version)
+    if ($VersionCheck) {
+        # Don't do anything, return what user wanted to get anyways
+        $Version
+    } else {
+        if ($Module) {
+            try {
+                $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop
+            } catch {
+                throw "Couldn't find module $Module to asses version information. Terminating."
+            }
+            $CurrentVersion = [version] $ModuleGallery.Version
         } else {
-            if ($CurrentVersion.$Type -ne -1) {
-                $CurrentVersion.$Type
+            $CurrentVersion = $null
+        }
+        $Splitted = $ExpectedVersion.Split('.')
+        $PreparedVersion = [ordered] @{
+            Major    = $Splitted[0]
+            Minor    = $Splitted[1]
+            Build    = $Splitted[2]
+            Revision = $Splitted[3]
+        }
+        [string] $StepType = foreach ($Key in $PreparedVersion.Keys) {
+            if ($PreparedVersion[$Key] -eq 'X') {
+                $Key
+                break
             }
         }
+        if ($null -eq $CurrentVersion) {
+            $VersionToUpgrade = ''
+        } else {
+            $VersionToUpgrade = $CurrentVersion.$StepType
+        }
+
+        if ($VersionToUpgrade -eq '') {
+            $ExpectedVersion = 1
+        } else {
+            $ExpectedVersion = $CurrentVersion.$StepType + 1
+        }
+
+        $PreparedVersion.$StepType = $ExpectedVersion
+        $Numbers = foreach ($Key in $PreparedVersion.Keys) {
+            if ($PreparedVersion[$Key]) {
+                $PreparedVersion[$Key]
+            }
+        }
+        $ProposedVersion = $Numbers -join '.'
+
+        $FinalVersion = $null
+        $VersionCheck = [version]::TryParse($ProposedVersion, [ref] $FinalVersion)
+        if ($VersionCheck) {
+            if ($Advanced) {
+                [ordered] @{
+                    Version          = $ProposedVersion
+                    PSGalleryVersion = $CurrentVersion
+                }
+            } else {
+                $ProposedVersion
+            }
+        } else {
+            throw "Couldn't properly verify version is version. Terminating."
+        }
     }
-    $NewVersion -join '.'
 }
-#Step-Version -Module Testimo -Update Minor
+
+<#
+Step-Version -Module Testimo12 -ExpectedVersion '0.1.X'
+Step-Version -ExpectedVersion '0.1.X'
+Step-Version -ExpectedVersion '0.1.5.X'
+Step-Version -ExpectedVersion '1.2.X'
+Step-Version -Module PSWriteHTML -ExpectedVersion '0.0.X'
+Step-Version -Module PSWriteHTML1 -ExpectedVersion '0.1.X'
+#>
