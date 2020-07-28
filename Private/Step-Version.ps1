@@ -14,10 +14,12 @@
         if ($Module) {
             try {
                 $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop
+                $CurrentVersion = [version] $ModuleGallery.Version
             } catch {
-                throw "Couldn't find module $Module to asses version information. Terminating."
+                #throw "Couldn't find module $Module to asses version information. Terminating."
+                $CurrentVersion = $null
             }
-            $CurrentVersion = [version] $ModuleGallery.Version
+
         } else {
             $CurrentVersion = $null
         }
