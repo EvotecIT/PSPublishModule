@@ -9,7 +9,10 @@
     $VersionCheck = [version]::TryParse($ExpectedVersion, [ref] $Version)
     if ($VersionCheck) {
         # Don't do anything, return what user wanted to get anyways
-        $Version
+        @{
+            Version          = $ExpectedVersion
+            PSGalleryVersion = 'Not aquired, no auto versioning.'
+        }
     } else {
         if ($Module) {
             try {

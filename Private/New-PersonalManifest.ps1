@@ -42,7 +42,12 @@ function New-PersonalManifest {
             }
         }
     }
-    New-ModuleManifest @Manifest
+    if ($Manifest.ModuleVersion) {
+        New-ModuleManifest @Manifest
+    } else {
+        Write-Text -Text '[-] Module version is not available. Terminating.' -Color Red
+        Exit
+    }
 
     if ($Configuration.Steps.PublishModule.Prerelease -ne '' -or $TemporaryManifest.ExternalModuleDependencies) {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
