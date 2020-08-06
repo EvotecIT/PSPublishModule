@@ -16,7 +16,7 @@
     } else {
         if ($Module) {
             try {
-                $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop
+                $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop -Verbose:$false -WarningAction SilentlyContinue
                 $CurrentVersion = [version] $ModuleGallery.Version
             } catch {
                 #throw "Couldn't find module $Module to asses version information. Terminating."
