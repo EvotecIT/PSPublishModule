@@ -40,6 +40,10 @@ function Merge-Module {
             $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')
             $Content = $Content.Replace('$PSScriptRoot\..\', '$PSScriptRoot\')
 
+            # Fixes [IO.Path]::Combine($PSScriptRoot, '..', 'Images') - mostly for PSTeams but should be useful for others
+            $Content = $Content.Replace("`$PSScriptRoot, '..',", "`$PSScriptRoot,")
+            $Content = $Content.Replace("`$PSScriptRoot,'..',", "`$PSScriptRoot,")
+
             try {
                 $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
             } catch {
