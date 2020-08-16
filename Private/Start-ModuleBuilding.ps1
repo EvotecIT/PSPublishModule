@@ -41,10 +41,15 @@
     Write-Text '----------------------------------------------------'
 
     if (-not $Configuration.Steps.BuildModule) {
-        Write-Text 'Section BuildModule is missing. Terminating.'
+        Write-Text '[-] Section BuildModule is missing. Terminating.' -Color Red
         return
     }
 
+    # check if project exists
+    if (-not (Test-Path -Path $FullProjectPath)) {
+        Write-Text "[-] Project path doesn't exists $FullProjectPath. Terminating" -Color Red
+        return
+    }
 
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
 
