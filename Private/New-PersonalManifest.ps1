@@ -49,7 +49,7 @@ function New-PersonalManifest {
         Exit
     }
 
-    if ($Configuration.Steps.PublishModule.Prerelease -ne '' -or $TemporaryManifest.ExternalModuleDependencies) {
+    if ($Configuration.Steps.PublishModule.Prerelease -ne '' -or $TemporaryManifest.ExternalModuleDependencies -or $Configuration.Options.Style.PSD1 -ne 'Native') {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
         $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
         if ($Data.ScriptsToProcess.Count -eq 0) {
