@@ -129,6 +129,15 @@ function Merge-Module {
             Write-Text "   [>] Application $Application " -Color Yellow
         }
     }
+    Write-Text "[+] Pre-Verification of Approved Modules" -Color DarkYellow
+    foreach ($ApprovedModule in $ApprovedModules) {
+        $ApprovedModuleStatus = Get-Module -Name $ApprovedModule -ListAvailable
+        if ($ApprovedModuleStatus) {
+            Write-Text "   [>] Approved module $ApprovedModule exists - can be used for merging." -Color Green
+        } else {
+            Write-Text "   [>] Approved module $ApprovedModule doesn't exists. Potentially issue with merging." -Color Red
+        }
+    }
     foreach ($Module in $ModulesToCheck.Source) {
         if ($Module -in $RequiredModules -and $Module -in $ApprovedModules) {
             Write-Text "[+] Module $Module is in required modules with ability to merge." -Color DarkYellow
