@@ -1,21 +1,39 @@
 function New-PrepareModule {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Existing')]
     param (
-        [System.Collections.IDictionary] $Configuration
-    )
+        [Parameter(ParameterSetName = 'New')][string] $Path,
+        [Parameter(ParameterSetName = 'New')][string] $ProjectName,
 
-    if (-not $Configuration) {
-        return
-    }
+        [Parameter(ParameterSetName = 'Existing')][System.Collections.IDictionary] $Configuration
+    )
+    Write-Host "[i] Module Building Initializing..." -ForegroundColor Yellow
     $GlobalTime = [System.Diagnostics.Stopwatch]::StartNew()
-    if (-not $Configuration.Information.DirectoryModulesCore) {
-        $Configuration.Information.DirectoryModulesCore = "$Env:USERPROFILE\Documents\PowerShell\Modules"
+    if ($Configuration) {
+        if (-not $Configuration.Information.DirectoryModulesCore) {
+            $Configuration.Information.DirectoryModulesCore = "$Env:USERPROFILE\Documents\PowerShell\Modules"
+        }
+        if (-not $Configuration.Information.DirectoryModules) {
+            $Configuration.Information.DirectoryModules = "$Env:USERPROFILE\Documents\WindowsPowerShell\Modules"
+        }
+        if ($Configuration.Steps.BuildModule.Enable -or $Configuration.Steps.BuildModule.EnableDesktop -or $Configuration.Steps.BuildModule.EnableCore -or $Configuration.Steps.BuildDocumentation -eq $true) {
+            Start-ModuleBuilding -Configuration $Configuration
+        }
     }
-    if (-not $Configuration.Information.DirectoryModules) {
-        $Configuration.Information.DirectoryModules = "$Env:USERPROFILE\Documents\WindowsPowerShell\Modules"
-    }
-    if ($Configuration.Steps.BuildModule.Enable -or $Configuration.Steps.BuildModule.EnableDesktop -or $Configuration.Steps.BuildModule.EnableCore -or $Configuration.Steps.BuildDocumentation -eq $true) {
-        Start-ModuleBuilding -Configuration $Configuration
+    if ($Path -and $ProjectName) {
+        if (-not (Test-Path -Path $Path)) {
+            Write-Text "[-] Path $Path doesn't exists. This shouldn't be the case." -Color Red
+        } else {
+            $FullProjectPath = [io.path]::Combine($Path, $ProjectName)
+            $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data'
+            Add-Directory -Directory $FullProjectPath
+            foreach ($folder in $Folders) {
+                $SubFolder = [io.path]::Combine($FullProjectPath, $Folder)
+                Add-Directory -Directory $SubFolder
+            }
+            Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
+            Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
+            Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.ps1" -Destination "$FullProjectPath\$ProjectName.psm1"
+        }
     }
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"
     Write-Host "[i] Module Building " -NoNewline -ForegroundColor Yellow
