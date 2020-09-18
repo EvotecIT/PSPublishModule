@@ -3,7 +3,6 @@ function New-PrepareModule {
     param (
         [Parameter(ParameterSetName = 'New')][string] $Path,
         [Parameter(ParameterSetName = 'New')][string] $ProjectName,
-
         [Parameter(ParameterSetName = 'Existing')][System.Collections.IDictionary] $Configuration
     )
     Write-Host "[i] Module Building Initializing..." -ForegroundColor Yellow
@@ -32,7 +31,7 @@ function New-PrepareModule {
             }
             Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
             Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-            Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.ps1" -Destination "$FullProjectPath\$ProjectName.psm1"
+            Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.txt" -Destination "$FullProjectPath\$ProjectName.psm1"
         }
     }
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"

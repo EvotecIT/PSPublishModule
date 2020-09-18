@@ -96,10 +96,8 @@
         if ($Configuration.Information.IncludeAll) {
             $DirectoriesWithAll = $Configuration.Information.IncludeAll
         } else {
-            $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\'
+            $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
         }
-
-
         if ($Configuration.Steps.BuildModule.Enable -eq $true) {
             $PreparingFilesTime = Write-Text "[+] Preparing files and folders" -Start
 

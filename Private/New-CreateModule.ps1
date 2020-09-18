@@ -14,5 +14,5 @@ function New-CreateModule {
 
     Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
     Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.ps1" -Destination  "$FullProjectPath\$ProjectName.psm1"
+    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.txt" -Destination  "$FullProjectPath\$ProjectName.psm1"
 }
