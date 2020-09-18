@@ -73,13 +73,10 @@
 
         # Fix required fields:
         $Configuration.Information.Manifest.RootModule = "$($ProjectName).psm1"
-        $Configuration.Information.Manifest.FunctionsToExport = @() #$FunctionToExport
         # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
         $Configuration.Information.Manifest.CmdletsToExport = @()
         # Variables to export from this module
         $Configuration.Information.Manifest.VariablesToExport = @()
-        # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-        $Configuration.Information.Manifest.AliasesToExport = @()
 
         if ($Configuration.Information.Exclude) {
             $Exclude = $Configuration.Information.Exclude
@@ -190,14 +187,46 @@
             $AliasesAndFunctions = Write-TextWithTime -Text '[+] Preparing function and aliases names' {
                 Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
             }
-
-            if ($AliasesAndFunctions.Function) {
-                $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Function
+            if ($AliasesAndFunctions -is [System.Collections.IDictionary]) {
+                $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Keys | Where-Object { $_ }
+                if (-not $Configuration.Information.Manifest.FunctionsToExport) {
+                    $Configuration.Information.Manifest.FunctionsToExport = @()
+                }
+                # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
+                $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Values | ForEach-Object { $_ } | Where-Object { $_ }
+                if (-not $Configuration.Information.Manifest.AliasesToExport) {
+                    $Configuration.Information.Manifest.AliasesToExport = @()
+                }
+            } else {
+                # this is not used, as we're using Hashtable above, but maybe if we change mind we can go back
+                $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Name | Where-Object { $_ }
+                if (-not $Configuration.Information.Manifest.FunctionsToExport) {
+                    $Configuration.Information.Manifest.FunctionsToExport = @()
+                }
+                $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias | ForEach-Object { $_ } | Where-Object { $_ }
+                if (-not $Configuration.Information.Manifest.AliasesToExport) {
+                    $Configuration.Information.Manifest.AliasesToExport = @()
+                }
             }
-            if ($AliasesAndFunctions.Alias) {
-                $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias
+            Write-Text "[i] Checking for duplicates in funcions and aliases" -Color Yellow
+            $FoundDuplicateAliases = $false
+            if ($Configuration.Information.Manifest.AliasesToExport) {
+                $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object –Unique
+                $DiffrenceAliases = Compare-Object –ReferenceObject $Configuration.Information.Manifest.AliasesToExport –DifferenceObject $UniqueAliases
+                foreach ($Alias in $Configuration.Information.Manifest.AliasesToExport) {
+                    if ($Alias -in $Configuration.Information.Manifest.FunctionsToExport) {
+                        Write-Text "[-] Alias $Alias is also used as function name. Fix it!" -Color Red
+                        $FoundDuplicateAliases = $true
+                    }
+                }
+                foreach ($Alias in $DiffrenceAliases.InputObject) {
+                    Write-Text "[-] Alias $Alias is used multiple times. Fix it!" -Color Red
+                    $FoundDuplicateAliases = $true
+                }
+                if ($FoundDuplicateAliases) {
+                    Exit
+                }
             }
-
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
                 $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
                 $FilesEnums = @(
@@ -272,6 +301,7 @@
                 -Sort $Configuration.Options.Merge.Sort `
                 -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
                 -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
+                -AliasesAndFunctions $AliasesAndFunctions `
                 -LibrariesStandard $FilesLibrariesStandard `
                 -LibrariesCore $FilesLibrariesCore `
                 -LibrariesDefault $FilesLibrariesDefault `

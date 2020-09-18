@@ -15,24 +15,17 @@ function Export-PSData {
     [cmdletbinding()]
     param(
         # The data that will be exported
-        [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
-        [PSObject[]]
-        $InputObject,
-
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true)][PSObject[]]$InputObject,
         # The path to the data file
-        [Parameter(Mandatory = $true, Position = 0)]
-        [string]
-        $DataFile,
+        [Parameter(Mandatory = $true, Position = 0)][string] $DataFile,
         [switch] $Sort
     )
     begin {
-        $AllObjects = New-Object Collections.ArrayList
+        $AllObjects = [System.Collections.Generic.List[object]]::new()
     }
-
     process {
-        $null = $AllObjects.AddRange($InputObject)
+        $AllObjects.AddRange($InputObject)
     }
-
     end {
         #region Convert to Hashtables and export
         $text = $AllObjects | Write-PowerShellHashtable -Sort:$Sort.IsPresent

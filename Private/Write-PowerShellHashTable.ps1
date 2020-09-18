@@ -24,18 +24,12 @@ function Write-PowerShellHashtable {
     #>
     [OutputType([string], [ScriptBlock])]
     param(
-        [Parameter(Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
-        [PSObject]
-        $InputObject,
-
+        [Parameter(Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)][PSObject] $InputObject,
         # Returns the content as a script block, rather than a string
-        [Alias('ScriptBlock')]
-        [switch]$AsScriptBlock,
-
+        [Alias('ScriptBlock')][switch]$AsScriptBlock,
         # If set, items in the hashtable will be sorted alphabetically
         [Switch]$Sort
     )
-
     process {
         $callstack = @(foreach ($_ in (Get-PSCallStack)) {
                 if ($_.Command -eq "Write-PowerShellHashtable") {
@@ -43,7 +37,7 @@ function Write-PowerShellHashtable {
                 }
             })
         $depth = $callStack.Count
-        if ($inputObject -isnot [Hashtable]) {
+        if ($inputObject -isnot [System.Collections.IDictionary]) {
 
             $newInputObject = @{
                 PSTypeName = @($inputobject.pstypenames)[-1]
@@ -54,7 +48,7 @@ function Write-PowerShellHashtable {
             $inputObject = $newInputObject
         }
 
-        if ($inputObject -is [Hashtable]) {
+        if ($inputObject -is [System.Collections.IDictionary]) {
             #region Indent
             $scriptString = ""
             $indent = $depth * 4
@@ -93,14 +87,17 @@ function Write-PowerShellHashtable {
                 } elseif ($value -is [ScriptBlock]) {
                     $value = "{$value}"
                 } elseif ($value -is [switch]) {
-                    $value = if ($value) { '$true'} else { '$false' }
+                    $value = if ($value) { '$true' } else { '$false' }
                 } elseif ($value -is [DateTime]) {
                     $value = if ($value) { "[DateTime]'$($value.ToString("o"))'" }
                 } elseif ($value -is [bool]) {
-                    $value = if ($value) { '$true'} else { '$false' }
-                } elseif ($value -and $value.GetType -and ($value.GetType().IsArray -or $value -is [Collections.IList])) {
+                    $value = if ($value) { '$true' } else { '$false' }
+                } elseif ($value -is [System.Collections.IList] -and $value.Count -eq 0) {
+                    $value = '@()'
+                } elseif ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
+                #} elseif ($value -and $value.GetType -and ($value.GetType().IsArray -or $value -is [Collections.IList])) {
                     $value = foreach ($v in $value) {
-                        if ($v -is [Hashtable]) {
+                        if ($v -is [System.Collections.IDictionary]) {
                             Write-PowerShellHashtable $v
                         } elseif ($v -is [Object] -and $v -isnot [string]) {
                             Write-PowerShellHashtable $v
@@ -112,12 +109,12 @@ function Write-PowerShellHashtable {
                     $ofs = ",$(' ' * ($indent + 4))"
                     $value = "$value"
                     $ofs = $oldOfs
-                } elseif ($value -as [Hashtable[]]) {
+                } elseif ($value -as [System.Collections.IDictionary[]]) {
                     $value = foreach ($v in $value) {
                         Write-PowerShellHashtable $v
                     }
                     $value = $value -join ","
-                } elseif ($value -is [Hashtable]) {
+                } elseif ($value -is [System.Collections.IDictionary]) {
                     $value = "$(Write-PowerShellHashtable $value)"
                 } elseif ($value -as [Double]) {
                     $value = "$value"

@@ -9,6 +9,7 @@ function Merge-Module {
         [string] $Sort = 'NONE',
         [string[]] $FunctionsToExport,
         [string[]] $AliasesToExport,
+        [System.Collections.IDictionary] $AliasesAndFunctions,
         [Array] $LibrariesStandard,
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
@@ -256,15 +257,19 @@ function Merge-Module {
     } else {
         $LibariesPath = ''
     }
+
     New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
         -FunctionAliaes $AliasesToExport `
+        -AliasesAndFunctions $AliasesAndFunctions `
         -LibrariesStandard $LibrariesStandard `
         -LibrariesCore $LibrariesCore `
         -LibrariesDefault $LibrariesDefault `
         -ModuleName $ModuleName `
         -UsingNamespaces:$UsingInPlace `
-        -LibariesPath $LibariesPath
+        -LibariesPath $LibariesPath `
+        -InternalModuleDependencies $Configuration.Information.Manifest.InternalModuleDependencies `
+        -CommandModuleDependencies $Configuration.Information.Manifest.CommandModuleDependencies
 
 
     Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1

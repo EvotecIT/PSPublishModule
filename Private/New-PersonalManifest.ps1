@@ -27,7 +27,14 @@ function New-PersonalManifest {
         $TemporaryManifest.ExternalModuleDependencies = $Manifest.ExternalModuleDependencies
         $Manifest.Remove('ExternalModuleDependencies')
     }
-
+    if ($Manifest.Contains('InternalModuleDependencies')) {
+        $TemporaryManifest.InternalModuleDependencies = $Manifest.InternalModuleDependencies
+        $Manifest.Remove('InternalModuleDependencies')
+    }
+    if ($Manifest.Contains('CommandModuleDependencies')) {
+        $TemporaryManifest.CommandModuleDependencies = $Manifest.CommandModuleDependencies
+        $Manifest.Remove('CommandModuleDependencies')
+    }
 
     if ($Manifest.Contains('RequiredModules')) {
         foreach ($SubModule in $Manifest.RequiredModules) {
@@ -53,10 +60,10 @@ function New-PersonalManifest {
         #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
         $Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
         if ($Data.ScriptsToProcess.Count -eq 0) {
-            $Data.Remove('ScriptsToProcess')
+            #$Data.Remove('ScriptsToProcess')
         }
         if ($Data.CmdletsToExport.Count -eq 0) {
-            $Data.Remove('CmdletsToExport')
+           # $Data.Remove('CmdletsToExport')
         }
 
         if ($Configuration.Steps.PublishModule.Prerelease) {

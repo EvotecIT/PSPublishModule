@@ -1,6 +1,7 @@
 ﻿@{
-    AliasesToExport      = ''
+    AliasesToExport      = @()
     Author               = 'Przemyslaw Klys'
+    CmdletsToExport      = @()
     CompanyName          = 'Evotec'
     CompatiblePSEditions = 'Desktop', 'Core'
     Copyright            = '(c) 2011 - 2020 Przemyslaw Klys @ Evotec. All rights reserved.'
@@ -22,7 +23,7 @@
         ModuleName    = 'platyps'
         Guid          = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'
     }, @{
-        ModuleVersion = '2.2.1'
+        ModuleVersion = '2.2.4.1'
         ModuleName    = 'powershellget'
         Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
     }, @{
