@@ -82,7 +82,6 @@ function Write-PowerShellHashtable {
                 $value = $kv.Value
                 # Write-Verbose "$value"
                 if ($value -is [string]) {
-
                     $value = "'" + $value.Replace("'", "''").Replace("’", "’’").Replace("‘", "‘‘") + "'"
                 } elseif ($value -is [ScriptBlock]) {
                     $value = "{$value}"
@@ -107,7 +106,7 @@ function Write-PowerShellHashtable {
                     }
                     $oldOfs = $ofs
                     $ofs = ",$(' ' * ($indent + 4))"
-                    $value = "$value"
+                    $value = "@($value)"
                     $ofs = $oldOfs
                 } elseif ($value -as [System.Collections.IDictionary[]]) {
                     $value = foreach ($v in $value) {
