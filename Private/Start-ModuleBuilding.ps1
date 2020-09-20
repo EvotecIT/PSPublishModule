@@ -76,7 +76,7 @@
         # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
         $Configuration.Information.Manifest.CmdletsToExport = @()
         # Variables to export from this module
-        $Configuration.Information.Manifest.VariablesToExport = @()
+        #$Configuration.Information.Manifest.VariablesToExport = @()
 
         if ($Configuration.Information.Exclude) {
             $Exclude = $Configuration.Information.Exclude

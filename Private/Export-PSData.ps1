@@ -28,8 +28,8 @@ function Export-PSData {
     }
     end {
         #region Convert to Hashtables and export
-        $text = $AllObjects | Write-PowerShellHashtable -Sort:$Sort.IsPresent
-        $text | Set-Content -Path $DataFile
+        $Text = $AllObjects | Write-PowerShellHashtable -Sort:$Sort.IsPresent
+        $Text | Out-File -FilePath $DataFile -Encoding UTF8
         #endregion Convert to Hashtables and export
     }
 
