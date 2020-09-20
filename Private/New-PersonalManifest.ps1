@@ -50,7 +50,7 @@ function New-PersonalManifest {
         }
     }
 
-    if ($Configuration.Steps.PublishModule.Prerelease -eq '' -and (-not $TemporaryManifest.ExternalModuleDependencies) -or $Configuration.Options.Style.PSD1 -eq 'Native') {
+    if ($Configuration.Options.Style.PSD1 -eq 'Native' -and $Configuration.Steps.PublishModule.Prerelease -eq '' -and (-not $TemporaryManifest.ExternalModuleDependencies)) {
         if ($Manifest.ModuleVersion) {
             New-ModuleManifest @Manifest
         } else {
