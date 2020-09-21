@@ -129,6 +129,9 @@ function New-PersonalManifest {
                 }
             )
         }
+        if (-not $Data.RequiredModules) {
+            $Data.Remove('RequiredModules')
+        }
         $Data | Export-PSData -DataFile $ManifestPath -Sort
     }
 }
