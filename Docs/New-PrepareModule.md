@@ -12,8 +12,14 @@ schema: 2.0.0
 
 ## SYNTAX
 
+### Existing (Default)
 ```
-New-PrepareModule [[-Configuration] <IDictionary>] [<CommonParameters>]
+New-PrepareModule [-Configuration <IDictionary>] [<CommonParameters>]
+```
+
+### New
+```
+New-PrepareModule [-Path <String>] [-ProjectName <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -35,11 +41,41 @@ PS C:\> {{ Add example code here }}
 
 ```yaml
 Type: IDictionary
-Parameter Sets: (All)
+Parameter Sets: Existing
 Aliases:
 
 Required: False
-Position: 0
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
+{{ Fill Path Description }}
+
+```yaml
+Type: String
+Parameter Sets: New
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProjectName
+{{ Fill ProjectName Description }}
+
+```yaml
+Type: String
+Parameter Sets: New
+Aliases:
+
+Required: False
+Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

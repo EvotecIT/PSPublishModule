@@ -521,13 +521,13 @@
         [Array] $Files = Get-ChildItem -Path $DocumentationPath
         if ($Files.Count -gt 0) {
             try {
-                $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue
+                $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
             } catch {
                 Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
             }
         } else {
             try {
-                $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue
+                $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
             } catch {
                 Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
             }
@@ -536,7 +536,7 @@
             # this is temporary workaround - due to diff output on update
             if ($Configuration.Options.Documentation.UpdateWhenNew) {
                 try {
-                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue
+                    $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
                 } catch {
                     Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
                 }

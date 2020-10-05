@@ -5,16 +5,23 @@ online version:
 schema: 2.0.0
 ---
 
-# Get-MissingFunctions
+# Register-Certificate
 
 ## SYNOPSIS
 {{ Fill in the Synopsis }}
 
 ## SYNTAX
 
+### PFX
 ```
-Get-MissingFunctions [[-FilePath] <String>] [[-Code] <ScriptBlock>] [[-Functions] <String[]>] [-Summary]
- [-SummaryWithCommands] [[-ApprovedModules] <Array>] [[-IgnoreFunctions] <Array>] [<CommonParameters>]
+Register-Certificate -CertificatePFX <String> -Path <String> [-TimeStampServer <String>]
+ [-IncludeChain <String>] [-Include <String[]>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### Store
+```
+Register-Certificate -LocalStore <String> [-Thumbprint <String>] -Path <String> [-TimeStampServer <String>]
+ [-IncludeChain <String>] [-Include <String[]>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -31,86 +38,41 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
-### -ApprovedModules
-{{ Fill ApprovedModules Description }}
-
-```yaml
-Type: Array
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Code
-{{ Fill Code Description }}
-
-```yaml
-Type: ScriptBlock
-Parameter Sets: (All)
-Aliases: ScriptBlock
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -FilePath
-{{ Fill FilePath Description }}
+### -CertificatePFX
+{{ Fill CertificatePFX Description }}
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases: Path
-
-Required: False
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Functions
-{{ Fill Functions Description }}
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
+Parameter Sets: PFX
 Aliases:
 
-Required: False
-Position: 2
+Required: True
+Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -IgnoreFunctions
-{{ Fill IgnoreFunctions Description }}
-
-```yaml
-Type: Array
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 4
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Summary
-{{ Fill Summary Description }}
+### -Confirm
+Prompts you for confirmation before running the cmdlet.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: (All)
+Aliases: cf
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Include
+{{ Fill Include Description }}
+
+```yaml
+Type: String[]
 Parameter Sets: (All)
 Aliases:
 
@@ -121,13 +83,91 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -SummaryWithCommands
-{{ Fill SummaryWithCommands Description }}
+### -IncludeChain
+{{ Fill IncludeChain Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: All, NonRoot, Signer
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -LocalStore
+{{ Fill LocalStore Description }}
+
+```yaml
+Type: String
+Parameter Sets: Store
+Aliases:
+Accepted values: LocalMachine, CurrentUser
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
+{{ Fill Path Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Thumbprint
+{{ Fill Thumbprint Description }}
+
+```yaml
+Type: String
+Parameter Sets: Store
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -TimeStampServer
+{{ Fill TimeStampServer Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -WhatIf
+Shows what would happen if the cmdlet runs.
+The cmdlet is not run.
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: (All)
-Aliases:
+Aliases: wi
 
 Required: False
 Position: Named
