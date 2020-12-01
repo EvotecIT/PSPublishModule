@@ -9,10 +9,12 @@ function New-PrepareModule {
     $GlobalTime = [System.Diagnostics.Stopwatch]::StartNew()
     if ($Configuration) {
         if (-not $Configuration.Information.DirectoryModulesCore) {
-            $Configuration.Information.DirectoryModulesCore = "$Env:USERPROFILE\Documents\PowerShell\Modules"
+            #$Configuration.Information.DirectoryModulesCore = "$Env:USERPROFILE\Documents\PowerShell\Modules"
+            $Configuration.Information.DirectoryModulesCore = "$([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments))\PowerShell\Modules"
         }
         if (-not $Configuration.Information.DirectoryModules) {
-            $Configuration.Information.DirectoryModules = "$Env:USERPROFILE\Documents\WindowsPowerShell\Modules"
+            #$Configuration.Information.DirectoryModules = "$Env:USERPROFILE\Documents\WindowsPowerShell\Modules"
+            $Configuration.Information.DirectoryModules = "$([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments))\WindowsPowerShell\Modules"
         }
         if ($Configuration.Steps.BuildModule.Enable -or $Configuration.Steps.BuildModule.EnableDesktop -or $Configuration.Steps.BuildModule.EnableCore -or $Configuration.Steps.BuildDocumentation -eq $true) {
             Start-ModuleBuilding -Configuration $Configuration

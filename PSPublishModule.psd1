@@ -8,7 +8,7 @@
     Description          = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
     FunctionsToExport    = @('Get-GitLog', 'Get-MissingFunctions', 'Initialize-PortableScript', 'New-PrepareModule', 'Register-Certificate', 'Remove-Comments', 'Test-ScriptFile', 'Test-ScriptModule')
     GUID                 = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion        = '0.9.31'
+    ModuleVersion        = '0.9.33'
     PowerShellVersion    = '5.1'
     PrivateData          = @{
         PSData = @{
@@ -23,7 +23,7 @@
             ModuleName    = 'platyps'
             Guid          = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'
         }, @{
-            ModuleVersion = '2.2.4.1'
+            ModuleVersion = '2.2.5'
             ModuleName    = 'powershellget'
             Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
         }, @{

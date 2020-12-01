@@ -31,6 +31,10 @@
     foreach ($_ in $FilteredCommands) {
         $ListCommands.Add($_)
     }
+    # Ensures even one object is array
+    [Array] $FilteredCommandsName = foreach ($Name in $FilteredCommands.Name) {
+        $Name
+    }
     # this gets commands along their ScriptBlock
     # $FilteredCommands = Get-RecursiveCommands -Commands $FilteredCommands
     [Array] $FunctionsOutput = foreach ($_ in $ListCommands) {
@@ -44,7 +48,7 @@
     }
 
     if ($FunctionsOutput.Count -gt 0) {
-        $IgnoreAlreadyKnownCommands = ($FilteredCommands.Name + $IgnoreFunctions) | Sort-Object -Unique
+        $IgnoreAlreadyKnownCommands = ($FilteredCommandsName + $IgnoreFunctions) | Sort-Object -Unique
         $ScriptBlockMissing = [scriptblock]::Create($FunctionsOutput)
         $AnotherRun = Get-MissingFunctions -SummaryWithCommands -ApprovedModules $ApprovedModules -Code $ScriptBlockMissing -IgnoreFunctions $IgnoreAlreadyKnownCommands
     }
