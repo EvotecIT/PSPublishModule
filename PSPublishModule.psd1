@@ -8,7 +8,7 @@
     Description          = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
     FunctionsToExport    = @('Get-GitLog', 'Get-MissingFunctions', 'Initialize-PortableScript', 'New-PrepareModule', 'Register-Certificate', 'Remove-Comments', 'Test-ScriptFile', 'Test-ScriptModule')
     GUID                 = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion        = '0.9.33'
+    ModuleVersion        = '0.9.35'
     PowerShellVersion    = '5.1'
     PrivateData          = @{
         PSData = @{
