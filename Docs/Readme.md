@@ -12,26 +12,26 @@ Locale: en-US
 
 ## PSPublishModule Cmdlets
 ### [Get-GitLog](Get-GitLog.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
 ### [Initialize-PortableScript](Initialize-PortableScript.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
 ### [New-PrepareModule](New-PrepareModule.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
 ### [Register-Certificate](Register-Certificate.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
 ### [Remove-Comments](Remove-Comments.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
 ### [Test-ScriptFile](Test-ScriptFile.md)
-{{ Fill in the Description }}
+Test a PowerShell script for cmdlets
 
 ### [Test-ScriptModule](Test-ScriptModule.md)
-{{ Fill in the Description }}
+{{ Fill in the Synopsis }}
 
