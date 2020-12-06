@@ -561,7 +561,7 @@
                     $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
                     #Start-Sleep -Seconds 1
                     # this is temporary workaround - due to diff output on update
-                    if ($Configuration.Options.Documentation.UpdateWhenNew) {
+                    if ($Configuration.Steps.BuildDocumentation.UpdateWhenNew) {
                         try {
                             $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
                         } catch {
