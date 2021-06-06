@@ -29,6 +29,9 @@ Locale: en-US
 ### [Remove-Comments](Remove-Comments.md)
 {{ Fill in the Synopsis }}
 
+### [Test-BasicModule](Test-BasicModule.md)
+{{ Fill in the Synopsis }}
+
 ### [Test-ScriptFile](Test-ScriptFile.md)
 Test a PowerShell script for cmdlets
 
