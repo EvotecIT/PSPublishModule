@@ -310,7 +310,7 @@
             if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
                 # Something is wrong here for folders other than root, need investigation
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
-                Write-Text "[+] 7th stage creating file catalog" -Color Blue
+                Write-Text "[+] Creating file catalog" -Color Blue
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
                 $CategoryPaths = @(
                     $FullModuleTemporaryPath
@@ -327,17 +327,19 @@
                     }
                 }
                 $TimeToExecuteSign.Stop()
-                Write-Text "[+] 7th stage creating file catalog [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+                Write-Text "[+] Creating file catalog [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
             }
             if ($Configuration.Steps.BuildModule.SignMerged) {
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
-                Write-Text "[+] 8th stage signing files" -Color Blue
-                $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat') -TimeStampServer 'http://timestamp.digicert.com'
-                foreach ($File in $SignedFiles) {
-                    Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
-                }
-                $TimeToExecuteSign.Stop()
-                Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+                #Write-Text "[+] 8th stage signing files" -Color Blue
+                Write-TextWithTime -Text 'Applying signature to files' {
+                    $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat') -TimeStampServer 'http://timestamp.digicert.com'
+                    foreach ($File in $SignedFiles) {
+                        Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
+                    }
+                    $TimeToExecuteSign.Stop()
+                 #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+                } -PreAppend Plus
             }
         }
         if ($Configuration.Steps.BuildModule.Enable -and (-not $Configuration.Steps.BuildModule.Merge)) {

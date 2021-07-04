@@ -18,7 +18,7 @@ function Merge-Module {
         [System.Collections.IDictionary] $Configuration
     )
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 1st stage merging" -Color Blue
+    Write-Text "[+] Merging" -Color Blue
 
     $PSM1FilePath = "$ModulePathTarget\$ModuleName.psm1"
     $PSD1FilePath = "$ModulePathTarget\$ModuleName.psd1"
@@ -67,10 +67,10 @@ function Merge-Module {
     }
 
     $TimeToExecute.Stop()
-    Write-Text "[+] 1st stage merging [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] Merging [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 2nd stage required modules" -Color Blue
+    Write-Text "[+] Detecting required modules" -Color Blue
 
     $RequiredModules = @(
         if ($Configuration.Information.Manifest.RequiredModules.Count -gt 0) {
@@ -103,20 +103,20 @@ function Merge-Module {
     $DependantRequiredModules = $DependantRequiredModules | Sort-Object -Unique
 
     $TimeToExecute.Stop()
-    Write-Text "[+] 2nd stage required modules [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] Detecting required modules [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 3rd stage missing functions" -Color Blue
+    Write-Text "[+] Searching for missing functions" -Color Blue
 
 
 
     $MissingFunctions = Get-MissingFunctions -FilePath $PSM1FilePath -SummaryWithCommands -ApprovedModules $ApprovedModules
 
     $TimeToExecute.Stop()
-    Write-Text "[+] 3rd stage missing functions [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] Searching for missing functions [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 4th stage commands used" -Color Blue
+    Write-Text "[+] Detecting commands used" -Color Blue
 
 
     #[Array] $CommandsWithoutType = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq '' } | Sort-Object -Unique -Property 'Source'
@@ -193,13 +193,13 @@ function Merge-Module {
     }
 
     $TimeToExecute.Stop()
-    Write-Text "[+] 4th stage commands used [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] Detecting commands used [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
 
     if ($Configuration.Steps.BuildModule.MergeMissing -eq $true) {
         if (Test-Path -LiteralPath $PSM1FilePath) {
             $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-            Write-Text "[+] 5th stage merge mergable commands" -Color Blue
+            Write-Text "[+] Merge mergable commands" -Color Blue
 
 
             $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
@@ -243,12 +243,12 @@ function Merge-Module {
         #>
 
             $TimeToExecute.Stop()
-            Write-Text "[+] 5th stage merge mergable commands [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+            Write-Text "[+] Merge mergable commands [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
         }
     }
 
     $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] 6th finalizing PSM1/PSD1" -Color Blue
+    Write-Text "[+] Finalizing PSM1/PSD1" -Color Blue
 
 
     if ($Configuration.Steps.BuildModule.LibrarySeparateFile) {
@@ -282,5 +282,5 @@ function Merge-Module {
         Remove-Item #-Verbose
 
     $TimeToExecuteSign.Stop()
-    Write-Text "[+] 6th finalizing PSM1/PSD1 [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] Finalizing PSM1/PSD1 [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
 }
