@@ -20,6 +20,9 @@ Locale: en-US
 ### [Initialize-PortableScript](Initialize-PortableScript.md)
 {{ Fill in the Synopsis }}
 
+### [Initialize-ProjectManager](Initialize-ProjectManager.md)
+Builds VSCode Project manager config from filesystem
+
 ### [New-PrepareModule](New-PrepareModule.md)
 {{ Fill in the Synopsis }}
 
