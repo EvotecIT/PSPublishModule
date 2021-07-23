@@ -25,7 +25,7 @@ function New-PrepareModule {
             Write-Text "[-] Path $Path doesn't exists. This shouldn't be the case." -Color Red
         } else {
             $FullProjectPath = [io.path]::Combine($Path, $ProjectName)
-            $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data'
+            $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data', 'Classes'
             Add-Directory -Directory $FullProjectPath
             foreach ($folder in $Folders) {
                 $SubFolder = [io.path]::Combine($FullProjectPath, $Folder)

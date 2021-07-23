@@ -91,7 +91,12 @@
         if ($Configuration.Information.IncludePS1) {
             $DirectoriesWithPS1 = $Configuration.Information.IncludePS1
         } else {
-            $DirectoriesWithPS1 = 'Private', 'Public', 'Enums'
+            $DirectoriesWithPS1 = 'Classes', 'Private', 'Public', 'Enums'
+        }
+        if ($Configuration.Information.IncludeClasses) {
+            $DirectoriesWithClasses = $Configuration.Information.IncludeClasses
+        } else {
+            $DirectoriesWithClasses = 'Classes'
         }
         if ($Configuration.Information.IncludeAll) {
             $DirectoriesWithAll = $Configuration.Information.IncludeAll
@@ -305,7 +310,8 @@
                 -LibrariesDefault $FilesLibrariesDefault `
                 -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
                 -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
-                -Configuration $Configuration
+                -Configuration $Configuration -DirectoriesWithPS1 $DirectoriesWithPS1 `
+                -ClassesPS1 $DirectoriesWithClasses
 
             if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
                 # Something is wrong here for folders other than root, need investigation
@@ -338,7 +344,7 @@
                         Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
                     }
                     $TimeToExecuteSign.Stop()
-                 #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
+                    #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
                 } -PreAppend Plus
             }
         }

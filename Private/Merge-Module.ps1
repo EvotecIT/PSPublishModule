@@ -15,7 +15,10 @@ function Merge-Module {
         [Array] $LibrariesDefault,
         [System.Collections.IDictionary] $FormatCodePSM1,
         [System.Collections.IDictionary] $FormatCodePSD1,
-        [System.Collections.IDictionary] $Configuration
+        [System.Collections.IDictionary] $Configuration,
+        [string[]] $DirectoriesWithPS1,
+        [string[]] $ClassesPS1
+
     )
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Merging" -Color Blue
@@ -23,17 +26,50 @@ function Merge-Module {
     $PSM1FilePath = "$ModulePathTarget\$ModuleName.psm1"
     $PSD1FilePath = "$ModulePathTarget\$ModuleName.psd1"
 
-    if ($PSEdition -eq 'Core') {
-        $ScriptFunctions = Get-ChildItem -Path $ModulePathSource\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+    [Array] $ClassesFunctions = foreach ($Directory in $DirectoriesWithPS1) {
+        if ($PSEdition -eq 'Core') {
+            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+        } else {
+            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+        }
+    }
+    # If dot source classes option is enabled we treat classes into separete file, and that means we need to exclude it from standard case
+    if ($Configuration.Steps.BuildModule.ClassesDotSource) {
+        [Array] $ListDirectoriesPS1 = foreach ($Dir in $DirectoriesWithPS1) {
+            if ($Dir -ne $ClassesPS1) {
+                $Dir
+            }
+        }
     } else {
-        $ScriptFunctions = Get-ChildItem -Path $ModulePathSource\*.ps1 -ErrorAction SilentlyContinue -Recurse
+        [Array] $ListDirectoriesPS1 = $DirectoriesWithPS1
+    }
+
+    [Array] $ScriptFunctions = foreach ($Directory in $ListDirectoriesPS1) {
+        if ($PSEdition -eq 'Core') {
+            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+        } else {
+            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+        }
+    }
+    [Array] $ClassesFunctions = foreach ($Directory in $ClassesPS1) {
+        if ($PSEdition -eq 'Core') {
+            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+        } else {
+            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+        }
     }
     if ($Sort -eq 'ASC') {
         $ScriptFunctions = $ScriptFunctions | Sort-Object -Property Name
+        $ClassesFunctions = $ClassesFunctions | Sort-Object -Property Name
     } elseif ($Sort -eq 'DESC') {
         $ScriptFunctions = $ScriptFunctions | Sort-Object -Descending -Property Name
+        $ClassesFunctions = $ClassesFunctions | Sort-Object -Descending -Property Name
     }
 
+
+    Get-ScriptsContent -Files $ScriptFunctions -OutputPath $PSM1FilePath
+
+    <#
     foreach ($FilePath in $ScriptFunctions) {
         $Content = Get-Content -Path $FilePath -Raw
         if ($Content.Count -gt 0) {
@@ -55,6 +91,7 @@ function Merge-Module {
             }
         }
     }
+    #>
 
 
     # Using file is needed if there are 'using namespaces' - this is a workaround provided by seeminglyscience
@@ -195,7 +232,6 @@ function Merge-Module {
     $TimeToExecute.Stop()
     Write-Text "[+] Detecting commands used [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
-
     if ($Configuration.Steps.BuildModule.MergeMissing -eq $true) {
         if (Test-Path -LiteralPath $PSM1FilePath) {
             $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
@@ -222,26 +258,6 @@ function Merge-Module {
                 }
             }
             $Configuration.Information.Manifest.RequiredModules = $NewRequiredModules
-
-
-
-            #$MissingFunctions.Functions
-            #$MissingFunctions.Summary | Format-Table -AutoSize
-            <#
-        Name                      Source                       CommandType Error ScriptBlock
-        ----                      ------                       ----------- ----- -----------
-        cmd.exe                   C:\Windows\system32\cmd.exe  Application
-        Import-PowerShellDataFile Microsoft.PowerShell.Utility    Function       ...
-        New-MarkdownHelp          platyPS                         Function       ...
-        Publish-Module            PowerShellGet                   Function       ...
-        Update-MarkdownHelpModule platyPS                         Function       ...
-        Find-Module               PowerShellGet                   Function       ...
-        Find-Script               PowerShellGet                   Function       ...
-        Get-MarkdownMetadata      platyPS                         Function       ...
-        Get-PSRepository          PowerShellGet                   Function       ...
-        Update-MarkdownHelp       platyPS                         Function       ...
-        #>
-
             $TimeToExecute.Stop()
             Write-Text "[+] Merge mergable commands [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
         }
@@ -251,13 +267,102 @@ function Merge-Module {
     Write-Text "[+] Finalizing PSM1/PSD1" -Color Blue
 
 
-    if ($Configuration.Steps.BuildModule.LibrarySeparateFile) {
-        $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
-        $ScriptsToProcessLibrary = "$ModuleName.Libraries.ps1"
-    } else {
-        $LibariesPath = ''
+    $LibraryContent = @(
+        if ($LibrariesStandard.Count -gt 0) {
+            foreach ($File in $LibrariesStandard) {
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output
+                }
+            }
+        } elseif ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
+
+            'if ($PSEdition -eq ''Core'') {'
+            foreach ($File in $LibrariesCore) {
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output
+                }
+            }
+            '} else {'
+            foreach ($File in $LibrariesDefault) {
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output
+                }
+            }
+            '}'
+
+        } elseif ($LibrariesCore.Count -gt 0) {
+            foreach ($File in $LibrariesCore) {
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output
+                }
+            }
+        } elseif ($LibrariesDefault.Count -gt 0) {
+            foreach ($File in $LibrariesDefault) {
+                $Extension = $File.Substring($File.Length - 4, 4)
+                if ($Extension -eq '.dll') {
+                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output
+                }
+            }
+        }
+    )
+    # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
+    if ($LibraryContent.Count -gt 0) {
+        if ($Configuration.Steps.BuildModule.LibrarySeparateFile -eq $true) {
+            $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
+            $ScriptsToProcessLibrary = "$ModuleName.Libraries.ps1"
+        }
+        if ($Configuration.Steps.BuildModule.LibraryDotSource -eq $true) {
+            $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
+            $DotSourcePath = ". `$PSScriptRoot\$ModuleName.Libraries.ps1"
+        }
+        if ($LibariesPath) {
+            $LibraryContent | Add-Content -Path $LibariesPath
+        }
     }
 
+
+    if ($ClassesFunctions.Count -gt 0) {
+        $ClassesPath = "$ModulePathTarget\$ModuleName.Classes.ps1"
+        $DotSourceClassPath = ". `$PSScriptRoot\$ModuleName.Classes.ps1"
+        Get-ScriptsContent -Files $ClassesFunctions -OutputPath $ClassesPath
+    }
+
+    # Adjust PSM1 file by adding dot sourcing or directly libraries to the PSM1 file
+    if ($LibariesPath -gt 0 -or $ClassesPath -gt 0) {
+        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
+        $IntegrateContent = @(
+            if ($LibraryContent.Count -gt 0) {
+                if ($DotSourcePath) {
+                    "# Dot source all libraries by loading external file"
+                    $DotSourcePath
+                    ""
+                }
+                if (-not $LibariesPath) {
+                    "# Load all types"
+                    $LibraryContent
+                    ""
+                }
+            }
+            if ($ClassesPath) {
+                "# Dot source all classes by loading external file"
+                $DotSourceClassPath
+                ""
+            }
+            $PSM1Content
+        )
+        $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+    }
+
+    # Finalize PSM1 by adding export functions/aliases and internal modules loading
     New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
         -FunctionAliaes $AliasesToExport `
@@ -271,9 +376,15 @@ function Merge-Module {
         -InternalModuleDependencies $Configuration.Information.Manifest.InternalModuleDependencies `
         -CommandModuleDependencies $Configuration.Information.Manifest.CommandModuleDependencies
 
-
+    # Format standard PSM1 file
     Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
+    # Format libraries PS1 file
+    if ($LibariesPath) {
+        Format-Code -FilePath $LibariesPath -FormatCode $FormatCodePSM1
+    }
+    # Build PSD1 file
     New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary
+    # Format PSD1 file
     Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
 
     # cleans up empty directories
