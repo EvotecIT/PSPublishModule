@@ -5,11 +5,18 @@ function New-PersonalManifest {
         [string] $ManifestPath,
         [switch] $AddScriptsToProcess,
         [switch] $AddUsingsToProcess,
-        [string] $ScriptsToProcessLibrary
+        [string] $ScriptsToProcessLibrary,
+        [switch] $UseWildcardForFunctions
     )
 
     $TemporaryManifest = @{ }
     $Manifest = $Configuration.Information.Manifest
+
+    if ($UseWildcardForFunctions) {
+        $Manifest.FunctionsToExport = @("*")
+        $Manifest.AliasesToExport = @("*")
+    }
+
     $Manifest.Path = $ManifestPath
 
     if (-not $AddScriptsToProcess) {

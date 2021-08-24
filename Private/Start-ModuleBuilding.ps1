@@ -248,8 +248,11 @@
             # Copy Configuration
             $SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
 
-            New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
-
+            if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
+                New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
+            } else {
+                New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+            }
             # Restore configuration, as some PersonalManifest plays with those
             $Configuration = $SaveConfiguration
 
