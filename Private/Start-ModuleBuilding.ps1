@@ -214,8 +214,8 @@
             Write-Text "[i] Checking for duplicates in funcions and aliases" -Color Yellow
             $FoundDuplicateAliases = $false
             if ($Configuration.Information.Manifest.AliasesToExport) {
-                $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object –Unique
-                $DiffrenceAliases = Compare-Object –ReferenceObject $Configuration.Information.Manifest.AliasesToExport –DifferenceObject $UniqueAliases
+                $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object -Unique
+                $DiffrenceAliases = Compare-Object -ReferenceObject $Configuration.Information.Manifest.AliasesToExport -DifferenceObject $UniqueAliases
                 foreach ($Alias in $Configuration.Information.Manifest.AliasesToExport) {
                     if ($Alias -in $Configuration.Information.Manifest.FunctionsToExport) {
                         Write-Text "[-] Alias $Alias is also used as function name. Fix it!" -Color Red
