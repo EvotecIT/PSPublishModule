@@ -11,6 +11,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ## PSPublishModule Cmdlets
+### [Convert-CommandsToList](Convert-CommandsToList.md)
+{{ Fill in the Synopsis }}
+
 ### [Get-GitLog](Get-GitLog.md)
 {{ Fill in the Synopsis }}
 
