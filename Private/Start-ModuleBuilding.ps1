@@ -408,19 +408,34 @@
             $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
             $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
 
-            Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
-                $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
-                if ($DestinationPaths.Desktop) {
-                    $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
-                    Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-                }
-                if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                    $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
-                    Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+            if ($Configuration.Steps.BuildModule.Releases) {
+                Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
+                    $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
+                    if ($DestinationPaths.Desktop) {
+                        $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
+                        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+                    }
+                    if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
+                        $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
+                        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+                    }
                 }
             }
-            if ($Configuration.Steps.BuildModule.ReleasesUnpacked) {
-                $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
+            if ($Configuration.Steps.BuildModule.ReleasesUnpacked -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.Enabled) {
+                if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [System.Collections.IDictionary]) {
+                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
+                        $ArtefactsPath = (Resolve-Path -Path $Configuration.Steps.BuildModule.ReleasesUnpacked.Path).Path
+                    } else {
+                        $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
+                    }
+                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
+                        $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($ArtefactsPath, $TagName )
+                    } else {
+                        $FolderPathReleasesUnpacked = $ArtefactsPath
+                    }
+                } else {
+                    $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
+                }
                 Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
                     try {
                         if (Test-Path -Path $FolderPathReleasesUnpacked) {
