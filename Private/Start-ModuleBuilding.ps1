@@ -93,6 +93,10 @@
         } else {
             $DirectoriesWithPS1 = 'Classes', 'Private', 'Public', 'Enums'
         }
+        # This is basically converting given folder into array of variables
+        # mostly done for internal project and testimo
+        $DirectoriesWithArrays = $Configuration.Information.IncludeAsArray.Values
+
         if ($Configuration.Information.IncludeClasses) {
             $DirectoriesWithClasses = $Configuration.Information.IncludeClasses
         } else {
@@ -158,13 +162,17 @@
                     }
                 }
             )
-
             # Link only files from subfolers
             $LinkPrivatePublicFiles = @(
                 foreach ($file in $AllFiles | Sort-Object -Unique) {
                     switch -Wildcard ($file) {
                         '*.ps1' {
                             foreach ($dir in $DirectoriesWithPS1) {
+                                if ($file -like "$dir*") {
+                                    $file
+                                }
+                            }
+                            foreach ($dir in $DirectoriesWithArrays) {
                                 if ($file -like "$dir*") {
                                     $file
                                 }
@@ -314,7 +322,7 @@
                 -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
                 -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
                 -Configuration $Configuration -DirectoriesWithPS1 $DirectoriesWithPS1 `
-                -ClassesPS1 $DirectoriesWithClasses
+                -ClassesPS1 $DirectoriesWithClasses -IncludeAsArray $Configuration.Information.IncludeAsArray
 
             if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
                 # Something is wrong here for folders other than root, need investigation
@@ -416,7 +424,7 @@
                 Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
                     try {
                         if (Test-Path -Path $FolderPathReleasesUnpacked) {
-                            Remove-Item -LiteralPath $FolderPathReleasesUnpacked -Force -Confirm:$false -Recurse
+                            Remove-ItemAlternative -LiteralPath $FolderPathReleasesUnpacked
                         }
                         $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
                         if ($DestinationPaths.Desktop) {
