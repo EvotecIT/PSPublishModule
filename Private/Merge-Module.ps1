@@ -17,7 +17,8 @@ function Merge-Module {
         [System.Collections.IDictionary] $FormatCodePSD1,
         [System.Collections.IDictionary] $Configuration,
         [string[]] $DirectoriesWithPS1,
-        [string[]] $ClassesPS1
+        [string[]] $ClassesPS1,
+        [System.Collections.IDictionary] $IncludeAsArray
 
     )
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
@@ -26,13 +27,29 @@ function Merge-Module {
     $PSM1FilePath = "$ModulePathTarget\$ModuleName.psm1"
     $PSD1FilePath = "$ModulePathTarget\$ModuleName.psd1"
 
-    [Array] $ClassesFunctions = foreach ($Directory in $DirectoriesWithPS1) {
-        if ($PSEdition -eq 'Core') {
-            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+    # [Array] $ClassesFunctions = foreach ($Directory in $DirectoriesWithPS1) {
+    #     if ($PSEdition -eq 'Core') {
+    #         Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+    #     } else {
+    #         Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+    #     }
+    # }
+
+    [Array] $ArrayIncludes = foreach ($VariableName in $IncludeAsArray.Keys) {
+        $FilePathVariables = [System.IO.Path]::Combine($ModulePathSource, $IncludeAsArray[$VariableName], "*.ps1")
+
+        [Array] $FilesInternal = if ($PSEdition -eq 'Core') {
+            Get-ChildItem -Path $FilePathVariables -ErrorAction SilentlyContinue -Recurse -FollowSymlink
         } else {
-            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+            Get-ChildItem -Path $FilePathVariables -ErrorAction SilentlyContinue -Recurse
         }
+        "$VariableName = @("
+        foreach ($Internal in $FilesInternal) {
+            Get-Content -Path $Internal.FullName -Raw
+        }
+        ")"
     }
+
     # If dot source classes option is enabled we treat classes into separete file, and that means we need to exclude it from standard case
     if ($Configuration.Steps.BuildModule.ClassesDotSource) {
         [Array] $ListDirectoriesPS1 = foreach ($Dir in $DirectoriesWithPS1) {
@@ -66,7 +83,9 @@ function Merge-Module {
         $ClassesFunctions = $ClassesFunctions | Sort-Object -Descending -Property Name
     }
 
-
+    if ($ArrayIncludes.Count -gt 0) {
+        $ArrayIncludes | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
+    }
     Get-ScriptsContent -Files $ScriptFunctions -OutputPath $PSM1FilePath
 
     <#
