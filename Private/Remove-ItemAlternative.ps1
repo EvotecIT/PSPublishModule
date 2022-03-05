@@ -29,6 +29,16 @@
     if ($Path -and (Test-Path -LiteralPath $Path)) {
         $Items = Get-ChildItem -LiteralPath $Path -Recurse
         foreach ($Item in $Items) {
+            if ($Item.PSIsContainer -eq $false) {
+                try {
+                    $Item.Delete()
+                } catch {
+                    Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                }
+            }
+        }
+        $Items = Get-ChildItem -LiteralPath $Path -Recurse
+        foreach ($Item in $Items) {
             try {
                 $Item.Delete()
             } catch {
