@@ -381,6 +381,10 @@ function Merge-Module {
         $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding UTF8
     }
 
+    if ($Configuration.Information.Manifest.DotNetFrameworkVersion) {
+        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Add-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+    }
+
     # Finalize PSM1 by adding export functions/aliases and internal modules loading
     New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
