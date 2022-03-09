@@ -455,6 +455,37 @@
                         Write-Text "[-] Format-Code - Copying final merged release to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
                         Exit
                     }
+                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules) {
+                        foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
+                            if ($Module.ModuleName) {
+                                $ModulesFound = Get-Module -ListAvailable -Name $Module.ModuleName
+                                if ($ModulesFound.Count -gt 0) {
+                                    $PathToPSD1 = if ($Module.ModuleVersion -eq 'Latest') {
+                                        $ModulesFound[0].Path
+                                    } else {
+                                        foreach ($M in $ModulesFound) {
+                                            if ($M.Version -eq $Module.ModuleVersion) {
+                                                $M.Path
+                                                break
+                                            }
+                                        }
+                                    }
+                                    $FolderToCopy = [System.IO.Path]::GetDirectoryName($PathToPSD1)
+                                    $ItemInformation = Get-Item -LiteralPath $FolderToCopy
+
+                                    #copy-item .\documents\ -destination .\my-backup-$(Get-Date -format "yyyy_MM_dd_hh_mm_ss")
+
+
+                                    if ($ItemInformation.DirectoryName -ne $Module.ModuleName) {
+                                        $NewPath = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.ModuleName)
+                                        Copy-Item -LiteralPath $FolderToCopy -Destination $NewPath -Recurse
+                                    } else {
+                                        Copy-Item -LiteralPath $FolderToCopy -Destination $FolderPathReleasesUnpacked -Recurse
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
