@@ -5,7 +5,7 @@ function Get-FunctionNames {
         [switch] $Recurse
     )
     if ($Path -ne '' -and (Test-Path -LiteralPath $Path)) {
-        $FilePath = Resolve-Path $Path
+        $FilePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
         [System.Management.Automation.Language.Parser]::ParseFile(($FilePath),
             [ref]$null,
             [ref]$null).FindAll(

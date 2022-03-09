@@ -424,7 +424,7 @@
             if ($Configuration.Steps.BuildModule.ReleasesUnpacked -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.Enabled) {
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [System.Collections.IDictionary]) {
                     if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
-                        $ArtefactsPath = (Resolve-Path -Path $Configuration.Steps.BuildModule.ReleasesUnpacked.Path).Path
+                        $ArtefactsPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.ReleasesUnpacked.Path)
                     } else {
                         $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
                     }
@@ -439,7 +439,7 @@
                 Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
                     try {
                         if (Test-Path -Path $FolderPathReleasesUnpacked) {
-                            Remove-ItemAlternative -LiteralPath $FolderPathReleasesUnpacked
+                            Remove-ItemAlternative -LiteralPath $FolderPathReleasesUnpacked -SkipFolder
                         }
                         $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
                         if ($DestinationPaths.Desktop) {
