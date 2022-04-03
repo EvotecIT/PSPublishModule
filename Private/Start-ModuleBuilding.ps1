@@ -402,93 +402,7 @@
         }
     }
     if ($Configuration.Steps.BuildModule.Enable) {
-        if ($Configuration.Steps.BuildModule.Releases -or $Configuration.Steps.BuildModule.ReleasesUnpacked) {
-            $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
-            $FileName = -join ("$TagName", '.zip')
-            $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-            $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
-
-            if ($Configuration.Steps.BuildModule.Releases) {
-                Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
-                    $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
-                    if ($DestinationPaths.Desktop) {
-                        $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
-                        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-                    }
-                    if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                        $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
-                        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-                    }
-                }
-            }
-            if ($Configuration.Steps.BuildModule.ReleasesUnpacked -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.Enabled) {
-                if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [System.Collections.IDictionary]) {
-                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
-                        $ArtefactsPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.ReleasesUnpacked.Path)
-                    } else {
-                        $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
-                    }
-                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
-                        $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($ArtefactsPath, $TagName )
-                    } else {
-                        $FolderPathReleasesUnpacked = $ArtefactsPath
-                    }
-                } else {
-                    $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
-                }
-                Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
-                    try {
-                        if (Test-Path -Path $FolderPathReleasesUnpacked) {
-                            Remove-ItemAlternative -LiteralPath $FolderPathReleasesUnpacked -SkipFolder
-                        }
-                        $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
-                        if ($DestinationPaths.Desktop) {
-                            Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
-                        }
-                        if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                            Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
-                        }
-                    } catch {
-                        $ErrorMessage = $_.Exception.Message
-                        #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
-                        Write-Host # This is to add new line, because the first line was opened up.
-                        Write-Text "[-] Format-Code - Copying final merged release to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
-                        Exit
-                    }
-                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules) {
-                        foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
-                            if ($Module.ModuleName) {
-                                $ModulesFound = Get-Module -ListAvailable -Name $Module.ModuleName
-                                if ($ModulesFound.Count -gt 0) {
-                                    $PathToPSD1 = if ($Module.ModuleVersion -eq 'Latest') {
-                                        $ModulesFound[0].Path
-                                    } else {
-                                        foreach ($M in $ModulesFound) {
-                                            if ($M.Version -eq $Module.ModuleVersion) {
-                                                $M.Path
-                                                break
-                                            }
-                                        }
-                                    }
-                                    $FolderToCopy = [System.IO.Path]::GetDirectoryName($PathToPSD1)
-                                    $ItemInformation = Get-Item -LiteralPath $FolderToCopy
-
-                                    #copy-item .\documents\ -destination .\my-backup-$(Get-Date -format "yyyy_MM_dd_hh_mm_ss")
-
-
-                                    if ($ItemInformation.DirectoryName -ne $Module.ModuleName) {
-                                        $NewPath = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.ModuleName)
-                                        Copy-Item -LiteralPath $FolderToCopy -Destination $NewPath -Recurse
-                                    } else {
-                                        Copy-Item -LiteralPath $FolderToCopy -Destination $FolderPathReleasesUnpacked -Recurse
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths
     }
 
     # Import Modules Section, useful to check before publishing
@@ -532,47 +446,7 @@
     }
 
     if ($Configuration.Steps.PublishModule.GitHub) {
-        $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
-        $FileName = -join ("$TagName", '.zip')
-        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
-
-        if ($Configuration.Options.GitHub.FromFile) {
-            $GitHubAccessToken = Get-Content -LiteralPath $Configuration.Options.GitHub.ApiKey
-        } else {
-            $GitHubAccessToken = $Configuration.Options.GitHub.ApiKey
-        }
-        if ($GitHubAccessToken) {
-            if ($Configuration.Options.GitHub.RepositoryName) {
-                $GitHubRepositoryName = $Configuration.Options.GitHub.RepositoryName
-            } else {
-                $GitHubRepositoryName = $ProjectName
-            }
-            if (Test-Path -LiteralPath $ZipPath) {
-                if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
-                    $IsPreRelease = $true
-                } else {
-                    $IsPreRelease = $false
-                }
-
-                $StatusGithub = New-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath -IsPreRelease $IsPreRelease
-                if ($StatusGithub.ReleaseCreationSucceeded -and $statusGithub.Succeeded) {
-                    $GithubColor = 'Green'
-                    $GitHubText = '+'
-                } else {
-                    $GithubColor = 'Red'
-                    $GitHubText = '-'
-                }
-
-                Write-Text "[$GitHubText] GitHub Release Creation Status: $($StatusGithub.ReleaseCreationSucceeded)" -Color $GithubColor
-                Write-Text "[$GitHubText] GitHub Release Succeeded: $($statusGithub.Succeeded)" -Color $GithubColor
-                Write-Text "[$GitHubText] GitHub Release Asset Upload Succeeded: $($statusGithub.AllAssetUploadsSucceeded)" -Color $GithubColor
-                Write-Text "[$GitHubText] GitHub Release URL: $($statusGitHub.ReleaseUrl)" -Color $GithubColor
-                if ($statusGithub.ErrorMessage) {
-                    Write-Text "[$GitHubText] GitHub Release ErrorMessage: $($statusGithub.ErrorMessage)" -Color $GithubColor
-                }
-            }
-        }
+        Start-GitHubBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
     }
     if ($Configuration.Steps.BuildDocumentation) {
         # Support for old way of building documentation -> converts to new one
