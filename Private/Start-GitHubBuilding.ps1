@@ -29,7 +29,7 @@
                 $IsPreRelease = $false
             }
 
-            $StatusGithub = New-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath -IsPreRelease $IsPreRelease
+            $StatusGithub = Send-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath -IsPreRelease $IsPreRelease
             if ($StatusGithub.ReleaseCreationSucceeded -and $statusGithub.Succeeded) {
                 $GithubColor = 'Green'
                 $GitHubText = '+'

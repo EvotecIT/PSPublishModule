@@ -1,4 +1,4 @@
-﻿function New-GitHubRelease {
+﻿function Send-GitHubRelease {
     <#
 	.SYNOPSIS
 	Creates a new Release for the given GitHub repository.
@@ -226,91 +226,4 @@
         $result.Succeeded = $true
         return $result
     }
-}
-
-function Send-FilesToGitHubRelease([string[]] $filePathsToUpload, [string] $urlToUploadFilesTo, $authHeader) {
-    [int] $numberOfFilesToUpload = $filePathsToUpload.Count
-    [int] $numberOfFilesUploaded = 0
-    $filePathsToUpload | ForEach-Object `
-    {
-        $filePath = $_
-        $fileName = Get-Item $filePath | Select-Object -ExpandProperty Name
-
-        $uploadAssetWebRequestParameters =
-        @{
-            # Append the name of the file to the upload url.
-            Uri         = $urlToUploadFilesTo + "?name=$fileName"
-            Method      = 'POST'
-            Headers     = $authHeader
-            ContentType = 'application/zip'
-            InFile      = $filePath
-        }
-
-        $numberOfFilesUploaded = $numberOfFilesUploaded + 1
-        Write-Verbose "Uploading asset $numberOfFilesUploaded of $numberOfFilesToUpload, '$filePath'."
-        Invoke-RestMethodAndThrowDescriptiveErrorOnFailure $uploadAssetWebRequestParameters > $null
-    }
-}
-
-function Test-AllFilePathsAndThrowErrorIfOneIsNotValid([string[]] $filePaths) {
-    foreach ($filePath in $filePaths) {
-        [bool] $fileWasNotFoundAtPath = [string]::IsNullOrEmpty($filePath) -or !(Test-Path -Path $filePath -PathType Leaf)
-        if ($fileWasNotFoundAtPath) {
-            throw "There is no file at the specified path, '$filePath'."
-        }
-    }
-}
-
-function Invoke-RestMethodAndThrowDescriptiveErrorOnFailure($requestParametersHashTable) {
-    $requestDetailsAsNicelyFormattedString = Convert-HashTableToNicelyFormattedString $requestParametersHashTable
-    Write-Verbose "Making web request with the following parameters:$NewLine$requestDetailsAsNicelyFormattedString"
-
-    try {
-        $webRequestResult = Invoke-RestMethod @requestParametersHashTable
-    } catch {
-        [Exception] $exception = $_.Exception
-
-        [string] $errorMessage = Get-RestMethodExceptionDetailsOrNull -restMethodException $exception
-        if ([string]::IsNullOrWhiteSpace($errorMessage)) {
-            $errorMessage = $exception.ToString()
-        }
-
-        throw "An unexpected error occurred while making web request:$NewLine$errorMessage"
-    }
-
-    Write-Verbose "Web request returned the following result:$NewLine$webRequestResult"
-    return $webRequestResult
-}
-
-function Get-RestMethodExceptionDetailsOrNull([Exception] $restMethodException) {
-    try {
-        $responseDetails = @{
-            ResponseUri       = $exception.Response.ResponseUri
-            StatusCode        = $exception.Response.StatusCode
-            StatusDescription = $exception.Response.StatusDescription
-            ErrorMessage      = $exception.Message
-        }
-        [string] $responseDetailsAsNicelyFormattedString = Convert-HashTableToNicelyFormattedString $responseDetails
-
-        [string] $errorInfo = "Request Details:" + $NewLine + $requestDetailsAsNicelyFormattedString
-        $errorInfo += $NewLine
-        $errorInfo += "Response Details:" + $NewLine + $responseDetailsAsNicelyFormattedString
-        return $errorInfo
-    } catch {
-        return $null
-    }
-}
-
-function Convert-HashTableToNicelyFormattedString($hashTable) {
-    [string] $nicelyFormattedString = $hashTable.Keys | ForEach-Object `
-    {
-        $key = $_
-        $value = $hashTable.$key
-        "  $key = $value$NewLine"
-    }
-    return $nicelyFormattedString
-}
-
-function Set-SecurityProtocolForThread {
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
 }
