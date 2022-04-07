@@ -20,6 +20,9 @@ Locale: en-US
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 {{ Fill in the Synopsis }}
 
+### [Initialize-PortableModule](Initialize-PortableModule.md)
+{{ Fill in the Synopsis }}
+
 ### [Initialize-PortableScript](Initialize-PortableScript.md)
 {{ Fill in the Synopsis }}
 
