@@ -27,9 +27,22 @@
         if ($Configuration.Steps.BuildModule.ReleasesUnpacked -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.Enabled) {
             if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [System.Collections.IDictionary]) {
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
-                    $ArtefactsPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.ReleasesUnpacked.Path)
+                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Relative -eq $false) {
+                        $ArtefactsPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.ReleasesUnpacked.Path)
+                    } else {
+                        $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.ReleasesUnpacked.Path)
+                    }
                 } else {
                     $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
+                }
+                if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Path) {
+                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Relative -eq $false) {
+                        $RequiredModulesPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Path)
+                    } else {
+                        $RequiredModulesPath = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Path)
+                    }
+                } else {
+                    $RequiredModulesPath = $ArtefactsPath
                 }
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
                     $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($ArtefactsPath, $TagName )
@@ -37,14 +50,16 @@
                     $FolderPathReleasesUnpacked = $ArtefactsPath
                 }
             } else {
+                # default values
+                $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName)
                 $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
             }
-            Write-TextWithTime -Text "[+] Copying final merged release to $FolderPathReleasesUnpacked" {
+            Write-TextWithTime -Text "[+] Copying final merged release to $ArtefactsPath" {
                 try {
-                    if (Test-Path -Path $FolderPathReleasesUnpacked) {
-                        Remove-ItemAlternative -LiteralPath $FolderPathReleasesUnpacked -SkipFolder
+                    if (Test-Path -Path $ArtefactsPath) {
+                        Remove-ItemAlternative -LiteralPath $ArtefactsPath -SkipFolder
                     }
-                    $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
+                    $null = New-Item -ItemType Directory -Path $ArtefactsPath -Force
                     if ($DestinationPaths.Desktop) {
                         Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
                     }
@@ -58,7 +73,7 @@
                     Write-Text "[-] Format-Code - Copying final merged release to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
                     Exit
                 }
-                if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules) {
+                if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled) {
                     foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
                         if ($Module.ModuleName) {
                             $ModulesFound = Get-Module -ListAvailable -Name $Module.ModuleName
@@ -91,6 +106,22 @@
                 }
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput) {
 
+                }
+                if ($Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput) {
+                    $FilesOutput = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
+                    foreach ($File in $FilesOutput.Keys) {
+                        if ($File -is [string]) {
+                            $FullFilePath = [System.IO.Path]::Combine($FullProjectPath, $File)
+                            if (Test-Path -Path $FullFilePath) {
+                                $DestinationPath = [System.IO.Path]::Combine($FolderPathReleasesUnpacked, $FilesOutput[$File])
+                                Copy-Item -LiteralPath $FullFilePath -Destination $DestinationPath -Force
+                            }
+                        } elseif ($File -is [System.Collections.IDictionary]) {
+                            if ($File.Enabled -eq $true) {
+
+                            }
+                        }
+                    }
                 }
             }
         }
