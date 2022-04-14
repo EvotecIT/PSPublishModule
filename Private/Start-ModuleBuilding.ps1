@@ -296,6 +296,18 @@
             $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
             Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
 
+            if ($Configuration.Information.LibrariesStandard) {
+                # User provided option, we don't care
+            } elseif ($Configuration.Information.LibrariesCore -and $Configuration.Information.LibrariesDefault) {
+                # User provided option for core and default we don't care
+            } else {
+                # user hasn't provided any option, we set it to default
+                $Configuration.Information.LibrariesStandard = "Lib\Standard"
+                $Configuration.Information.LibrariesCore = "Lib\Core"
+                $Configuration.Information.LibrariesDefault = "Lib\Default"
+            }
+
+
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
                 $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
                 $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
@@ -305,7 +317,7 @@
                 $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
             }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesStandard)) {
-                $StartsWithStandard = "$($Configuration.Information.LibrariesDefault)\"
+                $StartsWithStandard = "$($Configuration.Information.LibrariesStandard)\"
                 $FilesLibrariesStandard = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
             }
 
