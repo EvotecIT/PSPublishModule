@@ -81,11 +81,18 @@
                                 $PathToPSD1 = if ($Module.ModuleVersion -eq 'Latest') {
                                     $ModulesFound[0].Path
                                 } else {
-                                    foreach ($M in $ModulesFound) {
+                                    $FoundModule = foreach ($M in $ModulesFound) {
                                         if ($M.Version -eq $Module.ModuleVersion) {
                                             $M.Path
                                             break
                                         }
+                                    }
+                                    if (-not $FoundModule) {
+                                        # we tried to find exact version, but it was not found
+                                        # we use the latest version instead
+                                        $ModulesFound[0].Path
+                                    } else {
+                                        $FoundModule
                                     }
                                 }
                                 $FolderToCopy = [System.IO.Path]::GetDirectoryName($PathToPSD1)
