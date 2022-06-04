@@ -509,7 +509,7 @@
                     } catch {
                         Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
                     }
-                    $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath
+                    $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath -ErrorAction SilentlyContinue
                     #Start-Sleep -Seconds 1
                     # this is temporary workaround - due to diff output on update
                     if ($Configuration.Steps.BuildDocumentation.UpdateWhenNew) {
