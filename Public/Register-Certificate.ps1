@@ -43,7 +43,7 @@
         if (Test-Path -LiteralPath $Path) {
             Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue | Where-Object {
                 ($_ | Get-AuthenticodeSignature).Status -eq 'NotSigned'
-            } | Set-AuthenticodeSignature -Certificate $Certificate -TimestampServer $TimeStampServer -IncludeChain $IncludeChain
+            } | Set-AuthenticodeSignature -Certificate $Certificate -TimestampServer $TimeStampServer -IncludeChain $IncludeChain -HashAlgorithm Sha256
         }
     }
 }
