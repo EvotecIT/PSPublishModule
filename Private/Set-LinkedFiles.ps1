@@ -21,6 +21,7 @@ function Set-LinkedFiles {
         }
         #Write-Verbose "Creating symlink from $path2 (source) to $path (target)"
         #Write-Color 'Creating symlink from ', $path2, ' (source) to ', $path, ' (target)' -Color White, Yellow, White, Yellow, White
-        $null = cmd /c mklink $path $path2
+        Copy-Item -Path $Path2 -Destination $Path -Force -Recurse -Confirm:$false
+        #$null = cmd /c mklink $path $path2
     }
 }
