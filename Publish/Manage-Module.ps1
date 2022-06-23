@@ -1,5 +1,5 @@
 Clear-Host
-Import-Module "C:\Support\GitHub\PSPublishModule\PSPublishModule.psd1" -Force
+Import-Module "$PSSCriptRoot\..\PSPublishModule.psd1" -Force
 
 $Configuration = @{
     Information = @{
