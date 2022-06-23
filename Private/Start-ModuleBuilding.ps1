@@ -441,7 +441,7 @@
         Write-TextWithTime -Text "[+] Publishing Module to PowerShellGallery" {
             try {
                 if ($Configuration.Options.PowerShellGallery.FromFile) {
-                    $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey
+                    $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey -ErrorAction Stop
                     #New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
                     Publish-Module -Name $Configuration.Information.ModuleName -Repository PSGallery -NuGetApiKey $ApiKey -Force:$Configuration.Steps.PublishModule.RequireForce -Verbose -ErrorAction Stop
                 } else {
