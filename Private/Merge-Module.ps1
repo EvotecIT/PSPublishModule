@@ -285,53 +285,68 @@ function Merge-Module {
     $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Finalizing PSM1/PSD1" -Color Blue
 
+    # lets set the defaults to disabled value
+    if ($null -eq $Configuration.Steps.BuildModule.DebugDLL) {
+        $Configuration.Steps.BuildModule.DebugDLL = $false
+    }
 
     $LibraryContent = @(
         if ($LibrariesStandard.Count -gt 0) {
             foreach ($File in $LibrariesStandard) {
                 $Extension = $File.Substring($File.Length - 4, 4)
                 if ($Extension -eq '.dll') {
-                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                    $Output
-                }
-            }
-        } elseif ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
-
-            'if ($PSEdition -eq ''Core'') {'
-            foreach ($File in $LibrariesCore) {
-                $Extension = $File.Substring($File.Length - 4, 4)
-                if ($Extension -eq '.dll') {
-                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                    $Output
-                }
-            }
-            '} else {'
-            foreach ($File in $LibrariesDefault) {
-                $Extension = $File.Substring($File.Length - 4, 4)
-                if ($Extension -eq '.dll') {
-                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                    $Output
-                }
-            }
-            '}'
-
-        } elseif ($LibrariesCore.Count -gt 0) {
-            foreach ($File in $LibrariesCore) {
-                $Extension = $File.Substring($File.Length - 4, 4)
-                if ($Extension -eq '.dll') {
-                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-                    $Output
-                }
-            }
-        } elseif ($LibrariesDefault.Count -gt 0) {
-            foreach ($File in $LibrariesDefault) {
-                $Extension = $File.Substring($File.Length - 4, 4)
-                if ($Extension -eq '.dll') {
-                    $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                    $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
+                    #$Output = 'Add-Type -Path $PSScriptRoot\' + $File
                     $Output
                 }
             }
         }
+        if ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
+            'if ($PSEdition -eq ''Core'') {'
+            if ($LibrariesCore.Count -gt 0) {
+                foreach ($File in $LibrariesCore) {
+                    $Extension = $File.Substring($File.Length - 4, 4)
+                    if ($Extension -eq '.dll') {
+                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
+                        #$Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                        $Output
+                    }
+                }
+            } else {
+                #Write-Warning -Message "No libraries for PowerShell 6/7 were present. Most likely this module doesn't work on this version of PowerShell."
+            }
+            '} else {'
+            if ($LibrariesDefault.Count -gt 0) {
+                foreach ($File in $LibrariesDefault) {
+                    $Extension = $File.Substring($File.Length - 4, 4)
+                    if ($Extension -eq '.dll') {
+                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
+                        #$Output = 'Add-Type -Path $PSScriptRoot\' + $File
+                        $Output
+                    }
+                }
+            } else {
+                #Write-Warning -Message "No libraries for PowerShell 5.1 were present. Most likely this module doesn't work on this version of PowerShell."
+            }
+            '}'
+        }
+        # } elseif ($LibrariesCore.Count -gt 0) {
+        #     foreach ($File in $LibrariesCore) {
+        #         $Extension = $File.Substring($File.Length - 4, 4)
+        #         if ($Extension -eq '.dll') {
+        #             $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+        #             $Output
+        #         }
+        #     }
+        # } elseif ($LibrariesDefault.Count -gt 0) {
+        #     foreach ($File in $LibrariesDefault) {
+        #         $Extension = $File.Substring($File.Length - 4, 4)
+        #         if ($Extension -eq '.dll') {
+        #             $Output = 'Add-Type -Path $PSScriptRoot\' + $File
+        #             $Output
+        #         }
+        #     }
+        # }
     )
     # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
     if ($LibraryContent.Count -gt 0) {
