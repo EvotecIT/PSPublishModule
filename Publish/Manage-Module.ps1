@@ -159,6 +159,10 @@ $Configuration = @{
         }
     }
     Steps       = @{
+        BuildLibraries     = @{
+            Enable        = $false # build once every time nuget gets updated
+            Configuration = 'Release'
+        }
         BuildModule        = @{  # requires Enable to be on to process all of that
             Enable                  = $true
             DeleteBefore            = $false
@@ -189,6 +193,10 @@ $Configuration = @{
             # It's simply to make life easier during debugging
             # It makes all functions/aliases exportable
             UseWildcardForFunctions = $false
+
+            # special features for binary modules
+            DebugDLL               = $false
+            ResolveBinaryConflicts = $false # mostly for memory and other libraries
         }
         BuildDocumentation = @{
             Enable        = $true # enables documentation processing
@@ -201,10 +209,10 @@ $Configuration = @{
             Verbose         = $false
         }
         PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $false
+            Enabled      = $true
             Prerelease   = ''
             RequireForce = $false
-            GitHub       = $false
+            GitHub       = $true
         }
     }
 }
