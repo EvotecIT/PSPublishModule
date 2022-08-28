@@ -16,7 +16,14 @@ function New-PrepareModule {
             #$Configuration.Information.DirectoryModules = "$Env:USERPROFILE\Documents\WindowsPowerShell\Modules"
             $Configuration.Information.DirectoryModules = "$([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments))\WindowsPowerShell\Modules"
         }
-        if ($Configuration.Steps.BuildModule.Enable -or $Configuration.Steps.BuildModule.EnableDesktop -or $Configuration.Steps.BuildModule.EnableCore -or $Configuration.Steps.BuildDocumentation -eq $true) {
+        # We build module or do other stuff with it
+        if ($Configuration.Steps.BuildModule.Enable -or
+            $Configuration.Steps.BuildModule.EnableDesktop -or
+            $Configuration.Steps.BuildModule.EnableCore -or
+            $Configuration.Steps.BuildDocumentation -eq $true -or
+            $Configuration.Steps.BuildLibraries.Enable -or
+            $Configuration.Steps.PublishModule.Enable -or
+            $Configuration.Steps.PublishModule.Enabled) {
             Start-ModuleBuilding -Configuration $Configuration
         }
     }

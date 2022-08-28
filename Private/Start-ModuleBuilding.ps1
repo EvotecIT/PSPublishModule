@@ -51,6 +51,9 @@
         return
     }
 
+    Start-LibraryBuilding -RootDirectory $FullProjectPath -Version $Configuration.Information.Manifest.ModuleVersion -ModuleName $ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
+
+
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
 
         if ($Configuration.Steps.BuildModule.DeleteBefore -eq $true) {
@@ -412,9 +415,8 @@
                 }
             }
         }
-    }
-    if ($Configuration.Steps.BuildModule.Enable) {
         Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths
+
     }
 
     # Import Modules Section, useful to check before publishing

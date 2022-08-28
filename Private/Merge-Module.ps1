@@ -330,23 +330,6 @@ function Merge-Module {
             }
             '}'
         }
-        # } elseif ($LibrariesCore.Count -gt 0) {
-        #     foreach ($File in $LibrariesCore) {
-        #         $Extension = $File.Substring($File.Length - 4, 4)
-        #         if ($Extension -eq '.dll') {
-        #             $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-        #             $Output
-        #         }
-        #     }
-        # } elseif ($LibrariesDefault.Count -gt 0) {
-        #     foreach ($File in $LibrariesDefault) {
-        #         $Extension = $File.Substring($File.Length - 4, 4)
-        #         if ($Extension -eq '.dll') {
-        #             $Output = 'Add-Type -Path $PSScriptRoot\' + $File
-        #             $Output
-        #         }
-        #     }
-        # }
     )
     # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
     if ($LibraryContent.Count -gt 0) {
@@ -371,7 +354,7 @@ function Merge-Module {
     }
 
     # Adjust PSM1 file by adding dot sourcing or directly libraries to the PSM1 file
-    if ($LibariesPath -gt 0 -or $ClassesPath -gt 0) {
+    if ($LibariesPath -gt 0 -or $ClassesPath -gt 0 -or $Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
         $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
         $IntegrateContent = @(
             if ($LibraryContent.Count -gt 0) {
@@ -390,6 +373,10 @@ function Merge-Module {
                 "# Dot source all classes by loading external file"
                 $DotSourceClassPath
                 ""
+            }
+            # add resolve conflicting binary option
+            if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
+                New-DLLResolveConflict
             }
             $PSM1Content
         )

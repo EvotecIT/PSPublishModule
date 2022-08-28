@@ -1,11 +1,11 @@
 function New-PrepareManifest {
     [CmdletBinding()]
     param(
-        $ProjectName,
-        $modulePath,
-        $projectPath,
-        $functionToExport,
-        $projectUrl
+        [string] $ProjectName,
+        [string] $ModulePath,
+        [string] $ProjectPath,
+        $FunctionToExport,
+        [string] $ProjectUrl
     )
 
     Set-Location "$projectPath\$ProjectName"
