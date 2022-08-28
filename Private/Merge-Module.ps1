@@ -375,7 +375,9 @@ function Merge-Module {
                 ""
             }
             # add resolve conflicting binary option
-            if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
+            if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
+                New-DLLResolveConflict -ProjectName $Configuration.Steps.BuildModule.ResolveBinaryConflicts.ProjectName
+            } elseif ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -eq $true) {
                 New-DLLResolveConflict
             }
             $PSM1Content

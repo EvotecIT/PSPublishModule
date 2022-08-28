@@ -1,13 +1,17 @@
 ﻿function New-DLLResolveConflict {
     [CmdletBinding()]
     param(
-
+        [string] $ProjectName
     )
-
+    if ($ProjectName) {
+        $StandardName = "'$ProjectName'"
+    } else {
+        $StandardName = '`$myInvocation.MyCommand.Name.Replace(".psm1", "")'
+    }
     $Output = @"
 
     # Get library name, from the PSM1 file name
-    `$LibraryName = `$myInvocation.MyCommand.Name.Replace(".psm1", "")
+    `$LibraryName = $StandardName
     `$Library = "`$LibraryName.dll"
     `$Class = "`$LibraryName.Initialize"
 

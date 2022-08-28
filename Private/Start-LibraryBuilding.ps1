@@ -10,6 +10,9 @@
     if ($LibraryConfiguration.Count -eq 0) {
         return
     }
+    if ($LibraryConfiguration.Enable -ne $true) {
+        return
+    }
 
     $TranslateFrameworks = [ordered] @{
         'NetStandard2.0' = 'Standard'
@@ -22,11 +25,12 @@
     } else {
         $Configuration = 'Release'
     }
+    if ($LibraryConfiguration.ProjectName) {
+        $ModuleName = $LibraryConfiguration.ProjectName
+    }
 
-    #$RootDirectory = $PWD
-    #$RootDirectory = $PSScriptRoot
-    $ModuleProjectFile = [System.IO.Path]::Combine($RootDirectory, "Sources", $moduleName, $moduleName, "$ModuleName.csproj")
-    $SourceFolder = [System.IO.Path]::Combine($RootDirectory, "Sources", $moduleName, $moduleName)
+    $ModuleProjectFile = [System.IO.Path]::Combine($RootDirectory, "Sources", $ModuleName, "$ModuleName.csproj")
+    $SourceFolder = [System.IO.Path]::Combine($RootDirectory, "Sources", $ModuleName)
     $ModuleBinFolder = [System.IO.Path]::Combine($RootDirectory, "Lib")
     if (Test-Path -LiteralPath $ModuleBinFolder) {
         $Items = Get-ChildItem -LiteralPath $ModuleBinFolder -Recurse -Force
