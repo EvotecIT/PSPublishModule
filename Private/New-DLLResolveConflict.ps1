@@ -6,7 +6,7 @@
     if ($ProjectName) {
         $StandardName = "'$ProjectName'"
     } else {
-        $StandardName = '`$myInvocation.MyCommand.Name.Replace(".psm1", "")'
+        $StandardName = '$myInvocation.MyCommand.Name.Replace(".psm1", "")'
     }
     $Output = @"
 
