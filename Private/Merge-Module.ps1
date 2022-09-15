@@ -357,6 +357,12 @@ function Merge-Module {
     if ($LibariesPath -gt 0 -or $ClassesPath -gt 0 -or $Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
         $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
         $IntegrateContent = @(
+            # add resolve conflicting binary option
+            if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
+                New-DLLResolveConflict -ProjectName $Configuration.Steps.BuildModule.ResolveBinaryConflicts.ProjectName
+            } elseif ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -eq $true) {
+                New-DLLResolveConflict
+            }
             if ($LibraryContent.Count -gt 0) {
                 if ($DotSourcePath) {
                     "# Dot source all libraries by loading external file"
@@ -373,12 +379,6 @@ function Merge-Module {
                 "# Dot source all classes by loading external file"
                 $DotSourceClassPath
                 ""
-            }
-            # add resolve conflicting binary option
-            if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
-                New-DLLResolveConflict -ProjectName $Configuration.Steps.BuildModule.ResolveBinaryConflicts.ProjectName
-            } elseif ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -eq $true) {
-                New-DLLResolveConflict
             }
             $PSM1Content
         )
