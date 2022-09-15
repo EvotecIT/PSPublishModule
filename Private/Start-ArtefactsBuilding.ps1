@@ -8,11 +8,24 @@
     if ($Configuration.Steps.BuildModule.Releases -or $Configuration.Steps.BuildModule.ReleasesUnpacked) {
         $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
         $FileName = -join ("$TagName", '.zip')
-        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+        if ($Configuration.Steps.BuildModule.Releases -eq $true -or $Configuration.Steps.BuildModule.Releases.Enabled) {
+            if ($Configuration.Steps.BuildModule.Releases -is [System.Collections.IDictionary]) {
+                if ($Configuration.Steps.BuildModule.Releases.Path) {
+                    if ($Configuration.Steps.BuildModule.Releases.Relative -eq $false) {
+                        $FolderPathReleases = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.Releases.Path)
+                    } else {
+                        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.Releases.Path)
+                    }
+                } else {
+                    $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+                }
+            } else {
+                # default values
+                $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+            }
+            $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)                
 
-        if ($Configuration.Steps.BuildModule.Releases) {
-            Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
+                Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
                 $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
                 if ($DestinationPaths.Desktop) {
                     $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
@@ -44,29 +57,27 @@
                 } else {
                     $RequiredModulesPath = $ArtefactsPath
                 }
-                $FolderPathReleasesUnpacked = $RequiredModulesPath
+                if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
+                    $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($ArtefactsPath, $TagName )
+                } else {
+                    $FolderPathReleasesUnpacked = $ArtefactsPath
+                }
             } else {
                 # default values
                 $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName)
                 $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
-                $RequiredModulesPath = $ArtefactsPath
             }
             Write-TextWithTime -Text "[+] Copying final merged release to $ArtefactsPath" {
                 try {
-                    if (Test-Path -Path $ArtefactsPath) {
-                        Remove-ItemAlternative -LiteralPath $ArtefactsPath -SkipFolder
+                    if (Test-Path -Path $FolderPathReleasesUnpacked) {
+                        Remove-ItemAlternative -LiteralPath $FolderPathReleasesUnpacked -SkipFolder
                     }
                     $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
-
-                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
-                        $NameOfDestination = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.Information.ModuleName, $TagName)
-                    } else {
-                        $NameOfDestination = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.Information.ModuleName)
-                    }
                     if ($DestinationPaths.Desktop) {
-                        Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $NameOfDestination -Force
-                    } elseif ($DestinationPaths.Core) {
-                        Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $NameOfDestination -Force
+                        Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $FolderPathReleasesUnpacked -Force
+                    }
+                    if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
+                        Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $FolderPathReleasesUnpacked -Force
                     }
                 } catch {
                     $ErrorMessage = $_.Exception.Message
@@ -104,10 +115,10 @@
 
 
                                 if ($ItemInformation.DirectoryName -ne $Module.ModuleName) {
-                                    $NewPath = [io.path]::Combine($RequiredModulesPath, $Module.ModuleName)
+                                    $NewPath = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.ModuleName)
                                     Copy-Item -LiteralPath $FolderToCopy -Destination $NewPath -Recurse
                                 } else {
-                                    Copy-Item -LiteralPath $FolderToCopy -Destination $RequiredModulesPath -Recurse
+                                    Copy-Item -LiteralPath $FolderToCopy -Destination $FolderPathReleasesUnpacked -Recurse
                                 }
                             }
                         }
