@@ -44,12 +44,14 @@
                 } else {
                     $RequiredModulesPath = $ArtefactsPath
                 }
-                $FolderPathReleasesUnpacked = $RequiredModulesPath
+                $CurrentModulePath = $RequiredModulesPath
+                $FolderPathReleasesUnpacked = $ArtefactsPath
             } else {
                 # default values
                 $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName)
                 $FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
                 $RequiredModulesPath = $ArtefactsPath
+                $CurrentModulePath = $ArtefactsPath
             }
             Write-TextWithTime -Text "[+] Copying final merged release to $ArtefactsPath" {
                 try {
@@ -59,9 +61,9 @@
                     $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
 
                     if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
-                        $NameOfDestination = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.Information.ModuleName, $TagName)
+                        $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName, $TagName)
                     } else {
-                        $NameOfDestination = [io.path]::Combine($FolderPathReleasesUnpacked, $Module.Information.ModuleName)
+                        $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName)
                     }
                     if ($DestinationPaths.Desktop) {
                         Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $NameOfDestination -Force
@@ -119,14 +121,14 @@
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput) {
                     $FilesOutput = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
                     foreach ($File in $FilesOutput.Keys) {
-                        if ($File -is [string]) {
+                        if ($FilesOutput[$File] -is [string]) {
                             $FullFilePath = [System.IO.Path]::Combine($FullProjectPath, $File)
                             if (Test-Path -Path $FullFilePath) {
                                 $DestinationPath = [System.IO.Path]::Combine($FolderPathReleasesUnpacked, $FilesOutput[$File])
                                 Copy-Item -LiteralPath $FullFilePath -Destination $DestinationPath -Force
                             }
-                        } elseif ($File -is [System.Collections.IDictionary]) {
-                            if ($File.Enabled -eq $true) {
+                        } elseif ($FilesOutput[$File] -is [System.Collections.IDictionary]) {
+                            if ($FilesOutput[$File].Enabled -eq $true) {
 
                             }
                         }
