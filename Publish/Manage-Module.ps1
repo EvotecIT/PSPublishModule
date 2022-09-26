@@ -176,7 +176,7 @@ $Configuration = @{
                 Enabled         = $true
                 IncludeTagName  = $false
                 Path            = "$PSScriptRoot\..\Artefacts"
-                RequiredModules = $true
+                RequiredModules = $false
                 DirectoryOutput = @{
 
                 }
@@ -195,8 +195,8 @@ $Configuration = @{
             UseWildcardForFunctions = $false
 
             # special features for binary modules
-            DebugDLL               = $false
-            ResolveBinaryConflicts = $false # mostly for memory and other libraries
+            DebugDLL                = $false
+            ResolveBinaryConflicts  = $false # mostly for memory and other libraries
         }
         BuildDocumentation = @{
             Enable        = $true # enables documentation processing
