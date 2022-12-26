@@ -16,7 +16,10 @@
 
     $TranslateFrameworks = [ordered] @{
         'NetStandard2.0' = 'Standard'
+        'netStandard2.1' = 'Standard'
         'net472'         = 'Default'
+        'net48'          = 'Default'
+        'net470'         = 'Default'
         'netcoreapp3.1'  = 'Core'
     }
 
@@ -48,7 +51,7 @@
     }
 
     foreach ($Framework in $TranslateFrameworks.Keys) {
-        if ($SupportedFrameworks.Contains($Framework)) {
+        if ($SupportedFrameworks.Contains($Framework.ToLower()) -and $LibraryConfiguration.Framework.Contains($Framework.ToLower())) {
             Write-Host "Building $Framework ($Configuration)"
             dotnet publish --configuration $Configuration --verbosity q -nologo -p:Version=$Version --framework $Framework
             if ($LASTEXITCODE) {

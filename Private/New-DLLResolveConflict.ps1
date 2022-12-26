@@ -15,13 +15,21 @@
     `$Library = "`$LibraryName.dll"
     `$Class = "`$LibraryName.Initialize"
 
+    `$AssemblyFolders = Get-ChildItem -Path $PSScriptRoot -Directory -ErrorAction SilentlyContinue
+
     try {
         `$ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-        `$Framework = if (`$PSVersionTable.PSVersion.Major -eq 5) {
-            'Default'
+
+        if (`$AssemblyFolders.BaseName -contains 'Standard') {
+            `$Framework = 'Standard'
         } else {
-            'Core'
+            if (`$PSEdition -eq 'Core') {
+                `$Framework = 'Core'
+            } else {
+                `$Framework = 'Default'
+            }
         }
+
         if (-not (`$Class -as [type])) {
             & `$ImportModule ([IO.Path]::Combine(`$PSScriptRoot, 'Lib', `$Framework, `$Library)) -ErrorAction Stop
         } else {
