@@ -15,23 +15,56 @@
     `$Library = "`$LibraryName.dll"
     `$Class = "`$LibraryName.Initialize"
 
-    `$AssemblyFolders = Get-ChildItem -Path $PSScriptRoot -Directory -ErrorAction SilentlyContinue
+    `$AssemblyFolders = Get-ChildItem -Path `$PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
+
+    # Lets find which libraries we need to load
+    `$Default = `$false
+    `$Core = `$false
+    `$Standard = `$false
+    foreach (`$A in `$AssemblyFolders.Name) {
+        if (`$A -eq 'Default') {
+            `$Default = `$true
+        } elseif (`$A -eq 'Core') {
+            `$Core = `$true
+        } elseif (`$A -eq 'Standard') {
+            `$Standard = `$true
+        }
+    }
+    if (`$Standard -and `$Core -and `$Default) {
+        `$FrameworkNet = 'Default'
+        `$Framework = 'Standard'
+    } elseif (`$Standard -and `$Core) {
+        `$Framework = 'Standard'
+        `$FrameworkNet = 'Standard'
+    } elseif (`$Core -and `$Default) {
+        `$Framework = 'Core'
+        `$FrameworkNet = 'Default'
+    } elseif (`$Standard -and `$Default) {
+        `$Framework = 'Standard'
+        `$FrameworkNet = 'Default'
+    } elseif (`$Standard) {
+        `$Framework = 'Standard'
+        `$FrameworkNet = 'Standard'
+    } elseif (`$Core) {
+        `$Framework = 'Core'
+        `$FrameworkNet = ''
+    } elseif (`$Default) {
+        `$Framework = ''
+        `$FrameworkNet = 'Default'
+    } else {
+        Write-Error -Message 'No assemblies found'
+    }
+    if (`$PSEdition -eq 'Core') {
+        `$LibFolder = `$Framework
+    } else {
+        `$LibFolder = `$FrameworkNet
+    }
 
     try {
         `$ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 
-        if (`$AssemblyFolders.BaseName -contains 'Standard') {
-            `$Framework = 'Standard'
-        } else {
-            if (`$PSEdition -eq 'Core') {
-                `$Framework = 'Core'
-            } else {
-                `$Framework = 'Default'
-            }
-        }
-
         if (-not (`$Class -as [type])) {
-            & `$ImportModule ([IO.Path]::Combine(`$PSScriptRoot, 'Lib', `$Framework, `$Library)) -ErrorAction Stop
+            & `$ImportModule ([IO.Path]::Combine(`$PSScriptRoot, 'Lib', `$LibFolder, `$Library)) -ErrorAction Stop
         } else {
             `$Type = "`$Class" -as [Type]
             & `$importModule -Force -Assembly (`$Type.Assembly)
