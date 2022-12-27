@@ -1,6 +1,17 @@
 ﻿### PSPublishModule Changelog
 
 #### 0.9.52
+- Changed loading of libraries so it's always done in following way:
+ - If Standard, Core and Default are present -> load Default when PS 5, load Standard when PS 6+
+ - If Standard, Default are present -> load Default when PS 5, load Standard when PS 6+
+ - If Standard and Core are present -> load Standard only
+ - If Core and Default are present -> load Default when PS 5, load Core when PS 6+
+ - If Standard is present -> load Standard only for all PowerShell
+
+I've removed the logic where Standard would always get loaded even if Default/Core was also provided which could lead to unexpected behavior.
+- Added ability to build libraries on demand (when using -BuildLibraries). Requires more testing.
+- Cleaned code a bit, moved things around
+- Added ability to ResolveBinaryConflicts (when using -ResolveBinaryConflicts). Requires more testing. Visible in project [ImagePlayground](https://github.com/EvotecIT/ImagePlayground)
 
 #### 0.9.51 - 2022.09.26
 - Fixed path behavior for ReleasedUnpacked (hopefully)
