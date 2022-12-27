@@ -25,6 +25,5 @@
             $CleanedModules.Add($_)
         }
     }
-    # $CleanedModules.Add($Name)
     $CleanedModules
 }

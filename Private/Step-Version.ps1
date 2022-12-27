@@ -1,4 +1,31 @@
 ﻿function Step-Version {
+    <#
+    .SYNOPSIS
+    Short description
+
+    .DESCRIPTION
+    Long description
+
+    .PARAMETER Module
+    Parameter description
+
+    .PARAMETER ExpectedVersion
+    Parameter description
+
+    .PARAMETER Advanced
+    Parameter description
+
+    .EXAMPLE
+    Step-Version -Module Testimo12 -ExpectedVersion '0.1.X'
+    Step-Version -ExpectedVersion '0.1.X'
+    Step-Version -ExpectedVersion '0.1.5.X'
+    Step-Version -ExpectedVersion '1.2.X'
+    Step-Version -Module PSWriteHTML -ExpectedVersion '0.0.X'
+    Step-Version -Module PSWriteHTML1 -ExpectedVersion '0.1.X'
+
+    .NOTES
+    General notes
+    #>
     [cmdletBinding()]
     param(
         [string] $Module,
@@ -75,12 +102,3 @@
         }
     }
 }
-
-<#
-Step-Version -Module Testimo12 -ExpectedVersion '0.1.X'
-Step-Version -ExpectedVersion '0.1.X'
-Step-Version -ExpectedVersion '0.1.5.X'
-Step-Version -ExpectedVersion '1.2.X'
-Step-Version -Module PSWriteHTML -ExpectedVersion '0.0.X'
-Step-Version -Module PSWriteHTML1 -ExpectedVersion '0.1.X'
-#>

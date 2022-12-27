@@ -88,30 +88,6 @@ function Merge-Module {
     }
     Get-ScriptsContent -Files $ScriptFunctions -OutputPath $PSM1FilePath
 
-    <#
-    foreach ($FilePath in $ScriptFunctions) {
-        $Content = Get-Content -Path $FilePath -Raw
-        if ($Content.Count -gt 0) {
-            # Ensure file has content
-            $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')
-            $Content = $Content.Replace('$PSScriptRoot\..\', '$PSScriptRoot\')
-
-            # Fixes [IO.Path]::Combine($PSScriptRoot, '..', 'Images') - mostly for PSTeams but should be useful for others
-            $Content = $Content.Replace("`$PSScriptRoot, '..',", "`$PSScriptRoot,")
-            $Content = $Content.Replace("`$PSScriptRoot,'..',", "`$PSScriptRoot,")
-
-            try {
-                $Content | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
-            } catch {
-                $ErrorMessage = $_.Exception.Message
-                #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
-                Write-Error "Merge-Module - Merge on file $FilePath failed. Error: $ErrorMessage"
-                Exit
-            }
-        }
-    }
-    #>
-
 
     # Using file is needed if there are 'using namespaces' - this is a workaround provided by seeminglyscience
     $FilePathUsing = "$ModulePathTarget\$ModuleName.Usings.ps1"
@@ -289,31 +265,25 @@ function Merge-Module {
     if ($null -eq $Configuration.Steps.BuildModule.DebugDLL) {
         $Configuration.Steps.BuildModule.DebugDLL = $false
     }
-
     $LibraryContent = @(
         if ($LibrariesStandard.Count -gt 0) {
             foreach ($File in $LibrariesStandard) {
                 $Extension = $File.Substring($File.Length - 4, 4)
                 if ($Extension -eq '.dll') {
                     $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                    #$Output = 'Add-Type -Path $PSScriptRoot\' + $File
                     $Output
                 }
             }
-        }
-        if ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
+        } elseif ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
             'if ($PSEdition -eq ''Core'') {'
             if ($LibrariesCore.Count -gt 0) {
                 foreach ($File in $LibrariesCore) {
                     $Extension = $File.Substring($File.Length - 4, 4)
                     if ($Extension -eq '.dll') {
                         $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                        #$Output = 'Add-Type -Path $PSScriptRoot\' + $File
                         $Output
                     }
                 }
-            } else {
-                #Write-Warning -Message "No libraries for PowerShell 6/7 were present. Most likely this module doesn't work on this version of PowerShell."
             }
             '} else {'
             if ($LibrariesDefault.Count -gt 0) {
@@ -321,12 +291,9 @@ function Merge-Module {
                     $Extension = $File.Substring($File.Length - 4, 4)
                     if ($Extension -eq '.dll') {
                         $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                        #$Output = 'Add-Type -Path $PSScriptRoot\' + $File
                         $Output
                     }
                 }
-            } else {
-                #Write-Warning -Message "No libraries for PowerShell 5.1 were present. Most likely this module doesn't work on this version of PowerShell."
             }
             '}'
         }

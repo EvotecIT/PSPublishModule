@@ -1,4 +1,8 @@
-﻿function Test-AllFilePathsAndThrowErrorIfOneIsNotValid([string[]] $filePaths) {
+﻿function Test-AllFilePathsAndThrowErrorIfOneIsNotValid {
+    [CmdletBinding()]
+    param(
+        [string[]] $filePaths
+    )
     foreach ($filePath in $filePaths) {
         [bool] $fileWasNotFoundAtPath = [string]::IsNullOrEmpty($filePath) -or !(Test-Path -Path $filePath -PathType Leaf)
         if ($fileWasNotFoundAtPath) {

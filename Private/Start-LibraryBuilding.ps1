@@ -16,7 +16,10 @@
 
     $TranslateFrameworks = [ordered] @{
         'NetStandard2.0' = 'Standard'
+        'netStandard2.1' = 'Standard'
         'net472'         = 'Default'
+        'net48'          = 'Default'
+        'net470'         = 'Default'
         'netcoreapp3.1'  = 'Core'
     }
 
@@ -36,7 +39,7 @@
         $Items = Get-ChildItem -LiteralPath $ModuleBinFolder -Recurse -Force
         $Items | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
     }
-    New-Item -Path $ModuleBinFolder -ItemType Directory -Force | Out-Null
+    $null = New-Item -Path $ModuleBinFolder -ItemType Directory -Force
 
     Push-Location -Path $SourceFolder
 
@@ -48,11 +51,13 @@
     }
 
     foreach ($Framework in $TranslateFrameworks.Keys) {
-        if ($SupportedFrameworks.Contains($Framework)) {
-            Write-Host "Building $Framework ($Configuration)"
+        if ($SupportedFrameworks.Contains($Framework.ToLower()) -and $LibraryConfiguration.Framework.Contains($Framework.ToLower())) {
+            Write-Text "[+] Building $Framework ($Configuration)"
             dotnet publish --configuration $Configuration --verbosity q -nologo -p:Version=$Version --framework $Framework
             if ($LASTEXITCODE) {
-                Write-Warning -Message "Failed to build for $framework"
+                Write-Host # This is to add new line, because the first line was opened up.
+                Write-Text "[-] Building $Framework - failed. Error: $LASTEXITCODE" -Color Red
+                Exit
             }
         } else {
             continue
@@ -65,7 +70,7 @@
         try {
             Copy-Item -Path $PublishDirFolder -Destination $ModuleBinFrameworkFolder -Recurse -Filter "*.dll" -ErrorAction Stop
         } catch {
-            Write-Warning -Message "Copying $PublishDirFolder to $ModuleBinFrameworkFolder failed. Error: $($_.Exception.Message)"
+            Write-Text "[-] Copying $PublishDirFolder to $ModuleBinFrameworkFolder failed. Error: $($_.Exception.Message)" -Color Red
         }
     }
 

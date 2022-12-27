@@ -162,6 +162,8 @@ $Configuration = @{
         BuildLibraries     = @{
             Enable        = $false # build once every time nuget gets updated
             Configuration = 'Release'
+            Framework     = 'netstandard2.0', 'net472'
+            #ProjectName   = 'ImagePlayground.PowerShell'
         }
         BuildModule        = @{  # requires Enable to be on to process all of that
             Enable                  = $true
@@ -209,10 +211,10 @@ $Configuration = @{
             Verbose         = $false
         }
         PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $true
+            Enabled      = $false
             Prerelease   = ''
             RequireForce = $false
-            GitHub       = $true
+            GitHub       = $false
         }
     }
 }

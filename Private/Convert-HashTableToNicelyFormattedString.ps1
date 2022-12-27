@@ -1,4 +1,8 @@
-﻿function Convert-HashTableToNicelyFormattedString($hashTable) {
+﻿function Convert-HashTableToNicelyFormattedString {
+    [CmdletBinding()]
+    param(
+        [System.Collections.IDictionary] $hashTable
+    )
     [string] $nicelyFormattedString = $hashTable.Keys | ForEach-Object `
     {
         $key = $_

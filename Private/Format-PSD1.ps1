@@ -18,11 +18,6 @@
         }
 
         $Output = Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings
-        #$Output = foreach ($O in $Output) {
-        #    if ($O.Trim() -ne '') {
-        #        $O.Trim()
-        #    }
-        #}
         $Output | Out-File -LiteralPath $PSD1FilePath -NoNewline
     }
 }
