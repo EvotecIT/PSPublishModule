@@ -310,18 +310,63 @@
                 $Configuration.Information.LibrariesDefault = "Lib\Default"
             }
 
+            $CoreFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+            $DefaultFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+            $StandardFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
+
+            $Default = $false
+            $Core = $false
+            $Standard = $false
+            if ($CoreFiles.Count -gt 0) {
+                $Core = $true
+            }
+            if ($DefaultFiles.Count -gt 0) {
+                $Default = $true
+            }
+            if ($StandardFiles.Count -gt 0) {
+                $Standard = $true
+            }
+            if ($Standard -and $Core -and $Default) {
+                $FrameworkNet = 'Default'
+                $Framework = 'Standard'
+            } elseif ($Standard -and $Core) {
+                $Framework = 'Standard'
+                $FrameworkNet = 'Standard'
+            } elseif ($Core -and $Default) {
+                $Framework = 'Core'
+                $FrameworkNet = 'Default'
+            } elseif ($Standard -and $Default) {
+                $Framework = 'Standard'
+                $FrameworkNet = 'Default'
+            } elseif ($Standard) {
+                $Framework = 'Standard'
+                $FrameworkNet = 'Standard'
+            } elseif ($Core) {
+                $Framework = 'Core'
+                $FrameworkNet = ''
+            } elseif ($Default) {
+                $Framework = ''
+                $FrameworkNet = 'Default'
+            }
 
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
-                $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
+                if ($Framework -eq 'Core') {
+                    $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
+                } else {
+                    $StartsWithCore = "$($Configuration.Information.LibrariesStandard)\"
+                }
                 $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
             }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
-                $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
+                if ($FrameworkNet -eq 'Default') {
+                    $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
+                } else {
+                    $StartsWithDefault = "$($Configuration.Information.LibrariesStandard)\"
+                }
                 $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
             }
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesStandard)) {
-                $StartsWithStandard = "$($Configuration.Information.LibrariesStandard)\"
-                $FilesLibrariesStandard = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
+            if ($StartsWithCore -eq $StartsWithDefault) {
+                $FilesLibrariesStandard = $FilesLibrariesCore
             }
 
             Merge-Module -ModuleName $ProjectName `
@@ -421,113 +466,21 @@
 
     # Import Modules Section, useful to check before publishing
     if ($Configuration.Steps.ImportModules) {
-        $TemporaryVerbosePreference = $VerbosePreference
-        $VerbosePreference = $false
-
-        if ($Configuration.Steps.ImportModules.RequiredModules) {
-            Write-TextWithTime -Text '[+] Importing modules - REQUIRED' {
-                foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
-                    Import-Module -Name $Module -Force -ErrorAction Stop -Verbose:$false
-                }
-            }
-        }
-        if ($Configuration.Steps.ImportModules.Self) {
-            Write-TextWithTime -Text '[+] Importing module - SELF' {
-                Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$false
-            }
-        }
-        $VerbosePreference = $TemporaryVerbosePreference
+        Start-ImportingModules -Configuration $Configuration -ProjectName $ProjectName
     }
-
+    # Publish Module Section
     if ($Configuration.Steps.PublishModule.Enabled) {
-        Write-TextWithTime -Text "[+] Publishing Module to PowerShellGallery" {
-            try {
-                if ($Configuration.Options.PowerShellGallery.FromFile) {
-                    $ApiKey = Get-Content -Path $Configuration.Options.PowerShellGallery.ApiKey -ErrorAction Stop
-                    #New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
-                    Publish-Module -Name $Configuration.Information.ModuleName -Repository PSGallery -NuGetApiKey $ApiKey -Force:$Configuration.Steps.PublishModule.RequireForce -Verbose -ErrorAction Stop
-                } else {
-                    #New-PublishModule -ProjectName $Configuration.Information.ModuleName -ApiKey $Configuration.Options.PowerShellGallery.ApiKey -RequireForce $Configuration.Steps.PublishModule.RequireForce
-                    Publish-Module -Name $Configuration.Information.ModuleName -Repository PSGallery -NuGetApiKey $Configuration.Options.PowerShellGallery.ApiKey -Force:$Configuration.Steps.PublishModule.RequireForce -Verbose -ErrorAction Stop
-                }
-            } catch {
-                $ErrorMessage = $_.Exception.Message
-                Write-Host # This is to add new line, because the first line was opened up.
-                Write-Text "[-] Publishing Module - failed. Error: $ErrorMessage" -Color Red
-                Exit
-            }
+        $Publishing = Start-PublishingModule -Configuration $Configuration
+        if ($Publishing -eq $false) {
+            return
         }
     }
-
+    # Publish Module Section to GitHub
     if ($Configuration.Steps.PublishModule.GitHub) {
         Start-GitHubBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
     }
     if ($Configuration.Steps.BuildDocumentation) {
-        # Support for old way of building documentation -> converts to new one
-        if ($Configuration.Steps.BuildDocumentation -is [bool]) {
-            $TemporaryBuildDocumentation = $Configuration.Steps.BuildDocumentation
-            $Configuration.Steps.BuildDocumentation = @{
-                Enable = $TemporaryBuildDocumentation
-            }
-        }
-        # Real documentation process
-        if ($Configuration.Steps.BuildDocumentation -is [System.Collections.IDictionary]) {
-            if ($Configuration.Steps.BuildDocumentation.Enable -eq $true) {
-                $WarningVariablesMarkdown = @()
-                $DocumentationPath = "$FullProjectPath\$($Configuration.Options.Documentation.Path)"
-                $ReadMePath = "$FullProjectPath\$($Configuration.Options.Documentation.PathReadme)"
-                Write-Text "[+] Generating documentation to $DocumentationPath with $ReadMePath" -Color Yellow
-
-                if (-not (Test-Path -Path $DocumentationPath)) {
-                    $null = New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
-                }
-                [Array] $Files = Get-ChildItem -Path $DocumentationPath
-                if ($Files.Count -gt 0) {
-                    if ($Configuration.Steps.BuildDocumentation.StartClean -ne $true) {
-                        try {
-                            $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
-                        } catch {
-                            Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
-                        }
-                    } else {
-                        # remove everything / Refresh Count
-                        #$null = Remove-Item -Path $DocumentationPath -Force -Recurse
-                        <#
-                        $ItemToDelete = Get-ChildItem -Path $DocumentationPath
-                        foreach ($Item in $ItemToDelete) {
-                            $Item.Delete()
-                        }
-                        $ItemToDelete = Get-Item -Path $DocumentationPath
-                        $ItemToDelete.Delete($true)
-                        #>
-                        Remove-ItemAlternative -Path $DocumentationPath -SkipFolder
-                        #$null = New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
-                        [Array] $Files = Get-ChildItem -Path $DocumentationPath
-                    }
-                }
-                if ($Files.Count -eq 0) {
-                    try {
-                        $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
-                    } catch {
-                        Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
-                    }
-                    $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath -ErrorAction SilentlyContinue
-                    #Start-Sleep -Seconds 1
-                    # this is temporary workaround - due to diff output on update
-                    if ($Configuration.Steps.BuildDocumentation.UpdateWhenNew) {
-                        try {
-                            $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
-                        } catch {
-                            Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
-                        }
-                    }
-                }
-                foreach ($_ in $WarningVariablesMarkdown) {
-                    Write-Text "[-] Documentation warning: $_" -Color Yellow
-                }
-
-            }
-        }
+        Start-DocumentationBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -ProjectName $ProjectName
     }
 
     # Cleanup temp directory
