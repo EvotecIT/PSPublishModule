@@ -4,7 +4,7 @@ Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 $Configuration = @{
     Information = @{
         ModuleName        = 'PSPublishModule'
-        DirectoryProjects = 'C:\Support\GitHub'
+        #DirectoryProjects = 'C:\Support\GitHub'
 
         # Where from to export aliases / functions
         FunctionsToExport = 'Public'
@@ -199,6 +199,9 @@ $Configuration = @{
             # special features for binary modules
             DebugDLL                = $false
             ResolveBinaryConflicts  = $false # mostly for memory and other libraries
+            # ResolveBinaryConflicts  = @{
+            #     ProjectName = 'ImagePlayground.PowerShell'
+            # }
         }
         BuildDocumentation = @{
             Enable        = $true # enables documentation processing
