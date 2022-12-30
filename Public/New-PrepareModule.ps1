@@ -5,6 +5,9 @@ function New-PrepareModule {
         [Parameter(ParameterSetName = 'New')][string] $ProjectName,
         [Parameter(ParameterSetName = 'Existing')][System.Collections.IDictionary] $Configuration
     )
+    # this assumes that the script running this in Build or Publish folder (or any other folder that is 1 level below the root of the project)
+    [string] $PathToProject = Get-Item "$($MyInvocation.PSScriptRoot)/.."
+
     Write-Host "[i] Module Building Initializing..." -ForegroundColor Yellow
     $GlobalTime = [System.Diagnostics.Stopwatch]::StartNew()
     if ($Configuration) {
@@ -24,7 +27,7 @@ function New-PrepareModule {
             $Configuration.Steps.BuildLibraries.Enable -or
             $Configuration.Steps.PublishModule.Enable -or
             $Configuration.Steps.PublishModule.Enabled) {
-            Start-ModuleBuilding -Configuration $Configuration
+            Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
         }
     }
     if ($Path -and $ProjectName) {

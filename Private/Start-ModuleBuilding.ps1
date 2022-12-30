@@ -1,9 +1,9 @@
 ﻿function Start-ModuleBuilding {
     [CmdletBinding()]
     param(
-        [System.Collections.IDictionary] $Configuration
+        [System.Collections.IDictionary] $Configuration,
+        [string] $PathToProject
     )
-
     $DestinationPaths = @{ }
     if ($Configuration.Information.Manifest.CompatiblePSEditions) {
         if ($Configuration.Information.Manifest.CompatiblePSEditions -contains 'Desktop') {
@@ -24,7 +24,11 @@
     [string] $Random = Get-Random 10000000000
     [string] $FullModuleTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
     [string] $FullTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName + "_TEMP_$Random"
-    [string] $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
+    if ($Configuration.Information.DirectoryProjects) {
+        [string] $FullProjectPath = [IO.Path]::Combine($Configuration.Information.DirectoryProjects, $Configuration.Information.ModuleName)
+    } else {
+        [string] $FullProjectPath = $PathToProject
+    }
     [string] $ProjectName = $Configuration.Information.ModuleName
 
     Write-Text '----------------------------------------------------'
