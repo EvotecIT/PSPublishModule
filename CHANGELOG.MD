@@ -1,6 +1,6 @@
 ﻿### PSPublishModule Changelog
 
-#### 0.9.52
+#### 0.9.52 - 2022.12.30
 - Changed loading of libraries so it's always done in following way:
  - If Standard, Core and Default are present -> load Default when PS 5, load Standard when PS 6+
  - If Standard, Default are present -> load Default when PS 5, load Standard when PS 6+
@@ -12,6 +12,7 @@ I've removed the logic where Standard would always get loaded even if Default/Co
 - Added ability to build libraries on demand (when using -BuildLibraries). Requires more testing.
 - Cleaned code a bit, moved things around
 - Added ability to ResolveBinaryConflicts (when using -ResolveBinaryConflicts). Requires more testing. Visible in project [ImagePlayground](https://github.com/EvotecIT/ImagePlayground)
+- Removed need for `DirectoryProjects` in `$Configuration.Information` - if not present it will get the value itself
 
 #### 0.9.51 - 2022.09.26
 - Fixed path behavior for ReleasedUnpacked (hopefully)
