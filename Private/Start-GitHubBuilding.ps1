@@ -8,8 +8,26 @@
     )
     $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
     $FileName = -join ("$TagName", '.zip')
-    #$FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-    $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+
+    if ($Configuration.Steps.BuildModule.Releases -eq $true -or $Configuration.Steps.BuildModule.Releases.Enabled) {
+        if ($Configuration.Steps.BuildModule.Releases -is [System.Collections.IDictionary]) {
+            if ($Configuration.Steps.BuildModule.Releases.Path) {
+                if ($Configuration.Steps.BuildModule.Releases.Relative -eq $false) {
+                    $FolderPathReleases = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.Releases.Path)
+                } else {
+                    $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.Releases.Path)
+                }
+            } else {
+                $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+            }
+        } else {
+            # default values
+            $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+        }
+        $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)
+    } else {
+        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+    }
 
     if ($Configuration.Options.GitHub.FromFile) {
         $GitHubAccessToken = Get-Content -LiteralPath $Configuration.Options.GitHub.ApiKey
@@ -45,6 +63,9 @@
             if ($statusGithub.ErrorMessage) {
                 Write-Text "[$GitHubText] GitHub Release ErrorMessage: $($statusGithub.ErrorMessage)" -Color $GithubColor
             }
+        } else {
+            Write-Text "[-] GitHub Release Creation Status: Failed" -Color Red
+            Write-Text "[-] GitHub Release Creation Reason: $ZipPath doesn't exists. Most likely Releases option is disabled." -Color Red
         }
     }
 }
