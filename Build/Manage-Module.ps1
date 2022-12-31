@@ -68,7 +68,7 @@ $Configuration = @{
         Merge             = @{
             Sort           = 'None'
             FormatCodePSM1 = @{
-                Enabled           = $false
+                Enabled           = $true
                 RemoveComments    = $false
                 FormatterSettings = @{
                     IncludeRules = @(
@@ -215,10 +215,10 @@ $Configuration = @{
             Verbose         = $false
         }
         PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $false
+            Enabled      = $true
             Prerelease   = ''
             RequireForce = $false
-            GitHub       = $false
+            GitHub       = $true
         }
     }
 }
