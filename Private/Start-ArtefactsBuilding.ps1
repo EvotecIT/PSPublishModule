@@ -54,17 +54,17 @@
                 $CurrentModulePath = $ArtefactsPath
             }
             Write-TextWithTime -Text "[+] Copying final merged release to $ArtefactsPath" {
+                if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
+                    $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName, $TagName)
+                } else {
+                    $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName)
+                }
                 try {
-                    if (Test-Path -Path $ArtefactsPath) {
-                        Remove-ItemAlternative -LiteralPath $ArtefactsPath -SkipFolder
+                    if (Test-Path -Path $NameOfDestination) {
+                        Remove-ItemAlternative -LiteralPath $NameOfDestination #-SkipFolder
                     }
                     $null = New-Item -ItemType Directory -Path $FolderPathReleasesUnpacked -Force
 
-                    if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
-                        $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName, $TagName)
-                    } else {
-                        $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName)
-                    }
                     if ($DestinationPaths.Desktop) {
                         Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $NameOfDestination -Force
                     } elseif ($DestinationPaths.Core) {
