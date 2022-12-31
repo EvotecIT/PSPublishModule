@@ -1,5 +1,10 @@
 ﻿### PSPublishModule Changelog
 
+#### 0.9.53 - 2022.12.31
+- Adds local versioning via BuildModule\LocalVersion property (bumps version on every build)
+- No longer delete older tagged unpacked releases (only current) when tagging is enabled
+- Allows to specify Releases property in BuildModule\Releases. Both Enabled/Path need to be specified. If not specified it will use default values.
+
 #### 0.9.52 - 2022.12.30
 - Changed loading of libraries so it's always done in following way:
  - If Standard, Core and Default are present -> load Default when PS 5, load Standard when PS 6+
