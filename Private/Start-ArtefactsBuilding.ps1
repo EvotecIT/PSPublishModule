@@ -8,10 +8,24 @@
     if ($Configuration.Steps.BuildModule.Releases -or $Configuration.Steps.BuildModule.ReleasesUnpacked) {
         $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
         $FileName = -join ("$TagName", '.zip')
-        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
 
-        if ($Configuration.Steps.BuildModule.Releases) {
+        if ($Configuration.Steps.BuildModule.Releases -eq $true -or $Configuration.Steps.BuildModule.Releases.Enabled) {
+            if ($Configuration.Steps.BuildModule.Releases -is [System.Collections.IDictionary]) {
+                if ($Configuration.Steps.BuildModule.Releases.Path) {
+                    if ($Configuration.Steps.BuildModule.Releases.Relative -eq $false) {
+                        $FolderPathReleases = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.Releases.Path)
+                    } else {
+                        $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.Releases.Path)
+                    }
+                } else {
+                    $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+                }
+            } else {
+                # default values
+                $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+            }
+            $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)
+
             Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
                 $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
                 if ($DestinationPaths.Desktop) {
