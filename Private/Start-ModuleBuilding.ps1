@@ -17,9 +17,6 @@
         $DestinationPaths.Desktop = [IO.path]::Combine($Configuration.Information.DirectoryModules, $Configuration.Information.ModuleName)
         $DestinationPaths.Core = [IO.path]::Combine($Configuration.Information.DirectoryModulesCore, $Configuration.Information.ModuleName)
     }
-    $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced
-
-    $Configuration.Information.Manifest.ModuleVersion = $Versioning.Version
 
     [string] $Random = Get-Random 10000000000
     [string] $FullModuleTemporaryPath = [IO.path]::GetTempPath() + '' + $Configuration.Information.ModuleName
@@ -31,9 +28,21 @@
     }
     [string] $ProjectName = $Configuration.Information.ModuleName
 
+    $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
+    if ($Configuration.Steps.BuildModule.LocalVersion) {
+        $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced -LocalPSD1 $PSD1FilePath
+    } else {
+        $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced
+    }
+    $Configuration.Information.Manifest.ModuleVersion = $Versioning.Version
+
     Write-Text '----------------------------------------------------'
     Write-Text "[i] Project Name: $ProjectName" -Color Yellow
-    Write-Text "[i] PSGallery Version: $($Versioning.PSGalleryVersion)" -Color Yellow
+    if ($Configuration.Steps.BuildModule.LocalVersion) {
+        Write-Text "[i] Current Local Version: $($Versioning.CurrentVersion)" -Color Yellow
+    } else {
+        Write-Text "[i] Current PSGallery Version: $($Versioning.CurrentVersion)" -Color Yellow
+    }
     Write-Text "[i] Expected Version: $($Configuration.Information.Manifest.ModuleVersion)" -Color Yellow
     Write-Text "[i] Full module temporary path: $FullModuleTemporaryPath" -Color Yellow
     Write-Text "[i] Full project path: $FullProjectPath" -Color Yellow
@@ -257,8 +266,6 @@
                 }
                 #}
             }
-
-            $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
 
             # Copy Configuration
             $SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration

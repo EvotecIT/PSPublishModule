@@ -68,7 +68,7 @@ $Configuration = @{
         Merge             = @{
             Sort           = 'None'
             FormatCodePSM1 = @{
-                Enabled           = $true
+                Enabled           = $false
                 RemoveComments    = $false
                 FormatterSettings = @{
                     IncludeRules = @(
@@ -202,6 +202,7 @@ $Configuration = @{
             # ResolveBinaryConflicts  = @{
             #     ProjectName = 'ImagePlayground.PowerShell'
             # }
+            LocalVersion            = $false # bumps version in PSD1 on every build
         }
         BuildDocumentation = @{
             Enable        = $true # enables documentation processing

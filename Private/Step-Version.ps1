@@ -22,6 +22,7 @@
     Step-Version -ExpectedVersion '1.2.X'
     Step-Version -Module PSWriteHTML -ExpectedVersion '0.0.X'
     Step-Version -Module PSWriteHTML1 -ExpectedVersion '0.1.X'
+    Step-Version -Module PSPublishModule -ExpectedVersion '0.9.X' -Advanced -LocalPSD1 "C:\Support\GitHub\PSPublishModule\PSPublishModule.psd1"
 
     .NOTES
     General notes
@@ -30,26 +31,43 @@
     param(
         [string] $Module,
         [Parameter(Mandatory)][string] $ExpectedVersion,
-        [switch] $Advanced
+        [switch] $Advanced,
+        [string] $LocalPSD1
     )
     $Version = $null
     $VersionCheck = [version]::TryParse($ExpectedVersion, [ref] $Version)
     if ($VersionCheck) {
         # Don't do anything, return what user wanted to get anyways
         @{
-            Version          = $ExpectedVersion
-            PSGalleryVersion = 'Not aquired, no auto versioning.'
+            Version        = $ExpectedVersion
+            CurrentVersion = 'Not aquired, no auto versioning.'
         }
     } else {
         if ($Module) {
-            try {
-                $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop -Verbose:$false -WarningAction SilentlyContinue
-                $CurrentVersion = [version] $ModuleGallery.Version
-            } catch {
-                #throw "Couldn't find module $Module to asses version information. Terminating."
-                $CurrentVersion = $null
+            if (-not $LocalPSD1) {
+                try {
+                    $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop -Verbose:$false -WarningAction SilentlyContinue
+                    $CurrentVersion = [version] $ModuleGallery.Version
+                } catch {
+                    #throw "Couldn't find module $Module to asses version information. Terminating."
+                    $CurrentVersion = $null
+                }
+            } else {
+                if (Test-Path -LiteralPath $LocalPSD1) {
+                    $PSD1Data = Import-PowerShellDataFile -Path $LocalPSD1
+                    if ($PSD1Data.ModuleVersion) {
+                        try {
+                            $CurrentVersion = [version] $PSD1Data.ModuleVersion
+                        } catch {
+                            Write-Warning -Message "Couldn't parse version $($PSD1Data.ModuleVersion) from PSD1 file $LocalPSD1"
+                            $CurrentVersion = $null
+                        }
+                    }
+                } else {
+                    Write-Warning -Message "Couldn't find local PSD1 file $LocalPSD1"
+                    $CurrentVersion = $null
+                }
             }
-
         } else {
             $CurrentVersion = $null
         }
@@ -91,8 +109,8 @@
         if ($VersionCheck) {
             if ($Advanced) {
                 [ordered] @{
-                    Version          = $ProposedVersion
-                    PSGalleryVersion = $CurrentVersion
+                    Version        = $ProposedVersion
+                    CurrentVersion = $CurrentVersion
                 }
             } else {
                 $ProposedVersion
