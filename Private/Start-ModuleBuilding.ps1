@@ -321,9 +321,34 @@
                 $Configuration.Information.LibrariesDefault = "Lib\Default"
             }
 
+            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
+                # if ($Framework -eq 'Core') {
+                $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
+                # } else {
+                #     $StartsWithCore = "$($Configuration.Information.LibrariesStandard)\"
+                # }
+                # $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
+                # if ($FrameworkNet -eq 'Default') {
+                $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
+                # } else {
+                #     $StartsWithDefault = "$($Configuration.Information.LibrariesStandard)\"
+                # }
+                # $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+            }
+            # if ($StartsWithCore -eq $StartsWithDefault) {
+            #     $FilesLibrariesStandard = $FilesLibrariesCore
+            # }
+            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesStandard)) {
+                $StartsWithStandard = "$($Configuration.Information.LibrariesStandard)\"
+            }
+
+
             $CoreFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
             $DefaultFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
             $StandardFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
+
 
             $Default = $false
             $Core = $false
@@ -360,26 +385,19 @@
                 $FrameworkNet = 'Default'
             }
 
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
-                if ($Framework -eq 'Core') {
-                    $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
-                } else {
-                    $StartsWithCore = "$($Configuration.Information.LibrariesStandard)\"
-                }
-                $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+            if ($Framework -eq 'Core') {
+                $FilesLibrariesCore = $CoreFiles
+            } elseif ($Framework -eq 'Standard') {
+                $FilesLibrariesCore = $StandardFiles
             }
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
-                if ($FrameworkNet -eq 'Default') {
-                    $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
-                } else {
-                    $StartsWithDefault = "$($Configuration.Information.LibrariesStandard)\"
-                }
-                $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+            if ($FrameworkNet -eq 'Default') {
+                $FilesLibrariesDefault = $DefaultFiles
+            } elseif ($FrameworkNet -eq 'Standard') {
+                $FilesLibrariesDefault = $StandardFiles
             }
-            if ($StartsWithCore -eq $StartsWithDefault) {
+            if ($FrameworkNet -eq 'Standard' -and $Framework -eq 'Standard') {
                 $FilesLibrariesStandard = $FilesLibrariesCore
             }
-
             Merge-Module -ModuleName $ProjectName `
                 -ModulePathSource $FullTemporaryPath `
                 -ModulePathTarget $FullModuleTemporaryPath `
