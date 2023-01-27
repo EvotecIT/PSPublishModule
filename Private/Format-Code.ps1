@@ -27,7 +27,7 @@
                 #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
                 Write-Host # This is to add new line, because the first line was opened up.
                 Write-Text "[-] Format-Code - Formatting on file $FilePath failed. Error: $ErrorMessage" -Color Red
-                Exit
+                return $false
             }
         }
         Write-TextWithTime -Text "[+] Saving file - $FilePath" {
@@ -44,7 +44,7 @@
                 #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
                 Write-Host # This is to add new line, because the first line was opened up.
                 Write-Text "[-] Format-Code - Resaving file $FilePath failed. Error: $ErrorMessage" -Color Red
-                Exit
+                return $false
             }
         }
     }
