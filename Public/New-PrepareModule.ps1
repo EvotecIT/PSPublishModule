@@ -27,7 +27,10 @@ function New-PrepareModule {
             $Configuration.Steps.BuildLibraries.Enable -or
             $Configuration.Steps.PublishModule.Enable -or
             $Configuration.Steps.PublishModule.Enabled) {
-            Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
+            $Success = Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
+            if ($Success -eq $false) {
+                return
+            }
         }
     }
     if ($Path -and $ProjectName) {

@@ -88,8 +88,8 @@
                     $ErrorMessage = $_.Exception.Message
                     #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
                     Write-Host # This is to add new line, because the first line was opened up.
-                    Write-Text "[-] Format-Code - Copying final merged release to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
-                    Exit
+                    Write-Text "[-] Start-ArtefactsBuilding - Copying final merged release to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
+                    return $false
                 }
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled) {
                     foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
@@ -118,12 +118,18 @@
 
                                 #copy-item .\documents\ -destination .\my-backup-$(Get-Date -format "yyyy_MM_dd_hh_mm_ss")
 
-
-                                if ($ItemInformation.DirectoryName -ne $Module.ModuleName) {
-                                    $NewPath = [io.path]::Combine($RequiredModulesPath, $Module.ModuleName)
-                                    Copy-Item -LiteralPath $FolderToCopy -Destination $NewPath -Recurse
-                                } else {
-                                    Copy-Item -LiteralPath $FolderToCopy -Destination $RequiredModulesPath -Recurse
+                                try {
+                                    if ($ItemInformation.Name -ne $Module.ModuleName) {
+                                        $NewPath = [io.path]::Combine($RequiredModulesPath, $Module.ModuleName)
+                                        Remove-Item -LiteralPath $NewPath -Recurse -Force -ErrorAction Stop
+                                        Copy-Item -LiteralPath "$FolderToCopy" -Destination $NewPath -Recurse -Force -ErrorAction Stop
+                                    } else {
+                                        Copy-Item -LiteralPath $FolderToCopy -Destination $RequiredModulesPath -Recurse -Force
+                                    }
+                                } catch {
+                                    $ErrorMessage = $_.Exception.Message
+                                    Write-Text "[-] Start-ArtefactsBuilding - Copying final artefact module $($Module.ModuleName) to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
+                                    return $false
                                 }
                             }
                         }

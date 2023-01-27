@@ -70,15 +70,27 @@
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
 
         if ($Configuration.Steps.BuildModule.DeleteBefore -eq $true) {
-            Remove-Directory $($DestinationPaths.Desktop)
-            Remove-Directory $($DestinationPaths.Core)
+            $Success = Remove-Directory -Directory $($DestinationPaths.Desktop)
+            if ($Success -eq $false) {
+                return
+            }
+            $Success = Remove-Directory -Directory $($DestinationPaths.Core)
+            if ($Success -eq $false) {
+                return
+            }
         }
 
         $CurrentLocation = (Get-Location).Path
         Set-Location -Path $FullProjectPath
 
-        Remove-Directory $FullModuleTemporaryPath
-        Remove-Directory $FullTemporaryPath
+        $Success = Remove-Directory -Directory $FullModuleTemporaryPath
+        if ($Success -eq $false) {
+            return
+        }
+        $Success = Remove-Directory -Directory $FullTemporaryPath
+        if ($Success -eq $false) {
+            return
+        }
         Add-Directory $FullModuleTemporaryPath
         Add-Directory $FullTemporaryPath
 
@@ -251,7 +263,7 @@
                     $FoundDuplicateAliases = $true
                 }
                 if ($FoundDuplicateAliases) {
-                    Exit
+                    return
                 }
             }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
@@ -271,9 +283,15 @@
             $SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
 
             if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
-                New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
+                $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
+                if ($Success -eq $false) {
+                    return
+                }
             } else {
-                New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+                $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+                if ($Success -eq $false) {
+                    return
+                }
             }
             # Restore configuration, as some PersonalManifest plays with those
             $Configuration = $SaveConfiguration
@@ -281,7 +299,7 @@
             Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
 
             if ($Configuration.Steps.BuildModule.RefreshPSD1Only) {
-                Exit
+                return
             }
         }
         if ($Configuration.Steps.BuildModule.Enable -and $Configuration.Steps.BuildModule.Merge) {
@@ -398,7 +416,7 @@
             if ($FrameworkNet -eq 'Standard' -and $Framework -eq 'Standard') {
                 $FilesLibrariesStandard = $FilesLibrariesCore
             }
-            Merge-Module -ModuleName $ProjectName `
+            $Success = Merge-Module -ModuleName $ProjectName `
                 -ModulePathSource $FullTemporaryPath `
                 -ModulePathTarget $FullModuleTemporaryPath `
                 -Sort $Configuration.Options.Merge.Sort `
@@ -412,6 +430,10 @@
                 -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
                 -Configuration $Configuration -DirectoriesWithPS1 $DirectoriesWithPS1 `
                 -ClassesPS1 $DirectoriesWithClasses -IncludeAsArray $Configuration.Information.IncludeAsArray
+
+            if ($Success -eq $false) {
+                return
+            }
 
             if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
                 # Something is wrong here for folders other than root, need investigation
@@ -466,7 +488,10 @@
         if ($Configuration.Steps.BuildModule.Enable) {
             if ($DestinationPaths.Desktop) {
                 Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
-                    Remove-Directory -Directory $DestinationPaths.Desktop
+                    $Success = Remove-Directory -Directory $DestinationPaths.Desktop
+                    if ($Success -eq $false) {
+                        return $false
+                    }
                     Add-Directory -Directory $DestinationPaths.Desktop
                     Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Desktop -Recurse
                     # cleans up empty directories
@@ -479,7 +504,10 @@
             }
             if ($DestinationPaths.Core) {
                 Write-TextWithTime -Text "[+] Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
-                    Remove-Directory -Directory $DestinationPaths.Core
+                    $Success = Remove-Directory -Directory $DestinationPaths.Core
+                    if ($Success -eq $false) {
+                        return $false
+                    }
                     Add-Directory -Directory $DestinationPaths.Core
                     Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Core -Recurse
                     # cleans up empty directories
@@ -489,8 +517,10 @@
                 }
             }
         }
-        Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths
-
+        $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths
+        if ($Success -eq $false) {
+            return
+        }
     }
 
     # Import Modules Section, useful to check before publishing
@@ -514,6 +544,12 @@
 
     # Cleanup temp directory
     Write-Text "[+] Cleaning up directories created in TEMP directory" -Color Yellow
-    Remove-Directory $FullModuleTemporaryPath
-    Remove-Directory $FullTemporaryPath
+    $Success = Remove-Directory $FullModuleTemporaryPath
+    if ($Success -eq $false) {
+        return $false
+    }
+    $Success = Remove-Directory $FullTemporaryPath
+    if ($Success -eq $false) {
+        return $false
+    }
 }
