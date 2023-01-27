@@ -86,15 +86,20 @@ function Merge-Module {
     if ($ArrayIncludes.Count -gt 0) {
         $ArrayIncludes | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
     }
-    Get-ScriptsContent -Files $ScriptFunctions -OutputPath $PSM1FilePath
-
+    $Success = Get-ScriptsContent -Files $ScriptFunctions -OutputPath $PSM1FilePath
+    if ($Success -eq $false) {
+        return $false
+    }
 
     # Using file is needed if there are 'using namespaces' - this is a workaround provided by seeminglyscience
     $FilePathUsing = "$ModulePathTarget\$ModuleName.Usings.ps1"
 
     $UsingInPlace = Format-UsingNamespace -FilePath $PSM1FilePath -FilePathUsing $FilePathUsing
     if ($UsingInPlace) {
-        Format-Code -FilePath $FilePathUsing -FormatCode $FormatCodePSM1
+        $Success = Format-Code -FilePath $FilePathUsing -FormatCode $FormatCodePSM1
+        if ($Success -eq $false) {
+            return $false
+        }
         $Configuration.UsingInPlace = "$ModuleName.Usings.ps1"
     }
 
@@ -317,7 +322,10 @@ function Merge-Module {
     if ($ClassesFunctions.Count -gt 0) {
         $ClassesPath = "$ModulePathTarget\$ModuleName.Classes.ps1"
         $DotSourceClassPath = ". `$PSScriptRoot\$ModuleName.Classes.ps1"
-        Get-ScriptsContent -Files $ClassesFunctions -OutputPath $ClassesPath
+        $Success = Get-ScriptsContent -Files $ClassesFunctions -OutputPath $ClassesPath
+        if ($Success -eq $false) {
+            return $false
+        }
     }
 
     # Adjust PSM1 file by adding dot sourcing or directly libraries to the PSM1 file
@@ -371,16 +379,24 @@ function Merge-Module {
         -CommandModuleDependencies $Configuration.Information.Manifest.CommandModuleDependencies
 
     # Format standard PSM1 file
-    Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
+    $Success = Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
+    if ($Success -eq $false) {
+        return $false
+    }
     # Format libraries PS1 file
     if ($LibariesPath) {
-        Format-Code -FilePath $LibariesPath -FormatCode $FormatCodePSM1
+        $Success = Format-Code -FilePath $LibariesPath -FormatCode $FormatCodePSM1
+        if ($Success -eq $false) {
+            return $false
+        }
     }
     # Build PSD1 file
     New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary
     # Format PSD1 file
-    Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
-
+    $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
+    if ($Success -eq $false) {
+        return $false
+    }
     # cleans up empty directories
     Get-ChildItem $ModulePathTarget -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
         Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
