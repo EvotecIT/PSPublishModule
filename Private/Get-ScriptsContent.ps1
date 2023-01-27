@@ -20,9 +20,8 @@
                 $Content | Out-File -Append -LiteralPath $OutputPath -Encoding utf8
             } catch {
                 $ErrorMessage = $_.Exception.Message
-                #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
-                Write-Error "Merge-Module - Merge on file $FilePath failed. Error: $ErrorMessage"
-                Exit
+                Write-Text "[-] Get-ScriptsContent - Merge on file $FilePath failed. Error: $ErrorMessage" -Color Red
+                return $false
             }
         }
     }
