@@ -51,7 +51,7 @@ function New-PersonalManifest {
                     $SubModule.ModuleVersion = $AvailableModule[0].Version
                 } else {
                     Write-Text -Text "[-] Module $($SubModule.ModuleName) is not available, but defined as required with last version. Terminating." -Color Red
-                    Exit
+                    return $false
                 }
             }
         }
@@ -62,7 +62,7 @@ function New-PersonalManifest {
             New-ModuleManifest @Manifest
         } else {
             Write-Text -Text '[-] Module version is not available. Terminating.' -Color Red
-            Exit
+            return $false
         }
         Write-TextWithTime -Text "[+] Converting $($ManifestPath) UTF8 without BOM" {
             (Get-Content -Path $ManifestPath -Raw) | Out-FileUtf8NoBom $ManifestPath
