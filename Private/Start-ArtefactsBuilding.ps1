@@ -85,7 +85,6 @@
                     } elseif ($DestinationPaths.Core) {
                         Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $NameOfDestination -Force
                     }
-                    return $true
                 } catch {
                     $ErrorMessage = $_.Exception.Message
                     #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
