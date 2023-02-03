@@ -51,7 +51,7 @@ $Configuration = @{
             ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
 
             RequiredModules            = @(
-                @{ ModuleName = 'platyps'; ModuleVersion = "Latest"; Guid = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff' }
+                @{ ModuleName = 'platyps'; ModuleVersion = "Latest"; Guid = 'Auto' }
                 @{ ModuleName = 'powershellget'; ModuleVersion = "2.2.5"; Guid = '1d73a601-4a6c-43c5-ba3f-619b18bbb404' }
                 @{ ModuleName = 'PSScriptAnalyzer'; ModuleVersion = "Latest"; Guid = 'd6245802-193d-4068-a631-8863a4342a18' }
             )
@@ -68,7 +68,7 @@ $Configuration = @{
         Merge             = @{
             Sort           = 'None'
             FormatCodePSM1 = @{
-                Enabled           = $true
+                Enabled           = $false
                 RemoveComments    = $false
                 FormatterSettings = @{
                     IncludeRules = @(
@@ -215,10 +215,10 @@ $Configuration = @{
             Verbose         = $false
         }
         PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $true
+            Enabled      = $false
             Prerelease   = ''
             RequireForce = $false
-            GitHub       = $true
+            GitHub       = $false
         }
     }
 }
