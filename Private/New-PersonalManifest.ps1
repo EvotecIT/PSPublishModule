@@ -45,10 +45,19 @@ function New-PersonalManifest {
 
     if ($Manifest.Contains('RequiredModules')) {
         foreach ($SubModule in $Manifest.RequiredModules) {
+            [Array] $AvailableModule = Get-Module -ListAvailable $SubModule.ModuleName -Verbose:$false
+
             if ($SubModule.ModuleVersion -eq 'Latest') {
-                [Array] $AvailableModule = Get-Module -ListAvailable $SubModule.ModuleName -Verbose:$false
                 if ($AvailableModule) {
                     $SubModule.ModuleVersion = $AvailableModule[0].Version
+                } else {
+                    Write-Text -Text "[-] Module $($SubModule.ModuleName) is not available, but defined as required with last version. Terminating." -Color Red
+                    return $false
+                }
+            }
+            if ($SubModule.Guid -eq 'Auto') {
+                if ($AvailableModule) {
+                    $SubModule.Guid = $AvailableModule[0].Guid
                 } else {
                     Write-Text -Text "[-] Module $($SubModule.ModuleName) is not available, but defined as required with last version. Terminating." -Color Red
                     return $false
