@@ -73,6 +73,7 @@
                 } else {
                     $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName)
                 }
+                Write-Text "   [>] Copying module main module to $NameOfDestination" -Color Yellow
                 try {
                     if (Test-Path -Path $NameOfDestination) {
                         Remove-ItemAlternative -LiteralPath $NameOfDestination #-SkipFolder
@@ -84,6 +85,7 @@
                     } elseif ($DestinationPaths.Core) {
                         Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $NameOfDestination -Force
                     }
+                    return $true
                 } catch {
                     $ErrorMessage = $_.Exception.Message
                     #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
@@ -94,6 +96,7 @@
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled) {
                     foreach ($Module in $Configuration.Information.Manifest.RequiredModules) {
                         if ($Module.ModuleName) {
+                            Write-Text "   [>] Copying required module $($Module.ModuleName)" -Color Yellow
                             $ModulesFound = Get-Module -ListAvailable -Name $Module.ModuleName
                             if ($ModulesFound.Count -gt 0) {
                                 $PathToPSD1 = if ($Module.ModuleVersion -eq 'Latest') {
@@ -121,7 +124,10 @@
                                 try {
                                     if ($ItemInformation.Name -ne $Module.ModuleName) {
                                         $NewPath = [io.path]::Combine($RequiredModulesPath, $Module.ModuleName)
-                                        Remove-Item -LiteralPath $NewPath -Recurse -Force -ErrorAction Stop
+                                        if (Test-Path -LiteralPath $NewPath) {
+                                            Remove-Item -LiteralPath $NewPath -Recurse -Force -ErrorAction Stop
+                                        }
+                                        New-Item -Path $NewPath -ItemType Directory -Force -ErrorAction Stop
                                         Copy-Item -LiteralPath "$FolderToCopy" -Destination $NewPath -Recurse -Force -ErrorAction Stop
                                     } else {
                                         Copy-Item -LiteralPath $FolderToCopy -Destination $RequiredModulesPath -Recurse -Force
