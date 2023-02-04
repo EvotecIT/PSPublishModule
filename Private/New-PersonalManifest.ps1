@@ -138,10 +138,32 @@ function New-PersonalManifest {
             # Make sure Required Modules contains ExternalModuleDependencies
             $Data.RequiredModules = @(
                 foreach ($Module in $Manifest.RequiredModules) {
-                    $Module
+                    if ($Module -is [System.Collections.IDictionary]) {
+                        # Lets rewrite module to retain proper order always
+                        $Module = [ordered] @{
+                            ModuleName    = $Module.ModuleName
+                            ModuleVersion = $Module.ModuleVersion
+                            Guid          = $Module.Guid
+                        }
+                        Remove-EmptyValue -Hashtable $Module
+                        $Module
+                    } else {
+                        $Module
+                    }
                 }
                 foreach ($Module in $TemporaryManifest.ExternalModuleDependencies) {
-                    $Module
+                    if ($Module -is [System.Collections.IDictionary]) {
+                        # Lets rewrite module to retain proper order always
+                        $Module = [ordered] @{
+                            ModuleName    = $Module.ModuleName
+                            ModuleVersion = $Module.ModuleVersion
+                            Guid          = $Module.Guid
+                        }
+                        Remove-EmptyValue -Hashtable $Module
+                        $Module
+                    } else {
+                        $Module
+                    }
                 }
             )
         }
@@ -151,7 +173,3 @@ function New-PersonalManifest {
         $Data | Export-PSData -DataFile $ManifestPath -Sort
     }
 }
-
-#[-] [Error: The 'C:\Users\przemyslaw.klys\Documents\WindowsPowerShell\Modules\PSPublishModule\PSPublishModule.psd1'
-#module cannot be imported because its manifest contains one or more members that are not valid. The valid manifest members are
-#('ModuleToProcess', 'NestedModules', 'GUID', 'Author', 'CompanyName', 'Copyright', 'ModuleVersion', 'Description', 'PowerShellVersion', 'PowerShellHostName', 'PowerShellHostVersion', 'CLRVersion', 'DotNetFrameworkVersion', 'ProcessorArchitecture', 'RequiredModules', 'TypesToProcess', 'FormatsToProcess', 'ScriptsToProcess', 'PrivateData', 'RequiredAssemblies', 'ModuleList', 'FileList', 'FunctionsToExport', 'VariablesToExport', 'AliasesToExport', 'CmdletsToExport', 'DscResourcesToExport', 'CompatiblePSEditions', 'HelpInfoURI', 'RootModule', 'DefaultCommandPrefix'). Remove the members that are not valid ('Path', 'IconUri'), then try to import the module again.]
