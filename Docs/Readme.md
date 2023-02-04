@@ -29,6 +29,12 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
+### [New-ConfigurationManifest](New-ConfigurationManifest.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationModules](New-ConfigurationModules.md)
+{{ Fill in the Description }}
+
 ### [New-PrepareModule](New-PrepareModule.md)
 {{ Fill in the Description }}
 

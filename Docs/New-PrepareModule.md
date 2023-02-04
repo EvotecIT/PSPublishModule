@@ -14,12 +14,12 @@ schema: 2.0.0
 
 ### Existing (Default)
 ```
-New-PrepareModule [-Configuration <IDictionary>] [<CommonParameters>]
+New-PrepareModule [[-Settings] <ScriptBlock>] [-Configuration <IDictionary>] [<CommonParameters>]
 ```
 
 ### New
 ```
-New-PrepareModule [-Path <String>] [-ProjectName <String>] [<CommonParameters>]
+New-PrepareModule [[-Settings] <ScriptBlock>] [-Path <String>] [-ProjectName <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -76,6 +76,21 @@ Aliases:
 
 Required: False
 Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Settings
+{{ Fill Settings Description }}
+
+```yaml
+Type: ScriptBlock
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 0
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

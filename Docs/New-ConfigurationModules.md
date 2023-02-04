@@ -5,7 +5,7 @@ online version:
 schema: 2.0.0
 ---
 
-# Invoke-ModuleBuilder
+# New-ConfigurationModules
 
 ## SYNOPSIS
 {{ Fill in the Synopsis }}
@@ -13,7 +13,8 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-Invoke-ModuleBuilder [[-Configuration] <ScriptBlock>] [<CommonParameters>]
+New-ConfigurationModules [[-Type] <Object>] [[-Name] <String>] [[-Version] <String>] [[-Guid] <String>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -30,16 +31,62 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
-### -Configuration
-{{ Fill Configuration Description }}
+### -Guid
+{{ Fill Guid Description }}
 
 ```yaml
-Type: ScriptBlock
+Type: String
 Parameter Sets: (All)
 Aliases:
 
 Required: False
+Position: 3
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Name
+{{ Fill Name Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Type
+{{ Fill Type Description }}
+
+```yaml
+Type: Object
+Parameter Sets: (All)
+Aliases:
+Accepted values: RequiredModule, ExternalModule
+
+Required: False
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Version
+{{ Fill Version Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
