@@ -131,7 +131,13 @@
             $DirectoriesWithClasses = 'Classes'
         }
         if ($Configuration.Information.IncludeAll) {
-            $DirectoriesWithAll = $Configuration.Information.IncludeAll
+            $DirectoriesWithAll = $Configuration.Information.IncludeAll | ForEach-Object {
+                if ($_.EndsWith('\')) {
+                    $_
+                } else {
+                    "$_\"
+                }
+            }
         } else {
             $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
         }
