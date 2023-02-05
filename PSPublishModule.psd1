@@ -6,7 +6,7 @@
     CompatiblePSEditions = @('Desktop', 'Core')
     Copyright            = '(c) 2011 - 2023 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description          = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
-    FunctionsToExport    = @('Convert-CommandsToList', 'Get-GitLog', 'Get-MissingFunctions', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'New-ConfigurationManifest', 'New-ConfigurationModules', 'New-PrepareModule', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
+    FunctionsToExport    = @('Convert-CommandsToList', 'Get-GitLog', 'Get-MissingFunctions', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModules', 'New-PrepareModule', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
     GUID                 = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
     ModuleVersion        = '0.9.55'
     PowerShellVersion    = '5.1'
