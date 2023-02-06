@@ -29,6 +29,12 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
+### [New-ConfigurationArtefacts](New-ConfigurationArtefacts.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationBuild](New-ConfigurationBuild.md)
+{{ Fill in the Description }}
+
 ### [New-ConfigurationInformation](New-ConfigurationInformation.md)
 {{ Fill in the Description }}
 
@@ -36,6 +42,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [New-ConfigurationModules](New-ConfigurationModules.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationPublish](New-ConfigurationPublish.md)
 {{ Fill in the Description }}
 
 ### [New-PrepareModule](New-PrepareModule.md)
