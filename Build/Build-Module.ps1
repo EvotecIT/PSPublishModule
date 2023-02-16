@@ -30,25 +30,25 @@ $Configuration = @{
         # manifest information
         Manifest          = @{
             # Version number of this module.
-            ModuleVersion        = '0.9.X'
+            ModuleVersion              = '0.9.X'
             # Supported PSEditions
-            CompatiblePSEditions = @('Desktop', 'Core')
+            CompatiblePSEditions       = @('Desktop', 'Core')
             # ID used to uniquely identify this module
-            GUID                 = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+            GUID                       = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
             # Author of this module
-            Author               = 'Przemyslaw Klys'
+            Author                     = 'Przemyslaw Klys'
             # Company or vendor of this module
-            CompanyName          = 'Evotec'
+            CompanyName                = 'Evotec'
             # Copyright statement for this module
-            Copyright            = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
+            Copyright                  = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
             # Description of the functionality provided by this module
-            Description          = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
+            Description                = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
             # Minimum version of the Windows PowerShell engine required by this module
-            PowerShellVersion    = '5.1'
+            PowerShellVersion          = '5.1'
             # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-            Tags                 = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
-            IconUri              = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
-            ProjectUri           = 'https://github.com/EvotecIT/PSPublishModule'
+            Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
+            IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
+            ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
 
             RequiredModules            = @(
                 @{ ModuleName = 'platyps'; ModuleVersion = "Latest"; Guid = 'Auto' }
@@ -178,7 +178,10 @@ $Configuration = @{
                 Enabled         = $true
                 IncludeTagName  = $false
                 Path            = "$PSScriptRoot\..\Artefacts"
-                RequiredModules = $false
+                RequiredModules = @{
+                    Enabled = $true
+                    Path    = "$PSScriptRoot\..\Artefacts\Modules"
+                }
                 DirectoryOutput = @{
 
                 }
