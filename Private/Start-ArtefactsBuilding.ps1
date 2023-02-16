@@ -118,16 +118,14 @@
                                 $FolderToCopy = [System.IO.Path]::GetDirectoryName($PathToPSD1)
                                 $ItemInformation = Get-Item -LiteralPath $FolderToCopy
 
-                                #copy-item .\documents\ -destination .\my-backup-$(Get-Date -format "yyyy_MM_dd_hh_mm_ss")
-
                                 try {
                                     if ($ItemInformation.Name -ne $Module.ModuleName) {
                                         $NewPath = [io.path]::Combine($RequiredModulesPath, $Module.ModuleName)
                                         if (Test-Path -LiteralPath $NewPath) {
                                             Remove-Item -LiteralPath $NewPath -Recurse -Force -ErrorAction Stop
                                         }
-                                        New-Item -Path $NewPath -ItemType Directory -Force -ErrorAction Stop
-                                        Copy-Item -LiteralPath "$FolderToCopy" -Destination $NewPath -Recurse -Force -ErrorAction Stop
+                                        #New-Item -Path $NewPath -ItemType Directory -Force -ErrorAction Stop
+                                        Copy-Item -LiteralPath "$FolderToCopy" -Destination "$NewPath" -Recurse -Force -ErrorAction Stop
                                     } else {
                                         Copy-Item -LiteralPath $FolderToCopy -Destination $RequiredModulesPath -Recurse -Force
                                     }
