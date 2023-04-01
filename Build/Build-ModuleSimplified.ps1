@@ -24,8 +24,8 @@ $Configuration = @{
         Merge             = @{
             Sort           = 'None'
             FormatCodePSM1 = @{
-                Enabled           = $false
-                RemoveComments    = $false
+                Enabled           = $true
+                RemoveComments    = $true
                 FormatterSettings = @{
                     IncludeRules = @(
                         'PSPlaceOpenBrace',
