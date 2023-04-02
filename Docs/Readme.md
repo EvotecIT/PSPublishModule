@@ -35,6 +35,9 @@ Locale: en-US
 ### [New-ConfigurationBuild](New-ConfigurationBuild.md)
 {{ Fill in the Description }}
 
+### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)
+{{ Fill in the Description }}
+
 ### [New-ConfigurationFormat](New-ConfigurationFormat.md)
 {{ Fill in the Description }}
 

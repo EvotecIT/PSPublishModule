@@ -5,49 +5,77 @@ online version:
 schema: 2.0.0
 ---
 
-# New-ConfigurationPublish
+# New-ConfigurationDocumentation
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
 
 ## SYNTAX
 
 ```
-New-ConfigurationPublish [-Type] <String> [[-FilePath] <String>] [[-UserName] <String>]
- [[-RepositoryName] <String>] [[-ApiKey] <String>] [<CommonParameters>]
+New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [[-Path] <String>]
+ [[-PathReadme] <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Long description
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+An example
+```
 
 ## PARAMETERS
 
-### -ApiKey
-{{ Fill ApiKey Description }}
+### -Enable
+Enables creation of documentation from the module.
+If not specified, the documentation will not be created.
 
 ```yaml
-Type: String
+Type: SwitchParameter
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 4
-Default value: None
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -FilePath
-{{ Fill FilePath Description }}
+### -StartClean
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UpdateWhenNew
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
+Path to the folder where documentation will be created.
 
 ```yaml
 Type: String
@@ -61,39 +89,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -RepositoryName
-{{ Fill RepositoryName Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Type
-{{ Fill Type Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-Accepted values: PowerShellGallery, GitHub
-
-Required: True
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -UserName
-{{ Fill UserName Description }}
+### -PathReadme
+Path to the readme file that will be used for the documentation.
 
 ```yaml
 Type: String
@@ -112,11 +109,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
+General notes
 
 ## RELATED LINKS
