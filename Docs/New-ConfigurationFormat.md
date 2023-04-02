@@ -76,7 +76,7 @@ Accept wildcard characters: False
 Type: String[]
 Parameter Sets: (All)
 Aliases:
-Accepted values: OnMergePSM1, OnMergePSD1, DefaultPSM1, DefaultPSD1, DefaultPublic, DefaultPrivate, DefaultOther
+Accepted values: OnMergePSM1, OnMergePSD1, DefaultPSM1, DefaultPSD1
 
 Required: True
 Position: 0
