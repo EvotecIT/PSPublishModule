@@ -4,8 +4,8 @@
         [Parameter(Mandatory)]
         [validateSet(
             'OnMergePSM1', 'OnMergePSD1',
-            'DefaultPSM1', 'DefaultPSD1',
-            "DefaultPublic", 'DefaultPrivate', 'DefaultOther'
+            'DefaultPSM1', 'DefaultPSD1'
+            #"DefaultPublic", 'DefaultPrivate', 'DefaultOther'
         )][string[]]$ApplyTo,
 
         [validateSet('None', 'Asc', 'Desc')][string] $Sort,
