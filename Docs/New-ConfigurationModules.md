@@ -13,7 +13,7 @@ Provides a way to configure Required Modules or External Modules that will be us
 ## SYNTAX
 
 ```
-New-ConfigurationModules [[-Type] <Object>] [-Name] <String> [[-Version] <String>] [[-Guid] <String>]
+New-ConfigurationModules [[-Type] <Object>] [-Name] <String[]> [[-Version] <String>] [[-Guid] <String>]
  [<CommonParameters>]
 ```
 
@@ -48,7 +48,7 @@ Accept wildcard characters: False
 Name of PowerShell module that you want your module to depend on.
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: (All)
 Aliases:
 
