@@ -16,17 +16,18 @@
     )
 
     $Manifest = [ordered] @{
-        ModuleVersion        = $ModuleVersion
-        CompatiblePSEditions = @($CompatiblePSEditions)
-        GUID                 = $GUID
-        Author               = $Author
-        CompanyName          = $CompanyName
-        Copyright            = $Copyright
-        Description          = $Description
-        PowerShellVersion    = $PowerShellVersion
-        Tags                 = $Tags
-        IconUri              = $IconUri
-        ProjectUri           = $ProjectUri
+        ModuleVersion          = $ModuleVersion
+        CompatiblePSEditions   = @($CompatiblePSEditions)
+        GUID                   = $GUID
+        Author                 = $Author
+        CompanyName            = $CompanyName
+        Copyright              = $Copyright
+        Description            = $Description
+        PowerShellVersion      = $PowerShellVersion
+        Tags                   = $Tags
+        IconUri                = $IconUri
+        ProjectUri             = $ProjectUri
+        DotNetFrameworkVersion = $DotNetFrameworkVersion
     }
 
     $Option = @{
