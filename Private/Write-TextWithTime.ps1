@@ -11,19 +11,19 @@
     )
     if ($PreAppend) {
         if ($PreAppend -eq "Information") {
-            $TextBefore = '[ℹ]'
+            $TextBefore = '[i] '
             $ColorBefore = [System.ConsoleColor]::Yellow
         } elseif ($PreAppend -eq 'Minus') {
-            $TextBefore = '[-]'
+            $TextBefore = '[-] '
             $ColorBefore = [System.ConsoleColor]::Red
         } elseif ($PreAppend -eq 'Plus') {
             $TextBefore = '[+] '
             $ColorBefore = [System.ConsoleColor]::Cyan
         }
-        Write-Host "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
-        Write-Host "$Text" -ForegroundColor $Color
+        Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
+        Write-Host -Object "$Text" -ForegroundColor $Color
     } else {
-        Write-Host "$Text" -ForegroundColor $Color
+        Write-Host -Object "$Text" -ForegroundColor $Color
     }
     $Time = [System.Diagnostics.Stopwatch]::StartNew()
     if ($null -ne $Content) {
@@ -35,15 +35,19 @@
     }
     $TimeToExecute = $Time.Elapsed.ToString()
     if ($ErrorMessage) {
-        Write-Host " [Time: $TimeToExecute]" -ForegroundColor $ColorError
-        Write-Host "[-] $Text [Error: $ErrorMessage]" -ForegroundColor $ColorError
+        #Write-Host -Object " [Time: $TimeToExecute]" -ForegroundColor $ColorError
+        Write-Host -Object "[e] $Text [Error: $ErrorMessage]" -ForegroundColor $ColorError
+        if ($PreAppend) {
+            Write-Host -Object "[i] " -NoNewline -ForegroundColor $ColorError
+        }
+        Write-Host -Object "$Text [Time: $TimeToExecute]" -ForegroundColor $ColorError
         $Time.Stop()
         break
     } else {
         if ($PreAppend) {
-            Write-Host "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
+            Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
         }
-        Write-Host "$Text [Time: $TimeToExecute]" -ForegroundColor $ColorTime
+        Write-Host -Object "$Text [Time: $TimeToExecute]" -ForegroundColor $ColorTime
     }
     if (-not $Continue) {
         $Time.Stop()
