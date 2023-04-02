@@ -31,22 +31,22 @@ $Configuration = @{
             UserName = 'EvotecIT'
             #RepositoryName = 'PSPublishModule' # not required, uses project name
         }
-        Documentation     = @{
-            Path       = 'Docs'
-            PathReadme = 'Docs\Readme.md'
-        }
+        # Documentation     = @{
+        #     Path       = 'Docs'
+        #     PathReadme = 'Docs\Readme.md'
+        # }
         Style             = @{
             PSD1 = 'Minimal' # Native
         }
     }
     Steps   = @{
-        BuildLibraries     = @{
+        BuildLibraries = @{
             Enable        = $false # build once every time nuget gets updated
             Configuration = 'Release'
             Framework     = 'netstandard2.0', 'net472'
             #ProjectName   = 'ImagePlayground.PowerShell'
         }
-        BuildModule        = @{  # requires Enable to be on to process all of that
+        BuildModule    = @{  # requires Enable to be on to process all of that
             Enable                  = $true
             DeleteBefore            = $false
             Merge                   = $true
@@ -85,17 +85,17 @@ $Configuration = @{
             # }
             LocalVersion            = $false # bumps version in PSD1 on every build
         }
-        BuildDocumentation = @{
-            Enable        = $true # enables documentation processing
-            StartClean    = $true # always starts clean
-            UpdateWhenNew = $true # always updates right after update
-        }
-        ImportModules      = @{
+        # BuildDocumentation = @{
+        #     Enable        = $true # enables documentation processing
+        #     StartClean    = $true # always starts clean
+        #     UpdateWhenNew = $true # always updates right after update
+        # }
+        ImportModules  = @{
             Self            = $true
             RequiredModules = $false
             Verbose         = $false
         }
-        PublishModule      = @{  # requires Enable to be on to process all of that
+        PublishModule  = @{  # requires Enable to be on to process all of that
             Enabled      = $false
             Prerelease   = ''
             RequireForce = $false
@@ -172,4 +172,6 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
     # format PSD1 and PSM1 files within the module
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1'
+
+    New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 }
