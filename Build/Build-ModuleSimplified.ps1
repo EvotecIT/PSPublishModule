@@ -21,81 +21,81 @@ $Configuration = @{
     # LibrariesStandard = 'Lib\Standard'
     # }
     Options = @{
-        Merge             = @{
-            Sort           = 'None'
-            FormatCodePSM1 = @{
-                Enabled           = $true
-                RemoveComments    = $true
-                FormatterSettings = @{
-                    IncludeRules = @(
-                        'PSPlaceOpenBrace',
-                        'PSPlaceCloseBrace',
-                        'PSUseConsistentWhitespace',
-                        'PSUseConsistentIndentation',
-                        'PSAlignAssignmentStatement',
-                        'PSUseCorrectCasing'
-                    )
+        # Merge             = @{
+        #     Sort           = 'None'
+        #     FormatCodePSM1 = @{
+        #         Enabled           = $true
+        #         RemoveComments    = $true
+        #         FormatterSettings = @{
+        #             IncludeRules = @(
+        #                 'PSPlaceOpenBrace',
+        #                 'PSPlaceCloseBrace',
+        #                 'PSUseConsistentWhitespace',
+        #                 'PSUseConsistentIndentation',
+        #                 'PSAlignAssignmentStatement',
+        #                 'PSUseCorrectCasing'
+        #             )
 
-                    Rules        = @{
-                        PSPlaceOpenBrace           = @{
-                            Enable             = $true
-                            OnSameLine         = $true
-                            NewLineAfter       = $true
-                            IgnoreOneLineBlock = $true
-                        }
+        #             Rules        = @{
+        #                 PSPlaceOpenBrace           = @{
+        #                     Enable             = $true
+        #                     OnSameLine         = $true
+        #                     NewLineAfter       = $true
+        #                     IgnoreOneLineBlock = $true
+        #                 }
 
-                        PSPlaceCloseBrace          = @{
-                            Enable             = $true
-                            NewLineAfter       = $false
-                            IgnoreOneLineBlock = $true
-                            NoEmptyLineBefore  = $false
-                        }
+        #                 PSPlaceCloseBrace          = @{
+        #                     Enable             = $true
+        #                     NewLineAfter       = $false
+        #                     IgnoreOneLineBlock = $true
+        #                     NoEmptyLineBefore  = $false
+        #                 }
 
-                        PSUseConsistentIndentation = @{
-                            Enable              = $true
-                            Kind                = 'space'
-                            PipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
-                            IndentationSize     = 4
-                        }
+        #                 PSUseConsistentIndentation = @{
+        #                     Enable              = $true
+        #                     Kind                = 'space'
+        #                     PipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
+        #                     IndentationSize     = 4
+        #                 }
 
-                        PSUseConsistentWhitespace  = @{
-                            Enable          = $true
-                            CheckInnerBrace = $true
-                            CheckOpenBrace  = $true
-                            CheckOpenParen  = $true
-                            CheckOperator   = $true
-                            CheckPipe       = $true
-                            CheckSeparator  = $true
-                        }
+        #                 PSUseConsistentWhitespace  = @{
+        #                     Enable          = $true
+        #                     CheckInnerBrace = $true
+        #                     CheckOpenBrace  = $true
+        #                     CheckOpenParen  = $true
+        #                     CheckOperator   = $true
+        #                     CheckPipe       = $true
+        #                     CheckSeparator  = $true
+        #                 }
 
-                        PSAlignAssignmentStatement = @{
-                            Enable         = $true
-                            CheckHashtable = $true
-                        }
+        #                 PSAlignAssignmentStatement = @{
+        #                     Enable         = $true
+        #                     CheckHashtable = $true
+        #                 }
 
-                        PSUseCorrectCasing         = @{
-                            Enable = $true
-                        }
-                    }
-                }
-            }
-            FormatCodePSD1 = @{
-                Enabled        = $true
-                RemoveComments = $false
-            }
-            Integrate      = @{
-                ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-            }
-        }
-        Standard          = @{
-            FormatCodePSM1 = @{
+        #                 PSUseCorrectCasing         = @{
+        #                     Enable = $true
+        #                 }
+        #             }
+        #         }
+        #     }
+        #     FormatCodePSD1 = @{
+        #         Enabled        = $true
+        #         RemoveComments = $false
+        #     }
+        #     Integrate      = @{
+        #         ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
+        #     }
+        # }
+        # Standard          = @{
+        #     FormatCodePSM1 = @{
 
-            }
-            FormatCodePSD1 = @{
-                Enabled = $true
-                #RemoveComments = $true
-            }
-        }
+        #     }
+        #     FormatCodePSD1 = @{
+        #         Enabled = $true
+        #         #RemoveComments = $true
+        #     }
+        # }
         PowerShellGallery = @{
             ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
             FromFile = $true
@@ -181,17 +181,18 @@ $Configuration = @{
 
 New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     $Manifest = [ordered] @{
-        ModuleVersion        = '0.9.X'
-        CompatiblePSEditions = @('Desktop', 'Core')
-        GUID                 = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-        Author               = 'Przemyslaw Klys'
-        CompanyName          = 'Evotec'
-        Copyright            = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
-        Description          = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
-        PowerShellVersion    = '5.1'
-        Tags                 = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
-        IconUri              = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
-        ProjectUri           = 'https://github.com/EvotecIT/PSPublishModule'
+        ModuleVersion          = '0.9.X'
+        CompatiblePSEditions   = @('Desktop', 'Core')
+        GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+        Author                 = 'Przemyslaw Klys'
+        CompanyName            = 'Evotec'
+        Copyright              = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
+        Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
+        PowerShellVersion      = '5.1'
+        Tags                   = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
+        IconUri                = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
+        ProjectUri             = 'https://github.com/EvotecIT/PSPublishModule'
+        DotNetFrameworkVersion = '4.5.2'
     }
     New-ConfigurationManifest @Manifest
 
@@ -204,4 +205,38 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
         New-ConfigurationModules -Type ExternalModule -Name $Module
     }
+
+    $ConfigurationFormat = [ordered] @{
+        RemoveComments                              = $false
+
+        PlaceOpenBraceEnable                        = $true
+        PlaceOpenBraceOnSameLine                    = $true
+        PlaceOpenBraceNewLineAfter                  = $true
+        PlaceOpenBraceIgnoreOneLineBlock            = $false
+
+        PlaceCloseBraceEnable                       = $true
+        PlaceCloseBraceNewLineAfter                 = $true
+        PlaceCloseBraceIgnoreOneLineBlock           = $false
+        PlaceCloseBraceNoEmptyLineBefore            = $true
+
+        UseConsistentIndentationEnable              = $true
+        UseConsistentIndentationKind                = 'space'
+        UseConsistentIndentationPipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
+        UseConsistentIndentationIndentationSize     = 4
+
+        UseConsistentWhitespaceEnable               = $true
+        UseConsistentWhitespaceCheckInnerBrace      = $true
+        UseConsistentWhitespaceCheckOpenBrace       = $true
+        UseConsistentWhitespaceCheckOpenParen       = $true
+        UseConsistentWhitespaceCheckOperator        = $true
+        UseConsistentWhitespaceCheckPipe            = $true
+        UseConsistentWhitespaceCheckSeparator       = $true
+
+        AlignAssignmentStatementEnable              = $true
+        AlignAssignmentStatementCheckHashtable      = $true
+
+        UseCorrectCasingEnable                      = $true
+    }
+    New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1'
 }
