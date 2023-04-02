@@ -59,6 +59,15 @@
     if ($AliasesToExportFolder) {
         $Configuration.Information.AliasesToExport = $AliasesToExportFolder
     }
+    if (-not $Configuration.Options) {
+        $Configuration.Options = [ordered] @{}
+    }
+    if (-not $Configuration.Options.Merge) {
+        $Configuration.Options.Merge = [ordered] @{}
+    }
+    if (-not $Configuration.Options.Merge.Integrate) {
+        $Configuration.Options.Merge.Integrate = [ordered] @{}
+    }
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
             $ExecutedSettings = & $Settings
@@ -73,6 +82,11 @@
                         $Configuration.Information.Manifest.ExternalModuleDependencies = [System.Collections.Generic.List[System.Object]]::new()
                     }
                     $Configuration.Information.Manifest.ExternalModuleDependencies.Add($Setting.Configuration)
+                } elseif ($Setting.Type -eq 'ApprovedModule') {
+                    if ($Configuration.Options.Merge.Integrate.ApprovedModules -isnot [System.Collections.Generic.List[System.Object]]) {
+                        $Configuration.Options.Merge.Integrate.ApprovedModules = [System.Collections.Generic.List[System.Object]]::new()
+                    }
+                    $Configuration.Options.Merge.Integrate.ApprovedModules.Add($Setting.Configuration)
                 } elseif ($Setting.Type -eq 'Manifest') {
                     foreach ($Key in $Setting.Configuration.Keys) {
                         $Configuration.Information.Manifest[$Key] = $Setting.Configuration[$Key]
