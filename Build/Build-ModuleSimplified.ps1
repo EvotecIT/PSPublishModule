@@ -131,7 +131,7 @@ $Configuration = @{
             Releases                = $true
             #ReleasesUnpacked        = $false
             ReleasesUnpacked        = @{
-                Enabled         = $true
+                Enabled         = $false
                 IncludeTagName  = $false
                 Path            = "$PSScriptRoot\..\Artefacts"
                 RequiredModules = $false
@@ -238,5 +238,5 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
         UseCorrectCasingEnable                      = $true
     }
     New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' #-UseConsistentWhitespaceEnable -AlignAssignmentStatementEnable -UseConsistentIndentationEnable -UseCorrectCasingEnable -UseConsistentIndentationPipelineIndentation IncreaseIndentationAfterEveryPipeline
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1'
 } -Verbose
