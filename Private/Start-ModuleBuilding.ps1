@@ -286,7 +286,8 @@
             }
 
             # Copy Configuration
-            $SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
+            #$SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
+            $SaveConfiguration = Copy-DictionaryManual -Dictionary $Configuration
 
             if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
                 $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
