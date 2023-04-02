@@ -29,6 +29,8 @@
     [string] $ProjectName = $Configuration.Information.ModuleName
 
     $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
+    $PSM1FilePath = "$FullProjectPath\$ProjectName.psm1"
+
     if ($Configuration.Steps.BuildModule.LocalVersion) {
         $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced -LocalPSD1 $PSD1FilePath
     } else {
@@ -304,6 +306,7 @@
             $Configuration = $SaveConfiguration
 
             Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
+            Format-Code -FilePath $PSM1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSM1
 
             if ($Configuration.Steps.BuildModule.RefreshPSD1Only) {
                 return
