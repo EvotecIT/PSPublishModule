@@ -21,81 +21,6 @@ $Configuration = @{
     # LibrariesStandard = 'Lib\Standard'
     # }
     Options = @{
-        # Merge             = @{
-        #     Sort           = 'None'
-        #     FormatCodePSM1 = @{
-        #         Enabled           = $true
-        #         RemoveComments    = $true
-        #         FormatterSettings = @{
-        #             IncludeRules = @(
-        #                 'PSPlaceOpenBrace',
-        #                 'PSPlaceCloseBrace',
-        #                 'PSUseConsistentWhitespace',
-        #                 'PSUseConsistentIndentation',
-        #                 'PSAlignAssignmentStatement',
-        #                 'PSUseCorrectCasing'
-        #             )
-
-        #             Rules        = @{
-        #                 PSPlaceOpenBrace           = @{
-        #                     Enable             = $true
-        #                     OnSameLine         = $true
-        #                     NewLineAfter       = $true
-        #                     IgnoreOneLineBlock = $true
-        #                 }
-
-        #                 PSPlaceCloseBrace          = @{
-        #                     Enable             = $true
-        #                     NewLineAfter       = $false
-        #                     IgnoreOneLineBlock = $true
-        #                     NoEmptyLineBefore  = $false
-        #                 }
-
-        #                 PSUseConsistentIndentation = @{
-        #                     Enable              = $true
-        #                     Kind                = 'space'
-        #                     PipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
-        #                     IndentationSize     = 4
-        #                 }
-
-        #                 PSUseConsistentWhitespace  = @{
-        #                     Enable          = $true
-        #                     CheckInnerBrace = $true
-        #                     CheckOpenBrace  = $true
-        #                     CheckOpenParen  = $true
-        #                     CheckOperator   = $true
-        #                     CheckPipe       = $true
-        #                     CheckSeparator  = $true
-        #                 }
-
-        #                 PSAlignAssignmentStatement = @{
-        #                     Enable         = $true
-        #                     CheckHashtable = $true
-        #                 }
-
-        #                 PSUseCorrectCasing         = @{
-        #                     Enable = $true
-        #                 }
-        #             }
-        #         }
-        #     }
-        #     FormatCodePSD1 = @{
-        #         Enabled        = $true
-        #         RemoveComments = $false
-        #     }
-        #     Integrate      = @{
-        #         ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-        #     }
-        # }
-        # Standard          = @{
-        #     FormatCodePSM1 = @{
-
-        #     }
-        #     FormatCodePSD1 = @{
-        #         Enabled = $true
-        #         #RemoveComments = $true
-        #     }
-        # }
         PowerShellGallery = @{
             ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
             FromFile = $true
@@ -180,6 +105,7 @@ $Configuration = @{
 }
 
 New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
+    # Usual defaults as per standard module
     $Manifest = [ordered] @{
         ModuleVersion          = '0.9.X'
         CompatiblePSEditions   = @('Desktop', 'Core')
@@ -205,6 +131,11 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
         New-ConfigurationModules -Type ExternalModule -Name $Module
     }
+
+    # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
+    # And on that time only that function and dependant functions will be copied over
+    # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
+    New-ConfigurationModules -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
     $ConfigurationFormat = [ordered] @{
         RemoveComments                              = $false
@@ -237,6 +168,8 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
 
         UseCorrectCasingEnable                      = $true
     }
+    # format PSD1 and PSM1 files when merging into a single file
     New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
+    # format PSD1 and PSM1 files within the module
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1'
-} -Verbose
+}
