@@ -238,5 +238,5 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
         UseCorrectCasingEnable                      = $true
     }
     New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1'
-}
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' #-UseConsistentWhitespaceEnable -AlignAssignmentStatementEnable -UseConsistentIndentationEnable -UseCorrectCasingEnable -UseConsistentIndentationPipelineIndentation IncreaseIndentationAfterEveryPipeline
+} -Verbose
