@@ -2,7 +2,7 @@
     [cmdletbinding()]
     param(
         [string] $FilePath,
-        $FormatCode
+        [System.Collections.IDictionary] $FormatCode
     )
     if ($FormatCode.Enabled) {
         if ($FormatCode.RemoveComments) {
