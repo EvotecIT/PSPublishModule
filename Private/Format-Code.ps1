@@ -27,7 +27,7 @@
         }
         $Data = Write-TextWithTime -Text "[+] Formatting file - $FilePath" {
             try {
-                Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings -Verbose:$false
+                Invoke-Formatter -ScriptDefinition $Output -Settings $FormatCode.FormatterSettings #-Verbose:$false
             } catch {
                 $ErrorMessage = $_.Exception.Message
                 #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"
