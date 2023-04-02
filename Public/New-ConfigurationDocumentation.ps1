@@ -23,7 +23,10 @@
     Path to the readme file that will be used for the documentation.
 
     .EXAMPLE
-    An example
+    New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+
+    .EXAMPLE
+    New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
     .NOTES
     General notes
