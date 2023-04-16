@@ -47,7 +47,22 @@
                 $IsPreRelease = $false
             }
 
-            $StatusGithub = Send-GitHubRelease -GitHubUsername $Configuration.Options.GitHub.UserName -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $TagName -AssetFilePaths $ZipPath -IsPreRelease $IsPreRelease
+            $sendGitHubReleaseSplat = @{
+                GitHubUsername       = $Configuration.Options.GitHub.UserName
+                GitHubRepositoryName = $GitHubRepositoryName
+                GitHubAccessToken    = $GitHubAccessToken
+                TagName              = $TagName
+                AssetFilePaths       = $ZipPath
+                IsPreRelease         = $IsPreRelease
+                # those don't work, requires texting
+                #GenerateReleaseNotes = $true
+                #MakeLatest           = $true
+                #GenerateReleaseNotes = if ($Configuration.Options.GitHub.GenerateReleaseNotes) { $true } else { $false }
+                #MakeLatest           = if ($Configuration.Options.GitHub.MakeLatest) { $true } else { $false }
+            }
+
+            $StatusGithub = Send-GitHubRelease @sendGitHubReleaseSplat
+
             if ($StatusGithub.ReleaseCreationSucceeded -and $statusGithub.Succeeded) {
                 $GithubColor = 'Green'
                 $GitHubText = '+'
