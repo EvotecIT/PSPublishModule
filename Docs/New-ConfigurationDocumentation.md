@@ -8,22 +8,28 @@ schema: 2.0.0
 # New-ConfigurationDocumentation
 
 ## SYNOPSIS
+Enables or disables creation of documentation from the module using PlatyPS
 
 ## SYNTAX
 
 ```
-New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [[-Path] <String>]
- [[-PathReadme] <String>] [<CommonParameters>]
+New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [-Path] <String> [-PathReadme] <String>
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Long description
+Enables or disables creation of documentation from the module using PlatyPS
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```
-An example
+New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+```
+
+### EXAMPLE 2
+```
+New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs'
 ```
 
 ## PARAMETERS
@@ -45,7 +51,8 @@ Accept wildcard characters: False
 ```
 
 ### -StartClean
-Parameter description
+Removes all files from the documentation folder before creating new documentation.
+Otherwise the \`Update-MarkdownHelpModule\` will be used to update the documentation.
 
 ```yaml
 Type: SwitchParameter
@@ -60,7 +67,7 @@ Accept wildcard characters: False
 ```
 
 ### -UpdateWhenNew
-Parameter description
+Updates the documentation right after running \`New-MarkdownHelp\` due to platyPS bugs.
 
 ```yaml
 Type: SwitchParameter
@@ -82,7 +89,7 @@ Type: String
 Parameter Sets: (All)
 Aliases:
 
-Required: False
+Required: True
 Position: 1
 Default value: None
 Accept pipeline input: False
@@ -97,7 +104,7 @@ Type: String
 Parameter Sets: (All)
 Aliases:
 
-Required: False
+Required: True
 Position: 2
 Default value: None
 Accept pipeline input: False
