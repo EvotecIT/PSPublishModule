@@ -471,9 +471,36 @@
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
                 #Write-Text "[+] 8th stage signing files" -Color Blue
                 Write-TextWithTime -Text 'Applying signature to files' {
-                    $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat') -TimeStampServer 'http://timestamp.digicert.com'
-                    foreach ($File in $SignedFiles) {
-                        Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
+                    $registerCertificateSplat = @{
+                        WarningAction   = 'SilentlyContinue'
+                        LocalStore      = 'CurrentUser'
+                        Path            = $FullModuleTemporaryPath
+                        Include         = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
+                        TimeStampServer = 'http://timestamp.digicert.com'
+                    }
+                    if ($Configuration.Options.Signing -and $Configuration.Options.Signing.Thumbprint) {
+                        $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.Thumbprint
+                    } elseif ($Configuration.Options.Signing -and $Configuration.Options.Signing.CertificateThumbprint) {
+                        $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.CertificateThumbprint
+                    }
+
+                    [Array] $SignedFiles = Register-Certificate @registerCertificateSplat
+                    if ($SignedFiles.Count -eq 0) {
+                        throw "Please configure certificate for use, or disable signing."
+                        return $false
+                    } else {
+                        if ($SignedFiles[0].Thumbprint) {
+                            Write-Text -Text "   [i] Multiple certificates found for signing:"
+                            foreach ($Certificate in $SignedFiles) {
+                                Write-Text "      [>] Certificate $($Certificate.Thumbprint) with subject: $($Certificate.Subject)" -Color Yellow
+                            }
+                            throw "Please configure single certificate for use or disable signing."
+                            return $false
+                        } else {
+                            foreach ($File in $SignedFiles) {
+                                Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
+                            }
+                        }
                     }
                     $TimeToExecuteSign.Stop()
                     #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
