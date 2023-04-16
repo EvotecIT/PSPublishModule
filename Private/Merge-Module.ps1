@@ -391,7 +391,7 @@ function Merge-Module {
         }
     }
     # Build PSD1 file
-    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary
+    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary -OnMerge
     # Format PSD1 file
     $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
     if ($Success -eq $false) {
