@@ -68,6 +68,9 @@
     if (-not $Configuration.Options.Merge.Integrate) {
         $Configuration.Options.Merge.Integrate = [ordered] @{}
     }
+    if (-not $Configuration.Options.Standard) {
+        $Configuration.Options.Standard = [ordered] @{}
+    }
     if (-not $Configuration.Steps) {
         $Configuration.Steps = [ordered] @{}
     }
@@ -101,7 +104,7 @@
                 } elseif ($Setting.Type -eq 'Formatting') {
                     foreach ($Key in $Setting.Options.Keys) {
                         if (-not $Configuration.Options[$Key]) {
-                            $Configuration.Options[$Key] = @{}
+                            $Configuration.Options[$Key] = [ordered] @{}
                         }
                         foreach ($Entry in $Setting.Options[$Key].Keys) {
                             $Configuration.Options[$Key][$Entry] = $Setting.Options[$Key][$Entry]
@@ -111,10 +114,22 @@
                     $Configuration.Options.Documentation = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'BuildDocumentation') {
                     $Configuration.Steps.BuildDocumentation = $Setting.Configuration
+                } elseif ($Setting.Type -eq 'GitHub') {
+                    $Configuration.Options.GitHub = $Setting.Configuration
+                } elseif ($Setting.Type -eq 'PowerShellGallery') {
+                    $Configuration.Options.PowerShellGallery = $Setting.Configuration
                 }
             }
         }
     } -PreAppend Information
+
+    # lets set some defaults
+    if (-not $Configuration.Options.Merge.Sort) {
+        $Configuration.Options.Merge.Sort = 'None'
+    }
+    if (-not $Configuration.Options.Standard.Sort) {
+        $Configuration.Options.Standard.Sort = 'None'
+    }
 
     # We build module or do other stuff with it
     if ($Configuration.Steps.BuildModule.Enable -or
