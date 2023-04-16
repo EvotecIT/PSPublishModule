@@ -20,7 +20,7 @@
         }
     }
     RequiredModules        = @(@{
-            ModuleName    = 'platyps'
+            ModuleName    = 'platyPS'
             ModuleVersion = '0.14.2'
             Guid          = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'
         }, @{
