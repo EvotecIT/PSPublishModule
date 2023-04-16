@@ -8,6 +8,8 @@
             #"DefaultPublic", 'DefaultPrivate', 'DefaultOther'
         )][string[]]$ApplyTo,
 
+        [switch] $EnableFormatting,
+
         [validateSet('None', 'Asc', 'Desc')][string] $Sort,
         [switch] $RemoveComments,
 
@@ -37,43 +39,26 @@
         [switch] $AlignAssignmentStatementEnable,
         [switch] $AlignAssignmentStatementCheckHashtable,
 
-        [switch] $UseCorrectCasingEnable
+        [switch] $UseCorrectCasingEnable,
+
+        [ValidateSet('Minimal', 'Native')][string] $PSD1Style
     )
-
-
-    if (-not $Sort) {
-        $Sort = 'None'
-    }
+    $SettingsCount = 0
 
     $Options = [ordered] @{
         Merge    = [ordered] @{
-            Sort = $Sort
+            #Sort = $Sort
         }
         Standard = [ordered] @{
-            Sort = $Sort
+            #Sort = $Sort
         }
     }
 
     foreach ($Apply in $ApplyTo) {
-        if ($Apply -eq 'OnMergePSM1') {
-            $Formatting = $Options.Merge.FormatCodePSM1 = [ordered] @{}
-        } elseif ($Apply -eq 'OnMergePSD1') {
-            $Formatting = $Options.Merge.FormatCodePSD1 = [ordered] @{}
-        } elseif ($Apply -eq 'DefaultPSM1') {
-            $Formatting = $Options.Standard.FormatCodePSM1 = [ordered] @{}
-        } elseif ($Apply -eq 'DefaultPSD1') {
-            $Formatting = $Options.Standard.FormatCodePSD1 = [ordered] @{}
-        } elseif ($Apply -eq 'DefaultPublic') {
-            $Formatting = $Options.Standard.FormatCodePublic = [ordered] @{}
-        } elseif ($Apply -eq 'DefaultPrivate') {
-            $Formatting = $Options.Standard.FormatCodePrivate = [ordered] @{}
-        } elseif ($Apply -eq 'DefaultOther') {
-            $Formatting = $Options.Standard.FormatCodeOther = [ordered] @{}
-        } else {
-            throw "Unknown ApplyTo: $Apply"
+        $Formatting = [ordered] @{}
+        if ($PSBoundParameters.ContainsKey('RemoveComments')) {
+            $Formatting.RemoveComments = $RemoveComments.IsPresent
         }
-        $Formatting.Enabled = $true
-        $Formatting.RemoveComments = $RemoveComments
 
         $Formatting.FormatterSettings = [ordered] @{
             IncludeRules = @(
@@ -136,10 +121,51 @@
         if ($Formatting.FormatterSettings.Keys.Count -eq 0) {
             $null = $Formatting.Remove('FormatterSettings')
         }
+
+        if ($Formatting.Count -gt 0 -or $EnableFormatting) {
+            $SettingsCount++
+            $Formatting.Enabled = $true
+
+            if ($Apply -eq 'OnMergePSM1') {
+                $Options.Merge.FormatCodePSM1 = $Formatting
+            } elseif ($Apply -eq 'OnMergePSD1') {
+                $Options.Merge.FormatCodePSD1 = $Formatting
+            } elseif ($Apply -eq 'DefaultPSM1') {
+                $Options.Standard.FormatCodePSM1 = $Formatting
+            } elseif ($Apply -eq 'DefaultPSD1') {
+                $Options.Standard.FormatCodePSD1 = $Formatting
+            } elseif ($Apply -eq 'DefaultPublic') {
+                $Options.Standard.FormatCodePublic = $Formatting
+            } elseif ($Apply -eq 'DefaultPrivate') {
+                $Options.Standard.FormatCodePrivate = $Formatting
+            } elseif ($Apply -eq 'DefaultOther') {
+                $Options.Standard.FormatCodeOther = $Formatting
+            } else {
+                throw "Unknown ApplyTo: $Apply"
+            }
+        }
+        if ($PSD1Style) {
+            if ($Apply -eq 'OnMergePSD1') {
+                $SettingsCount++
+                $Options['Merge']['Style'] = [ordered] @{}
+                $Options['Merge']['Style']['PSD1'] = $PSD1Style
+            } elseif ($Apply -eq 'DefaultPSD1') {
+                $SettingsCount++
+                $Options['Standard']['Style'] = [ordered] @{}
+                $Options['Standard']['Style']['PSD1'] = $PSD1Style
+            }
+        }
     }
-    $Output = @{
-        Type    = 'Formatting'
-        Options = $Options
+
+    # Set formatting options if present
+    if ($SettingsCount -gt 0) {
+        $Output = [ordered] @{
+            Type    = 'Formatting'
+            Options = $Options
+        }
+        $Output
     }
-    $Output
 }
+
+# $Config = New-ConfigurationFormat -ApplyTo OnMergePSD1, DefaultPSD1 -PSD1Style Minimal
+# $Config.Options
