@@ -133,6 +133,9 @@
 
         [Parameter(Mandatory = $false, HelpMessage = "True to identify the release as a prerelease. false to identify the release as a full release. Default: false")]
         [bool] $IsPreRelease = $false
+
+        #[switch] $GenerateReleaseNotes,
+        #[switch] $MakeLatest
     )
 
     BEGIN {
@@ -169,33 +172,32 @@
             $result.AllAssetUploadsSucceeded = $null
         }
 
-        $authHeader =
-        @{
+        $authHeader = [ordered] @{
             Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($GitHubAccessToken + ":x-oauth-basic"))
         }
 
-        $releaseData =
-        @{
+        $releaseData = [ordered] @{
             tag_name         = $TagName
             target_commitish = $Commitish
             name             = $ReleaseName
             body             = $ReleaseNotes
             draft            = $IsDraft
             prerelease       = $IsPreRelease
+            #generate_release_notes = $GenerateReleaseNotes.IsPresent
+            #make_latest            = $MakeLatest.IsPresent
         }
 
-        $createReleaseWebRequestParameters =
-        @{
+        $createReleaseWebRequestParameters = [ordered] @{
             Uri         = "https://api.github.com/repos/$GitHubUsername/$GitHubRepositoryName/releases"
             Method      = 'POST'
             Headers     = $authHeader
-            ContentType = 'application/json'
+            ContentType = 'application/vnd.github+json'
             Body        = (ConvertTo-Json $releaseData -Compress)
         }
 
         try {
             Write-Verbose "Sending web request to create the new Release..."
-            $createReleaseWebRequestResults = Invoke-RestMethodAndThrowDescriptiveErrorOnFailure $createReleaseWebRequestParameters
+            $createReleaseWebRequestResults = Invoke-RestMethodAndThrowDescriptiveErrorOnFailure -requestParametersHashTable $createReleaseWebRequestParameters
         } catch {
             $result.ReleaseCreationSucceeded = $false
             $result.ErrorMessage = $_.Exception.Message
