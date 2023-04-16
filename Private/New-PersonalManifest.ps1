@@ -6,7 +6,8 @@ function New-PersonalManifest {
         [switch] $AddScriptsToProcess,
         [switch] $AddUsingsToProcess,
         [string] $ScriptsToProcessLibrary,
-        [switch] $UseWildcardForFunctions
+        [switch] $UseWildcardForFunctions,
+        [switch] $OnMerge
     )
 
     $TemporaryManifest = @{ }
@@ -65,8 +66,24 @@ function New-PersonalManifest {
             }
         }
     }
+    if ($OnMerge) {
+        if ($Configuration.Options.Merge.Style.PSD1) {
+            $PSD1Style = $Configuration.Options.Merge.Style.PSD1
+        }
+    } else {
+        if ($Configuration.Options.Standard.Style.PSD1) {
+            $PSD1Style = $Configuration.Options.Standard.Style.PSD1
+        }
+    }
+    if (-not $PSD1Style) {
+        if ($Configuration.Options.Style.PSD1) {
+            $PSD1Style = $Configuration.Options.Style.PSD1
+        } else {
+            $PSD1Style = 'Minimal'
+        }
+    }
 
-    if ($Configuration.Options.Style.PSD1 -eq 'Native' -and $Configuration.Steps.PublishModule.Prerelease -eq '' -and (-not $TemporaryManifest.ExternalModuleDependencies)) {
+    if ($PSD1Style -eq 'Native' -and $Configuration.Steps.PublishModule.Prerelease -eq '' -and (-not $TemporaryManifest.ExternalModuleDependencies)) {
         if ($Manifest.ModuleVersion) {
             New-ModuleManifest @Manifest
         } else {
