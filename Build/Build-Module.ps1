@@ -130,6 +130,9 @@ $Configuration = @{
             Integrate      = @{
                 ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
             }
+            # Style          = @{
+            #     PSD1 = 'Native'
+            # }
         }
         Standard          = @{
             FormatCodePSM1 = @{
@@ -139,6 +142,9 @@ $Configuration = @{
                 Enabled = $true
                 #RemoveComments = $true
             }
+            # Style          = @{
+            #     PSD1 = 'Native'
+            # }
         }
         PowerShellGallery = @{
             ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
