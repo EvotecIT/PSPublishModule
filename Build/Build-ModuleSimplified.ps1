@@ -2,43 +2,8 @@
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
 $Configuration = @{
-    # Information = @{
-    # Those options below are not nessecary but can be used to configure other options. Those are "defaults"
-    # Exclude           = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
-    # IncludeRoot       = '*.psm1', '*.psd1', 'License*'
-    # IncludePS1        = 'Private', 'Public', 'Enums', 'Classes'
-    # IncludeAll        = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
-
-    # IncludeCustomCode = {
-
-    # }
-    # IncludeToArray    = @{
-    #     'Rules' = 'Examples'
-    # }
-
-    # LibrariesCore     = 'Lib\Core'
-    # LibrariesDefault  = 'Lib\Default'
-    # LibrariesStandard = 'Lib\Standard'
-    # }
     Options = @{
-        PowerShellGallery = @{
-            ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
-            FromFile = $true
-        }
-        GitHub            = @{
-            ApiKey   = 'C:\Support\Important\GithubAPI.txt'
-            FromFile = $true
-            UserName = 'EvotecIT'
-            #RepositoryName = 'PSPublishModule' # not required, uses project name
-        }
-        # Documentation     = @{
-        #     Path       = 'Docs'
-        #     PathReadme = 'Docs\Readme.md'
-        # }
-        Style             = @{
-            PSD1 = 'Minimal' # Native
-        }
-        Signing           = @{
+        Signing = @{
             CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
         }
     }
@@ -88,11 +53,6 @@ $Configuration = @{
             # }
             LocalVersion            = $false # bumps version in PSD1 on every build
         }
-        # BuildDocumentation = @{
-        #     Enable        = $true # enables documentation processing
-        #     StartClean    = $true # always starts clean
-        #     UpdateWhenNew = $true # always updates right after update
-        # }
         ImportModules  = @{
             Self            = $true
             RequiredModules = $false
@@ -172,9 +132,18 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
         UseCorrectCasingEnable                      = $true
     }
     # format PSD1 and PSM1 files when merging into a single file
+    # enable formatting is not required as Configuration is provided
     New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
     # format PSD1 and PSM1 files within the module
-    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1'
+    # enable formatting is required to make sure that formatting is applied (with default settings)
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' -EnableFormatting -Sort None
+    # when creating PSD1 use special style without comments and with only required parameters
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
+    # configuration for documentation, at the same time it enables documentation processing
     New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+
+    # global options for publishing to github/psgallery
+    New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt'
+    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT'
 }
