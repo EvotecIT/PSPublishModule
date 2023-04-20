@@ -37,7 +37,7 @@ function New-PrepareModule {
         [alias('ProjectName')][string] $ModuleName,
         [string] $FunctionsToExportFolder = 'Public',
         [string] $AliasesToExportFolder = 'Public',
-        [System.Collections.IDictionary] $Configuration,
+        [System.Collections.IDictionary] $Configuration = [ordered] @{},
         [string[]] $ExcludeFromPackage = @('.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'),
         [string[]] $IncludeRoot = @('*.psm1', '*.psd1', 'License*'),
         [string[]] $IncludePS1 = @('Private', 'Public', 'Enums', 'Classes'),
@@ -61,7 +61,7 @@ function New-PrepareModule {
             Write-Text "[-] Path $Path doesn't exists. This shouldn't be the case." -Color Red
         } else {
             $FullProjectPath = [io.path]::Combine($Path, $ModuleName)
-            $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data', 'Classes'
+            $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Build'
             Add-Directory -Directory $FullProjectPath
             foreach ($folder in $Folders) {
                 $SubFolder = [io.path]::Combine($FullProjectPath, $Folder)
@@ -69,7 +69,7 @@ function New-PrepareModule {
             }
             Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
             Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-            Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.txt" -Destination "$FullProjectPath\$ProjectName.psm1"
+            Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.txt" -Destination "$FullProjectPath\$ModuleName.psm1"
         }
     }
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"
