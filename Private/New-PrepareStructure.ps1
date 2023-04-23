@@ -74,6 +74,12 @@
     if (-not $Configuration.Steps) {
         $Configuration.Steps = [ordered] @{}
     }
+    if (-not $Configuration.Steps.PublishModule) {
+        $Configuration.Steps.PublishModule = [ordered] @{}
+    }
+    if (-not $Configuration.Steps.ImportModules) {
+        $Configuration.Steps.ImportModules = [ordered] @{}
+    }
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
             $ExecutedSettings = & $Settings
@@ -118,6 +124,18 @@
                     $Configuration.Options.GitHub = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'PowerShellGallery') {
                     $Configuration.Options.PowerShellGallery = $Setting.Configuration
+                } elseif ($Setting.Type -eq 'PowerShellGalleryPublishing') {
+                    foreach ($Key in $Setting.PublishModule.Keys) {
+                        $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'GitHubPublishing') {
+                    foreach ($Key in $Setting.PublishModule.Keys) {
+                        $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'ImportModules') {
+                    foreach ($Key in $Setting.ImportModules.Keys) {
+                        $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
+                    }
                 }
             }
         }
