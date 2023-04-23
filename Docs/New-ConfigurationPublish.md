@@ -13,8 +13,9 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-New-ConfigurationPublish [-Type] <String> [[-FilePath] <String>] [[-UserName] <String>]
- [[-RepositoryName] <String>] [[-ApiKey] <String>] [<CommonParameters>]
+New-ConfigurationPublish [[-Type] <String>] [[-FilePath] <String>] [[-UserName] <String>]
+ [[-RepositoryName] <String>] [[-ApiKey] <String>] [-Enabled] [[-PreReleaseTag] <String>] [-Force]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -46,6 +47,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -Enabled
+{{ Fill Enabled Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -FilePath
 {{ Fill FilePath Description }}
 
@@ -56,6 +72,36 @@ Aliases:
 
 Required: False
 Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Force
+{{ Fill Force Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PreReleaseTag
+{{ Fill PreReleaseTag Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -85,7 +131,7 @@ Parameter Sets: (All)
 Aliases:
 Accepted values: PowerShellGallery, GitHub
 
-Required: True
+Required: False
 Position: 0
 Default value: None
 Accept pipeline input: False

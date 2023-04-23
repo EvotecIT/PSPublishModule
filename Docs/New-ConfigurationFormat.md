@@ -13,16 +13,17 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-New-ConfigurationFormat [-ApplyTo] <String[]> [[-Sort] <String>] [-RemoveComments] [-PlaceOpenBraceEnable]
- [-PlaceOpenBraceOnSameLine] [-PlaceOpenBraceNewLineAfter] [-PlaceOpenBraceIgnoreOneLineBlock]
- [-PlaceCloseBraceEnable] [-PlaceCloseBraceNewLineAfter] [-PlaceCloseBraceIgnoreOneLineBlock]
- [-PlaceCloseBraceNoEmptyLineBefore] [-UseConsistentIndentationEnable]
+New-ConfigurationFormat [-ApplyTo] <String[]> [-EnableFormatting] [[-Sort] <String>] [-RemoveComments]
+ [-PlaceOpenBraceEnable] [-PlaceOpenBraceOnSameLine] [-PlaceOpenBraceNewLineAfter]
+ [-PlaceOpenBraceIgnoreOneLineBlock] [-PlaceCloseBraceEnable] [-PlaceCloseBraceNewLineAfter]
+ [-PlaceCloseBraceIgnoreOneLineBlock] [-PlaceCloseBraceNoEmptyLineBefore] [-UseConsistentIndentationEnable]
  [[-UseConsistentIndentationKind] <String>] [[-UseConsistentIndentationPipelineIndentation] <String>]
  [[-UseConsistentIndentationIndentationSize] <Int32>] [-UseConsistentWhitespaceEnable]
  [-UseConsistentWhitespaceCheckInnerBrace] [-UseConsistentWhitespaceCheckOpenBrace]
  [-UseConsistentWhitespaceCheckOpenParen] [-UseConsistentWhitespaceCheckOperator]
  [-UseConsistentWhitespaceCheckPipe] [-UseConsistentWhitespaceCheckSeparator] [-AlignAssignmentStatementEnable]
- [-AlignAssignmentStatementCheckHashtable] [-UseCorrectCasingEnable] [<CommonParameters>]
+ [-AlignAssignmentStatementCheckHashtable] [-UseCorrectCasingEnable] [[-PSD1Style] <String>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -80,6 +81,37 @@ Accepted values: OnMergePSM1, OnMergePSD1, DefaultPSM1, DefaultPSD1
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -EnableFormatting
+{{ Fill EnableFormatting Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PSD1Style
+{{ Fill PSD1Style Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: Minimal, Native
+
+Required: False
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
