@@ -38,7 +38,7 @@
         #Write-Host -Object " [Time: $TimeToExecute]" -ForegroundColor $ColorError
         Write-Host -Object "[e] $Text [Error: $ErrorMessage]" -ForegroundColor $ColorError
         if ($PreAppend) {
-            Write-Host -Object "[i] " -NoNewline -ForegroundColor $ColorError
+            Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorError
         }
         Write-Host -Object "$Text [Time: $TimeToExecute]" -ForegroundColor $ColorError
         $Time.Stop()
