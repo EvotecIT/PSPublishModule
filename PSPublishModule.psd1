@@ -1,4 +1,4 @@
-﻿@{
+@{
     AliasesToExport        = @()
     Author                 = 'Przemyslaw Klys'
     CmdletsToExport        = @()
@@ -7,7 +7,7 @@
     Copyright              = '(c) 2011 - 2023 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
     DotNetFrameworkVersion = '4.5.2'
-    FunctionsToExport      = @('Convert-CommandsToList', 'Get-GitLog', 'Get-MissingFunctions', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'New-ConfigurationArtefacts', 'New-ConfigurationBuild', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModules', 'New-ConfigurationPublish', 'New-PrepareModule', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
+    FunctionsToExport      = @('Convert-CommandsToList', 'Get-GitLog', 'Get-MissingFunctions', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationPublish', 'New-PrepareModule', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
     ModuleVersion          = '0.9.55'
     PowerShellVersion      = '5.1'
