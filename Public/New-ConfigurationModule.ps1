@@ -22,21 +22,21 @@
 
     .EXAMPLE
     # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModules -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModules -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModules -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
 
     .EXAMPLE
     # Add external module dependencies, using loop for simplicity
     foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
-        New-ConfigurationModules -Type ExternalModule -Name $Module
+        New-ConfigurationModule -Type ExternalModule -Name $Module
     }
 
     .EXAMPLE
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over
     # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
-    New-ConfigurationModules -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
+    New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
     .NOTES
     General notes
