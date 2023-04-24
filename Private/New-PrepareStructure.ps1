@@ -1,11 +1,14 @@
 ﻿function New-PrepareStructure {
     [CmdletBinding()]
     param(
-        [System.Collections.IDictionary]$Configuration = [ordered] @{},
+        [System.Collections.IDictionary]$Configuration,
         [scriptblock] $Settings,
         [string] $PathToProject
     )
     # Lets precreate structure if it's not available
+    if (-not $Configuration) {
+        $Configuration = [ordered] @{}
+    }
     if (-not $Configuration.Information) {
         $Configuration.Information = [ordered] @{}
     }
@@ -71,6 +74,9 @@
     if (-not $Configuration.Options.Standard) {
         $Configuration.Options.Standard = [ordered] @{}
     }
+    if (-not $Configuration.Options.Signing) {
+        $Configuration.Options.Signing = [ordered] @{}
+    }
     if (-not $Configuration.Steps) {
         $Configuration.Steps = [ordered] @{}
     }
@@ -79,6 +85,12 @@
     }
     if (-not $Configuration.Steps.ImportModules) {
         $Configuration.Steps.ImportModules = [ordered] @{}
+    }
+    if (-not $Configuration.Steps.BuildModule) {
+        $Configuration.Steps.BuildModule = [ordered] @{}
+    }
+    if (-not $Configuration.Steps.BuildLibraries) {
+        $Configuration.Steps.BuildLibraries = [ordered] @{}
     }
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
@@ -135,6 +147,22 @@
                 } elseif ($Setting.Type -eq 'ImportModules') {
                     foreach ($Key in $Setting.ImportModules.Keys) {
                         $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'Releases') {
+                    foreach ($Key in $Setting.Releases.Keys) {
+                        $Configuration.Steps.BuildModule['Releases'][$Key] = $Setting.Releases[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'ReleasesUnpacked') {
+                    foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
+                        $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'Build') {
+                    foreach ($Key in $Setting.BuildModule.Keys) {
+                        $Configuration.Steps.BuildModule[$Key] = $Setting.BuildModule[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'BuildLibraries') {
+                    foreach ($Key in $Setting.BuildLibraries.Keys) {
+                        $Configuration.Steps.BuildLibraries[$Key] = $Setting.BuildLibraries[$Key]
                     }
                 }
             }
