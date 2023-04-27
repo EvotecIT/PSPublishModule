@@ -121,7 +121,7 @@ function Merge-Module {
             $Configuration.Information.Manifest.ExternalModuleDependencies
         }
     )
-    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
+    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules | Sort-Object -Unique
 
     $ModulesThatWillMissBecauseOfIntegrating = [System.Collections.Generic.List[string]]::new()
     [Array] $DependantRequiredModules = foreach ($_ in $RequiredModules) {
