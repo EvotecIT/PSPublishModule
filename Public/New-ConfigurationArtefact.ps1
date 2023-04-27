@@ -6,6 +6,7 @@
         [switch] $IncludeTagName,
         [string] $Path,
         [switch] $RequiredModules,
+        [string] $RequiredModulesPath,
         [System.Collections.IDictionary] $CopyDirectories,
         [System.Collections.IDictionary] $CopyFiles
     )
@@ -58,7 +59,17 @@
             }
         }
     }
-    if ($PSBoundParameters.ContainsKey('RequiredModules')) {
+    if ($PSBoundParameters.ContainsKey('RequiredModulesPath')) {
+        [ordered] @{
+            Type          = $ArtefactType
+            $ArtefactType = [ordered] @{
+                RequiredModules = @{
+                    Enabled = $true
+                    Path    = $RequiredModulesPath
+                }
+            }
+        }
+    } elseif ($PSBoundParameters.ContainsKey('RequiredModules')) {
         [ordered] @{
             Type          = $ArtefactType
             $ArtefactType = [ordered] @{

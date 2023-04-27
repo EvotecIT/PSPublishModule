@@ -74,10 +74,12 @@
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
 
         if ($Configuration.Steps.BuildModule.DeleteBefore -eq $true) {
+            Write-Text "[i] Deleting old module (Desktop destination) $($DestinationPaths.Desktop)" -Color Yellow
             $Success = Remove-Directory -Directory $($DestinationPaths.Desktop)
             if ($Success -eq $false) {
                 return
             }
+            Write-Text "[i] Deleting old module (Core destination) $($DestinationPaths.Core)" -Color Yellow
             $Success = Remove-Directory -Directory $($DestinationPaths.Core)
             if ($Success -eq $false) {
                 return
