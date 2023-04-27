@@ -89,6 +89,12 @@
     if (-not $Configuration.Steps.BuildModule) {
         $Configuration.Steps.BuildModule = [ordered] @{}
     }
+    if (-not $Configuration.Steps.BuildModule.Releases) {
+        $Configuration.Steps.BuildModule.Releases = [ordered] @{}
+    }
+    if (-not $Configuration.Steps.BuildModule.ReleasesUnpacked) {
+        $Configuration.Steps.BuildModule.ReleasesUnpacked = [ordered] @{}
+    }
     if (-not $Configuration.Steps.BuildLibraries) {
         $Configuration.Steps.BuildLibraries = [ordered] @{}
     }
@@ -163,6 +169,15 @@
                 } elseif ($Setting.Type -eq 'BuildLibraries') {
                     foreach ($Key in $Setting.BuildLibraries.Keys) {
                         $Configuration.Steps.BuildLibraries[$Key] = $Setting.BuildLibraries[$Key]
+                    }
+                } elseif ($Setting.Type -eq 'Options') {
+                    foreach ($Key in $Setting.Options.Keys) {
+                        if (-not $Configuration.Options[$Key]) {
+                            $Configuration.Options[$Key] = [ordered] @{}
+                        }
+                        foreach ($Entry in $Setting.Options[$Key].Keys) {
+                            $Configuration.Options[$Key][$Entry] = $Setting.Options[$Key][$Entry]
+                        }
                     }
                 }
             }
