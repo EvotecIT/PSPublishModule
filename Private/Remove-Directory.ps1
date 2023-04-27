@@ -10,7 +10,7 @@ function Remove-Directory {
                 Remove-Item -Path $Directory -Confirm:$false -Recurse -Force -ErrorAction Stop
             } catch {
                 $ErrorMessage = $_.Exception.Message
-                Write-Text "[-] Can't delete folder $Directory. Fix error before contiuing: $ErrorMessage" -Color Red
+                Write-Text "[e] Can't delete folder $Directory. Fix error before continuing: $ErrorMessage" -Color Red
                 return $false
             }
         }
