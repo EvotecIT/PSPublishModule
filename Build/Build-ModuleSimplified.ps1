@@ -1,60 +1,60 @@
 ﻿Clear-Host
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
-$Configuration = @{
-    Options = @{
-        Signing = @{
-            CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
-        }
-    }
-    Steps   = @{
-        BuildLibraries = @{
-            Enable        = $false # build once every time nuget gets updated
-            Configuration = 'Release'
-            Framework     = 'netstandard2.0', 'net472'
-            #ProjectName   = 'ImagePlayground.PowerShell'
-        }
-        BuildModule    = @{  # requires Enable to be on to process all of that
-            Enable                  = $true
-            DeleteBefore            = $false
-            Merge                   = $true
-            MergeMissing            = $true
-            SignMerged              = $true
-            #CreateFileCatalog       = $false
-            Releases                = $true
-            #ReleasesUnpacked        = $false
-            ReleasesUnpacked        = @{
-                Enabled         = $false
-                IncludeTagName  = $false
-                Path            = "$PSScriptRoot\..\Artefacts"
-                RequiredModules = $false
-                DirectoryOutput = @{
+# $Configuration = @{
+#     Options = @{
+#         Signing = @{
+#             CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
+#         }
+#     }
+#     Steps   = @{
+#         BuildLibraries = @{
+#             Enable        = $false # build once every time nuget gets updated
+#             Configuration = 'Release'
+#             Framework     = 'netstandard2.0', 'net472'
+#             #ProjectName   = 'ImagePlayground.PowerShell'
+#         }
+#         BuildModule    = @{  # requires Enable to be on to process all of that
+#             Enable                  = $true
+#             DeleteBefore            = $false
+#             Merge                   = $true
+#             MergeMissing            = $true
+#             SignMerged              = $true
+#             #CreateFileCatalog       = $false
+#             Releases                = $true
+#             #ReleasesUnpacked        = $false
+#             ReleasesUnpacked        = @{
+#                 Enabled         = $false
+#                 IncludeTagName  = $false
+#                 Path            = "$PSScriptRoot\..\Artefacts"
+#                 RequiredModules = $false
+#                 DirectoryOutput = @{
 
-                }
-                FilesOutput     = @{
+#                 }
+#                 FilesOutput     = @{
 
-                }
-            }
-            RefreshPSD1Only         = $false
-            # only when there are classes
-            ClassesDotSource        = $false
-            LibrarySeparateFile     = $false
-            LibraryDotSource        = $false
-            # Applicable only for non-merge/publish situation
-            # It's simply to make life easier during debugging
-            # It makes all functions/aliases exportable
-            UseWildcardForFunctions = $false
+#                 }
+#             }
+#             RefreshPSD1Only         = $false
+#             # only when there are classes
+#             ClassesDotSource        = $false
+#             LibrarySeparateFile     = $false
+#             LibraryDotSource        = $false
+#             # Applicable only for non-merge/publish situation
+#             # It's simply to make life easier during debugging
+#             # It makes all functions/aliases exportable
+#             UseWildcardForFunctions = $false
 
-            # special features for binary modules
-            DebugDLL                = $false
-            ResolveBinaryConflicts  = $false # mostly for memory and other libraries
-            # ResolveBinaryConflicts  = @{
-            #     ProjectName = 'ImagePlayground.PowerShell'
-            # }
-            LocalVersion            = $false # bumps version in PSD1 on every build
-        }
-    }
-}
+#             # special features for binary modules
+#             DebugDLL                = $false
+#             ResolveBinaryConflicts  = $false # mostly for memory and other libraries
+#             # ResolveBinaryConflicts  = @{
+#             #     ProjectName = 'ImagePlayground.PowerShell'
+#             # }
+#             LocalVersion            = $false # bumps version in PSD1 on every build
+#         }
+#     }
+# }
 
 New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     # Usual defaults as per standard module
@@ -75,19 +75,19 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     New-ConfigurationManifest @Manifest
 
     # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModules -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModules -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-    New-ConfigurationModules -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
 
     # Add external module dependencies, using loop for simplicity
     foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
-        New-ConfigurationModules -Type ExternalModule -Name $Module
+        New-ConfigurationModule -Type ExternalModule -Name $Module
     }
 
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over
     # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
-    New-ConfigurationModules -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
+    New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
     $ConfigurationFormat = [ordered] @{
         RemoveComments                              = $false
@@ -137,4 +137,6 @@ New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
     # global options for publishing to github/psgallery
     New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$false
     New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$false
+
+    New-ConfigurationBuild -Enable:$true -SignModule -DeleteTargetModuleBeforeBuild -MergeModuleOnBuild -CertificateThumbprint '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
 }
