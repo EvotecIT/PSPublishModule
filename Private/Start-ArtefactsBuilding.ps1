@@ -150,6 +150,8 @@
                                 $DestinationPath = [System.IO.Path]::Combine($FolderPathReleasesUnpacked, $FilesOutput[$File])
                                 $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationPath)
                                 Write-TextWithTime -Text "Copying file $FullFilePath to $ResolvedDestination" {
+                                    $DirectoryPath = [Io.Path]::GetDirectoryName($ResolvedDestination)
+                                    $null = New-Item -ItemType Directory -Force -ErrorAction Stop -Path $DirectoryPath
                                     Copy-Item -LiteralPath $FullFilePath -Destination $ResolvedDestination -Force -ErrorAction Stop
                                 } -PreAppend Plus -SpacesBefore "   "
                             }
