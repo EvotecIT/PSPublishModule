@@ -78,7 +78,7 @@ function Invoke-ModuleBuild {
         [parameter(ParameterSetName = 'Modern')][string] $Path,
         [parameter(Mandatory, ParameterSetName = 'Modern')][alias('ProjectName')][string] $ModuleName,
         [parameter(ParameterSetName = 'Modern')][string] $FunctionsToExportFolder = 'Public',
-        [parameter(ParameterSetName = 'Modern')][string] $AliasesToExportFolder = 'Public',%
+        [parameter(ParameterSetName = 'Modern')][string] $AliasesToExportFolder = 'Public',
         [Parameter(Mandatory, ParameterSetName = 'Configuration')][System.Collections.IDictionary] $Configuration = [ordered] @{},
         [parameter(ParameterSetName = 'Modern')][string[]] $ExcludeFromPackage = @('.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'),
         [parameter(ParameterSetName = 'Modern')][string[]] $IncludeRoot = @('*.psm1', '*.psd1', 'License*'),
