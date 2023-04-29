@@ -2,7 +2,7 @@
     [CmdletBinding()]
     param(
         [ScriptBlock] $Content,
-        [ValidateSet('Plus', 'Minus', 'Information')][string] $PreAppend,
+        [ValidateSet('Plus', 'Minus', 'Information', 'Addition')][string] $PreAppend,
         [string] $Text,
         [switch] $Continue,
         [System.ConsoleColor] $Color = [System.ConsoleColor]::Cyan,
@@ -20,6 +20,9 @@
         } elseif ($PreAppend -eq 'Plus') {
             $TextBefore = "$SpacesBefore[+] "
             $ColorBefore = [System.ConsoleColor]::Cyan
+        } elseif ($PreAppend -eq 'Addition') {
+            $TextBefore = "$SpacesBefore[>] "
+            $ColorBefore = [System.ConsoleColor]::Yellow
         }
         Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
         Write-Host -Object "$Text" -ForegroundColor $Color
