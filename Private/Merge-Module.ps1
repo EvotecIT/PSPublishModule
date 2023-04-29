@@ -45,7 +45,7 @@ function Merge-Module {
         }
         "$VariableName = @("
         foreach ($Internal in $FilesInternal) {
-            Get-Content -Path $Internal.FullName -Raw
+            Get-Content -Path $Internal.FullName -Raw -Encoding utf8
         }
         ")"
     }
@@ -238,7 +238,7 @@ function Merge-Module {
             Write-Text "[+] Merge mergable commands" -Color Blue
 
 
-            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
+            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
             $IntegrateContent = @(
                 $MissingFunctions.Functions
                 $PSM1Content
@@ -314,7 +314,7 @@ function Merge-Module {
             $DotSourcePath = ". `$PSScriptRoot\$ModuleName.Libraries.ps1"
         }
         if ($LibariesPath) {
-            $LibraryContent | Add-Content -Path $LibariesPath
+            $LibraryContent | Out-File -Append -LiteralPath $LibariesPath -Encoding utf8
         }
     }
 
@@ -330,7 +330,7 @@ function Merge-Module {
 
     # Adjust PSM1 file by adding dot sourcing or directly libraries to the PSM1 file
     if ($LibariesPath -gt 0 -or $ClassesPath -gt 0 -or $Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
-        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
+        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
         $IntegrateContent = @(
             # add resolve conflicting binary option
             if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
@@ -361,7 +361,7 @@ function Merge-Module {
     }
 
     if ($Configuration.Information.Manifest.DotNetFrameworkVersion) {
-        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Add-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Out-File -Append -LiteralPath $PSM1FilePath -Encoding UTF8
     }
 
     # Finalize PSM1 by adding export functions/aliases and internal modules loading
