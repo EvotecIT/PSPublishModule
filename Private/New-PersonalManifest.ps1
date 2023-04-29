@@ -44,29 +44,6 @@ function New-PersonalManifest {
         $Manifest.Remove('CommandModuleDependencies')
     }
 
-    # if ($Manifest.Contains('RequiredModules')) {
-    #     foreach ($SubModule in $Manifest.RequiredModules) {
-    #         [Array] $AvailableModule = Get-Module -ListAvailable $SubModule.ModuleName -Verbose:$false
-
-    #         if ($SubModule.ModuleVersion -eq 'Latest') {
-    #             if ($AvailableModule) {
-    #                 $SubModule.ModuleVersion = $AvailableModule[0].Version
-    #             } else {
-    #                 Write-Text -Text "[-] Module $($SubModule.ModuleName) is not available, but defined as required with last version. Terminating." -Color Red
-    #                 return $false
-    #             }
-    #         }
-    #         if ($SubModule.Guid -eq 'Auto') {
-    #             if ($AvailableModule) {
-    #                 $SubModule.Guid = $AvailableModule[0].Guid
-    #             } else {
-    #                 Write-Text -Text "[-] Module $($SubModule.ModuleName) is not available, but defined as required with last version. Terminating." -Color Red
-    #                 return $false
-    #             }
-    #         }
-    #     }
-    # }
-
     if ($OnMerge) {
         if ($Configuration.Options.Merge.Style.PSD1) {
             $PSD1Style = $Configuration.Options.Merge.Style.PSD1
@@ -91,14 +68,13 @@ function New-PersonalManifest {
             Write-Text -Text '[-] Module version is not available. Terminating.' -Color Red
             return $false
         }
-        Write-TextWithTime -Text "[+] Converting $($ManifestPath) UTF8 without BOM" {
-            (Get-Content -Path $ManifestPath -Raw) | Out-FileUtf8NoBom $ManifestPath
+        Write-TextWithTime -Text "[i] Converting $($ManifestPath) UTF8 without BOM" {
+            (Get-Content -Path $ManifestPath -Raw -Encoding utf8) | Out-FileUtf8NoBom $ManifestPath
         }
     } else {
-        # if ($Configuration.Steps.PublishModule.Prerelease -ne '' -or $TemporaryManifest.ExternalModuleDependencies -or $Configuration.Options.Style.PSD1 -ne 'Native') {
-        #[string] $PSD1Path = $Configuration.Information.Manifest.Path
-        #$FilePathPSD1 = Get-Item -Path $Configuration.Information.Manifest.Path
-        #$Data = Import-PowerShellDataFile -Path $Configuration.Information.Manifest.Path
+        if ($PSD1Style -eq 'Native') {
+            Write-Text -Text '[-] Native PSD1 style is not available when using PreRelease or ExternalModuleDependencies. Switching to Minimal.' -Color Yellow
+        }
         if ($Data.ScriptsToProcess.Count -eq 0) {
             #$Data.Remove('ScriptsToProcess')
         }
@@ -112,25 +88,34 @@ function New-PersonalManifest {
         if ($Data.Path) {
             $Data.Remove('Path')
         }
-        if ($Data.Tags) {
-            $Data.PrivateData.PSData.Tags = $Data.Tags
-            $Data.Remove('Tags')
-        }
-        if ($Data.LicenseUri) {
-            $Data.PrivateData.PSData.LicenseUri = $Data.LicenseUri
-            $Data.Remove('LicenseUri')
-        }
-        if ($Data.ProjectUri) {
-            $Data.PrivateData.PSData.ProjectUri = $Data.ProjectUri
-            $Data.Remove('ProjectUri')
-        }
-        if ($Data.IconUri) {
-            $Data.PrivateData.PSData.IconUri = $Data.IconUri
-            $Data.Remove('IconUri')
-        }
-        if ($Data.ReleaseNotes) {
-            $Data.PrivateData.PSData.ReleaseNotes = $Data.ReleaseNotes
-            $Data.Remove('ReleaseNotes')
+
+
+        # if ($Data.Tags) {
+        #     $Data.PrivateData.PSData.Tags = $Data.Tags
+        #     $Data.Remove('Tags')
+        # }
+        # if ($Data.LicenseUri) {
+        #     $Data.PrivateData.PSData.LicenseUri = $Data.LicenseUri
+        #     $Data.Remove('LicenseUri')
+        # }
+        # if ($Data.ProjectUri) {
+        #     $Data.PrivateData.PSData.ProjectUri = $Data.ProjectUri
+        #     $Data.Remove('ProjectUri')
+        # }
+        # if ($Data.IconUri) {
+        #     $Data.PrivateData.PSData.IconUri = $Data.IconUri
+        #     $Data.Remove('IconUri')
+        # }
+        # if ($Data.ReleaseNotes) {
+        #     $Data.PrivateData.PSData.ReleaseNotes = $Data.ReleaseNotes
+        #     $Data.Remove('ReleaseNotes')
+        # }
+        $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies')
+        foreach ($Entry in [string[]] $Data.Keys) {
+            if ($Entry -in $ValidateEntriesPrivateData) {
+                $Data.PrivateData.PSData.$Entry = $Data.$Entry
+                $Data.Remove($Entry)
+            }
         }
         $ValidDataEntries = @('ModuleToProcess', 'NestedModules', 'GUID', 'Author', 'CompanyName', 'Copyright', 'ModuleVersion', 'Description', 'PowerShellVersion', 'PowerShellHostName', 'PowerShellHostVersion', 'CLRVersion', 'DotNetFrameworkVersion', 'ProcessorArchitecture', 'RequiredModules', 'TypesToProcess', 'FormatsToProcess', 'ScriptsToProcess', 'PrivateData', 'RequiredAssemblies', 'ModuleList', 'FileList', 'FunctionsToExport', 'VariablesToExport', 'AliasesToExport', 'CmdletsToExport', 'DscResourcesToExport', 'CompatiblePSEditions', 'HelpInfoURI', 'RootModule', 'DefaultCommandPrefix')
         foreach ($Entry in [string[]] $Data.Keys) {
@@ -139,7 +124,6 @@ function New-PersonalManifest {
                 $Data.Remove($Entry)
             }
         }
-        $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies')
         foreach ($Entry in [string[]] $Data.PrivateData.PSData.Keys) {
             if ($Entry -notin $ValidateEntriesPrivateData) {
                 Write-Text -Text "[-] Removing wrong entries from PSD1 Private Data - $Entry" -Color Red
