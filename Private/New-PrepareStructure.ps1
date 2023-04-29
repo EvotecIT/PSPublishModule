@@ -160,7 +160,19 @@
                     }
                 } elseif ($Setting.Type -eq 'ReleasesUnpacked') {
                     foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
-                        $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
+                        #$Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
+                        foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
+                            if ($Setting.ReleasesUnpacked[$Key] -is [System.Collections.IDictionary]) {
+                                foreach ($Entry in $Setting.ReleasesUnpacked[$Key].Keys) {
+                                    if (-not $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key]) {
+                                        $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = [ordered] @{}
+                                    }
+                                    $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key][$Entry] = $Setting.ReleasesUnpacked[$Key][$Entry]
+                                }
+                            } else {
+                                $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
+                            }
+                        }
                     }
                 } elseif ($Setting.Type -eq 'Build') {
                     foreach ($Key in $Setting.BuildModule.Keys) {
