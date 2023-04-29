@@ -30,7 +30,7 @@
     }
 
     if ($Configuration.Options.GitHub.FromFile) {
-        $GitHubAccessToken = Get-Content -LiteralPath $Configuration.Options.GitHub.ApiKey
+        $GitHubAccessToken = Get-Content -LiteralPath $Configuration.Options.GitHub.ApiKey -Encoding UTF8
     } else {
         $GitHubAccessToken = $Configuration.Options.GitHub.ApiKey
     }
