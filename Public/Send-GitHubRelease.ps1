@@ -144,7 +144,7 @@
         # 	Forces a function to be the first non-comment code to appear in a PowerShell Script/Module.
         Set-StrictMode -Version Latest
 
-        Set-SecurityProtocolForThread
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
 
         [string] $NewLine = [Environment]::NewLine
 
