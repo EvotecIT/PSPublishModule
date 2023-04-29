@@ -26,7 +26,7 @@
             }
             $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)
 
-            Write-TextWithTime -Text "[+] Compressing final merged release $ZipPath" {
+            Write-TextWithTime -Text "Compressing final merged release $ZipPath" {
                 $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
                 if ($DestinationPaths.Desktop) {
                     $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
@@ -36,7 +36,7 @@
                     $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
                     Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
                 }
-            }
+            } -PreAppend 'Plus'
         }
         if ($Configuration.Steps.BuildModule.ReleasesUnpacked -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.Enabled) {
             if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [System.Collections.IDictionary]) {
