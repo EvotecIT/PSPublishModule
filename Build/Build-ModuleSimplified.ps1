@@ -5,7 +5,7 @@ Import-Module "$PSScriptRoot\..\PSPublishModule.psm1" -Force
 Build-Module -ModuleName 'PSPublishModule' -Configuration $Configuration {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '0.9.X'
+        ModuleVersion          = '1.0.0'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -85,4 +85,9 @@ Build-Module -ModuleName 'PSPublishModule' -Configuration $Configuration {
     New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$false
 
     New-ConfigurationBuild -Enable:$true -SignModule -DeleteTargetModuleBeforeBuild -MergeModuleOnBuild -CertificateThumbprint '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
+
+    New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Modules" -CopyFiles @{
+
+    }
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Releases"
 }
