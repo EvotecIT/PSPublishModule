@@ -1,62 +1,8 @@
 ﻿Clear-Host
-Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
+Import-Module "$PSScriptRoot\..\PSPublishModule.psm1" -Force
 
-# $Configuration = @{
-#     Options = @{
-#         Signing = @{
-#             CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
-#         }
-#     }
-#     Steps   = @{
-#         BuildLibraries = @{
-#             Enable        = $false # build once every time nuget gets updated
-#             Configuration = 'Release'
-#             Framework     = 'netstandard2.0', 'net472'
-#             #ProjectName   = 'ImagePlayground.PowerShell'
-#         }
-#         BuildModule    = @{  # requires Enable to be on to process all of that
-#             Enable                  = $true
-#             DeleteBefore            = $false
-#             Merge                   = $true
-#             MergeMissing            = $true
-#             SignMerged              = $true
-#             #CreateFileCatalog       = $false
-#             Releases                = $true
-#             #ReleasesUnpacked        = $false
-#             ReleasesUnpacked        = @{
-#                 Enabled         = $false
-#                 IncludeTagName  = $false
-#                 Path            = "$PSScriptRoot\..\Artefacts"
-#                 RequiredModules = $false
-#                 DirectoryOutput = @{
 
-#                 }
-#                 FilesOutput     = @{
-
-#                 }
-#             }
-#             RefreshPSD1Only         = $false
-#             # only when there are classes
-#             ClassesDotSource        = $false
-#             LibrarySeparateFile     = $false
-#             LibraryDotSource        = $false
-#             # Applicable only for non-merge/publish situation
-#             # It's simply to make life easier during debugging
-#             # It makes all functions/aliases exportable
-#             UseWildcardForFunctions = $false
-
-#             # special features for binary modules
-#             DebugDLL                = $false
-#             ResolveBinaryConflicts  = $false # mostly for memory and other libraries
-#             # ResolveBinaryConflicts  = @{
-#             #     ProjectName = 'ImagePlayground.PowerShell'
-#             # }
-#             LocalVersion            = $false # bumps version in PSD1 on every build
-#         }
-#     }
-# }
-
-New-PrepareModule -ModuleName 'PSPublishModule' -Configuration $Configuration {
+Build-Module -ModuleName 'PSPublishModule' -Configuration $Configuration {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
         ModuleVersion          = '0.9.X'
