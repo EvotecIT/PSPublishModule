@@ -43,6 +43,8 @@
             $DirectPathForPrimaryModule = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath
         } elseif ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Path) {
             $DirectPathForPrimaryModule = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Path
+        } elseif ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
+            $DirectPathForPrimaryModule = $Configuration.Steps.BuildModule.ReleasesUnpacked.Path
         } else {
             $DirectPathForPrimaryModule = $FolderPathReleases
         }
@@ -50,6 +52,8 @@
             $DirectPathForRequiredModules = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Path
         } elseif ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath) {
             $DirectPathForRequiredModules = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath
+        } elseif ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
+            $DirectPathForPrimaryModule = $Configuration.Steps.BuildModule.ReleasesUnpacked.Path
         } else {
             $DirectPathForRequiredModules = $FolderPathReleases
         }
