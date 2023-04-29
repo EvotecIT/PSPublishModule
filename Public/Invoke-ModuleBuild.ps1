@@ -72,23 +72,25 @@ function Invoke-ModuleBuild {
     General notes
     #>
     [alias('New-PrepareModule', 'Build-Module')]
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Modern')]
     param (
-        [Parameter(Position = 0)][scriptblock] $Settings,
-        [string] $Path,
-        [parameter(Mandatory)][alias('ProjectName')][string] $ModuleName,
-        [string] $FunctionsToExportFolder = 'Public',
-        [string] $AliasesToExportFolder = 'Public',
-        [System.Collections.IDictionary] $Configuration = [ordered] @{},
-        [string[]] $ExcludeFromPackage = @('.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'),
-        [string[]] $IncludeRoot = @('*.psm1', '*.psd1', 'License*'),
-        [string[]] $IncludePS1 = @('Private', 'Public', 'Enums', 'Classes'),
-        [string[]] $IncludeAll = @('Images', 'Resources', 'Templates', 'Bin', 'Lib', 'Data'),
-        [scriptblock] $IncludeCustomCode,
-        [System.Collections.IDictionary] $IncludeToArray,
-        [string] $LibrariesCore = 'Lib\Core',
-        [string] $LibrariesDefault = 'Lib\Default',
-        [string] $LibrariesStandard = 'Lib\Standard',
+        [Parameter(Position = 0, ParameterSetName = 'Modern')][scriptblock] $Settings,
+        [parameter(ParameterSetName = 'Modern')][string] $Path,
+        [parameter(Mandatory, ParameterSetName = 'Modern')][alias('ProjectName')][string] $ModuleName,
+        [parameter(ParameterSetName = 'Modern')][string] $FunctionsToExportFolder = 'Public',
+        [parameter(ParameterSetName = 'Modern')][string] $AliasesToExportFolder = 'Public',%
+        [Parameter(Mandatory, ParameterSetName = 'Configuration')][System.Collections.IDictionary] $Configuration = [ordered] @{},
+        [parameter(ParameterSetName = 'Modern')][string[]] $ExcludeFromPackage = @('.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'),
+        [parameter(ParameterSetName = 'Modern')][string[]] $IncludeRoot = @('*.psm1', '*.psd1', 'License*'),
+        [parameter(ParameterSetName = 'Modern')][string[]] $IncludePS1 = @('Private', 'Public', 'Enums', 'Classes'),
+        [parameter(ParameterSetName = 'Modern')][string[]] $IncludeAll = @('Images', 'Resources', 'Templates', 'Bin', 'Lib', 'Data'),
+        [parameter(ParameterSetName = 'Modern')][scriptblock] $IncludeCustomCode,
+        [parameter(ParameterSetName = 'Modern')][System.Collections.IDictionary] $IncludeToArray,
+        [parameter(ParameterSetName = 'Modern')][string] $LibrariesCore = 'Lib\Core',
+        [parameter(ParameterSetName = 'Modern')][string] $LibrariesDefault = 'Lib\Default',
+        [parameter(ParameterSetName = 'Modern')][string] $LibrariesStandard = 'Lib\Standard',
+        [parameter(ParameterSetName = 'Configuration')]
+        [parameter(ParameterSetName = 'Modern')]
         [switch] $ExitCode
     )
     # this assumes that the script running this in Build or Publish folder (or any other folder that is 1 level below the root of the project)
