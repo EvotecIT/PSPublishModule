@@ -29,21 +29,21 @@ function New-PSMFile {
             $Aliases = @()
         }
 
-        "" | Add-Content -Path $Path
+        "" | Out-File -Append -LiteralPath $Path -Encoding utf8
 
         # This allows for loading modules in PSM1 file directly
         if ($InternalModuleDependencies) {
             @(
                 "# Added internal module loading to cater for special cases "
                 ""
-            ) | Add-Content -Path $Path
+            ) | Out-File -Append -LiteralPath $Path -Encoding utf8
             $ModulesText = "'$($InternalModuleDependencies -join "','")'"
             @"
             `$ModulesOptional = $ModulesText
             foreach (`$Module in `$ModulesOptional) {
                 Import-Module -Name `$Module -ErrorAction SilentlyContinue
             }
-"@ | Add-Content -Path $Path
+"@ | Out-File -Append -LiteralPath $Path -Encoding utf8
         }
 
         # This allows to export functions only if module loading works correctly
@@ -96,12 +96,12 @@ function New-PSMFile {
 
                 Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)
 "@
-            ) | Add-Content -Path $Path
+            ) | Out-File -Append -LiteralPath $Path -Encoding utf8
         } else {
             # this loads functions/aliases as designed
-            "" | Add-Content -Path $Path
-            "# Export functions and aliases as required" | Add-Content -Path $Path
-            "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Add-Content -Path $Path
+            "" | Out-File -Append -LiteralPath $Path -Encoding utf8
+            "# Export functions and aliases as required" | Out-File -Append -LiteralPath $Path -Encoding utf8
+            "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding utf8
         }
 
     } catch {
