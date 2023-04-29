@@ -7,7 +7,7 @@
     if ($FormatCode.Enabled) {
         if ($FormatCode.RemoveComments) {
             # Write-Verbose "Removing Comments"
-            $ContentBefore = Get-Content -LiteralPath $FilePath
+            $ContentBefore = Get-Content -LiteralPath $FilePath -Encoding UTF8
             Write-Text "[i] Removing Comments - Lines in code before: $($ContentBefore.Count)" -Color Yellow
             $Output = Write-TextWithTime -Text "[+] Removing Comments - $FilePath" {
                 Remove-Comments -FilePath $FilePath
@@ -19,7 +19,7 @@
             }
         } else {
             $Output = Write-TextWithTime -Text "[+] Reading file content - $FilePath" {
-                Get-Content -LiteralPath $FilePath -Raw
+                Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8
             }
         }
         if ($null -eq $FormatCode.FormatterSettings) {

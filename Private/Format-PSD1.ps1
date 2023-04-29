@@ -5,7 +5,7 @@
         $FormatCode
     )
     if ($FormatCode.Enabled) {
-        $Output = Get-Content -LiteralPath $PSD1FilePath -Raw
+        $Output = Get-Content -LiteralPath $PSD1FilePath -Raw -Encoding UTF8
         if ($FormatCode.RemoveComments) {
             Write-Verbose "Removing Comments - $PSD1FilePath"
             # Remove comments

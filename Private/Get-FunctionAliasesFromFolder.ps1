@@ -14,7 +14,7 @@ function Get-FunctionAliasesFromFolder {
     }
     [Array] $Content = foreach ($File in $FilesPS1) {
         ''
-        Get-Content -LiteralPath $File.FullName -Raw -Encoding Default
+        Get-Content -LiteralPath $File.FullName -Raw -Encoding UTF8
     }
     $Code = $Content -join [System.Environment]::NewLine
 
