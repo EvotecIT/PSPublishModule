@@ -58,7 +58,7 @@
         if (Test-Path -LiteralPath $Project) {
             $JsonPath = [io.path]::Combine($Project, 'projects.json')
             if (Test-Path -LiteralPath $JsonPath) {
-                Get-Content -LiteralPath $JsonPath | Set-Content -LiteralPath "$JsonPath.backup"
+                Get-Content -LiteralPath $JsonPath -Encoding UTF8 | Set-Content -LiteralPath "$JsonPath.backup"
             }
             $ProjectManager | ConvertTo-Json | Set-Content -LiteralPath $JsonPath
         }
