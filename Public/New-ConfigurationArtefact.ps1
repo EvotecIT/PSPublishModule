@@ -5,10 +5,12 @@
         [switch] $Enable,
         [switch] $IncludeTagName,
         [string] $Path,
-        [switch] $RequiredModules,
+        [alias('RequiredModules')][switch] $AddRequiredModules,
+        [string] $ModulesPath,
         [string] $RequiredModulesPath,
         [System.Collections.IDictionary] $CopyDirectories,
-        [System.Collections.IDictionary] $CopyFiles
+        [System.Collections.IDictionary] $CopyFiles,
+        [switch] $Clear
     )
 
     if ($Type -eq 'Packed') {
@@ -16,24 +18,6 @@
     } else {
         $ArtefactType = 'ReleasesUnpacked'
     }
-
-    # $BuildModule = @{  # requires Enable to be on to process all of that
-    #     #CreateFileCatalog       = $false
-    #     Releases         = $true
-    #     #ReleasesUnpacked        = $false
-    #     ReleasesUnpacked = @{
-    #         Enabled         = $false
-    #         IncludeTagName  = $false
-    #         Path            = "$PSScriptRoot\..\Artefacts"
-    #         RequiredModules = $false
-    #         DirectoryOutput = @{
-
-    #         }
-    #         FilesOutput     = @{
-
-    #         }
-    #     }
-    # }
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
         [ordered] @{
@@ -64,16 +48,28 @@
             Type          = $ArtefactType
             $ArtefactType = [ordered] @{
                 RequiredModules = @{
-                    Enabled = $true
-                    Path    = $RequiredModulesPath
+                    Path = $RequiredModulesPath
                 }
             }
         }
-    } elseif ($PSBoundParameters.ContainsKey('RequiredModules')) {
+    }
+    if ($PSBoundParameters.ContainsKey('AddRequiredModules')) {
         [ordered] @{
             Type          = $ArtefactType
             $ArtefactType = [ordered] @{
-                RequiredModules = $RequiredModules
+                RequiredModules = @{
+                    Enabled = $true
+                }
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('ModulesPath')) {
+        [ordered] @{
+            Type          = $ArtefactType
+            $ArtefactType = [ordered] @{
+                RequiredModules = @{
+                    ModulesPath = $ModulesPath
+                }
             }
         }
     }
@@ -90,6 +86,14 @@
             Type          = $ArtefactType
             $ArtefactType = [ordered] @{
                 FilesOutput = $CopyFiles
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('Clear')) {
+        [ordered] @{
+            Type          = $ArtefactType
+            $ArtefactType = [ordered] @{
+                Clear = $Clear
             }
         }
     }
