@@ -67,7 +67,7 @@
                 $RequiredModulesPath = $ArtefactsPath
                 $CurrentModulePath = $ArtefactsPath
             }
-            Write-TextWithTime -Text "[+] Copying final merged release to $ArtefactsPath" {
+            Write-TextWithTime -Text "Copying final merged release to $ArtefactsPath" -PreAppend Plus {
                 if ($Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName) {
                     $NameOfDestination = [io.path]::Combine($CurrentModulePath, $Configuration.Information.ModuleName, $TagName)
                 } else {
@@ -148,7 +148,10 @@
                             $FullFilePath = [System.IO.Path]::Combine($FullProjectPath, $File)
                             if (Test-Path -Path $FullFilePath) {
                                 $DestinationPath = [System.IO.Path]::Combine($FolderPathReleasesUnpacked, $FilesOutput[$File])
-                                Copy-Item -LiteralPath $FullFilePath -Destination $DestinationPath -Force
+                                $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationPath)
+                                Write-TextWithTime -Text "Copying file $FullFilePath to $ResolvedDestination" {
+                                    Copy-Item -LiteralPath $FullFilePath -Destination $ResolvedDestination -Force -ErrorAction Stop
+                                } -PreAppend Plus -SpacesBefore "   "
                             }
                         } elseif ($FilesOutput[$File] -is [System.Collections.IDictionary]) {
                             if ($FilesOutput[$File].Enabled -eq $true) {
