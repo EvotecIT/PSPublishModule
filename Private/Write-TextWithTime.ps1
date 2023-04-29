@@ -7,17 +7,18 @@
         [switch] $Continue,
         [System.ConsoleColor] $Color = [System.ConsoleColor]::Cyan,
         [System.ConsoleColor] $ColorTime = [System.ConsoleColor]::Green,
-        [System.ConsoleColor] $ColorError = [System.ConsoleColor]::Red
+        [System.ConsoleColor] $ColorError = [System.ConsoleColor]::Red,
+        [string] $SpacesBefore
     )
     if ($PreAppend) {
         if ($PreAppend -eq "Information") {
-            $TextBefore = '[i] '
+            $TextBefore = "$SpacesBefore[i] "
             $ColorBefore = [System.ConsoleColor]::Yellow
         } elseif ($PreAppend -eq 'Minus') {
-            $TextBefore = '[-] '
+            $TextBefore = "$SpacesBefore[-] "
             $ColorBefore = [System.ConsoleColor]::Red
         } elseif ($PreAppend -eq 'Plus') {
-            $TextBefore = '[+] '
+            $TextBefore = "$SpacesBefore[+] "
             $ColorBefore = [System.ConsoleColor]::Cyan
         }
         Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
@@ -28,24 +29,29 @@
     $Time = [System.Diagnostics.Stopwatch]::StartNew()
     if ($null -ne $Content) {
         try {
-            & $Content
+            $InputData = & $Content
+            if ($InputData -contains $false) {
+                $ErrorMessage = "Failure in scriptblock. Check output."
+            } else {
+                $InputData
+            }
         } catch {
             $ErrorMessage = $_.Exception.Message
         }
     }
     $TimeToExecute = $Time.Elapsed.ToString()
     if ($ErrorMessage) {
-        #Write-Host -Object " [Time: $TimeToExecute]" -ForegroundColor $ColorError
-        Write-Host -Object "[e] $Text [Error: $ErrorMessage]" -ForegroundColor $ColorError
+        Write-Host -Object "$SpacesBefore[e] $Text [Error: $ErrorMessage]" -ForegroundColor $ColorError
         if ($PreAppend) {
-            Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorError
+            Write-Host -Object "$($TextBefore)" -NoNewline -ForegroundColor $ColorError
         }
         Write-Host -Object "$Text [Time: $TimeToExecute]" -ForegroundColor $ColorError
         $Time.Stop()
+        return $false
         break
     } else {
         if ($PreAppend) {
-            Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
+            Write-Host -Object "$($TextBefore)" -NoNewline -ForegroundColor $ColorBefore
         }
         Write-Host -Object "$Text [Time: $TimeToExecute]" -ForegroundColor $ColorTime
     }
