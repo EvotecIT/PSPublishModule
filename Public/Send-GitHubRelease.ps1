@@ -1,106 +1,106 @@
 ﻿function Send-GitHubRelease {
     <#
-	.SYNOPSIS
-	Creates a new Release for the given GitHub repository.
+    .SYNOPSIS
+    Creates a new Release for the given GitHub repository.
 
-	.DESCRIPTION
-	Uses the GitHub API to create a new Release for a given repository.
-	Allows you to specify all of the Release properties, such as the Tag, Name, Assets, and if it's a Draft or Prerelease or not.
+    .DESCRIPTION
+    Uses the GitHub API to create a new Release for a given repository.
+    Allows you to specify all of the Release properties, such as the Tag, Name, Assets, and if it's a Draft or Prerelease or not.
 
-	.PARAMETER GitHubUsername
-	The username that the GitHub repository exists under.
-	e.g. For the repository https://github.com/deadlydog/New-GitHubRelease, the username is 'deadlydog'.
+    .PARAMETER GitHubUsername
+    The username that the GitHub repository exists under.
+    e.g. For the repository https://github.com/deadlydog/New-GitHubRelease, the username is 'deadlydog'.
 
-	.PARAMETER GitHubRepositoryName
-	The name of the repository to create the Release for.
-	e.g. For the repository https://github.com/deadlydog/New-GitHubRelease, the repository name is 'New-GitHubRelease'.
+    .PARAMETER GitHubRepositoryName
+    The name of the repository to create the Release for.
+    e.g. For the repository https://github.com/deadlydog/New-GitHubRelease, the repository name is 'New-GitHubRelease'.
 
-	.PARAMETER GitHubAccessToken
-	The Access Token to use as credentials for GitHub.
-	Access tokens can be generated at https://github.com/settings/tokens.
-	The access token will need to have the repo/public_repo permission on it for it to be allowed to create a new Release.
+    .PARAMETER GitHubAccessToken
+    The Access Token to use as credentials for GitHub.
+    Access tokens can be generated at https://github.com/settings/tokens.
+    The access token will need to have the repo/public_repo permission on it for it to be allowed to create a new Release.
 
-	.PARAMETER TagName
-	The name of the tag to create at the Commitish.
+    .PARAMETER TagName
+    The name of the tag to create at the Commitish.
 
-	.PARAMETER ReleaseName
-	The name to use for the new release.
-	If blank, the TagName will be used.
+    .PARAMETER ReleaseName
+    The name to use for the new release.
+    If blank, the TagName will be used.
 
-	.PARAMETER ReleaseNotes
-	The text describing the contents of the release.
+    .PARAMETER ReleaseNotes
+    The text describing the contents of the release.
 
-	.PARAMETER AssetFilePaths
-	The full paths of the files to include in the release.
+    .PARAMETER AssetFilePaths
+    The full paths of the files to include in the release.
 
-	.PARAMETER Commitish
-	Specifies the commitish value that determines where the Git tag is created from.
-	Can be any branch or commit SHA. Unused if the Git tag already exists.
-	Default: the repository's default branch (usually master).
+    .PARAMETER Commitish
+    Specifies the commitish value that determines where the Git tag is created from.
+    Can be any branch or commit SHA. Unused if the Git tag already exists.
+    Default: the repository's default branch (usually master).
 
-	.PARAMETER IsDraft
-	True to create a draft (unpublished) release, false to create a published one.
-	Default: false
+    .PARAMETER IsDraft
+    True to create a draft (unpublished) release, false to create a published one.
+    Default: false
 
-	.PARAMETER IsPreRelease
-	True to identify the release as a prerelease. false to identify the release as a full release.
-	Default: false
+    .PARAMETER IsPreRelease
+    True to identify the release as a prerelease. false to identify the release as a full release.
+    Default: false
 
-	.OUTPUTS
-	A hash table with the following properties is returned:
+    .OUTPUTS
+    A hash table with the following properties is returned:
 
-	Succeeded = $true if the Release was created successfully and all assets were uploaded to it, $false if some part of the process failed.
-	ReleaseCreationSucceeded = $true if the Release was created successfully (does not include asset uploads), $false if the Release was not created.
-	AllAssetUploadsSucceeded = $true if all assets were uploaded to the Release successfully, $false if one of them failed, $null if there were no assets to upload.
-	ReleaseUrl = The URL of the new Release that was created.
-	ErrorMessage = A message describing what went wrong in the case that Succeeded is $false.
+    Succeeded = $true if the Release was created successfully and all assets were uploaded to it, $false if some part of the process failed.
+    ReleaseCreationSucceeded = $true if the Release was created successfully (does not include asset uploads), $false if the Release was not created.
+    AllAssetUploadsSucceeded = $true if all assets were uploaded to the Release successfully, $false if one of them failed, $null if there were no assets to upload.
+    ReleaseUrl = The URL of the new Release that was created.
+    ErrorMessage = A message describing what went wrong in the case that Succeeded is $false.
 
-	.EXAMPLE
-	# Import the module dynamically from the PowerShell Gallery. Use CurrentUser scope to avoid having to run as admin.
-	Import-Module -Name New-GitHubRelease -Scope CurrentUser
+    .EXAMPLE
+    # Import the module dynamically from the PowerShell Gallery. Use CurrentUser scope to avoid having to run as admin.
+    Import-Module -Name New-GitHubRelease -Scope CurrentUser
 
-	# Specify the parameters required to create the release. Do it as a hash table for easier readability.
-	$newGitHubReleaseParameters =
-	@{
-		GitHubUsername = 'deadlydog'
-		GitHubRepositoryName = 'New-GitHubRelease'
-		GitHubAccessToken = 'SomeLongHexidecimalString'
-		ReleaseName = "New-GitHubRelease v1.0.0"
-		TagName = "v1.0.0"
-		ReleaseNotes = "This release contains the following changes: ..."
-		AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
-		IsPreRelease = $false
-		IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
-	}
+    # Specify the parameters required to create the release. Do it as a hash table for easier readability.
+    $newGitHubReleaseParameters =
+    @{
+        GitHubUsername = 'deadlydog'
+        GitHubRepositoryName = 'New-GitHubRelease'
+        GitHubAccessToken = 'SomeLongHexidecimalString'
+        ReleaseName = "New-GitHubRelease v1.0.0"
+        TagName = "v1.0.0"
+        ReleaseNotes = "This release contains the following changes: ..."
+        AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
+        IsPreRelease = $false
+        IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
+    }
 
-	# Try to create the Release on GitHub and save the results.
-	$result = New-GitHubRelease @newGitHubReleaseParameters
+    # Try to create the Release on GitHub and save the results.
+    $result = New-GitHubRelease @newGitHubReleaseParameters
 
-	# Provide some feedback to the user based on the results.
-	if ($result.Succeeded -eq $true)
-	{
-		Write-Output "Release published successfully! View it at $($result.ReleaseUrl)"
-	}
-	elseif ($result.ReleaseCreationSucceeded -eq $false)
-	{
-		Write-Error "The release was not created. Error message is: $($result.ErrorMessage)"
-	}
-	elseif ($result.AllAssetUploadsSucceeded -eq $false)
-	{
-		Write-Error "The release was created, but not all of the assets were uploaded to it. View it at $($result.ReleaseUrl). Error message is: $($result.ErrorMessage)"
-	}
+    # Provide some feedback to the user based on the results.
+    if ($result.Succeeded -eq $true)
+    {
+        Write-Output "Release published successfully! View it at $($result.ReleaseUrl)"
+    }
+    elseif ($result.ReleaseCreationSucceeded -eq $false)
+    {
+        Write-Error "The release was not created. Error message is: $($result.ErrorMessage)"
+    }
+    elseif ($result.AllAssetUploadsSucceeded -eq $false)
+    {
+        Write-Error "The release was created, but not all of the assets were uploaded to it. View it at $($result.ReleaseUrl). Error message is: $($result.ErrorMessage)"
+    }
 
-	Attempt to create a new Release on GitHub, and provide feedback to the user indicating if it succeeded or not.
+    Attempt to create a new Release on GitHub, and provide feedback to the user indicating if it succeeded or not.
 
-	.LINK
-	Project home: https://github.com/deadlydog/New-GitHubRelease
+    .LINK
+    Project home: https://github.com/deadlydog/New-GitHubRelease
 
-	.NOTES
-	Name:   New-GitHubRelease
-	Author: Daniel Schroeder (originally based on the script at https://github.com/majkinetor/au/blob/master/scripts/Github-CreateRelease.ps1)
-	GitHub Release API Documentation: https://developer.github.com/v3/repos/releases/#create-a-release
-	Version: 1.0.2
-#>
+    .NOTES
+    Name:   New-GitHubRelease
+    Author: Daniel Schroeder (originally based on the script at https://github.com/majkinetor/au/blob/master/scripts/Github-CreateRelease.ps1)
+    GitHub Release API Documentation: https://developer.github.com/v3/repos/releases/#create-a-release
+    Version: 1.0.2
+    #>
     [CmdletBinding()]
     param
     (
