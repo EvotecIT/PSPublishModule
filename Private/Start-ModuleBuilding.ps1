@@ -570,14 +570,14 @@
     }
     # Publish Module Section
     if ($Configuration.Steps.PublishModule.Enabled) {
-        $Publishing = Start-PublishingModule -Configuration $Configuration
+        $Publishing = Start-PublishingGallery -Configuration $Configuration
         if ($Publishing -eq $false) {
-            return
+            return $false
         }
     }
     # Publish Module Section to GitHub
     if ($Configuration.Steps.PublishModule.GitHub) {
-        Start-GitHubBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
+        Start-PublishingGitHub -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
     }
     if ($Configuration.Steps.BuildDocumentation) {
         Start-DocumentationBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -ProjectName $ProjectName
