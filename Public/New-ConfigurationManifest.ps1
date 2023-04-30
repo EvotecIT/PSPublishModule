@@ -4,7 +4,7 @@
         [Parameter(Mandatory)][string] $ModuleVersion,
         [ValidateSet('Desktop', 'Core')][string[]] $CompatiblePSEditions = @('Desktop', 'Core'),
         [Parameter(Mandatory)][string] $GUID,
-        [string] $Author,
+        [Parameter(Mandatory)][string] $Author,
         [string] $CompanyName,
         [string] $Copyright,
         [string] $Description,
@@ -29,6 +29,7 @@
         ProjectUri             = $ProjectUri
         DotNetFrameworkVersion = $DotNetFrameworkVersion
     }
+    Remove-EmptyValue -Hashtable $Manifest
 
     $Option = @{
         Type          = 'Manifest'
