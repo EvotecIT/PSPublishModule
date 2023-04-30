@@ -3,19 +3,12 @@
     param(
         [ValidateSet('PowerShellGallery', 'GitHub')]
         [string] $Type,
-
         [string] $FilePath,
-
         [string] $UserName,
-
         [string] $RepositoryName,
-
         [string] $ApiKey,
-
         [switch] $Enabled,
-
         [string] $PreReleaseTag,
-
         [switch] $Force
     )
     $Options = [ordered] @{}
@@ -76,6 +69,14 @@
                 }
             }
         }
+        if ($VerbosePreference) {
+            [ordered] @{
+                Type          = 'PowerShellGalleryPublishing'
+                PublishModule = [ordered] @{
+                    PSGalleryVerbose = $true
+                }
+            }
+        }
         if ($PreReleaseTag) {
             [ordered] @{
                 Type          = 'PowerShellGalleryPublishing'
@@ -98,6 +99,14 @@
                 Type          = 'GitHubPublishing'
                 PublishModule = [ordered] @{
                     GitHub = $true
+                }
+            }
+        }
+        if ($VerbosePreference) {
+            [ordered] @{
+                Type          = 'PowerShellGalleryPublishing'
+                PublishModule = [ordered] @{
+                    GitHubVerbose = $true
                 }
             }
         }
