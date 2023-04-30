@@ -139,9 +139,9 @@
                 } elseif ($Setting.Type -eq 'BuildDocumentation') {
                     $Configuration.Steps.BuildDocumentation = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'GitHub') {
-                    $Configuration.Options.GitHub = $Setting.Configuration
+                    $Configuration.Options.GitHub = $Setting.Configuration.GitHub
                 } elseif ($Setting.Type -eq 'PowerShellGallery') {
-                    $Configuration.Options.PowerShellGallery = $Setting.Configuration
+                    $Configuration.Options.PowerShellGallery = $Setting.Configuration.PowerShellGallery
                 } elseif ($Setting.Type -eq 'PowerShellGalleryPublishing') {
                     foreach ($Key in $Setting.PublishModule.Keys) {
                         $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
@@ -214,7 +214,7 @@
         $Configuration.Steps.PublishModule.Enabled) {
         $Success = Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
         if ($Success -eq $false) {
-            return
+            return $false
         }
     }
 }
