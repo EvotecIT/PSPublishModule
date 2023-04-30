@@ -74,17 +74,17 @@
         if ($PlaceOpenBraceEnable) {
             $Formatting.FormatterSettings.Rules.PSPlaceOpenBrace = [ordered] @{
                 Enable             = $true
-                OnSameLine         = $PlaceOpenBraceOnSameLine
-                NewLineAfter       = $PlaceOpenBraceNewLineAfter
-                IgnoreOneLineBlock = $PlaceOpenBraceIgnoreOneLineBlock
+                OnSameLine         = $PlaceOpenBraceOnSameLine.IsPresent
+                NewLineAfter       = $PlaceOpenBraceNewLineAfter.IsPresent
+                IgnoreOneLineBlock = $PlaceOpenBraceIgnoreOneLineBlock.IsPresent
             }
         }
         if ($PlaceCloseBraceEnable) {
             $Formatting.FormatterSettings.Rules.PSPlaceCloseBrace = [ordered] @{
                 Enable             = $true
-                NewLineAfter       = $PlaceCloseBraceNewLineAfter
-                IgnoreOneLineBlock = $PlaceCloseBraceIgnoreOneLineBlock
-                NoEmptyLineBefore  = $PlaceCloseBraceNoEmptyLineBefore
+                NewLineAfter       = $PlaceCloseBraceNewLineAfter.IsPresent
+                IgnoreOneLineBlock = $PlaceCloseBraceIgnoreOneLineBlock.IsPresent
+                NoEmptyLineBefore  = $PlaceCloseBraceNoEmptyLineBefore.IsPresent
             }
         }
         if ($UseConsistentIndentationEnable) {
@@ -98,18 +98,18 @@
         if ($UseConsistentWhitespaceEnable) {
             $Formatting.FormatterSettings.Rules.PSUseConsistentWhitespace = [ordered] @{
                 Enable          = $true
-                CheckInnerBrace = $UseConsistentWhitespaceCheckInnerBrace
-                CheckOpenBrace  = $UseConsistentWhitespaceCheckOpenBrace
-                CheckOpenParen  = $UseConsistentWhitespaceCheckOpenParen
-                CheckOperator   = $UseConsistentWhitespaceCheckOperator
-                CheckPipe       = $UseConsistentWhitespaceCheckPipe
-                CheckSeparator  = $UseConsistentWhitespaceCheckSeparator
+                CheckInnerBrace = $UseConsistentWhitespaceCheckInnerBrace.IsPresent
+                CheckOpenBrace  = $UseConsistentWhitespaceCheckOpenBrace.IsPresent
+                CheckOpenParen  = $UseConsistentWhitespaceCheckOpenParen.IsPresent
+                CheckOperator   = $UseConsistentWhitespaceCheckOperator.IsPresent
+                CheckPipe       = $UseConsistentWhitespaceCheckPipe.IsPresent
+                CheckSeparator  = $UseConsistentWhitespaceCheckSeparator.IsPresent
             }
         }
         if ($AlignAssignmentStatementEnable) {
             $Formatting.FormatterSettings.Rules.PSAlignAssignmentStatement = [ordered] @{
                 Enable         = $true
-                CheckHashtable = $AlignAssignmentStatementCheckHashtable
+                CheckHashtable = $AlignAssignmentStatementCheckHashtable.IsPresent
             }
         }
         if ($UseCorrectCasingEnable) {
