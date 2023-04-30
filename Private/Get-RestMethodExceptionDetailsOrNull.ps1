@@ -1,4 +1,8 @@
-﻿function Get-RestMethodExceptionDetailsOrNull([Exception] $restMethodException) {
+﻿function Get-RestMethodExceptionDetailsOrNull {
+    [CmdletBinding()]
+    param(
+        [Exception] $restMethodException
+    )
     try {
         $responseDetails = @{
             ResponseUri       = $exception.Response.ResponseUri
