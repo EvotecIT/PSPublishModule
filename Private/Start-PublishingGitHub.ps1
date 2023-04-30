@@ -1,4 +1,4 @@
-﻿function Start-GitHubBuilding {
+﻿function Start-PublishingGitHub {
     [cmdletBinding()]
     param(
         [System.Collections.IDictionary] $Configuration,
@@ -41,7 +41,7 @@
             $GitHubRepositoryName = $ProjectName
         }
         if (Test-Path -LiteralPath $ZipPath) {
-            if ($Configuration.Steps.PublishModule.Prerelease -ne '') {
+            if ($Configuration.Steps.PublishModule.Prerelease) {
                 $IsPreRelease = $true
             } else {
                 $IsPreRelease = $false
@@ -54,11 +54,12 @@
                 TagName              = $TagName
                 AssetFilePaths       = $ZipPath
                 IsPreRelease         = $IsPreRelease
-                # those don't work, requires texting
+                # those don't work, requires testing
                 #GenerateReleaseNotes = $true
                 #MakeLatest           = $true
                 #GenerateReleaseNotes = if ($Configuration.Options.GitHub.GenerateReleaseNotes) { $true } else { $false }
                 #MakeLatest           = if ($Configuration.Options.GitHub.MakeLatest) { $true } else { $false }
+                Verbose              = $Configuration.Steps.PublishModule.GitHubVerbose
             }
 
             $StatusGithub = Send-GitHubRelease @sendGitHubReleaseSplat
