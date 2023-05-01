@@ -10,6 +10,8 @@
         [string] $RequiredModulesPath,
         [System.Collections.IDictionary] $CopyDirectories,
         [System.Collections.IDictionary] $CopyFiles,
+        [switch] $CopyDirectoriesRelative,
+        [switch] $CopyFilesRelative,
         [switch] $Clear
     )
 
@@ -81,11 +83,27 @@
             }
         }
     }
+    if ($PSBoundParameters.ContainsKey('CopyDirectoriesRelative')) {
+        [ordered] @{
+            Type          = $ArtefactType
+            $ArtefactType = [ordered] @{
+                DestinationDirectoriesRelative = $CopyDirectoriesRelative.IsPresent
+            }
+        }
+    }
     if ($PSBoundParameters.ContainsKey('CopyFiles')) {
         [ordered] @{
             Type          = $ArtefactType
             $ArtefactType = [ordered] @{
                 FilesOutput = $CopyFiles
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('CopyFilesRelative')) {
+        [ordered] @{
+            Type          = $ArtefactType
+            $ArtefactType = [ordered] @{
+                DestinationFilesRelative = $CopyFilesRelative.IsPresent
             }
         }
     }
