@@ -24,19 +24,8 @@
                 # default values
                 $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
             }
-            $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)
 
-            Write-TextWithTime -Text "Compressing final merged release $ZipPath" {
-                $null = New-Item -ItemType Directory -Path $FolderPathReleases -Force
-                if ($DestinationPaths.Desktop) {
-                    $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
-                    Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-                }
-                if ($DestinationPaths.Core -and -not $DestinationPaths.Desktop) {
-                    $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
-                    Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
-                }
-            } -PreAppend 'Plus'
+            Compress-Artefact -Destination $FolderPathReleases -FileName $FileName
         }
 
         if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath) {
@@ -87,7 +76,6 @@
                 $CurrentModulePath = $ArtefactsPath
             }
             Write-TextWithTime -Text "Copying final merged release to $ArtefactsPath" -PreAppend Plus {
-
                 $copyMainModuleSplat = @{
                     Enabled           = $true
                     IncludeTagName    = $Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName
@@ -104,14 +92,17 @@
                 }
                 Copy-ArtefactRequiredModule @copyRequiredModuleSplat
 
-                Copy-ArtefactRequiredFolders -FoldersInput $Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput -ProjectPath $FullProjectPath
+                $copyArtefactRequiredFoldersSplat = @{
+                    FoldersInput = $Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput
+                    ProjectPath  = $FullProjectPath
+                }
+                Copy-ArtefactRequiredFolders @copyArtefactRequiredFoldersSplat
 
                 $copyArtefactRequiredFilesSplat = @{
                     FilesInput  = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
                     ProjectPath = $FullProjectPath
                     Destination = $FolderPathReleasesUnpacked
                 }
-
                 Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
             }
         }
