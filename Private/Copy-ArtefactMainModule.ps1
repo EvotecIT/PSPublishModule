@@ -2,29 +2,29 @@
     [CmdletBinding()]
     param(
         [switch] $Enabled,
-        [string] $IncludeTagName,
+        [bool] $IncludeTagName,
         [string] $ModuleName,
-        [string] $Destination,
-        [string] $CurrentModulePath
+        [string] $Destination
     )
     if (-not $Enabled) {
         return
     }
     if ($IncludeTagName) {
-        $NameOfDestination = [io.path]::Combine($CurrentModulePath, $ModuleName, $TagName)
+        $NameOfDestination = [io.path]::Combine($Destination, $ModuleName, $TagName)
     } else {
-        $NameOfDestination = [io.path]::Combine($CurrentModulePath, $ModuleName)
+        $NameOfDestination = [io.path]::Combine($Destination, $ModuleName)
     }
-    Write-TextWithTime -PreAppend Addition -Text "Copying main module to $NameOfDestination" -Color Yellow {
+    $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($NameOfDestination)
+    Write-TextWithTime -PreAppend Addition -Text "Copying main module to $ResolvedDestination" -Color Yellow {
         if (Test-Path -Path $NameOfDestination) {
             Remove-ItemAlternative -LiteralPath $NameOfDestination
         }
         $null = New-Item -ItemType Directory -Path $Destination -Force
 
         if ($DestinationPaths.Desktop) {
-            Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $NameOfDestination -Force
+            Copy-Item -LiteralPath $DestinationPaths.Desktop -Recurse -Destination $ResolvedDestination -Force
         } elseif ($DestinationPaths.Core) {
-            Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $NameOfDestination -Force
+            Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $ResolvedDestination -Force
         }
     } -SpacesBefore '   '
 }
