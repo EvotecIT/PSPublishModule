@@ -77,17 +77,19 @@
             }
 
             $SplatArtefact = @{
-                ModuleName                 = $Configuration.Information.ModuleName
-                CopyMainModule             = $true
-                CopyRequiredModules        = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled
-                ProjectPath                = $FullProjectPath
-                Destination                = $ArtefactsPath
-                DestinationMainModule      = $CurrentModulePath
-                DestinationRequiredModules = $RequiredModulesPath
-                RequiredModules            = $Configuration.Information.Manifest.RequiredModules
-                Files                      = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
-                Folders                    = $Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput
-                IncludeTagName             = $Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName
+                ModuleName                     = $Configuration.Information.ModuleName
+                CopyMainModule                 = $true
+                CopyRequiredModules            = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled
+                ProjectPath                    = $FullProjectPath
+                Destination                    = $ArtefactsPath
+                DestinationMainModule          = $CurrentModulePath
+                DestinationRequiredModules     = $RequiredModulesPath
+                RequiredModules                = $Configuration.Information.Manifest.RequiredModules
+                Files                          = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
+                Folders                        = $Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput
+                IncludeTagName                 = $Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName
+                DestinationFilesRelative       = $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationFilesRelative
+                DestinationDirectoriesRelative = $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationDirectoriesRelative
             }
             Remove-EmptyValue -Hashtable $SplatArtefact
             Add-Artefact @SplatArtefact
