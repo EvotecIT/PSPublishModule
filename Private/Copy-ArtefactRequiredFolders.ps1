@@ -3,6 +3,7 @@
     param(
         [System.Collections.IDictionary] $FoldersInput,
         [string] $ProjectPath,
-        [string] $Destination
+        [string] $Destination,
+        [bool] $DestinationRelative
     )
 }
