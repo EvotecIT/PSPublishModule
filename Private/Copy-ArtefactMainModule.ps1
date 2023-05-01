@@ -16,10 +16,8 @@
         $NameOfDestination = [io.path]::Combine($CurrentModulePath, $ModuleName)
     }
     Write-TextWithTime -PreAppend Addition -Text "Copying main module to $NameOfDestination" -Color Yellow {
-        #Write-Text "   [>] Copying main module to $NameOfDestination" -Color Yellow
-        # try {
         if (Test-Path -Path $NameOfDestination) {
-            Remove-ItemAlternative -LiteralPath $NameOfDestination #-SkipFolder
+            Remove-ItemAlternative -LiteralPath $NameOfDestination
         }
         $null = New-Item -ItemType Directory -Path $Destination -Force
 
@@ -28,11 +26,5 @@
         } elseif ($DestinationPaths.Core) {
             Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $NameOfDestination -Force
         }
-        # } catch {
-        #     $ErrorMessage = $_.Exception.Message
-        #     Write-Host # This is to add new line, because the first line was opened up.
-        #     Write-Text "[-] Start-ArtefactsBuilding - Copying final merged release to $Destination failed. Error: $ErrorMessage" -Color Red
-        #     return $false
-        # }
     } -SpacesBefore '   '
 }
