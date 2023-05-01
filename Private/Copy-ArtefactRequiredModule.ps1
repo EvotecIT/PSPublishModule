@@ -3,13 +3,13 @@
     param(
         [switch] $Enabled,
         [Array] $RequiredModules,
-        [string] $FolderPath
+        [string] $Destination
     )
     if (-not $Enabled) {
         return
     }
-    if (-not (Test-Path -LiteralPath $FolderPath)) {
-        New-Item -ItemType Directory -Path $FolderPath -Force
+    if (-not (Test-Path -LiteralPath $Destination)) {
+        New-Item -ItemType Directory -Path $Destination -Force
     }
     foreach ($Module in $RequiredModules) {
         if ($Module.ModuleName) {
@@ -39,17 +39,17 @@
 
                     #try {
                     if ($ItemInformation.Name -ne $Module.ModuleName) {
-                        $NewPath = [io.path]::Combine($FolderPath, $Module.ModuleName)
+                        $NewPath = [io.path]::Combine($Destination, $Module.ModuleName)
                         if (Test-Path -LiteralPath $NewPath) {
                             Remove-Item -LiteralPath $NewPath -Recurse -Force -ErrorAction Stop
                         }
                         Copy-Item -LiteralPath $FolderToCopy -Destination $NewPath -Recurse -Force -ErrorAction Stop
                     } else {
-                        Copy-Item -LiteralPath $FolderToCopy -Destination $FolderPath -Recurse -Force
+                        Copy-Item -LiteralPath $FolderToCopy -Destination $Destination -Recurse -Force
                     }
                     #} catch {
                     #   $ErrorMessage = $_.Exception.Message
-                    #    Write-Text "[-] Start-ArtefactsBuilding - Copying final artefact module $($Module.ModuleName) to $FolderPathReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
+                    #    Write-Text "[-] Start-ArtefactsBuilding - Copying final artefact module $($Module.ModuleName) to $DestinationReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
                     #    return $false
                     #}
                 }
