@@ -104,7 +104,7 @@
         }
         if ($VerbosePreference) {
             [ordered] @{
-                Type          = 'PowerShellGalleryPublishing'
+                Type          = 'GitHubPublishing'
                 PublishModule = [ordered] @{
                     GitHubVerbose = $true
                 }
