@@ -124,17 +124,19 @@ function Merge-Module {
     [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules | Sort-Object -Unique
 
     $ModulesThatWillMissBecauseOfIntegrating = [System.Collections.Generic.List[string]]::new()
-    [Array] $DependantRequiredModules = foreach ($_ in $RequiredModules) {
-        [Array] $TemporaryDependant = Find-RequiredModules -Name $_
-        if ($_ -in $ApprovedModules) {
-            # We basically skip dependant modules and tell the user to use it separatly
-            # This is because if the module PSSharedGoods has requirements like PSWriteColor
-            # and we don't integrate PSWriteColor separatly it would be skipped
-            foreach ($ModulesTemp in $TemporaryDependant) {
-                $ModulesThatWillMissBecauseOfIntegrating.Add($ModulesTemp)
+    [Array] $DependantRequiredModules = foreach ($Module in $RequiredModules) {
+        [Array] $TemporaryDependant = Find-RequiredModules -Name $Module
+        if ($TemporaryDependant.Count -gt 0) {
+            if ($Module -in $ApprovedModules) {
+                # We basically skip dependant modules and tell the user to use it separatly
+                # This is because if the module PSSharedGoods has requirements like PSWriteColor
+                # and we don't integrate PSWriteColor separatly it would be skipped
+                foreach ($ModulesTemp in $TemporaryDependant) {
+                    $ModulesThatWillMissBecauseOfIntegrating.Add($ModulesTemp)
+                }
+            } else {
+                $TemporaryDependant
             }
-        } else {
-            $TemporaryDependant
         }
     }
     $DependantRequiredModules = $DependantRequiredModules | Sort-Object -Unique
@@ -194,10 +196,10 @@ function Merge-Module {
                 Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color DarkYellow
             }
         } elseif ($Module -in $DependantRequiredModules) {
-            Write-Text "[+] Module $Module is in dependant required module within required modules." -Color Green
+            Write-Text "[+] Module $Module is in dependant required module within required modules." -Color DarkGray
             $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
             foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Green
+                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color DarkGray
             }
         } elseif ($Module -in $RequiredModules) {
             Write-Text "[+] Module $Module is in required modules." -Color Green
