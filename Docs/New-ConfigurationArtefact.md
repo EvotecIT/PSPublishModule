@@ -5,7 +5,7 @@ online version:
 schema: 2.0.0
 ---
 
-# New-ConfigurationManifest
+# New-ConfigurationArtefact
 
 ## SYNOPSIS
 {{ Fill in the Synopsis }}
@@ -13,10 +13,9 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <String[]>] [-GUID] <String>
- [-Author] <String> [[-CompanyName] <String>] [[-Copyright] <String>] [[-Description] <String>]
- [[-PowerShellVersion] <String>] [[-Tags] <String[]>] [[-IconUri] <String>] [[-ProjectUri] <String>]
- [[-DotNetFrameworkVersion] <String>] [<CommonParameters>]
+New-ConfigurationArtefact [-Type] <String> [-Enable] [-IncludeTagName] [[-Path] <String>] [-AddRequiredModules]
+ [[-ModulesPath] <String>] [[-RequiredModulesPath] <String>] [[-CopyDirectories] <IDictionary>]
+ [[-CopyFiles] <IDictionary>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-Clear] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -33,26 +32,41 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
-### -Author
-{{ Fill Author Description }}
+### -AddRequiredModules
+{{ Fill AddRequiredModules Description }}
 
 ```yaml
-Type: String
+Type: SwitchParameter
 Parameter Sets: (All)
-Aliases:
+Aliases: RequiredModules
 
-Required: True
-Position: 3
+Required: False
+Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -CompanyName
-{{ Fill CompanyName Description }}
+### -Clear
+{{ Fill Clear Description }}
 
 ```yaml
-Type: String
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CopyDirectories
+{{ Fill CopyDirectories Description }}
+
+```yaml
+Type: IDictionary
 Parameter Sets: (All)
 Aliases:
 
@@ -63,27 +77,26 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -CompatiblePSEditions
-{{ Fill CompatiblePSEditions Description }}
+### -CopyDirectoriesRelative
+{{ Fill CopyDirectoriesRelative Description }}
 
 ```yaml
-Type: String[]
+Type: SwitchParameter
 Parameter Sets: (All)
 Aliases:
-Accepted values: Desktop, Core
 
 Required: False
-Position: 1
+Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Copyright
-{{ Fill Copyright Description }}
+### -CopyFiles
+{{ Fill CopyFiles Description }}
 
 ```yaml
-Type: String
+Type: IDictionary
 Parameter Sets: (All)
 Aliases:
 
@@ -94,8 +107,53 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Description
-{{ Fill Description Description }}
+### -CopyFilesRelative
+{{ Fill CopyFilesRelative Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Enable
+{{ Fill Enable Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeTagName
+{{ Fill IncludeTagName Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ModulesPath
+{{ Fill ModulesPath Description }}
 
 ```yaml
 Type: String
@@ -103,44 +161,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DotNetFrameworkVersion
-{{ Fill DotNetFrameworkVersion Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 11
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -GUID
-{{ Fill GUID Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
 Position: 2
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -IconUri
-{{ Fill IconUri Description }}
+### -Path
+{{ Fill Path Description }}
 
 ```yaml
 Type: String
@@ -148,67 +176,38 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 9
+Position: 1
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ModuleVersion
-{{ Fill ModuleVersion Description }}
+### -RequiredModulesPath
+{{ Fill RequiredModulesPath Description }}
 
 ```yaml
 Type: String
 Parameter Sets: (All)
 Aliases:
+
+Required: False
+Position: 3
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Type
+{{ Fill Type Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: Unpacked, Packed
 
 Required: True
 Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -PowerShellVersion
-{{ Fill PowerShellVersion Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 7
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProjectUri
-{{ Fill ProjectUri Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 10
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Tags
-{{ Fill Tags Description }}
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

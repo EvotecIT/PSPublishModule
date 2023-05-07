@@ -29,6 +29,12 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
+### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
+{{ Fill in the Description }}
+
 ### [New-ConfigurationBuild](New-ConfigurationBuild.md)
 {{ Fill in the Description }}
 
@@ -50,10 +56,10 @@ Locale: en-US
 ### [New-ConfigurationManifest](New-ConfigurationManifest.md)
 {{ Fill in the Description }}
 
-### [New-ConfigurationPublish](New-ConfigurationPublish.md)
+### [New-ConfigurationModule](New-ConfigurationModule.md)
 {{ Fill in the Description }}
 
-### [New-PrepareModule](New-PrepareModule.md)
+### [New-ConfigurationPublish](New-ConfigurationPublish.md)
 {{ Fill in the Description }}
 
 ### [Register-Certificate](Register-Certificate.md)
