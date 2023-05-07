@@ -14,7 +14,6 @@
     foreach ($Module in $RequiredModules) {
         if ($Module.ModuleName) {
             Write-TextWithTime -PreAppend Addition -Text "Copying required module $($Module.ModuleName)" -Color Yellow {
-                # Write-Text "   [>] Copying required module $($Module.ModuleName)" -Color Yellow
                 $ModulesFound = Get-Module -ListAvailable -Name $Module.ModuleName
                 if ($ModulesFound.Count -gt 0) {
                     $PathToPSD1 = if ($Module.ModuleVersion -eq 'Latest') {
@@ -37,7 +36,6 @@
                     $FolderToCopy = [System.IO.Path]::GetDirectoryName($PathToPSD1)
                     $ItemInformation = Get-Item -LiteralPath $FolderToCopy
 
-                    #try {
                     if ($ItemInformation.Name -ne $Module.ModuleName) {
                         $NewPath = [io.path]::Combine($Destination, $Module.ModuleName)
                         if (Test-Path -LiteralPath $NewPath) {
@@ -47,11 +45,6 @@
                     } else {
                         Copy-Item -LiteralPath $FolderToCopy -Destination $Destination -Recurse -Force
                     }
-                    #} catch {
-                    #   $ErrorMessage = $_.Exception.Message
-                    #    Write-Text "[-] Start-ArtefactsBuilding - Copying final artefact module $($Module.ModuleName) to $DestinationReleasesUnpacked failed. Error: $ErrorMessage" -Color Red
-                    #    return $false
-                    #}
                 }
             } -SpacesBefore '   '
         }
