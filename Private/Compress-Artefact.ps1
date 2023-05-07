@@ -37,6 +37,7 @@
         }
     }
     $ZipPath = [System.IO.Path]::Combine($Destination, $FileName)
+    $ZipPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ZipPath)
 
     $Configuration.CurrentSettings.ArtefactZipName = $FileName
     $Configuration.CurrentSettings.ArtefactZipPath = $ZipPath
