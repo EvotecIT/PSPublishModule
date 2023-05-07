@@ -4,6 +4,6 @@
         [System.Collections.IDictionary] $FoldersInput,
         [string] $ProjectPath,
         [string] $Destination,
-        [bool] $DestinationRelative
+        [nullable[bool]] $DestinationRelative
     )
 }

@@ -2,7 +2,7 @@
     [CmdletBinding()]
     param(
         [switch] $Enabled,
-        [bool] $IncludeTagName,
+        [nullable[bool]] $IncludeTagName,
         [string] $ModuleName,
         [string] $Destination
     )

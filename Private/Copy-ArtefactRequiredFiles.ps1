@@ -4,7 +4,7 @@
         [System.Collections.IDictionary] $FilesInput,
         [string] $ProjectPath,
         [string] $Destination,
-        [bool] $DestinationRelative
+        [nullable[bool]] $DestinationRelative
     )
 
     foreach ($File in $FilesInput.Keys) {
