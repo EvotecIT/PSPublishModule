@@ -23,6 +23,11 @@
     if (-not $Configuration.Information.DirectoryModules) {
         $Configuration.Information.DirectoryModules = "$([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments))\WindowsPowerShell\Modules"
     }
+    # This is to use within module between different stages
+    # kind of temporary settings storage
+    if (-not $Configuration.CurrentSettings) {
+        $Configuration.CurrentSettings = [ordered] @{}
+    }
     if ($ModuleName) {
         $Configuration.Information.ModuleName = $ModuleName
     }
