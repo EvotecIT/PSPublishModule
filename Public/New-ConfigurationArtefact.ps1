@@ -12,7 +12,8 @@
         [System.Collections.IDictionary] $CopyFiles,
         [switch] $CopyDirectoriesRelative,
         [switch] $CopyFilesRelative,
-        [switch] $Clear
+        [switch] $Clear,
+        [string] $ArtefactName
     )
 
     if ($Type -eq 'Packed') {
@@ -112,6 +113,14 @@
             Type          = $ArtefactType
             $ArtefactType = [ordered] @{
                 Clear = $Clear
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('ArtefactName')) {
+        [ordered] @{
+            Type          = $ArtefactType
+            $ArtefactType = [ordered] @{
+                ArtefactName = $ArtefactName
             }
         }
     }
