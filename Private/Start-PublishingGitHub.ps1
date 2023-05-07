@@ -7,27 +7,32 @@
         [string] $ProjectName
     )
     $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
-    $FileName = -join ("$TagName", '.zip')
+    #$FileName = -join ("$TagName", '.zip')
 
-    if ($Configuration.Steps.BuildModule.Releases -eq $true -or $Configuration.Steps.BuildModule.Releases.Enabled) {
-        if ($Configuration.Steps.BuildModule.Releases -is [System.Collections.IDictionary]) {
-            if ($Configuration.Steps.BuildModule.Releases.Path) {
-                if ($Configuration.Steps.BuildModule.Releases.Relative -eq $false) {
-                    $FolderPathReleases = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.Releases.Path)
-                } else {
-                    $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.Releases.Path)
-                }
-            } else {
-                $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-            }
-        } else {
-            # default values
-            $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
-        }
-        $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)
-    } else {
-        $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+    # if ($Configuration.Steps.BuildModule.Releases -eq $true -or $Configuration.Steps.BuildModule.Releases.Enabled) {
+    #     if ($Configuration.Steps.BuildModule.Releases -is [System.Collections.IDictionary]) {
+    #         if ($Configuration.Steps.BuildModule.Releases.Path) {
+    #             if ($Configuration.Steps.BuildModule.Releases.Relative -eq $false) {
+    #                 $FolderPathReleases = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Configuration.Steps.BuildModule.Releases.Path)
+    #             } else {
+    #                 $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Configuration.Steps.BuildModule.Releases.Path)
+    #             }
+    #         } else {
+    #             $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+    #         }
+    #     } else {
+    #         # default values
+    #         $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
+    #     }
+    #     $ZipPath = [System.IO.Path]::Combine($FolderPathReleases, $FileName)
+    # } else {
+    #     $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
+    # }
+    if ($Configuration.CurrentSettings.ArtefactZipPath -and (Test-Path -LiteralPath $Configuration.CurrentSettings.ArtefactZipPath)) {
+        Write-Text -Text "[-] Publishing to GitHub failed. File $($Configuration.CurrentSettings.ArtefactZipPath) doesn't exists" -Color Red
+        return $false
     }
+    $ZipPath = $Configuration.CurrentSettings.ArtefactZipPath
 
     if ($Configuration.Options.GitHub.FromFile) {
         $GitHubAccessToken = Get-Content -LiteralPath $Configuration.Options.GitHub.ApiKey -Encoding UTF8
@@ -78,10 +83,12 @@
             Write-Text "[$GitHubText] GitHub Release URL: $($statusGitHub.ReleaseUrl)" -Color $GithubColor
             if ($statusGithub.ErrorMessage) {
                 Write-Text "[$GitHubText] GitHub Release ErrorMessage: $($statusGithub.ErrorMessage)" -Color $GithubColor
+                return $false
             }
         } else {
             Write-Text "[-] GitHub Release Creation Status: Failed" -Color Red
             Write-Text "[-] GitHub Release Creation Reason: $ZipPath doesn't exists. Most likely Releases option is disabled." -Color Red
+            return $false
         }
     }
 }
