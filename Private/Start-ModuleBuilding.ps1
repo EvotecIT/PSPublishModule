@@ -97,8 +97,8 @@
         if ($Success -eq $false) {
             return
         }
-        Add-Directory $FullModuleTemporaryPath
-        Add-Directory $FullTemporaryPath
+        Add-Directory -Directory $FullModuleTemporaryPath
+        Add-Directory -Directory $FullTemporaryPath
 
         # $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates', 'Resources'
 
