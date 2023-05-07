@@ -28,7 +28,7 @@
     # } else {
     #     $ZipPath = [System.IO.Path]::Combine($FullProjectPath, 'Releases', $FileName)
     # }
-    if ($Configuration.CurrentSettings.ArtefactZipPath -and (Test-Path -LiteralPath $Configuration.CurrentSettings.ArtefactZipPath)) {
+    if (-not $Configuration.CurrentSettings.ArtefactZipPath -or -not (Test-Path -LiteralPath $Configuration.CurrentSettings.ArtefactZipPath)) {
         Write-Text -Text "[-] Publishing to GitHub failed. File $($Configuration.CurrentSettings.ArtefactZipPath) doesn't exists" -Color Red
         return $false
     }
