@@ -6,9 +6,6 @@
         [System.Collections.IDictionary] $DestinationPaths
     )
     if ($Configuration.Steps.BuildModule.Releases -or $Configuration.Steps.BuildModule.ReleasesUnpacked) {
-        $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
-        $FileName = -join ("$TagName", '.zip')
-
         if ($Configuration.Steps.BuildModule.Releases -eq $true -or $Configuration.Steps.BuildModule.Releases.Enabled) {
             if ($Configuration.Steps.BuildModule.Releases -is [System.Collections.IDictionary]) {
                 if ($Configuration.Steps.BuildModule.Releases.Path) {
@@ -24,8 +21,27 @@
                 # default values
                 $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, 'Releases')
             }
+            if ($DestinationPaths.Desktop) {
+                $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
+            } elseif ($DestinationPaths.Core) {
+                $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
+            }
 
-            Compress-Artefact -Destination $FolderPathReleases -FileName $FileName
+            $compressArtefactSplat = @{
+                Configuration = $Configuration
+                LegacyName    = if ($Configuration.Steps.BuildModule.Releases -is [bool]) { $true } else { $false }
+                Source        = $CompressPath
+                Destination   = $FolderPathReleases
+                ModuleName    = $Configuration.Information.ModuleName
+                ModuleVersion = $Configuration.Information.Manifest.ModuleVersion
+                IncludeTag    = $Configuration.Steps.BuildModule.Releases.IncludeTagName
+                ArtefactName  = $Configuration.Steps.BuildModule.Releases.ArtefactName
+            }
+
+            $OutputArchive = Compress-Artefact @compressArtefactSplat
+            if ($OutputArchive -eq $false) {
+                return $false
+            }
         }
 
         if ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath) {
@@ -78,6 +94,8 @@
 
             $SplatArtefact = @{
                 ModuleName                     = $Configuration.Information.ModuleName
+                ModuleVersion                  = $Configuration.Information.Manifest.ModuleVersion
+                LegacyName                     = if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [bool]) { $true } else { $false }
                 CopyMainModule                 = $true
                 CopyRequiredModules            = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled
                 ProjectPath                    = $FullProjectPath
@@ -87,44 +105,16 @@
                 RequiredModules                = $Configuration.Information.Manifest.RequiredModules
                 Files                          = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
                 Folders                        = $Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput
-                IncludeTagName                 = $Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName
                 DestinationFilesRelative       = $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationFilesRelative
                 DestinationDirectoriesRelative = $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationDirectoriesRelative
+                Configuration                  = $Configuration
+                IncludeTag                     = $Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName
+                ArtefactName                   = $Configuration.Steps.BuildModule.ReleasesUnpacked.ArtefactName
+                ZipIt                          = $false
+                DestinationZip                 = $null
             }
             Remove-EmptyValue -Hashtable $SplatArtefact
             Add-Artefact @SplatArtefact
-
-
-            # Write-TextWithTime -Text "Copying final merged release to $ArtefactsPath" -PreAppend Plus {
-            #     $copyMainModuleSplat = @{
-            #         Enabled           = $true
-            #         IncludeTagName    = $Configuration.Steps.BuildModule.ReleasesUnpacked.IncludeTagName
-            #         ModuleName        = $Configuration.Information.ModuleName
-            #         Destination       = $FolderPathReleasesUnpacked
-            #         CurrentModulePath = $CurrentModulePath
-            #     }
-            #     Copy-ArtefactMainModule @copyMainModuleSplat
-
-            #     $copyRequiredModuleSplat = @{
-            #         Enabled         = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules -eq $true -or $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.Enabled
-            #         RequiredModules = $Configuration.Information.Manifest.RequiredModules
-            #         FolderPath      = $RequiredModulesPath
-            #     }
-            #     Copy-ArtefactRequiredModule @copyRequiredModuleSplat
-
-            #     $copyArtefactRequiredFoldersSplat = @{
-            #         FoldersInput = $Configuration.Steps.BuildModule.ReleasesUnpacked.DirectoryOutput
-            #         ProjectPath  = $FullProjectPath
-            #     }
-            #     Copy-ArtefactRequiredFolders @copyArtefactRequiredFoldersSplat
-
-            #     $copyArtefactRequiredFilesSplat = @{
-            #         FilesInput  = $Configuration.Steps.BuildModule.ReleasesUnpacked.FilesOutput
-            #         ProjectPath = $FullProjectPath
-            #         Destination = $FolderPathReleasesUnpacked
-            #     }
-            #     Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
-            # }
         }
     }
 }
