@@ -64,7 +64,7 @@
                 #MakeLatest           = $true
                 #GenerateReleaseNotes = if ($Configuration.Options.GitHub.GenerateReleaseNotes) { $true } else { $false }
                 #MakeLatest           = if ($Configuration.Options.GitHub.MakeLatest) { $true } else { $false }
-                Verbose              = $Configuration.Steps.PublishModule.GitHubVerbose
+                Verbose              = if ($Configuration.Steps.PublishModule.GitHubVerbose) { $Configuration.Steps.PublishModule.GitHubVerbose } else { $false }
             }
 
             $StatusGithub = Send-GitHubRelease @sendGitHubReleaseSplat

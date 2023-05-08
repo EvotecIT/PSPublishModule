@@ -14,7 +14,7 @@
             Repository  = 'PSGallery'
             NuGetApiKey = $ApiKey
             Force       = $Configuration.Steps.PublishModule.RequireForce
-            Verbose     = $Configuration.Steps.PublishModule.PSGalleryVerbose
+            Verbose     = if ($Configuration.Steps.PublishModule.PSGalleryVerbose) { $Configuration.Steps.PublishModule.PSGalleryVerbose } else { $false }
             ErrorAction = 'Stop'
         }
         Publish-Module @publishModuleSplat
