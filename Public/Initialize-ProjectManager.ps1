@@ -43,16 +43,16 @@
         $SortedProjects = $SortedProjects | Sort-Object -Descending -Property LastWriteTime
     }
 
-    $ProjectManager = foreach ($_ in $SortedProjects) {
+    $ProjectManager = foreach ($Project in $SortedProjects) {
         [PSCustomObject] @{
-            name     = $_.name
-            rootPath = $_.FullName
+            name     = $Project.name
+            rootPath = $Project.FullName
             paths    = @()
             tags     = @()
             enabled  = $true
         }
     }
-    $PathProjects = [io.path]::Combine($Env:APPDATA, "Code\User\globalStorage\alefragnani.project-manager"), [io.path]::Combine($Env:APPDATA, "Code\User\globalStorage\alefragnani.project-manager")
+    $PathProjects = [io.path]::Combine($Env:APPDATA, "Code\User\globalStorage\alefragnani.project-manager"), [io.path]::Combine($Env:APPDATA, "Code - Insiders\User\globalStorage\alefragnani.project-manager")
 
     foreach ($Project in $PathProjects) {
         if (Test-Path -LiteralPath $Project) {
