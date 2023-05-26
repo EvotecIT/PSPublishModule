@@ -474,7 +474,7 @@
             if ($Configuration.Steps.BuildModule.SignMerged) {
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
                 #Write-Text "[+] 8th stage signing files" -Color Blue
-                Write-TextWithTime -Text 'Applying signature to files' {
+                $SuccessFullSigning = Write-TextWithTime -Text 'Applying signature to files' {
                     $registerCertificateSplat = @{
                         WarningAction   = 'SilentlyContinue'
                         LocalStore      = 'CurrentUser'
@@ -509,6 +509,9 @@
                     $TimeToExecuteSign.Stop()
                     #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
                 } -PreAppend Plus
+                if ($SuccessFullSigning -eq $false) {
+                    return $false
+                }
             }
         }
         if (-not $Configuration.Steps.BuildModule.Merge) {
