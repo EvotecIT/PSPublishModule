@@ -58,7 +58,7 @@
         } elseif ($Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath) {
             $DirectPathForRequiredModules = $Configuration.Steps.BuildModule.ReleasesUnpacked.RequiredModules.ModulesPath
         } elseif ($Configuration.Steps.BuildModule.ReleasesUnpacked.Path) {
-            $DirectPathForPrimaryModule = $Configuration.Steps.BuildModule.ReleasesUnpacked.Path
+            $DirectPathForRequiredModules = $Configuration.Steps.BuildModule.ReleasesUnpacked.Path
         } else {
             $DirectPathForRequiredModules = $FolderPathReleases
         }
@@ -90,6 +90,19 @@
                 #$FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
                 $RequiredModulesPath = $ArtefactsPath
                 $CurrentModulePath = $ArtefactsPath
+            }
+
+            # we try to set some defaults just in case some settings are not available (mainly because user is using non-DSL model)
+            # this is to make sure that if user is using relative paths we can still use them for copying files/folders
+            if ($null -eq $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationFilesRelative) {
+                if ($null -ne $Configuration.Steps.BuildModule.ReleasesUnpacked.Relative) {
+                    $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationFilesRelative = $Configuration.Steps.BuildModule.ReleasesUnpacked.Relative
+                }
+            }
+            if ($null -eq $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationDirectoriesRelative) {
+                if ($null -ne $Configuration.Steps.BuildModule.ReleasesUnpacked.Relative) {
+                    $Configuration.Steps.BuildModule.ReleasesUnpacked.DestinationDirectoriesRelative = $Configuration.Steps.BuildModule.ReleasesUnpacked.Relative
+                }
             }
 
             $SplatArtefact = @{
