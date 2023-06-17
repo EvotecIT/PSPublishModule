@@ -103,6 +103,9 @@
     if (-not $Configuration.Steps.BuildLibraries) {
         $Configuration.Steps.BuildLibraries = [ordered] @{}
     }
+    if (-not $Configuration.Information.Manifest.CommandModuleDependencies) {
+        $Configuration.Information.Manifest.CommandModuleDependencies = [ordered] @{}
+    }
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
             $ExecutedSettings = & $Settings
@@ -139,6 +142,8 @@
                             $Configuration.Options[$Key][$Entry] = $Setting.Options[$Key][$Entry]
                         }
                     }
+                } elseif ($Setting.Type -eq 'Command') {
+                    $Configuration.Information.Manifest.CommandModuleDependencies[$Setting.Configuration.ModuleName] = @($Setting.Configuration.CommandName)
                 } elseif ($Setting.Type -eq 'Documentation') {
                     $Configuration.Options.Documentation = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'BuildDocumentation') {
