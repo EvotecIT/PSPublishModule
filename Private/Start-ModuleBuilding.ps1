@@ -569,7 +569,10 @@
 
     # Import Modules Section, useful to check before publishing
     if ($Configuration.Steps.ImportModules) {
-        Start-ImportingModules -Configuration $Configuration -ProjectName $ProjectName
+        $ImportSuccess = Start-ImportingModules -Configuration $Configuration -ProjectName $ProjectName
+        if ($ImportSuccess -eq $false) {
+            return $false
+        }
     }
     # Publish Module Section
     if ($Configuration.Steps.PublishModule.Enabled) {
