@@ -1,5 +1,10 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.0.0 - 2023.06.18
+- Big rewrite of PSPublishModule allowing more configuration options
+- New configuration options
+- New safety checks in place
+
 #### 0.9.53 - 2022.12.31
 - Adds local versioning via BuildModule\LocalVersion property (bumps version on every build)
 - No longer delete older tagged unpacked releases (only current) when tagging is enabled
