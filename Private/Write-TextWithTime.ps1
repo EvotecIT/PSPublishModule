@@ -34,7 +34,7 @@
         try {
             $InputData = & $Content
             if ($InputData -contains $false) {
-                $ErrorMessage = "Failure in scriptblock. Check output."
+                $ErrorMessage = "Failure in action above. Check output above."
             } else {
                 $InputData
             }
