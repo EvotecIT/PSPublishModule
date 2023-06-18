@@ -446,7 +446,7 @@
                 -ClassesPS1 $DirectoriesWithClasses -IncludeAsArray $Configuration.Information.IncludeAsArray
 
             if ($Success -eq $false) {
-                return
+                return $false
             }
 
             if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
