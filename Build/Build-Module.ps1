@@ -1,4 +1,4 @@
-Clear-Host
+﻿Clear-Host
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
 $Configuration = @{
@@ -42,7 +42,7 @@ $Configuration = @{
             # Copyright statement for this module
             Copyright                  = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
             # Description of the functionality provided by this module
-            Description                = 'Simple project allowing preparing, managing and publishing modules to PowerShellGallery'
+            Description                = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
             # Minimum version of the Windows PowerShell engine required by this module
             PowerShellVersion          = '5.1'
             # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
@@ -51,7 +51,7 @@ $Configuration = @{
             ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
 
             RequiredModules            = @(
-                @{ ModuleName = 'platyps'; ModuleVersion = "Latest"; Guid = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff' }
+                @{ ModuleName = 'platyps'; ModuleVersion = "Latest"; Guid = 'Auto' }
                 @{ ModuleName = 'powershellget'; ModuleVersion = "2.2.5"; Guid = '1d73a601-4a6c-43c5-ba3f-619b18bbb404' }
                 @{ ModuleName = 'PSScriptAnalyzer'; ModuleVersion = "Latest"; Guid = 'd6245802-193d-4068-a631-8863a4342a18' }
             )
@@ -61,14 +61,14 @@ $Configuration = @{
                 "Microsoft.PowerShell.Management"
                 "Microsoft.PowerShell.Security"
             )
-            #DotNetFrameworkVersion     = '4.5.2'
+            DotNetFrameworkVersion     = '4.5.2'
         }
     }
     Options     = @{
         Merge             = @{
             Sort           = 'None'
             FormatCodePSM1 = @{
-                Enabled           = $true
+                Enabled           = $false
                 RemoveComments    = $false
                 FormatterSettings = @{
                     IncludeRules = @(
@@ -130,6 +130,9 @@ $Configuration = @{
             Integrate      = @{
                 ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
             }
+            # Style          = @{
+            #     PSD1 = 'Native'
+            # }
         }
         Standard          = @{
             FormatCodePSM1 = @{
@@ -139,6 +142,9 @@ $Configuration = @{
                 Enabled = $true
                 #RemoveComments = $true
             }
+            # Style          = @{
+            #     PSD1 = 'Native'
+            # }
         }
         PowerShellGallery = @{
             ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
@@ -156,6 +162,9 @@ $Configuration = @{
         }
         Style             = @{
             PSD1 = 'Minimal' # Native
+        }
+        Signing           = @{
+            CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
         }
     }
     Steps       = @{
@@ -178,7 +187,10 @@ $Configuration = @{
                 Enabled         = $true
                 IncludeTagName  = $false
                 Path            = "$PSScriptRoot\..\Artefacts"
-                RequiredModules = $false
+                RequiredModules = @{
+                    Enabled = $true
+                    Path    = "$PSScriptRoot\..\Artefacts\Modules"
+                }
                 DirectoryOutput = @{
 
                 }
@@ -215,10 +227,10 @@ $Configuration = @{
             Verbose         = $false
         }
         PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $true
+            Enabled      = $false
             Prerelease   = ''
             RequireForce = $false
-            GitHub       = $true
+            GitHub       = $false
         }
     }
 }

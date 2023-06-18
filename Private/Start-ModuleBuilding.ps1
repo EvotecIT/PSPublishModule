@@ -29,6 +29,8 @@
     [string] $ProjectName = $Configuration.Information.ModuleName
 
     $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
+    $PSM1FilePath = "$FullProjectPath\$ProjectName.psm1"
+
     if ($Configuration.Steps.BuildModule.LocalVersion) {
         $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced -LocalPSD1 $PSD1FilePath
     } else {
@@ -66,14 +68,18 @@
 
     Start-LibraryBuilding -RootDirectory $FullProjectPath -Version $Configuration.Information.Manifest.ModuleVersion -ModuleName $ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
 
+    # Verify if manifest contains required modules and fix it if nessecary
+    Convert-RequiredModules -Configuration $Configuration
 
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
 
         if ($Configuration.Steps.BuildModule.DeleteBefore -eq $true) {
+            Write-Text "[i] Deleting old module (Desktop destination) $($DestinationPaths.Desktop)" -Color Yellow
             $Success = Remove-Directory -Directory $($DestinationPaths.Desktop)
             if ($Success -eq $false) {
                 return
             }
+            Write-Text "[i] Deleting old module (Core destination) $($DestinationPaths.Core)" -Color Yellow
             $Success = Remove-Directory -Directory $($DestinationPaths.Core)
             if ($Success -eq $false) {
                 return
@@ -91,8 +97,8 @@
         if ($Success -eq $false) {
             return
         }
-        Add-Directory $FullModuleTemporaryPath
-        Add-Directory $FullTemporaryPath
+        Add-Directory -Directory $FullModuleTemporaryPath
+        Add-Directory -Directory $FullTemporaryPath
 
         # $DirectoryTypes = 'Public', 'Private', 'Lib', 'Bin', 'Enums', 'Images', 'Templates', 'Resources'
 
@@ -131,178 +137,186 @@
             $DirectoriesWithClasses = 'Classes'
         }
         if ($Configuration.Information.IncludeAll) {
-            $DirectoriesWithAll = $Configuration.Information.IncludeAll
+            $DirectoriesWithAll = $Configuration.Information.IncludeAll | ForEach-Object {
+                if ($_.EndsWith('\')) {
+                    $_
+                } else {
+                    "$_\"
+                }
+            }
         } else {
             $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
         }
-        if ($Configuration.Steps.BuildModule.Enable -eq $true) {
-            $PreparingFilesTime = Write-Text "[+] Preparing files and folders" -Start
 
-            if ($PSEdition -eq 'core') {
-                $Directories = @(
-                    $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude -FollowSymlink
-                    @(
-                        $TempDirectories
-                        $TempDirectories | Get-ChildItem -Directory -Recurse -FollowSymlink
-                    )
-                )
-                $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
-                $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File -FollowSymlink
-            } else {
-                $Directories = @(
-                    $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
-                    @(
-                        $TempDirectories
-                        $TempDirectories | Get-ChildItem -Directory -Recurse
-                    )
-                )
-                $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude | Get-ChildItem -File -Recurse
-                $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File
-            }
-            $LinkDirectories = @(
-                foreach ($directory in $Directories) {
-                    $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
-                    $RelativeDirectoryPath = "$RelativeDirectoryPath\"
-                    $RelativeDirectoryPath
-                }
-            )
-            $AllFiles = foreach ($File in $Files) {
-                $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
-                $RelativeFilePath
-            }
-            $RootFiles = foreach ($File in $FilesRoot) {
-                $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
-                $RelativeFilePath
-            }
-            # Link only files in Root Directory
-            $LinkFilesRoot = @(
-                foreach ($File in $RootFiles | Sort-Object -Unique) {
-                    switch -Wildcard ($file) {
-                        '*.psd1' {
-                            $File
-                        }
-                        '*.psm1' {
-                            $File
-                        }
-                        'License*' {
-                            $File
-                        }
-                    }
-                }
-            )
-            # Link only files from subfolers
-            $LinkPrivatePublicFiles = @(
-                foreach ($file in $AllFiles | Sort-Object -Unique) {
-                    switch -Wildcard ($file) {
-                        '*.ps1' {
-                            foreach ($dir in $DirectoriesWithPS1) {
-                                if ($file -like "$dir*") {
-                                    $file
-                                }
-                            }
-                            foreach ($dir in $DirectoriesWithArrays) {
-                                if ($file -like "$dir*") {
-                                    $file
-                                }
-                            }
-                            # Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithPS1
-                            continue
-                        }
-                        '*.*' {
-                            #Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithAll
-                            foreach ($dir in $DirectoriesWithAll) {
-                                if ($file -like "$dir*") {
-                                    $file
-                                }
-                            }
-                            continue
-                        }
-                    }
-                }
-            )
-            $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
+        $PreparingFilesTime = Write-Text "[+] Preparing files and folders" -Start
 
-            Write-Text -End -Time $PreparingFilesTime
-            $AliasesAndFunctions = Write-TextWithTime -Text '[+] Preparing function and aliases names' {
-                Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
+        if ($PSEdition -eq 'core') {
+            $Directories = @(
+                $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude -FollowSymlink
+                @(
+                    $TempDirectories
+                    $TempDirectories | Get-ChildItem -Directory -Recurse -FollowSymlink
+                )
+            )
+            $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
+            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File -FollowSymlink
+        } else {
+            $Directories = @(
+                $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
+                @(
+                    $TempDirectories
+                    $TempDirectories | Get-ChildItem -Directory -Recurse
+                )
+            )
+            $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude | Get-ChildItem -File -Recurse
+            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File
+        }
+        $LinkDirectories = @(
+            foreach ($directory in $Directories) {
+                $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
+                $RelativeDirectoryPath = "$RelativeDirectoryPath\"
+                $RelativeDirectoryPath
             }
-            if ($AliasesAndFunctions -is [System.Collections.IDictionary]) {
-                $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Keys | Where-Object { $_ }
-                if (-not $Configuration.Information.Manifest.FunctionsToExport) {
-                    $Configuration.Information.Manifest.FunctionsToExport = @()
-                }
-                # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-                $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Values | ForEach-Object { $_ } | Where-Object { $_ }
-                if (-not $Configuration.Information.Manifest.AliasesToExport) {
-                    $Configuration.Information.Manifest.AliasesToExport = @()
-                }
-            } else {
-                # this is not used, as we're using Hashtable above, but maybe if we change mind we can go back
-                $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Name | Where-Object { $_ }
-                if (-not $Configuration.Information.Manifest.FunctionsToExport) {
-                    $Configuration.Information.Manifest.FunctionsToExport = @()
-                }
-                $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias | ForEach-Object { $_ } | Where-Object { $_ }
-                if (-not $Configuration.Information.Manifest.AliasesToExport) {
-                    $Configuration.Information.Manifest.AliasesToExport = @()
-                }
-            }
-            Write-Text "[i] Checking for duplicates in funcions and aliases" -Color Yellow
-            $FoundDuplicateAliases = $false
-            if ($Configuration.Information.Manifest.AliasesToExport) {
-                $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object -Unique
-                $DiffrenceAliases = Compare-Object -ReferenceObject $Configuration.Information.Manifest.AliasesToExport -DifferenceObject $UniqueAliases
-                foreach ($Alias in $Configuration.Information.Manifest.AliasesToExport) {
-                    if ($Alias -in $Configuration.Information.Manifest.FunctionsToExport) {
-                        Write-Text "[-] Alias $Alias is also used as function name. Fix it!" -Color Red
-                        $FoundDuplicateAliases = $true
+        )
+        $AllFiles = foreach ($File in $Files) {
+            $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            $RelativeFilePath
+        }
+        $RootFiles = foreach ($File in $FilesRoot) {
+            $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            $RelativeFilePath
+        }
+        # Link only files in Root Directory
+        $LinkFilesRoot = @(
+            foreach ($File in $RootFiles | Sort-Object -Unique) {
+                switch -Wildcard ($file) {
+                    '*.psd1' {
+                        $File
+                    }
+                    '*.psm1' {
+                        $File
+                    }
+                    'License*' {
+                        $File
                     }
                 }
-                foreach ($Alias in $DiffrenceAliases.InputObject) {
-                    Write-Text "[-] Alias $Alias is used multiple times. Fix it!" -Color Red
+            }
+        )
+        # Link only files from subfolers
+        $LinkPrivatePublicFiles = @(
+            foreach ($file in $AllFiles | Sort-Object -Unique) {
+                switch -Wildcard ($file) {
+                    '*.ps1' {
+                        foreach ($dir in $DirectoriesWithPS1) {
+                            if ($file -like "$dir*") {
+                                $file
+                            }
+                        }
+                        foreach ($dir in $DirectoriesWithArrays) {
+                            if ($file -like "$dir*") {
+                                $file
+                            }
+                        }
+                        # Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithPS1
+                        continue
+                    }
+                    '*.*' {
+                        #Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithAll
+                        foreach ($dir in $DirectoriesWithAll) {
+                            if ($file -like "$dir*") {
+                                $file
+                            }
+                        }
+                        continue
+                    }
+                }
+            }
+        )
+        $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
+
+        Write-Text -End -Time $PreparingFilesTime
+        $AliasesAndFunctions = Write-TextWithTime -Text '[+] Preparing function and aliases names' {
+            Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
+        }
+        if ($AliasesAndFunctions -is [System.Collections.IDictionary]) {
+            $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Keys | Where-Object { $_ }
+            if (-not $Configuration.Information.Manifest.FunctionsToExport) {
+                $Configuration.Information.Manifest.FunctionsToExport = @()
+            }
+            # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
+            $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Values | ForEach-Object { $_ } | Where-Object { $_ }
+            if (-not $Configuration.Information.Manifest.AliasesToExport) {
+                $Configuration.Information.Manifest.AliasesToExport = @()
+            }
+        } else {
+            # this is not used, as we're using Hashtable above, but maybe if we change mind we can go back
+            $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Name | Where-Object { $_ }
+            if (-not $Configuration.Information.Manifest.FunctionsToExport) {
+                $Configuration.Information.Manifest.FunctionsToExport = @()
+            }
+            $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias | ForEach-Object { $_ } | Where-Object { $_ }
+            if (-not $Configuration.Information.Manifest.AliasesToExport) {
+                $Configuration.Information.Manifest.AliasesToExport = @()
+            }
+        }
+        Write-Text "[i] Checking for duplicates in funcions and aliases" -Color Yellow
+        $FoundDuplicateAliases = $false
+        if ($Configuration.Information.Manifest.AliasesToExport) {
+            $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object -Unique
+            $DiffrenceAliases = Compare-Object -ReferenceObject $Configuration.Information.Manifest.AliasesToExport -DifferenceObject $UniqueAliases
+            foreach ($Alias in $Configuration.Information.Manifest.AliasesToExport) {
+                if ($Alias -in $Configuration.Information.Manifest.FunctionsToExport) {
+                    Write-Text "[-] Alias $Alias is also used as function name. Fix it!" -Color Red
                     $FoundDuplicateAliases = $true
                 }
-                if ($FoundDuplicateAliases) {
-                    return
-                }
             }
-            if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
-                $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
-                $FilesEnums = @(
-                    $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
-                )
-
-                if ($FilesEnums.Count -gt 0) {
-                    Write-TextWithTime -Text "[+] ScriptsToProcess export $FilesEnums"
-                    $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
-                }
-                #}
+            foreach ($Alias in $DiffrenceAliases.InputObject) {
+                Write-Text "[-] Alias $Alias is used multiple times. Fix it!" -Color Red
+                $FoundDuplicateAliases = $true
             }
-
-            # Copy Configuration
-            $SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
-
-            if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
-                $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
-                if ($Success -eq $false) {
-                    return
-                }
-            } else {
-                $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
-                if ($Success -eq $false) {
-                    return
-                }
-            }
-            # Restore configuration, as some PersonalManifest plays with those
-            $Configuration = $SaveConfiguration
-
-            Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
-
-            if ($Configuration.Steps.BuildModule.RefreshPSD1Only) {
+            if ($FoundDuplicateAliases) {
                 return
             }
         }
-        if ($Configuration.Steps.BuildModule.Enable -and $Configuration.Steps.BuildModule.Merge) {
+        if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
+            $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
+            $FilesEnums = @(
+                $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
+            )
+
+            if ($FilesEnums.Count -gt 0) {
+                Write-TextWithTime -Text "[+] ScriptsToProcess export $FilesEnums"
+                $Configuration.Information.Manifest.ScriptsToProcess = $FilesEnums
+            }
+            #}
+        }
+
+        # Copy Configuration
+        #$SaveConfiguration = Copy-InternalDictionary -Dictionary $Configuration
+        $SaveConfiguration = Copy-DictionaryManual -Dictionary $Configuration
+
+        if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
+            $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
+            if ($Success -eq $false) {
+                return
+            }
+        } else {
+            $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
+            if ($Success -eq $false) {
+                return
+            }
+        }
+        # Restore configuration, as some PersonalManifest plays with those
+        $Configuration = $SaveConfiguration
+
+        Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
+        Format-Code -FilePath $PSM1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSM1
+
+        if ($Configuration.Steps.BuildModule.RefreshPSD1Only) {
+            return
+        }
+
+        if ($Configuration.Steps.BuildModule.Merge) {
             foreach ($Directory in $LinkDirectories) {
                 $Dir = "$FullTemporaryPath\$Directory"
                 Add-Directory $Dir
@@ -432,7 +446,7 @@
                 -ClassesPS1 $DirectoriesWithClasses -IncludeAsArray $Configuration.Information.IncludeAsArray
 
             if ($Success -eq $false) {
-                return
+                return $false
             }
 
             if ($Configuration.Steps.BuildModule.CreateFileCatalog) {
@@ -460,17 +474,47 @@
             if ($Configuration.Steps.BuildModule.SignMerged) {
                 $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
                 #Write-Text "[+] 8th stage signing files" -Color Blue
-                Write-TextWithTime -Text 'Applying signature to files' {
-                    $SignedFiles = Register-Certificate -LocalStore CurrentUser -Path $FullModuleTemporaryPath -Include @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat') -TimeStampServer 'http://timestamp.digicert.com'
-                    foreach ($File in $SignedFiles) {
-                        Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
+                $SuccessFullSigning = Write-TextWithTime -Text 'Applying signature to files' {
+                    $registerCertificateSplat = @{
+                        WarningAction   = 'SilentlyContinue'
+                        LocalStore      = 'CurrentUser'
+                        Path            = $FullModuleTemporaryPath
+                        Include         = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
+                        TimeStampServer = 'http://timestamp.digicert.com'
+                    }
+                    if ($Configuration.Options.Signing -and $Configuration.Options.Signing.Thumbprint) {
+                        $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.Thumbprint
+                    } elseif ($Configuration.Options.Signing -and $Configuration.Options.Signing.CertificateThumbprint) {
+                        $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.CertificateThumbprint
+                    }
+
+                    [Array] $SignedFiles = Register-Certificate @registerCertificateSplat
+                    if ($SignedFiles.Count -eq 0) {
+                        throw "Please configure certificate for use, or disable signing."
+                        return $false
+                    } else {
+                        if ($SignedFiles[0].Thumbprint) {
+                            Write-Text -Text "   [i] Multiple certificates found for signing:"
+                            foreach ($Certificate in $SignedFiles) {
+                                Write-Text "      [>] Certificate $($Certificate.Thumbprint) with subject: $($Certificate.Subject)" -Color Yellow
+                            }
+                            throw "Please configure single certificate for use or disable signing."
+                            return $false
+                        } else {
+                            foreach ($File in $SignedFiles) {
+                                Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
+                            }
+                        }
                     }
                     $TimeToExecuteSign.Stop()
                     #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
                 } -PreAppend Plus
+                if ($SuccessFullSigning -eq $false) {
+                    return $false
+                }
             }
         }
-        if ($Configuration.Steps.BuildModule.Enable -and (-not $Configuration.Steps.BuildModule.Merge)) {
+        if (-not $Configuration.Steps.BuildModule.Merge) {
             foreach ($Directory in $LinkDirectories) {
                 $Dir = "$FullModuleTemporaryPath\$Directory"
                 Add-Directory $Dir
@@ -525,18 +569,21 @@
 
     # Import Modules Section, useful to check before publishing
     if ($Configuration.Steps.ImportModules) {
-        Start-ImportingModules -Configuration $Configuration -ProjectName $ProjectName
+        $ImportSuccess = Start-ImportingModules -Configuration $Configuration -ProjectName $ProjectName
+        if ($ImportSuccess -eq $false) {
+            return $false
+        }
     }
     # Publish Module Section
     if ($Configuration.Steps.PublishModule.Enabled) {
-        $Publishing = Start-PublishingModule -Configuration $Configuration
+        $Publishing = Start-PublishingGallery -Configuration $Configuration
         if ($Publishing -eq $false) {
-            return
+            return $false
         }
     }
     # Publish Module Section to GitHub
     if ($Configuration.Steps.PublishModule.GitHub) {
-        Start-GitHubBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
+        Start-PublishingGitHub -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
     }
     if ($Configuration.Steps.BuildDocumentation) {
         Start-DocumentationBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -ProjectName $ProjectName

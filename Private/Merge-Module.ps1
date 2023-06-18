@@ -45,7 +45,7 @@ function Merge-Module {
         }
         "$VariableName = @("
         foreach ($Internal in $FilesInternal) {
-            Get-Content -Path $Internal.FullName -Raw
+            Get-Content -Path $Internal.FullName -Raw -Encoding utf8
         }
         ")"
     }
@@ -121,20 +121,22 @@ function Merge-Module {
             $Configuration.Information.Manifest.ExternalModuleDependencies
         }
     )
-    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules
+    [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules | Sort-Object -Unique
 
     $ModulesThatWillMissBecauseOfIntegrating = [System.Collections.Generic.List[string]]::new()
-    [Array] $DependantRequiredModules = foreach ($_ in $RequiredModules) {
-        [Array] $TemporaryDependant = Find-RequiredModules -Name $_
-        if ($_ -in $ApprovedModules) {
-            # We basically skip dependant modules and tell the user to use it separatly
-            # This is because if the module PSSharedGoods has requirements like PSWriteColor
-            # and we don't integrate PSWriteColor separatly it would be skipped
-            foreach ($ModulesTemp in $TemporaryDependant) {
-                $ModulesThatWillMissBecauseOfIntegrating.Add($ModulesTemp)
+    [Array] $DependantRequiredModules = foreach ($Module in $RequiredModules) {
+        [Array] $TemporaryDependant = Find-RequiredModules -Name $Module
+        if ($TemporaryDependant.Count -gt 0) {
+            if ($Module -in $ApprovedModules) {
+                # We basically skip dependant modules and tell the user to use it separatly
+                # This is because if the module PSSharedGoods has requirements like PSWriteColor
+                # and we don't integrate PSWriteColor separatly it would be skipped
+                foreach ($ModulesTemp in $TemporaryDependant) {
+                    $ModulesThatWillMissBecauseOfIntegrating.Add($ModulesTemp)
+                }
+            } else {
+                $TemporaryDependant
             }
-        } else {
-            $TemporaryDependant
         }
     }
     $DependantRequiredModules = $DependantRequiredModules | Sort-Object -Unique
@@ -155,7 +157,6 @@ function Merge-Module {
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Detecting commands used" -Color Blue
 
-
     #[Array] $CommandsWithoutType = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq '' } | Sort-Object -Unique -Property 'Source'
     [Array] $ApplicationsCheck = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq 'Application' } | Sort-Object -Unique -Property 'Source'
     [Array] $ModulesToCheck = $MissingFunctions.Summary | Where-Object { $_.CommandType -ne 'Application' -and $_.CommandType -ne '' } | Sort-Object -Unique -Property 'Source'
@@ -167,70 +168,145 @@ function Merge-Module {
             Write-Text "   [>] Application $Application " -Color Yellow
         }
     }
-    Write-Text "[+] Pre-Verification of Approved Modules" -Color DarkYellow
-    foreach ($ApprovedModule in $ApprovedModules) {
-        $ApprovedModuleStatus = Get-Module -Name $ApprovedModule -ListAvailable
-        if ($ApprovedModuleStatus) {
-            Write-Text "   [>] Approved module $ApprovedModule exists - can be used for merging." -Color Green
-        } else {
-            Write-Text "   [>] Approved module $ApprovedModule doesn't exists. Potentially issue with merging." -Color Red
-        }
-    }
-    foreach ($Module in $ModulesToCheck.Source) {
-        if ($Module -in $RequiredModules -and $Module -in $ApprovedModules) {
-            Write-Text "[+] Module $Module is in required modules with ability to merge." -Color DarkYellow
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
-            foreach ($F in $MyFunctions) {
-                if ($F.IsPrivate) {
-                    Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsPrivate: $($F.IsPrivate))" -Color Magenta
-                } else {
-                    Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsPrivate: $($F.IsPrivate))" -Color DarkYellow
-                }
-            }
-        } elseif ($Module -in $DependantRequiredModules -and $Module -in $ApprovedModules) {
-            Write-Text "[+] Module $Module is in dependant required module within required modules with ability to merge." -Color DarkYellow
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
-            foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color DarkYellow
-            }
-        } elseif ($Module -in $DependantRequiredModules) {
-            Write-Text "[+] Module $Module is in dependant required module within required modules." -Color Green
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
-            foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Green
-            }
-        } elseif ($Module -in $RequiredModules) {
-            Write-Text "[+] Module $Module is in required modules." -Color Green
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
-            foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Green
-            }
-        } elseif ($Module -notin $RequiredModules -and $Module -in $ApprovedModules) {
-            Write-Text "[+] Module $Module is missing in required module, but it's in approved modules." -Color Magenta
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
-            foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Magenta
-            }
-        } else {
-            Write-Text "[-] Module $Module is missing in required modules. Potential issue." -Color Red
-            $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module }) #-join ','
-            foreach ($F in $MyFunctions) {
-                Write-Text "   [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Red
-            }
-        }
-    }
-    if ($CommandsWithoutModule.Count -gt 0) {
-        Write-Text "[-] Some commands couldn't be resolved to functions (private function maybe?). Potential issue." -Color Red
-        foreach ($F in $CommandsWithoutModule) {
-            Write-Text "   [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
-        }
-    }
-    foreach ($Module in $ModulesThatWillMissBecauseOfIntegrating) {
-        #Write-Text "[-] Module $Module is missing in required modules due to integration of some approved module. Potential issue." -Color Red
-    }
-
     $TimeToExecute.Stop()
     Write-Text "[+] Detecting commands used [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+
+    Write-TextWithTime -Text "Pre-Verification of approved modules" {
+        foreach ($ApprovedModule in $ApprovedModules) {
+            $ApprovedModuleStatus = Get-Module -Name $ApprovedModule -ListAvailable
+            if ($ApprovedModuleStatus) {
+                Write-Text "   [>] Approved module $ApprovedModule exists - can be used for merging." -Color Green
+            } else {
+                Write-Text "   [>] Approved module $ApprovedModule doesn't exists. Potentially issue with merging." -Color Red
+            }
+        }
+    } -PreAppend Plus
+
+    $TerminateEarly = $false
+    $Success = Write-TextWithTime -Text "Analyze required, approved modules" {
+        foreach ($Module in $ModulesToCheck.Source) {
+            if ($Module -in $RequiredModules -and $Module -in $ApprovedModules) {
+                Write-Text "   [+] Module $Module is in required modules with ability to merge." -Color DarkYellow
+                $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
+                foreach ($F in $MyFunctions) {
+                    if ($F.IsPrivate) {
+                        Write-Text "      [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsPrivate: $($F.IsPrivate))" -Color Magenta
+                    } else {
+                        Write-Text "      [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsPrivate: $($F.IsPrivate))" -Color DarkYellow
+                    }
+                }
+            } elseif ($Module -in $DependantRequiredModules -and $Module -in $ApprovedModules) {
+                Write-Text "   [+] Module $Module is in dependant required module within required modules with ability to merge." -Color DarkYellow
+                $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
+                foreach ($F in $MyFunctions) {
+                    Write-Text "      [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color DarkYellow
+                }
+            } elseif ($Module -in $DependantRequiredModules) {
+                Write-Text "   [+] Module $Module is in dependant required module within required modules." -Color DarkGray
+                $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
+                foreach ($F in $MyFunctions) {
+                    Write-Text "      [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color DarkGray
+                }
+            } elseif ($Module -in $RequiredModules) {
+                Write-Text "   [+] Module $Module is in required modules." -Color Green
+                $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
+                foreach ($F in $MyFunctions) {
+                    Write-Text "      [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Green
+                }
+            } elseif ($Module -notin $RequiredModules -and $Module -in $ApprovedModules) {
+                Write-Text "   [+] Module $Module is missing in required module, but it's in approved modules." -Color Magenta
+                $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
+                foreach ($F in $MyFunctions) {
+                    Write-Text "      [>] Command used $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Magenta
+                }
+            } else {
+                [Array] $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
+                if ($Configuration.Options.Merge.ModuleSkip.Force -eq $true) {
+                    Write-Text "   [-] Module $Module is missing in required modules. Non-critical issue as per configuration (force used)." -Color Gray
+                    foreach ($F in $MyFunctions) {
+                        Write-Text "      [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate)). Ignored by configuration." -Color Gray
+                    }
+                } else {
+                    if ($Module -in $Configuration.Options.Merge.ModuleSkip.IgnoreModuleName) {
+                        Write-Text "   [-] Module $Module is missing in required modules. Non-critical issue as per configuration (skipped module)." -Color Gray
+                        foreach ($F in $MyFunctions) {
+                            Write-Text "      [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate)). Ignored by configuration." -Color Gray
+                        }
+                    } else {
+                        $FoundProblem = $false
+                        foreach ($F in $MyFunctions) {
+                            if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                                $FoundProblem = $true
+                            }
+                        }
+                        if (-not $FoundProblem) {
+                            Write-Text "   [-] Module $Module is missing in required modules. Non-critical issue as per configuration (skipped functions)." -Color Gray
+                            foreach ($F in $MyFunctions) {
+                                if ($F.Name -in $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                                    Write-Text "      [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate)). Ignored by configuration." -Color Gray
+                                } else {
+                                    Write-Text "      [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Red
+                                }
+                            }
+                        } else {
+                            $TerminateEarly = $true
+                            Write-Text "   [-] Module $Module is missing in required modules. Potential issue. Fix configuration required." -Color Red
+                            foreach ($F in $MyFunctions) {
+                                if ($F.Name -in $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                                    Write-Text "      [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate)). Ignored by configuration." -Color Gray
+                                } else {
+                                    Write-Text "      [>] Command affected $($F.Name) (Command Type: $($F.CommandType) / IsAlias: $($F.IsAlias)) / IsAlias: $($F.IsPrivate))" -Color Red
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if ($CommandsWithoutModule.Count -gt 0) {
+                    $FoundProblem = $false
+                    foreach ($F in $CommandsWithoutModule) {
+                        if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                            $FoundProblem = $true
+                        }
+                    }
+                    if ($FoundProblem) {
+                        Write-Text "   [-] Some commands couldn't be resolved to functions (private function maybe?). Potential issue." -Color Red
+                        foreach ($F in $CommandsWithoutModule) {
+                            if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                                $TerminateEarly = $true
+                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
+                            } else {
+                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias)). Ignored by configuration." -Color Gray
+                            }
+                        }
+                    } else {
+                        Write-Text "   [-] Some commands couldn't be resolved to functions (private function maybe?). Non-critical issue as per configuration (skipped functions)." -Color Gray
+                        foreach ($F in $CommandsWithoutModule) {
+                            if ($F.Name -in $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias)). Ignored by configuration." -Color Gray
+                            } else {
+                                # this shouldn't happen, but just in case
+                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
+                            }
+                        }
+                    }
+                }
+                foreach ($Module in $ModulesThatWillMissBecauseOfIntegrating) {
+                    #Write-Text "[-] Module $Module is missing in required modules due to integration of some approved module. Potential issue." -Color Red
+                }
+            }
+        }
+
+        if ($TerminateEarly) {
+            Write-Text "   [-] Some commands are missing in required modules. Fix this issue or use New-ConfigurationModuleSkip to skip verification." -Color Red
+            return $false
+        }
+
+    } -PreAppend Plus
+
+    if ($Success -eq $false) {
+        return $false
+    }
 
     if ($Configuration.Steps.BuildModule.MergeMissing -eq $true) {
         if (Test-Path -LiteralPath $PSM1FilePath) {
@@ -238,7 +314,7 @@ function Merge-Module {
             Write-Text "[+] Merge mergable commands" -Color Blue
 
 
-            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
+            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
             $IntegrateContent = @(
                 $MissingFunctions.Functions
                 $PSM1Content
@@ -262,6 +338,7 @@ function Merge-Module {
             Write-Text "[+] Merge mergable commands [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
         }
     }
+
 
     $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Finalizing PSM1/PSD1" -Color Blue
@@ -314,7 +391,7 @@ function Merge-Module {
             $DotSourcePath = ". `$PSScriptRoot\$ModuleName.Libraries.ps1"
         }
         if ($LibariesPath) {
-            $LibraryContent | Add-Content -Path $LibariesPath
+            $LibraryContent | Out-File -Append -LiteralPath $LibariesPath -Encoding utf8
         }
     }
 
@@ -330,7 +407,7 @@ function Merge-Module {
 
     # Adjust PSM1 file by adding dot sourcing or directly libraries to the PSM1 file
     if ($LibariesPath -gt 0 -or $ClassesPath -gt 0 -or $Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
-        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw
+        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
         $IntegrateContent = @(
             # add resolve conflicting binary option
             if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
@@ -361,7 +438,7 @@ function Merge-Module {
     }
 
     if ($Configuration.Information.Manifest.DotNetFrameworkVersion) {
-        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Add-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Out-File -Append -LiteralPath $PSM1FilePath -Encoding UTF8
     }
 
     # Finalize PSM1 by adding export functions/aliases and internal modules loading
@@ -391,7 +468,7 @@ function Merge-Module {
         }
     }
     # Build PSD1 file
-    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary
+    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary -OnMerge
     # Format PSD1 file
     $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
     if ($Success -eq $false) {

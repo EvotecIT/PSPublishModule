@@ -1,8 +1,14 @@
-﻿function Send-FilesToGitHubRelease([string[]] $filePathsToUpload, [string] $urlToUploadFilesTo, $authHeader) {
+﻿function Send-FilesToGitHubRelease {
+    [cmdletbinding()]
+    param(
+        [string[]] $filePathsToUpload,
+        [string] $urlToUploadFilesTo,
+        $authHeader
+    )
     [int] $numberOfFilesToUpload = $filePathsToUpload.Count
     [int] $numberOfFilesUploaded = 0
-    $filePathsToUpload | ForEach-Object `
-    {
+
+    $filePathsToUpload | ForEach-Object {
         $filePath = $_
         $fileName = Get-Item $filePath | Select-Object -ExpandProperty Name
 

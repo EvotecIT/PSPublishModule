@@ -5,21 +5,15 @@ online version:
 schema: 2.0.0
 ---
 
-# New-PrepareModule
+# New-ConfigurationImportModule
 
 ## SYNOPSIS
 {{ Fill in the Synopsis }}
 
 ## SYNTAX
 
-### Existing (Default)
 ```
-New-PrepareModule [-Configuration <IDictionary>] [<CommonParameters>]
-```
-
-### New
-```
-New-PrepareModule [-Path <String>] [-ProjectName <String>] [<CommonParameters>]
+New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -36,12 +30,12 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
-### -Configuration
-{{ Fill Configuration Description }}
+### -ImportRequiredModules
+{{ Fill ImportRequiredModules Description }}
 
 ```yaml
-Type: IDictionary
-Parameter Sets: Existing
+Type: SwitchParameter
+Parameter Sets: (All)
 Aliases:
 
 Required: False
@@ -51,27 +45,12 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Path
-{{ Fill Path Description }}
+### -ImportSelf
+{{ Fill ImportSelf Description }}
 
 ```yaml
-Type: String
-Parameter Sets: New
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProjectName
-{{ Fill ProjectName Description }}
-
-```yaml
-Type: String
-Parameter Sets: New
+Type: SwitchParameter
+Parameter Sets: (All)
 Aliases:
 
 Required: False

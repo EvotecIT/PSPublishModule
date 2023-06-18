@@ -13,7 +13,7 @@ Builds VSCode Project manager config from filesystem
 ## SYNTAX
 
 ```
-Initialize-ProjectManager [-Path] <String> [<CommonParameters>]
+Initialize-ProjectManager [-Path] <String> [-DisableSorting] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -24,6 +24,11 @@ Builds VSCode Project manager config from filesystem
 ### EXAMPLE 1
 ```
 Initialize-ProjectManager -Path "C:\Support\GitHub"
+```
+
+### EXAMPLE 2
+```
+Initialize-ProjectManager -Path "C:\Support\GitHub" -DisableSorting
 ```
 
 ## PARAMETERS
@@ -39,6 +44,21 @@ Aliases:
 Required: True
 Position: 1
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DisableSorting
+Disables sorting of the projects by last modified date
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

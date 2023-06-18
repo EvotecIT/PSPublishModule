@@ -28,6 +28,29 @@ It allows us to make sure our modules are built the same way every time making t
 
 Each module that is published to PowerShellGallery has Publish folder next to it and within it there is PS1 script which executes module building that uses this module builder.
 
+## Support This Project
+
+If you find this project helpful, please consider supporting its development.
+Your sponsorship will help the maintainers dedicate more time to maintenance and new feature development for everyone.
+
+It takes a lot of time and effort to create and maintain this project.
+By becoming a sponsor, you can help ensure that it stays free and accessible to everyone who needs it.
+
+To become a sponsor, you can choose from the following options:
+
+ - [Become a sponsor via GitHub Sponsors :heart:](https://github.com/sponsors/PrzemyslawKlys)
+ - [Become a sponsor via PayPal :heart:](https://paypal.me/PrzemyslawKlys)
+ -
+Your sponsorship is completely optional and not required for using this project.
+We want this project to remain open-source and available for anyone to use for free,
+regardless of whether they choose to sponsor it or not.
+
+If you work for a company that uses our .NET libraries or PowerShell Modules,
+please consider asking your manager or marketing team if your company would be interested in supporting this project.
+Your company's support can help us continue to maintain and improve this project for the benefit of everyone.
+
+Thank you for considering supporting this project!
+
 ### Installing
 
 ```powershell

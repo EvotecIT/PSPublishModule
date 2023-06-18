@@ -136,7 +136,7 @@ Accept wildcard characters: False
 ```yaml
 Type: String
 Parameter Sets: Store
-Aliases:
+Aliases: CertificateThumbprint
 
 Required: False
 Position: Named

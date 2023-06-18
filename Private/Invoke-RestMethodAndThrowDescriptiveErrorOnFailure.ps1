@@ -1,4 +1,8 @@
-﻿function Invoke-RestMethodAndThrowDescriptiveErrorOnFailure($requestParametersHashTable) {
+﻿function Invoke-RestMethodAndThrowDescriptiveErrorOnFailure {
+    [cmdletbinding()]
+    param(
+        [System.Collections.IDictionary] $requestParametersHashTable
+    )
     $requestDetailsAsNicelyFormattedString = Convert-HashTableToNicelyFormattedString $requestParametersHashTable
     Write-Verbose "Making web request with the following parameters:$NewLine$requestDetailsAsNicelyFormattedString"
 

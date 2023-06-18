@@ -29,7 +29,37 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
-### [New-PrepareModule](New-PrepareModule.md)
+### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationBuild](New-ConfigurationBuild.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationExecute](New-ConfigurationExecute.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationFormat](New-ConfigurationFormat.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationImportModule](New-ConfigurationImportModule.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationInformation](New-ConfigurationInformation.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationManifest](New-ConfigurationManifest.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationModule](New-ConfigurationModule.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationPublish](New-ConfigurationPublish.md)
 {{ Fill in the Description }}
 
 ### [Register-Certificate](Register-Certificate.md)

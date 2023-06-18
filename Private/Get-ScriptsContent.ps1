@@ -6,7 +6,7 @@
     )
 
     foreach ($FilePath in $Files) {
-        $Content = Get-Content -Path $FilePath -Raw
+        $Content = Get-Content -Path $FilePath -Raw -Encoding utf8
         if ($Content.Count -gt 0) {
             # Ensure file has content
             $Content = $Content.Replace('$PSScriptRoot\..\..\', '$PSScriptRoot\')

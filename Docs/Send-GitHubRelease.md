@@ -35,15 +35,15 @@ Import-Module -Name New-GitHubRelease -Scope CurrentUser
 Do it as a hash table for easier readability.
 $newGitHubReleaseParameters =
 @{
-	GitHubUsername = 'deadlydog'
-	GitHubRepositoryName = 'New-GitHubRelease'
-	GitHubAccessToken = 'SomeLongHexidecimalString'
-	ReleaseName = "New-GitHubRelease v1.0.0"
-	TagName = "v1.0.0"
-	ReleaseNotes = "This release contains the following changes: ..."
-	AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
-	IsPreRelease = $false
-	IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
+    GitHubUsername = 'deadlydog'
+    GitHubRepositoryName = 'New-GitHubRelease'
+    GitHubAccessToken = 'SomeLongHexidecimalString'
+    ReleaseName = "New-GitHubRelease v1.0.0"
+    TagName = "v1.0.0"
+    ReleaseNotes = "This release contains the following changes: ..."
+    AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
+    IsPreRelease = $false
+    IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
 }
 
 # Try to create the Release on GitHub and save the results.
@@ -52,17 +52,17 @@ $result = New-GitHubRelease @newGitHubReleaseParameters
 # Provide some feedback to the user based on the results.
 if ($result.Succeeded -eq $true)
 {
-	Write-Output "Release published successfully!
+    Write-Output "Release published successfully!
 View it at $($result.ReleaseUrl)"
 }
 elseif ($result.ReleaseCreationSucceeded -eq $false)
 {
-	Write-Error "The release was not created.
+    Write-Error "The release was not created.
 Error message is: $($result.ErrorMessage)"
 }
 elseif ($result.AllAssetUploadsSucceeded -eq $false)
 {
-	Write-Error "The release was created, but not all of the assets were uploaded to it.
+    Write-Error "The release was created, but not all of the assets were uploaded to it.
 View it at $($result.ReleaseUrl).
 Error message is: $($result.ErrorMessage)"
 }

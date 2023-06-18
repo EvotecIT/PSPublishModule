@@ -43,7 +43,7 @@
 
     Push-Location -Path $SourceFolder
 
-    [xml] $ProjectInformation = Get-Content -Raw -LiteralPath $ModuleProjectFile
+    [xml] $ProjectInformation = Get-Content -Raw -LiteralPath $ModuleProjectFile -Encoding UTF8
     $SupportedFrameworks = foreach ($PropertyGroup in $ProjectInformation.Project.PropertyGroup) {
         if ($PropertyGroup.TargetFrameworks) {
             $PropertyGroup.TargetFrameworks -split ";"

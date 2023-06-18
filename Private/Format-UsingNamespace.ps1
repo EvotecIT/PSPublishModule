@@ -33,15 +33,12 @@
             # Repeat using namespaces
             $null = New-Item -Path $FilePathUsing -ItemType file -Force
             $UsingNamespaces = $UsingNamespaces.Trim() | Sort-Object -Unique
-            $UsingNamespaces | Add-Content -LiteralPath $FilePathUsing -Encoding utf8
-            #$UsingNamespaces | Add-Content -LiteralPath $FilePathUsing -Encoding utf8
+            $UsingNamespaces | Out-File -Append -LiteralPath $FilePathUsing -Encoding utf8
 
-
-            #$Content | Add-Content -LiteralPath $FilePathUsing -Encoding utf8
-            $Content | Add-Content -LiteralPath $FilePathSave -Encoding utf8
+            $Content | Out-File -Append -LiteralPath $FilePathSave -Encoding utf8
             return $true
         } else {
-            $Content | Add-Content -LiteralPath $FilePathSave -Encoding utf8
+            $Content | Out-File -Append -LiteralPath $FilePathSave -Encoding utf8
             return $False
         }
     }

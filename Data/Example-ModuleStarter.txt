@@ -41,7 +41,7 @@ if ($Standard -and $Core -and $Default) {
     $Framework = ''
     $FrameworkNet = 'Default'
 } else {
-    Write-Error -Message 'No assemblies found'
+    #Write-Error -Message 'No assemblies found'
 }
 
 $Assembly = @(

@@ -6,7 +6,7 @@
         [Array] $ApprovedModules
     )
     $Output = Get-MissingFunctions -FilePath $FilePath -SummaryWithCommands -ApprovedModules $ApprovedModules
-    $Script = Get-Content -LiteralPath $FilePath
+    $Script = Get-Content -LiteralPath $FilePath -Encoding UTF8
     $FinalScript = @(
         $Output.Functions
         $Script
