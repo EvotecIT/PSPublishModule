@@ -74,3 +74,13 @@
         $Option
     }
 }
+
+Register-ArgumentCompleter -CommandName New-ConfigurationModule -ParameterName Version -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    'Auto', 'Latest' | Where-Object { $_ -like "*$wordToComplete*" }
+}
+
+Register-ArgumentCompleter -CommandName New-ConfigurationModule -ParameterName Guid -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    'Auto', 'Latest' | Where-Object { $_ -like "*$wordToComplete*" }
+}
