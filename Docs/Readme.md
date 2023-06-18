@@ -14,9 +14,6 @@ Locale: en-US
 ### [Convert-CommandsToList](Convert-CommandsToList.md)
 {{ Fill in the Description }}
 
-### [Get-GitLog](Get-GitLog.md)
-{{ Fill in the Description }}
-
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 {{ Fill in the Description }}
 
@@ -38,6 +35,9 @@ Locale: en-US
 ### [New-ConfigurationBuild](New-ConfigurationBuild.md)
 {{ Fill in the Description }}
 
+### [New-ConfigurationCommand](New-ConfigurationCommand.md)
+{{ Fill in the Description }}
+
 ### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)
 {{ Fill in the Description }}
 
@@ -57,6 +57,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [New-ConfigurationModule](New-ConfigurationModule.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
 {{ Fill in the Description }}
 
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)

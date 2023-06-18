@@ -15,7 +15,8 @@ schema: 2.0.0
 ```
 New-ConfigurationArtefact [-Type] <String> [-Enable] [-IncludeTagName] [[-Path] <String>] [-AddRequiredModules]
  [[-ModulesPath] <String>] [[-RequiredModulesPath] <String>] [[-CopyDirectories] <IDictionary>]
- [[-CopyFiles] <IDictionary>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-Clear] [<CommonParameters>]
+ [[-CopyFiles] <IDictionary>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-Clear]
+ [[-ArtefactName] <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -42,6 +43,21 @@ Aliases: RequiredModules
 
 Required: False
 Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ArtefactName
+{{ Fill ArtefactName Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

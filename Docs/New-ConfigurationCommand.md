@@ -5,21 +5,15 @@ online version:
 schema: 2.0.0
 ---
 
-# Get-GitLog
+# New-ConfigurationCommand
 
 ## SYNOPSIS
 {{ Fill in the Synopsis }}
 
 ## SYNTAX
 
-### Default (Default)
 ```
-Get-GitLog -GitFolder <String> [<CommonParameters>]
-```
-
-### SourceTarget
-```
-Get-GitLog -GitFolder <String> -StartCommitId <String> [-EndCommitId <String>] [<CommonParameters>]
+New-ConfigurationCommand [[-ModuleName] <String>] [[-CommandName] <String[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -36,46 +30,31 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
-### -EndCommitId
-{{ Fill EndCommitId Description }}
+### -CommandName
+{{ Fill CommandName Description }}
 
 ```yaml
-Type: String
-Parameter Sets: SourceTarget
+Type: String[]
+Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: Named
+Position: 1
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -GitFolder
-{{ Fill GitFolder Description }}
+### -ModuleName
+{{ Fill ModuleName Description }}
 
 ```yaml
 Type: String
 Parameter Sets: (All)
 Aliases:
 
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -StartCommitId
-{{ Fill StartCommitId Description }}
-
-```yaml
-Type: String
-Parameter Sets: SourceTarget
-Aliases:
-
-Required: True
-Position: Named
+Required: False
+Position: 0
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
