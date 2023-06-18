@@ -125,6 +125,8 @@
                         $Configuration.Options.Merge.Integrate.ApprovedModules = [System.Collections.Generic.List[System.Object]]::new()
                     }
                     $Configuration.Options.Merge.Integrate.ApprovedModules.Add($Setting.Configuration)
+                } elseif ($Setting.Type -eq 'ModuleSkip') {
+                    $Configuration.Options.Merge.ModuleSkip = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'Manifest') {
                     foreach ($Key in $Setting.Configuration.Keys) {
                         $Configuration.Information.Manifest[$Key] = $Setting.Configuration[$Key]
