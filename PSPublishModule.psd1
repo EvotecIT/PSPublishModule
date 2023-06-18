@@ -1,4 +1,4 @@
-@{
+﻿@{
     AliasesToExport        = @('New-PrepareModule', 'Build-Module')
     Author                 = 'Przemyslaw Klys'
     CmdletsToExport        = @()
