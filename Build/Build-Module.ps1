@@ -30,7 +30,7 @@ $Configuration = @{
         # manifest information
         Manifest          = @{
             # Version number of this module.
-            ModuleVersion              = '0.9.X'
+            ModuleVersion              = '1.0.X'
             # Supported PSEditions
             CompatiblePSEditions       = @('Desktop', 'Core')
             # ID used to uniquely identify this module
