@@ -13,14 +13,14 @@
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
-            Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
-            IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
             ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
+            IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
+            Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
             ExternalModuleDependencies = @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
         }
     }
     RequiredModules        = @(@{
-            ModuleName    = 'platyPS'
+            ModuleName    = 'platyps'
             ModuleVersion = '0.14.2'
             Guid          = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'
         }, @{
