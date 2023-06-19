@@ -3,7 +3,8 @@
     param(
         [System.Collections.IDictionary]$Configuration,
         [scriptblock] $Settings,
-        [string] $PathToProject
+        [string] $PathToProject,
+        [string] $ModuleName
     )
     # Lets precreate structure if it's not available
     if (-not $Configuration) {
@@ -13,7 +14,18 @@
         $Configuration.Information = [ordered] @{}
     }
     if (-not $Configuration.Information.Manifest) {
-        $Configuration.Information.Manifest = [ordered] @{}
+        # if it's not provided, we try to get it from PSD1 file
+        $PathToPSD1 = [io.path]::Combine($PathToProject, $ModuleName + '.psd1')
+        if (Test-Path -LiteralPath $PathToPSD1) {
+            try {
+                $Configuration.Information.Manifest = Import-PowerShellDataFile -Path $PathToPSD1 -ErrorAction Stop
+            } catch {
+                Write-Text "[-] Reading $PathToPSD1 failed. Error: $($_.Exception.Message)" -Color Red
+                return $false
+            }
+        } else {
+            $Configuration.Information.Manifest = [ordered] @{}
+        }
     }
     # This deals with OneDrive redirection or similar
     if (-not $Configuration.Information.DirectoryModulesCore) {
@@ -217,16 +229,16 @@
     }
 
     # We build module or do other stuff with it
-    if ($Configuration.Steps.BuildModule.Enable -or
-        $Configuration.Steps.BuildModule.EnableDesktop -or
-        $Configuration.Steps.BuildModule.EnableCore -or
-        $Configuration.Steps.BuildDocumentation -eq $true -or
-        $Configuration.Steps.BuildLibraries.Enable -or
-        $Configuration.Steps.PublishModule.Enable -or
-        $Configuration.Steps.PublishModule.Enabled) {
-        $Success = Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
-        if ($Success -eq $false) {
-            return $false
-        }
+    # if ($Configuration.Steps.BuildModule.Enable -or
+    #     $Configuration.Steps.BuildModule.EnableDesktop -or
+    #     $Configuration.Steps.BuildModule.EnableCore -or
+    #     $Configuration.Steps.BuildDocumentation -eq $true -or
+    #     $Configuration.Steps.BuildLibraries.Enable -or
+    #     $Configuration.Steps.PublishModule.Enable -or
+    #     $Configuration.Steps.PublishModule.Enabled) {
+    $Success = Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
+    if ($Success -eq $false) {
+        return $false
     }
+    # }
 }
