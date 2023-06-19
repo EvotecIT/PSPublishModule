@@ -1,3 +1,3 @@
-﻿Import-Module "C:\Support\GitHub\PSPublishModule\PSPublishModule.psd1" -Force
+﻿Import-Module "$PSSCriptRoot\..\PSPublishModule.psd1" -Force
 
-New-PrepareModule -Path "C:\Support\GitHub" -ProjectName "PowerJamf"
+Build-Module -ModuleName 'MyGreatModule' -Path "C:\Support\GitHub"
