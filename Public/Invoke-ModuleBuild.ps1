@@ -96,36 +96,85 @@ function Invoke-ModuleBuild {
     # this assumes that the script running this in Build or Publish folder (or any other folder that is 1 level below the root of the project)
     [string] $PathToProject = Get-Item -LiteralPath "$($MyInvocation.PSScriptRoot)/.."
 
-    Write-Host "[i] Module Building Initializing..." -ForegroundColor Yellow
+    Write-Host "[i] Module Build Initializing..." -ForegroundColor Yellow
     $GlobalTime = [System.Diagnostics.Stopwatch]::StartNew()
+
+    if ($Path -and $ModuleName) {
+        $FullProjectPath = [io.path]::Combine($Path, $ModuleName)
+        if (-not (Test-Path -Path $Path)) {
+            Write-Text -Text "[-] Path $Path doesn't exists. Please create it, before continuing." -Color Red
+            if ($ExitCode) {
+                return 1
+            } else {
+                return
+            }
+        } else {
+            $CopiedBuildModule = $false
+            $CopiedPSD1 = $false
+            if (Test-Path -Path $FullProjectPath) {
+                Write-Text -Text "[i] Module $ModuleName ($FullProjectPath) already exists. Skipping inital steps" -Color DarkGray
+            } else {
+                Write-Text -Text "[i] Preparing module structure for $ModuleName in $Path" -Color DarkGray
+                $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Build'
+                Add-Directory -Directory $FullProjectPath
+                foreach ($folder in $Folders) {
+                    $SubFolder = [io.path]::Combine($FullProjectPath, $Folder)
+                    Add-Directory -Directory $SubFolder
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\.gitignore")) {
+                    Write-Text -Text "   [+] Copying '.gitignore' file" -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\CHANGELOG.MD")) {
+                    Write-Text -Text "   [+] Copying CHANGELOG.MD file" -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-CHANGELOG.MD" -Destination "$FullProjectPath\CHANGELOG.MD"
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\README.MD")) {
+                    Write-Text -Text "   [+] Copying README.MD file" -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-README.MD" -Destination "$FullProjectPath\README.MD"
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\License")) {
+                    Write-Text -Text "   [+] Copying MIT License file" -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\Build\Build-Module.ps1")) {
+                    Write-Text -Text "   [+] Copying Build-Module.ps1 file" -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleBuilder.txt" -Destination "$FullProjectPath\Build\Build-Module.ps1"
+                    $CopiedBuildModule = $True
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\$ModuleName.psm1")) {
+                    Write-Text -Text "   [+] Copying Module PSM1 file." -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModulePSM1.txt" -Destination "$FullProjectPath\$ModuleName.psm1"
+                }
+                if (-not (Test-Path -LiteralPath "$FullProjectPath\$ModuleName.psd1")) {
+                    Write-Text -Text "   [+] Copying Module PSD1 file." -Color DarkGray
+                    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModulePSD1.txt" -Destination "$FullProjectPath\$ModuleName.psd1"
+                    $CopiedPSD1 = $True
+                }
+                # lets update module builder to proper module name and guid
+                $Guid = (New-Guid).Guid
+                if ($CopiedBuildModule) {
+                    Register-DataForInitialModule -FilePath "$FullProjectPath\Build\Build-Module.ps1" -ModuleName $ModuleName -Guid $Guid
+                }
+                if ($CopiedPSD1) {
+                    Register-DataForInitialModule -FilePath "$FullProjectPath\$ModuleName.psd1" -ModuleName $ModuleName -Guid $Guid
+                }
+                Write-Text -Text "[i] Preparing module structure for $ModuleName in $Path. Completed." -Color DarkGray
+            }
+        }
+    }
 
     $ModuleOutput = New-PrepareStructure -Configuration $Configuration -Settings $Settings -PathToProject $PathToProject
 
-    if ($Path -and $ModuleName) {
-        if (-not (Test-Path -Path $Path)) {
-            Write-Text "[-] Path $Path doesn't exists. This shouldn't be the case." -Color Red
-        } else {
-            $FullProjectPath = [io.path]::Combine($Path, $ModuleName)
-            $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Build'
-            Add-Directory -Directory $FullProjectPath
-            foreach ($folder in $Folders) {
-                $SubFolder = [io.path]::Combine($FullProjectPath, $Folder)
-                Add-Directory -Directory $SubFolder
-            }
-            Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
-            Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-            Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.txt" -Destination "$FullProjectPath\$ModuleName.psm1"
-        }
-    }
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"
     if ($ModuleOutput -notcontains $false) {
-        Write-Host "[i] Module Building Completed " -NoNewline -ForegroundColor Green
+        Write-Host "[i] Module Build Completed " -NoNewline -ForegroundColor Green
         Write-Host "[Time Total: $Execute]" -ForegroundColor Green
         if ($ExitCode) {
             Exit 1
         }
     } else {
-        Write-Host "[i] Module Building Failed " -NoNewline -ForegroundColor Red
+        Write-Host "[i] Module Build Failed " -NoNewline -ForegroundColor Red
         Write-Host "[Time Total: $Execute]" -ForegroundColor Red
         if ($ExitCode) {
             Exit 0
