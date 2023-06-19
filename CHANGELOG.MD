@@ -1,5 +1,11 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.1.0 - 2023.06.19
+- Improve initially provided files when creating new module for easy use
+- Autogenerate the example Build-Module.ps1 file for new projects
+- Update GUID/ModuleName based on data provided by user
+- Other small improvements
+
 #### 1.0.0 - 2023.06.18
 - Big rewrite of PSPublishModule allowing more configuration options
 - New configuration options
