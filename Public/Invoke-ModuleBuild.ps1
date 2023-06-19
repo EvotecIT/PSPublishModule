@@ -62,7 +62,7 @@ function Invoke-ModuleBuild {
     Parameter description
 
     .PARAMETER ExitCode
-    Exit code to be returned to the caller. If not provided, it will not exit the script.
+    Exit code to be returned to the caller. If not provided, it will not exit the script, but finish gracefully.
     Exit code 0 means success, 1 means failure.
 
     .EXAMPLE
@@ -93,8 +93,14 @@ function Invoke-ModuleBuild {
         [parameter(ParameterSetName = 'Modern')]
         [switch] $ExitCode
     )
-    # this assumes that the script running this in Build or Publish folder (or any other folder that is 1 level below the root of the project)
-    [string] $PathToProject = Get-Item -LiteralPath "$($MyInvocation.PSScriptRoot)/.."
+    if ($Path) {
+        # Path is given so we use it as is
+        $FullProjectPath = [io.path]::Combine($Path, $ModuleName)
+    } else {
+        # this assumes that the script running this in Build or Publish folder (or any other folder that is 1 level below the root of the project)
+        $PathToProject = Get-Item -LiteralPath "$($MyInvocation.PSScriptRoot)/.."
+        $FullProjectPath = Get-Item -LiteralPath $PathToProject
+    }
 
     Write-Host "[i] Module Build Initializing..." -ForegroundColor Yellow
     $GlobalTime = [System.Diagnostics.Stopwatch]::StartNew()
@@ -104,7 +110,7 @@ function Invoke-ModuleBuild {
         if (-not (Test-Path -Path $Path)) {
             Write-Text -Text "[-] Path $Path doesn't exists. Please create it, before continuing." -Color Red
             if ($ExitCode) {
-                return 1
+                Exit 1
             } else {
                 return
             }
@@ -164,7 +170,7 @@ function Invoke-ModuleBuild {
         }
     }
 
-    $ModuleOutput = New-PrepareStructure -Configuration $Configuration -Settings $Settings -PathToProject $PathToProject
+    $ModuleOutput = New-PrepareStructure -Configuration $Configuration -Settings $Settings -PathToProject $FullProjectPath -ModuleName $ModuleName
 
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"
     if ($ModuleOutput -notcontains $false) {
