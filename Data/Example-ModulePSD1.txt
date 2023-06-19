@@ -1,0 +1,19 @@
+﻿@{
+    AliasesToExport      = @()
+    Author               = 'Author'
+    CmdletsToExport      = @()
+    CompanyName          = 'CompanyName'
+    CompatiblePSEditions = @('Desktop', 'Core')
+    Copyright            = '(c) 2011 - 2023 Author @ CompanyName. All rights reserved.'
+    Description          = 'Simple project $ModuleName'
+    FunctionsToExport    = @()
+    GUID                 = '$Guid'
+    ModuleVersion        = '1.0.0'
+    PowerShellVersion    = '5.1'
+    PrivateData          = @{
+        PSData = @{
+            Tags = @('Windows', 'MacOS', 'Linux')
+        }
+    }
+    RootModule           = '$ModuleName.psm1'
+}
