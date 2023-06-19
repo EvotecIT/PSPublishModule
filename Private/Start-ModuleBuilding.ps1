@@ -31,13 +31,17 @@
     $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
     $PSM1FilePath = "$FullProjectPath\$ProjectName.psm1"
 
-    if ($Configuration.Steps.BuildModule.LocalVersion) {
-        $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced -LocalPSD1 $PSD1FilePath
+    if ($Configuration.Information.Manifest.ModuleVersion) {
+        if ($Configuration.Steps.BuildModule.LocalVersion) {
+            $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced -LocalPSD1 $PSD1FilePath
+        } else {
+            $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced
+        }
+        $Configuration.Information.Manifest.ModuleVersion = $Versioning.Version
     } else {
-        $Versioning = Step-Version -Module $Configuration.Information.ModuleName -ExpectedVersion $Configuration.Information.Manifest.ModuleVersion -Advanced
+        # lets fake the version if there's no PSD1, and there's no version in config
+        $Configuration.Information.Manifest.ModuleVersion = 1.0.0
     }
-    $Configuration.Information.Manifest.ModuleVersion = $Versioning.Version
-
     Write-Text '----------------------------------------------------'
     Write-Text "[i] Project Name: $ProjectName" -Color Yellow
     if ($Configuration.Steps.BuildModule.LocalVersion) {
