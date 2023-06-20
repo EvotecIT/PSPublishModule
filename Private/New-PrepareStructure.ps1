@@ -170,6 +170,10 @@
                     foreach ($Key in $Setting.PublishModule.Keys) {
                         $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
                     }
+                } elseif ($Setting.Type -eq 'TestsBeforeMerge') {
+                    $Configuration.Options.TestsBeforeMerge = $Setting.Configuration
+                } elseif ($Setting.Type -eq 'TestsAfterMerge') {
+                    $Configuration.Options.TestsAfterMerge = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'GitHubPublishing') {
                     foreach ($Key in $Setting.PublishModule.Keys) {
                         $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
