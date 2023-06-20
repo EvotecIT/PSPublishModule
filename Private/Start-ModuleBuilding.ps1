@@ -578,6 +578,14 @@
             return $false
         }
     }
+
+    if ($Configuration.Options.TestsAfterMerge) {
+        $TestsSuccess = Initialize-InternalTests -Configuration $Configuration -Type 'TestsAfterMerge'
+        if ($TestsSuccess -eq $false) {
+            return $false
+        }
+    }
+
     # Publish Module Section
     if ($Configuration.Steps.PublishModule.Enabled) {
         $Publishing = Start-PublishingGallery -Configuration $Configuration
