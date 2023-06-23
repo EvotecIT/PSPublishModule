@@ -87,7 +87,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Modules"
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Releases" -IncludeTagName
 
-    New-ConfigurationTest -When AfterMerge -TestsPath "$PSScriptRoot\..\Tests" -Enable
+    New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
 
     # global options for publishing to github/psgallery
     #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$false
