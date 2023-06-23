@@ -61,13 +61,13 @@
 
     if (-not $Configuration.Steps.BuildModule) {
         Write-Text '[-] Section BuildModule is missing. Terminating.' -Color Red
-        return
+        return $false
     }
 
     # check if project exists
     if (-not (Test-Path -Path $FullProjectPath)) {
         Write-Text "[-] Project path doesn't exists $FullProjectPath. Terminating" -Color Red
-        return
+        return $false
     }
 
     Start-LibraryBuilding -RootDirectory $FullProjectPath -Version $Configuration.Information.Manifest.ModuleVersion -ModuleName $ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
@@ -81,12 +81,12 @@
             Write-Text "[i] Deleting old module (Desktop destination) $($DestinationPaths.Desktop)" -Color Yellow
             $Success = Remove-Directory -Directory $($DestinationPaths.Desktop)
             if ($Success -eq $false) {
-                return
+                return $false
             }
             Write-Text "[i] Deleting old module (Core destination) $($DestinationPaths.Core)" -Color Yellow
             $Success = Remove-Directory -Directory $($DestinationPaths.Core)
             if ($Success -eq $false) {
-                return
+                return $false
             }
         }
 
@@ -95,11 +95,11 @@
 
         $Success = Remove-Directory -Directory $FullModuleTemporaryPath
         if ($Success -eq $false) {
-            return
+            return $false
         }
         $Success = Remove-Directory -Directory $FullTemporaryPath
         if ($Success -eq $false) {
-            return
+            return $false
         }
         Add-Directory -Directory $FullModuleTemporaryPath
         Add-Directory -Directory $FullTemporaryPath
@@ -302,12 +302,12 @@
         if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
             $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
             if ($Success -eq $false) {
-                return
+                return $false
             }
         } else {
             $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
             if ($Success -eq $false) {
-                return
+                return $false
             }
         }
         # Restore configuration, as some PersonalManifest plays with those
@@ -533,9 +533,9 @@
         # Revers Path to current locatikon
         Set-Location -Path $CurrentLocation
 
-        if ($Configuration.Steps.BuildModule.Enable) {
+        $Success = if ($Configuration.Steps.BuildModule.Enable) {
             if ($DestinationPaths.Desktop) {
-                Write-TextWithTime -Text "[+] Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
+                Write-TextWithTime -Text "Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
                     $Success = Remove-Directory -Directory $DestinationPaths.Desktop
                     if ($Success -eq $false) {
                         return $false
@@ -546,12 +546,10 @@
                     Get-ChildItem $DestinationPaths.Desktop -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
                         Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
                         Remove-Item #-Verbose
-                }
-
-
+                } -PreAppend Plus
             }
             if ($DestinationPaths.Core) {
-                Write-TextWithTime -Text "[+] Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
+                Write-TextWithTime -Text "Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
                     $Success = Remove-Directory -Directory $DestinationPaths.Core
                     if ($Success -eq $false) {
                         return $false
@@ -562,12 +560,15 @@
                     Get-ChildItem $DestinationPaths.Core -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
                         Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
                         Remove-Item #-Verbose
-                }
+                } -PreAppend Plus
             }
+        }
+        if ($Success -eq $false) {
+            return $false
         }
         $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths
         if ($Success -eq $false) {
-            return
+            return $false
         }
     }
 
