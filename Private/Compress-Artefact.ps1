@@ -42,8 +42,12 @@
     $Configuration.CurrentSettings.ArtefactZipName = $FileName
     $Configuration.CurrentSettings.ArtefactZipPath = $ZipPath
 
-    Write-TextWithTime -Text "Compressing final merged release $ZipPath" {
+    $Success = Write-TextWithTime -Text "Compressing final merged release $ZipPath" {
         $null = New-Item -ItemType Directory -Path $Destination -Force
-        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force
+        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force -ErrorAction Stop
     } -PreAppend 'Plus'
+
+    if ($Success -eq $false) {
+        return $false
+    }
 }
