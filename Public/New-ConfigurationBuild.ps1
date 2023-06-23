@@ -19,7 +19,7 @@
 
         [string] $CertificateThumbprint,
 
-        [switch] $NETBuild,
+        #[switch] $NETBuild,
         [ValidateSet('Release', 'Debug')][string] $NETConfiguration, # may need to allow user choice
         [string[]] $NETFramework,
         [string] $NETProjectName
@@ -173,18 +173,11 @@
     #     ProjectName   = 'ImagePlayground.PowerShell'
     # }
 
-    if ($PSBoundParameters.ContainsKey('NETBuild')) {
-        [ordered] @{
-            Type           = 'BuildLibraries'
-            BuildLibraries = [ordered] @{
-                Enable = $NETBuild.IsPresent
-            }
-        }
-    }
     if ($PSBoundParameters.ContainsKey('NETConfiguration')) {
         [ordered] @{
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
+                Enable        = $true
                 Configuration = $NETConfiguration
             }
         }
@@ -193,6 +186,7 @@
         [ordered] @{
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
+                Enable    = $true
                 Framework = $NETFramework
             }
         }

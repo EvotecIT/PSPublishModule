@@ -12,7 +12,8 @@
         [string[]] $Tags,
         [string] $IconUri,
         [string] $ProjectUri,
-        [string] $DotNetFrameworkVersion
+        [string] $DotNetFrameworkVersion,
+        [string] $LicenseUri
     )
 
     $Manifest = [ordered] @{
@@ -28,6 +29,7 @@
         IconUri                = $IconUri
         ProjectUri             = $ProjectUri
         DotNetFrameworkVersion = $DotNetFrameworkVersion
+        LicenseUri             = $LicenseUri
     }
     Remove-EmptyValue -Hashtable $Manifest
 
