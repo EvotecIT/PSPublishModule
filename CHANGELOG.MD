@@ -1,5 +1,10 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.2.0 - 2023.06.23
+- Improve termination when things go wrong
+- Small fixes here and there
+- Added ability to test after merge before publishing
+
 #### 1.1.0 - 2023.06.19
 - Improve initially provided files when creating new module for easy use
 - Autogenerate the example Build-Module.ps1 file for new projects
