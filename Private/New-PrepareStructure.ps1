@@ -118,6 +118,9 @@
     if (-not $Configuration.Information.Manifest.CommandModuleDependencies) {
         $Configuration.Information.Manifest.CommandModuleDependencies = [ordered] @{}
     }
+    # lets reset whatever is in PSD1 that we load
+    $Configuration.Information.Manifest.RequiredModules = $null
+
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
             $ExecutedSettings = & $Settings
