@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.4.0 - 2023.07.03
+- Fixes minor issue with reading required modules
+
 #### 1.3.0 - 2023.07.03
 - Improve termination when things go wrong
 - Fix replacement of GUID in module manifest when creating new module
