@@ -7,7 +7,7 @@
     )
 
     $BuildModule = Get-Content -Path $FilePath -Raw
-    $BuildModule = $BuildModule.Replace('$GUID', $Guid)
-    $BuildModule = $BuildModule.Replace('$ModuleName', $ModuleName)
+    $BuildModule = $BuildModule -replace "\`$GUID", $Guid
+    $BuildModule = $BuildModule -replace "\`$ModuleName", $ModuleName
     Set-Content -Path $FilePath -Value $BuildModule -Encoding utf8
 }
