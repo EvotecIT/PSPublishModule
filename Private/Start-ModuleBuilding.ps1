@@ -279,7 +279,7 @@
                 $FoundDuplicateAliases = $true
             }
             if ($FoundDuplicateAliases) {
-                return
+                return $false
             }
         }
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
