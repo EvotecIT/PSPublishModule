@@ -184,7 +184,7 @@ function Merge-Module {
 
     $TerminateEarly = $false
     $Success = Write-TextWithTime -Text "Analyze required, approved modules" {
-        foreach ($Module in $ModulesToCheck.Source) {
+        foreach ($Module in $ModulesToCheck.Source | Sort-Object) {
             if ($Module -in $RequiredModules -and $Module -in $ApprovedModules) {
                 Write-Text "   [+] Module $Module is in required modules with ability to merge." -Color DarkYellow
                 $MyFunctions = ($MissingFunctions.Summary | Where-Object { $_.Source -eq $Module })
@@ -261,41 +261,41 @@ function Merge-Module {
                         }
                     }
                 }
+            }
+        }
 
-                if ($CommandsWithoutModule.Count -gt 0) {
-                    $FoundProblem = $false
-                    foreach ($F in $CommandsWithoutModule) {
-                        if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
-                            $FoundProblem = $true
-                        }
-                    }
-                    if ($FoundProblem) {
-                        Write-Text "   [-] Some commands couldn't be resolved to functions (private function maybe?). Potential issue." -Color Red
-                        foreach ($F in $CommandsWithoutModule) {
-                            if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
-                                $TerminateEarly = $true
-                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
-                            } else {
-                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias)). Ignored by configuration." -Color Gray
-                            }
-                        }
+        if ($CommandsWithoutModule.Count -gt 0) {
+            $FoundProblem = $false
+            foreach ($F in $CommandsWithoutModule) {
+                if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                    $FoundProblem = $true
+                }
+            }
+            if ($FoundProblem) {
+                Write-Text "   [-] Some commands couldn't be resolved to functions (private function maybe?). Potential issue." -Color Red
+                foreach ($F in $CommandsWithoutModule) {
+                    if ($F.Name -notin $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                        $TerminateEarly = $true
+                        Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
                     } else {
-                        Write-Text "   [-] Some commands couldn't be resolved to functions (private function maybe?). Non-critical issue as per configuration (skipped functions)." -Color Gray
-                        foreach ($F in $CommandsWithoutModule) {
-                            if ($F.Name -in $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
-                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias)). Ignored by configuration." -Color Gray
-                            } else {
-                                # this shouldn't happen, but just in case
-                                Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
-                            }
-                        }
+                        Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias)). Ignored by configuration." -Color Gray
                     }
                 }
-                foreach ($Module in $ModulesThatWillMissBecauseOfIntegrating) {
-                    #Write-Text "[-] Module $Module is missing in required modules due to integration of some approved module. Potential issue." -Color Red
+            } else {
+                Write-Text "   [-] Some commands couldn't be resolved to functions (private function maybe?). Non-critical issue as per configuration (skipped functions)." -Color Gray
+                foreach ($F in $CommandsWithoutModule) {
+                    if ($F.Name -in $Configuration.Options.Merge.ModuleSkip.IgnoreFunctionName) {
+                        Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias)). Ignored by configuration." -Color Gray
+                    } else {
+                        # this shouldn't happen, but just in case
+                        Write-Text "      [>] Command affected $($F.Name) (Command Type: Unknown / IsAlias: $($F.IsAlias))" -Color Red
+                    }
                 }
             }
         }
+        #foreach ($Module in $ModulesThatWillMissBecauseOfIntegrating) {
+        #Write-Text "[-] Module $Module is missing in required modules due to integration of some approved module. Potential issue." -Color Red
+        #}
 
         if ($TerminateEarly) {
             Write-Text "   [-] Some commands are missing in required modules. Fix this issue or use New-ConfigurationModuleSkip to skip verification." -Color Red
