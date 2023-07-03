@@ -1,5 +1,10 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.3.0 - 2023.07.03
+- Improve termination when things go wrong
+- Fix replacement of GUID in module manifest when creating new module
+- Fix for duplicate detection of used functions
+
 #### 1.2.0 - 2023.06.23
 - Improve termination when things go wrong
 - Small fixes here and there
