@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.5.0 - 2023.07.04
+- Fixes detection of unknown functions in module
+
 #### 1.4.0 - 2023.07.03
 - Fixes minor issue with reading required modules
 
