@@ -160,7 +160,7 @@ function Merge-Module {
     #[Array] $CommandsWithoutType = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq '' } | Sort-Object -Unique -Property 'Source'
     [Array] $ApplicationsCheck = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq 'Application' } | Sort-Object -Unique -Property 'Source'
     [Array] $ModulesToCheck = $MissingFunctions.Summary | Where-Object { $_.CommandType -ne 'Application' -and $_.CommandType -ne '' } | Sort-Object -Unique -Property 'Source'
-    [Array] $CommandsWithoutModule = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq '' } | Sort-Object -Unique -Property 'Source'
+    [Array] $CommandsWithoutModule = $MissingFunctions.Summary | Where-Object { $_.CommandType -eq '' } #| Sort-Object -Unique -Property 'Source'
 
     if ($ApplicationsCheck.Source) {
         Write-Text "[i] Applications used by this module. Make sure those are present on destination system. " -Color Yellow
