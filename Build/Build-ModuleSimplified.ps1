@@ -82,7 +82,7 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 
-    New-ConfigurationBuild -Enable:$true -SignModule -DeleteTargetModuleBeforeBuild -MergeModuleOnBuild -CertificateThumbprint '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
+    New-ConfigurationBuild -Enable:$true -SignModule -DeleteTargetModuleBeforeBuild -MergeModuleOnBuild -CertificateThumbprint '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
 
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Modules"
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Releases" -IncludeTagName
