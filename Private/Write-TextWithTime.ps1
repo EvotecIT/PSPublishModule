@@ -39,7 +39,7 @@
                 $InputData
             }
         } catch {
-            $ErrorMessage = $_.Exception.Message
+            $ErrorMessage = $_.Exception.Message + " (File: $($_.InvocationInfo.ScriptName), Line: " + $_.InvocationInfo.ScriptLineNumber + ")"
         }
     }
     $TimeToExecute = $Time.Elapsed.ToString()
