@@ -236,16 +236,8 @@
     }
 
     # We build module or do other stuff with it
-    # if ($Configuration.Steps.BuildModule.Enable -or
-    #     $Configuration.Steps.BuildModule.EnableDesktop -or
-    #     $Configuration.Steps.BuildModule.EnableCore -or
-    #     $Configuration.Steps.BuildDocumentation -eq $true -or
-    #     $Configuration.Steps.BuildLibraries.Enable -or
-    #     $Configuration.Steps.PublishModule.Enable -or
-    #     $Configuration.Steps.PublishModule.Enabled) {
     $Success = Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
     if ($Success -eq $false) {
         return $false
     }
-    # }
 }
