@@ -1,5 +1,9 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.5.1 - 2023.07.06
+- Improve logic for detection of used functions
+- Update default configuration for new modules
+
 #### 1.5.0 - 2023.07.04
 - Fixes detection of unknown functions in module
 
