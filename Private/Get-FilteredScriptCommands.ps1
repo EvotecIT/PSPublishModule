@@ -18,6 +18,14 @@
         try {
             $IsAlias = $false
             $Data = Get-Command -Name $Command -ErrorAction Stop
+            if ($Data.Source -eq 'PSPublishModule') {
+                # we need to exclude PSPublishModule from any processing
+                # this is because it has advantage of being in the same scope
+                # this means it's functions would be preferred over any other
+                if ($Data.Source -notin $ApprovedModules) {
+                    throw
+                }
+            }
             if ($Data.CommandType -eq 'Alias') {
                 $Data = Get-Command -Name $Data.Definition
                 $IsAlias = $true
