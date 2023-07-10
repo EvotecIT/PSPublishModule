@@ -56,10 +56,10 @@ Thank you for considering supporting this project!
 ### Installing
 
 ```powershell
-Install-Module -Name PSPublishModule -AllowClobber -Force
+Install-Module -Name PSPublishModule -AllowClobber -Force -SkipPublisherCheck
 ```
 
-Force and AllowClobber aren't necessary but they do skip errors in case some appear.
+Force and AllowClobber and SkipPublisherCheck aren't necessary but they do skip errors in case some appear.
 
 ### Updating
 
