@@ -65,6 +65,9 @@ Locale: en-US
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)
 {{ Fill in the Description }}
 
+### [New-ConfigurationTest](New-ConfigurationTest.md)
+{{ Fill in the Description }}
+
 ### [Register-Certificate](Register-Certificate.md)
 {{ Fill in the Description }}
 
