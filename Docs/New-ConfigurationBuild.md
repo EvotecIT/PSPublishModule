@@ -17,7 +17,7 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [-MergeFunctionsFromApprovedModules] [-SignModule] [-DotSourceClasses] [-DotSourceLibraries]
  [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning]
  [-MergeLibraryDebugging] [-ResolveBinaryConflicts] [[-ResolveBinaryConflictsName] <String>]
- [[-CertificateThumbprint] <String>] [-NETBuild] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>]
+ [[-CertificateThumbprint] <String>] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>]
  [[-NETProjectName] <String>] [<CommonParameters>]
 ```
 
@@ -157,21 +157,6 @@ Accept wildcard characters: False
 
 ### -MergeModuleOnBuild
 {{ Fill MergeModuleOnBuild Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETBuild
-{{ Fill NETBuild Description }}
 
 ```yaml
 Type: SwitchParameter

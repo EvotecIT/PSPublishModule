@@ -282,7 +282,7 @@ Accept wildcard characters: False
 
 ### -ExitCode
 Exit code to be returned to the caller.
-If not provided, it will not exit the script.
+If not provided, it will not exit the script, but finish gracefully.
 Exit code 0 means success, 1 means failure.
 
 ```yaml

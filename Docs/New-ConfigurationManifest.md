@@ -16,7 +16,7 @@ schema: 2.0.0
 New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <String[]>] [-GUID] <String>
  [-Author] <String> [[-CompanyName] <String>] [[-Copyright] <String>] [[-Description] <String>]
  [[-PowerShellVersion] <String>] [[-Tags] <String[]>] [[-IconUri] <String>] [[-ProjectUri] <String>]
- [[-DotNetFrameworkVersion] <String>] [<CommonParameters>]
+ [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -149,6 +149,21 @@ Aliases:
 
 Required: False
 Position: 9
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -LicenseUri
+{{ Fill LicenseUri Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
