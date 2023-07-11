@@ -8,21 +8,30 @@
         [System.ConsoleColor] $Color = [System.ConsoleColor]::Cyan,
         [System.ConsoleColor] $ColorTime = [System.ConsoleColor]::Green,
         [System.ConsoleColor] $ColorError = [System.ConsoleColor]::Red,
+        [System.ConsoleColor] $ColorBefore,
         [string] $SpacesBefore
     )
     if ($PreAppend) {
         if ($PreAppend -eq "Information") {
             $TextBefore = "$SpacesBefore[i] "
-            $ColorBefore = [System.ConsoleColor]::Yellow
+            if (-not $ColorBefore) {
+                $ColorBefore = [System.ConsoleColor]::Yellow
+            }
         } elseif ($PreAppend -eq 'Minus') {
             $TextBefore = "$SpacesBefore[-] "
-            $ColorBefore = [System.ConsoleColor]::Red
+            if (-not $ColorBefore) {
+                $ColorBefore = [System.ConsoleColor]::Red
+            }
         } elseif ($PreAppend -eq 'Plus') {
             $TextBefore = "$SpacesBefore[+] "
-            $ColorBefore = [System.ConsoleColor]::Cyan
+            if (-not $ColorBefore) {
+                $ColorBefore = [System.ConsoleColor]::Cyan
+            }
         } elseif ($PreAppend -eq 'Addition') {
             $TextBefore = "$SpacesBefore[>] "
-            $ColorBefore = [System.ConsoleColor]::Yellow
+            if (-not $ColorBefore) {
+                $ColorBefore = [System.ConsoleColor]::Yellow
+            }
         }
         Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
         Write-Host -Object "$Text" -ForegroundColor $Color
