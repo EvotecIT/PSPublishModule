@@ -22,7 +22,7 @@ function Merge-Module {
 
     )
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Text "[+] Merging" -Color Blue
+    Write-Text "[+] Merging files into PSM1" -Color Blue
 
     $PSM1FilePath = "$ModulePathTarget\$ModuleName.psm1"
     $PSD1FilePath = "$ModulePathTarget\$ModuleName.psd1"
@@ -86,7 +86,7 @@ function Merge-Module {
     if ($ArrayIncludes.Count -gt 0) {
         $ArrayIncludes | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
     }
-    $Success = Get-ScriptsContent -Files $ScriptFunctions -OutputPath $PSM1FilePath
+    $Success = Get-ScriptsContentAndTryReplace -Files $ScriptFunctions -OutputPath $PSM1FilePath -DoNotAttemptToFixRelativePaths:$Configuration.Steps.BuildModule.DoNotAttemptToFixRelativePaths
     if ($Success -eq $false) {
         return $false
     }
@@ -104,7 +104,7 @@ function Merge-Module {
     }
 
     $TimeToExecute.Stop()
-    Write-Text "[+] Merging [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
+    Write-Text "[+] Merging files into PSM1 [Time: $($($TimeToExecute.Elapsed).Tostring())]" -Color Blue
 
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Detecting required modules" -Color Blue
@@ -399,7 +399,7 @@ function Merge-Module {
     if ($ClassesFunctions.Count -gt 0) {
         $ClassesPath = "$ModulePathTarget\$ModuleName.Classes.ps1"
         $DotSourceClassPath = ". `$PSScriptRoot\$ModuleName.Classes.ps1"
-        $Success = Get-ScriptsContent -Files $ClassesFunctions -OutputPath $ClassesPath
+        $Success = Get-ScriptsContentAndTryReplace -Files $ClassesFunctions -OutputPath $ClassesPath -DoNotAttemptToFixRelativePaths:$Configuration.Steps.BuildModule.DoNotAttemptToFixRelativePaths
         if ($Success -eq $false) {
             return $false
         }
