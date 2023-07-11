@@ -1,5 +1,9 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.6.0 - 2023.07.11
+- Improve logic for replacing expandable variables and allow disabling this feature
+- Impovements overall
+
 #### 1.5.1 - 2023.07.06
 - Improve logic for detection of used functions
 - Update default configuration for new modules
