@@ -13,6 +13,8 @@
         [switch] $UseWildcardForFunctions,
         [switch] $LocalVersioning,
 
+        [switch] $DoNotAttemptToFixRelativePaths,
+
         [switch] $MergeLibraryDebugging,
         [switch] $ResolveBinaryConflicts,
         [string] $ResolveBinaryConflictsName,
@@ -119,6 +121,14 @@
         }
     }
 
+    if ($PSBoundParameters.ContainsKey('DoNotAttemptToFixRelativePaths')) {
+        [ordered] @{
+            Type        = 'Build'
+            BuildModule = [ordered] @{
+                DoNotAttemptToFixRelativePaths = $DoNotAttemptToFixRelativePaths.IsPresent
+            }
+        }
+    }
 
     if ($PSBoundParameters.ContainsKey('MergeLibraryDebugging')) {
         [ordered] @{
