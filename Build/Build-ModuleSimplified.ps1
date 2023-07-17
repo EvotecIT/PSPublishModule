@@ -26,7 +26,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
 
     # Add external module dependencies, using loop for simplicity
-    foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
+    foreach ($Module in @('PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
         New-ConfigurationModule -Type ExternalModule -Name $Module
     }
 
@@ -92,4 +92,4 @@ Build-Module -ModuleName 'PSPublishModule' {
     # global options for publishing to github/psgallery
     #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
     #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true
-}
+} -ExitCode
