@@ -177,13 +177,13 @@ function Invoke-ModuleBuild {
         Write-Host "[i] Module Build Completed " -NoNewline -ForegroundColor Green
         Write-Host "[Time Total: $Execute]" -ForegroundColor Green
         if ($ExitCode) {
-            Exit 1
+            Exit 0
         }
     } else {
         Write-Host "[i] Module Build Failed " -NoNewline -ForegroundColor Red
         Write-Host "[Time Total: $Execute]" -ForegroundColor Red
         if ($ExitCode) {
-            Exit 0
+            Exit 1
         }
     }
 }
