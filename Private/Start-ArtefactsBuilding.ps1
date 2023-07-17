@@ -66,12 +66,12 @@
             if ($Configuration.Steps.BuildModule.ReleasesUnpacked -is [System.Collections.IDictionary]) {
                 if ($DirectPathForPrimaryModule) {
                     if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Relative -eq $false) {
-                        $ArtefactsPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DirectPathForPrimaryModule)
+                        $CurrentModulePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DirectPathForPrimaryModule)
                     } else {
-                        $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, $DirectPathForPrimaryModule)
+                        $CurrentModulePath = [System.IO.Path]::Combine($FullProjectPath, $DirectPathForPrimaryModule)
                     }
                 } else {
-                    $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
+                    $CurrentModulePath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
                 }
                 if ($DirectPathForRequiredModules) {
                     if ($Configuration.Steps.BuildModule.ReleasesUnpacked.Relative -eq $false) {
@@ -82,7 +82,7 @@
                 } else {
                     $RequiredModulesPath = $ArtefactsPath
                 }
-                $CurrentModulePath = $ArtefactsPath
+                $ArtefactsPath = $Configuration.Steps.BuildModule.ReleasesUnpacked.Path
                 # $FolderPathReleasesUnpacked = $ArtefactsPath
             } else {
                 # default values
