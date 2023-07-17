@@ -22,6 +22,9 @@
                     $null = New-Item -ItemType Directory -Force -ErrorAction Stop -Path $DirectoryPath
                     Copy-Item -LiteralPath $FullFilePath -Destination $ResolvedDestination -Force -ErrorAction Stop
                 } -PreAppend Plus -SpacesBefore "   " -Color Yellow
+            } else {
+                Write-TextWithTime -Text "File $FullFilePath does not exist" -PreAppend Plus -SpacesBefore "   " -Color Red -ColorTime Red -ColorBefore Red
+                return $false
             }
         } elseif ($FilesInput[$File] -is [System.Collections.IDictionary]) {
             if ($FilesInput[$File].Enabled -eq $true) {
@@ -39,6 +42,9 @@
                             $null = New-Item -ItemType Directory -Force -ErrorAction Stop -Path $DirectoryPath
                             Copy-Item -LiteralPath $FullFilePath -Destination $ResolvedDestination -Force -ErrorAction Stop
                         } -PreAppend Plus -SpacesBefore "   " -Color Yellow
+                    } else {
+                        Write-TextWithTime -Text "File $FullFilePath does not exist" -PreAppend Plus -SpacesBefore "   " -Color Red -ColorTime Red -ColorBefore Red
+                        return $false
                     }
                 }
             }
