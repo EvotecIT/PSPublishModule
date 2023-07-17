@@ -42,11 +42,14 @@ jobs:
       - name: Test with Pester
         shell: pwsh
         run: |
-           pwd
-           Write-Host $PSScriptRoot
+           Write-Host "Pwd: $pwd" -ForegroundColor Yellow
+           Write-Host "PSScriptRoot $PSScriptRoot" -ForegroundColor Yellow
 
            Get-ChildItem -Path $PSScriptRoot | ft
-           Invoke-Pester -Script $PSScriptRoot\Tests -Passthru | Export-CliXml -Path Unit.Tests.xml
+
+           Get-ChildItem -Path . | ft
+
+           Invoke-Pester -Script .\Tests -Passthru | Export-CliXml -Path Unit.Tests.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v3
