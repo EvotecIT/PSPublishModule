@@ -1,5 +1,89 @@
 ﻿function New-ConfigurationBuild {
+    <#
+    .SYNOPSIS
+    Short description
+
+    .DESCRIPTION
+    Long description
+
+    .PARAMETER Enable
+    Parameter description
+
+    .PARAMETER DeleteTargetModuleBeforeBuild
+    Parameter description
+
+    .PARAMETER MergeModuleOnBuild
+    Parameter description
+
+    .PARAMETER MergeFunctionsFromApprovedModules
+    Parameter description
+
+    .PARAMETER SignModule
+    Parameter description
+
+    .PARAMETER DotSourceClasses
+    Parameter description
+
+    .PARAMETER DotSourceLibraries
+    Parameter description
+
+    .PARAMETER SeparateFileLibraries
+    Parameter description
+
+    .PARAMETER RefreshPSD1Only
+    Parameter description
+
+    .PARAMETER UseWildcardForFunctions
+    Parameter description
+
+    .PARAMETER LocalVersioning
+    Parameter description
+
+    .PARAMETER DoNotAttemptToFixRelativePaths
+    Configures module builder to not replace $PSScriptRoot\..\ with $PSScriptRoot\
+    This is useful if you have a module that has a lot of relative paths that are required when using Private/Public folders,
+    but for merge process those are not supposed to be there as the paths change.
+    By default module builder will attempt to fix it. This option disables this functionality.
+    Best practice is to use $MyInvocation.MyCommand.Module.ModuleBase or similar instead of relative paths.
+
+    .PARAMETER MergeLibraryDebugging
+    Parameter description
+
+    .PARAMETER ResolveBinaryConflicts
+    Parameter description
+
+    .PARAMETER ResolveBinaryConflictsName
+    Parameter description
+
+    .PARAMETER CertificateThumbprint
+    Parameter description
+
+    .PARAMETER CertificatePFXPath
+    Parameter description
+
+    .PARAMETER CertificatePFXBase64
+    Parameter description
+
+    .PARAMETER CertificatePFXPassword
+    Parameter description
+
+    .PARAMETER NETConfiguration
+    Parameter description
+
+    .PARAMETER NETFramework
+    Parameter description
+
+    .PARAMETER NETProjectName
+    Parameter description
+
+    .EXAMPLE
+    An example
+
+    .NOTES
+    General notes
+    #>
     [CmdletBinding()]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSAvoidUsingPlainTextForPassword", "")]
     param(
         [switch] $Enable,
         [switch] $DeleteTargetModuleBeforeBuild,
@@ -20,6 +104,9 @@
         [string] $ResolveBinaryConflictsName,
 
         [string] $CertificateThumbprint,
+        [string] $CertificatePFXPath,
+        [string] $CertificatePFXBase64,
+        [string] $CertificatePFXPassword,
 
         #[switch] $NETBuild,
         [ValidateSet('Release', 'Debug')][string] $NETConfiguration, # may need to allow user choice
@@ -157,12 +244,6 @@
     }
 
     if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) {
-
-        # $Options = @{
-        #     Signing = @{
-        #         CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
-        #     }
-        # }
         [ordered] @{
             Type    = 'Options'
             Options = [ordered] @{
@@ -170,6 +251,36 @@
                     CertificateThumbprint = $CertificateThumbprint
                 }
             }
+        }
+    } elseif ($PSBoundParameters.ContainsKey('CertificatePFXPath')) {
+        if ($PSBoundParameters.ContainsKey('CertificatePFXPassword')) {
+            # this is added to support users direct PFX
+            [ordered] @{
+                Type    = 'Options'
+                Options = [ordered] @{
+                    Signing = [ordered] @{
+                        CertificatePFXPath     = $CertificatePFXPath
+                        CertificatePFXPassword = $CertificatePFXPassword
+                    }
+                }
+            }
+        } else {
+            throw "CertificatePFXPassword is required when using CertificatePFXPath"
+        }
+    } elseif ($PSBoundParameters.ContainsKey('CertificatePFXBase64')) {
+        if ($PSBoundParameters.ContainsKey('CertificatePFXPassword')) {
+            # this is added to support GitHub/Azure DevOps Secrets
+            [ordered] @{
+                Type    = 'Options'
+                Options = [ordered] @{
+                    Signing = [ordered] @{
+                        CertificatePFXBase64   = $CertificatePFXBase64
+                        CertificatePFXPassword = $CertificatePFXPassword
+                    }
+                }
+            }
+        } else {
+            throw "CertificatePFXPassword is required when using CertificatePFXBase64"
         }
     }
 
