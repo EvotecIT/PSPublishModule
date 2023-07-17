@@ -475,47 +475,9 @@
                 $TimeToExecuteSign.Stop()
                 Write-Text "[+] Creating file catalog [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
             }
-            if ($Configuration.Steps.BuildModule.SignMerged) {
-                $TimeToExecuteSign = [System.Diagnostics.Stopwatch]::StartNew()
-                #Write-Text "[+] 8th stage signing files" -Color Blue
-                $SuccessFullSigning = Write-TextWithTime -Text 'Applying signature to files' {
-                    $registerCertificateSplat = @{
-                        WarningAction   = 'SilentlyContinue'
-                        LocalStore      = 'CurrentUser'
-                        Path            = $FullModuleTemporaryPath
-                        Include         = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
-                        TimeStampServer = 'http://timestamp.digicert.com'
-                    }
-                    if ($Configuration.Options.Signing -and $Configuration.Options.Signing.Thumbprint) {
-                        $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.Thumbprint
-                    } elseif ($Configuration.Options.Signing -and $Configuration.Options.Signing.CertificateThumbprint) {
-                        $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.CertificateThumbprint
-                    }
-
-                    [Array] $SignedFiles = Register-Certificate @registerCertificateSplat
-                    if ($SignedFiles.Count -eq 0) {
-                        throw "Please configure certificate for use, or disable signing."
-                        return $false
-                    } else {
-                        if ($SignedFiles[0].Thumbprint) {
-                            Write-Text -Text "   [i] Multiple certificates found for signing:"
-                            foreach ($Certificate in $SignedFiles) {
-                                Write-Text "      [>] Certificate $($Certificate.Thumbprint) with subject: $($Certificate.Subject)" -Color Yellow
-                            }
-                            throw "Please configure single certificate for use or disable signing."
-                            return $false
-                        } else {
-                            foreach ($File in $SignedFiles) {
-                                Write-Text "   [>] File $($File.Path) with status: $($File.StatusMessage)" -Color Yellow
-                            }
-                        }
-                    }
-                    $TimeToExecuteSign.Stop()
-                    #   Write-Text "[+] 8th stage signing files [Time: $($($TimeToExecuteSign.Elapsed).Tostring())]" -Color Blue
-                } -PreAppend Plus
-                if ($SuccessFullSigning -eq $false) {
-                    return $false
-                }
+            $SuccessFullSigning = Start-ModuleSigning -Configuration $Configuration -FullModuleTemporaryPath $FullModuleTemporaryPath
+            if ($SuccessFullSigning -eq $false) {
+                return $false
             }
         }
         if (-not $Configuration.Steps.BuildModule.Merge) {
