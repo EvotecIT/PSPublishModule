@@ -10,14 +10,18 @@
         $TemporaryFile = $FilePath
     } elseif ($CertificateAsBase64) {
         $TemporaryFile = [io.path]::GetTempFileName()
-        Set-Content -Value $([System.Convert]::FromBase64String($CertificateAsBase64)) -Path $TemporaryFile -Encoding Byte -ErrorAction Stop
+        if ($PSVersionTable.PSEdition -eq 'Core') {
+            Set-Content -AsByteStream -Value $([System.Convert]::FromBase64String($CertificateAsBase64)) -Path $TemporaryFile -ErrorAction Stop
+        } else {
+            Set-Content -Value $([System.Convert]::FromBase64String($CertificateAsBase64)) -Path $TemporaryFile -Encoding Byte -ErrorAction Stop
+        }
     } else {
         return $false
     }
     if ($TemporaryFile) {
-        $CodeSigningCert = Import-PfxCertificate -FilePath $pfxCertFilePath -Password $($PfxPassword | ConvertTo-SecureString -AsPlainText -Force) -CertStoreLocation Cert:\CurrentUser\My
+        $CodeSigningCert = Import-PfxCertificate -FilePath $pfxCertFilePath -Password $($PfxPassword | ConvertTo-SecureString -AsPlainText -Force) -CertStoreLocation Cert:\CurrentUser\My -ErrorAction Stop
         if ($CodeSigningCert) {
-
+            return $CodeSigningCert
         } else {
             return $false
         }
