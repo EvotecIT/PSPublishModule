@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.7.0
+- Improve `New-ConfigurationBuild` by adding CertificatePFXPath, CertificatePFXBase64, CertificatePFXPassword to support GitHub Actions/AzureDevOps
+
 #### 1.6.0 - 2023.07.11
 - Improve logic for replacing expandable variables and allow disabling this feature
 - Impovements overall
