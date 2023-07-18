@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.7.1
+- Added `RequiredVersion` to `New-ConfigurationModule` to allow specifying exact version instead the minimum version
+
 #### 1.7.0
 - Improve `New-ConfigurationBuild` by adding CertificatePFXPath, CertificatePFXBase64, CertificatePFXPassword to support GitHub Actions/AzureDevOps
 - Fixes copy of files during build process

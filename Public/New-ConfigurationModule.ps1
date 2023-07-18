@@ -13,8 +13,15 @@
     Name of PowerShell module that you want your module to depend on.
 
     .PARAMETER Version
-    Version of PowerShell module that you want your module to depend on. If you don't specify a version, any version of the module is acceptable.
+    Version of PowerShell module that you want your module to depend on.
+    If you don't specify a version, any version of the module is acceptable.
     You can also use word 'Latest' to specify that you want to use the latest version of the module, and the module will be pickup up latest version available on the system.
+
+    .PARAMETER RequiredVersion
+    RequiredVersion of PowerShell module that you want your module to depend on.
+    This forces the module to require this specific version.
+    When using Version, the module will be picked up if it's equal or higher than the version specified.
+    When using RequiredVersion, the module will be picked up only if it's equal to the version specified.
 
     .PARAMETER Guid
     Guid of PowerShell module that you want your module to depend on. If you don't specify a Guid, any Guid of the module is acceptable, but it is recommended to specify it.
@@ -46,6 +53,7 @@
         [validateset('RequiredModule', 'ExternalModule', 'ApprovedModule')] $Type = 'RequiredModule',
         [Parameter(Mandatory)][string[]] $Name,
         [string] $Version,
+        [string] $RequiredVersion,
         [string] $Guid
     )
     foreach ($N in $Name) {
@@ -54,9 +62,13 @@
             $Configuration = $N
         } else {
             $ModuleInformation = [ordered] @{
-                ModuleName    = $N
-                ModuleVersion = $Version
-                Guid          = $Guid
+                ModuleName      = $N
+                ModuleVersion   = $Version
+                RequiredVersion = $RequiredVersion
+                Guid            = $Guid
+            }
+            if ($Version -and $RequiredVersion) {
+                throw 'You cannot use both Version and RequiredVersion at the same time for the same module. Please choose one or the other (New-ConfigurationModule) '
             }
             Remove-EmptyValue -Hashtable $ModuleInformation
             if ($ModuleInformation.Count -eq 0) {
