@@ -32,7 +32,7 @@ function New-PSMFile {
         "" | Out-File -Append -LiteralPath $Path -Encoding utf8
 
         # This allows for loading modules in PSM1 file directly
-        if ($InternalModuleDependencies) {
+        if ($InternalModuleDependencies.Count -gt 0) {
             @(
                 "# Added internal module loading to cater for special cases "
                 ""
@@ -47,7 +47,7 @@ function New-PSMFile {
         }
 
         # This allows to export functions only if module loading works correctly
-        if ($CommandModuleDependencies) {
+        if ($CommandModuleDependencies -and $CommandModuleDependencies.Keys.Count -gt 0) {
             @(
                 "`$ModuleFunctions = @{"
                 foreach ($Module in $CommandModuleDependencies.Keys) {
