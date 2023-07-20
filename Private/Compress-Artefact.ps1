@@ -44,7 +44,19 @@
 
     $Success = Write-TextWithTime -Text "Compressing final merged release $ZipPath" {
         $null = New-Item -ItemType Directory -Path $Destination -Force
-        Compress-Archive -Path $CompressPath -DestinationPath $ZipPath -Force -ErrorAction Stop
+        # Keep in mind we're skipping hidden files, as compress-archive doesn't support those
+        # and I don't feel like rewritting it myself :-)
+        # but i believe we should not be copying them in the first place
+        # from what I saw most are PowerShellGet cache files
+        [Array] $DirectoryToCompress = Get-ChildItem -Path $Source -Directory -ErrorAction SilentlyContinue
+        [Array] $FilesToCompress = Get-ChildItem -Path $Source -File -Exclude '*.zip' -ErrorAction SilentlyContinue
+        if ($DirectoryToCompress.Count -gt 0 -and $FilesToCompress.Count -gt 0) {
+            Compress-Archive -Path @($DirectoryToCompress.FullName + $FilesToCompress.FullName) -DestinationPath $ZipPath -Force -ErrorAction Stop
+        } elseif ($DirectoryToCompress.Count -gt 0) {
+            Compress-Archive -Path $DirectoryToCompress.FullName -DestinationPath $ZipPath -Force -ErrorAction Stop
+        } elseif ($FilesToCompress.Count -gt 0) {
+            Compress-Archive -Path $FilesToCompress.FullName -DestinationPath $ZipPath -Force -ErrorAction Stop
+        }
     } -PreAppend 'Plus'
 
     if ($Success -eq $false) {
