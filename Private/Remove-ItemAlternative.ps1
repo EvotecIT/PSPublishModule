@@ -12,6 +12,9 @@
     .PARAMETER SkipFolder
     Do not delete top level folder
 
+    .PARAMETER Exclude
+    Skip files/folders matching given pattern
+
     .EXAMPLE
     Remove-ItemAlternative -Path "C:\Support\GitHub\GpoZaurr\Docs"
 
@@ -24,10 +27,19 @@
     [cmdletbinding()]
     param(
         [alias('LiteralPath')][string] $Path,
-        [switch] $SkipFolder
+        [switch] $SkipFolder,
+        [string[]] $Exclude
     )
     if ($Path -and (Test-Path -LiteralPath $Path)) {
-        $Items = Get-ChildItem -LiteralPath $Path -Recurse -Force -File
+        $getChildItemSplat = @{
+            Path    = $Path
+            Recurse = $true
+            Force   = $true
+            File    = $true
+            Exclude = $Exclude
+        }
+        Remove-EmptyValue -Hashtable $getChildItemSplat
+        $Items = Get-ChildItem @getChildItemSplat
         foreach ($Item in $Items) {
             try {
                 $Item.Delete()
@@ -35,7 +47,14 @@
                 Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
             }
         }
-        $Items = Get-ChildItem -LiteralPath $Path -Recurse -Force | Sort-Object -Descending -Property 'FullName'
+        $getChildItemSplat = @{
+            Path    = $Path
+            Recurse = $true
+            Force   = $true
+            Exclude = $Exclude
+        }
+        Remove-EmptyValue -Hashtable $getChildItemSplat
+        $Items = Get-ChildItem @getChildItemSplat | Sort-Object -Descending -Property 'FullName'
         foreach ($Item in $Items) {
             try {
                 $Item.Delete()
@@ -43,7 +62,7 @@
                 Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
             }
         }
-        if (-not $SkipFolder) {
+        if (-not $SkipFolder.IsPresent) {
             $Item = Get-Item -LiteralPath $Path
             try {
                 $Item.Delete($true)
