@@ -1,10 +1,10 @@
 ﻿Clear-Host
-Import-Module "$PSScriptRoot\..\PSPublishModule.psm1" -Force
+Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '1.X.0'
+        ModuleVersion          = '1.7.X'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -82,7 +82,18 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 
-    New-ConfigurationBuild -Enable:$true -SignModule -DeleteTargetModuleBeforeBuild -MergeModuleOnBuild -CertificateThumbprint '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703' -DoNotAttemptToFixRelativePaths
+    $newConfigurationBuildSplat = @{
+        Enable                         = $true
+        SignModule                     = $true
+        DeleteTargetModuleBeforeBuild  = $true
+        MergeModuleOnBuild             = $true
+        CertificateThumbprint          = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
+        #CertificatePFXBase64           = $BasePfx
+        #CertificatePFXPassword         = "zGT"
+        DoNotAttemptToFixRelativePaths = $true
+    }
+
+    New-ConfigurationBuild @newConfigurationBuildSplat
 
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Modules"
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Releases" -IncludeTagName
