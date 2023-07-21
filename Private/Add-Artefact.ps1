@@ -76,5 +76,8 @@
             }
             Compress-Artefact @zipSplat
         }
+        Write-TextWithTime -Text "Removing temporary release from $ResolvedDestination ($ResolvedDestinationZip)" -PreAppend Plus {
+            Remove-ItemAlternative -Path $ResolvedDestination -SkipFolder -Exclude '*.zip'
+        }
     }
 }

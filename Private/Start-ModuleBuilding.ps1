@@ -528,7 +528,11 @@
         if ($Success -eq $false) {
             return $false
         }
-        $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths
+        $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'Releases'
+        if ($Success -eq $false) {
+            return $false
+        }
+        $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'ReleasesUnpacked'
         if ($Success -eq $false) {
             return $false
         }
