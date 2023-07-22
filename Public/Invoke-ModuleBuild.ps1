@@ -71,7 +71,7 @@ function Invoke-ModuleBuild {
     .NOTES
     General notes
     #>
-    [alias('New-PrepareModule', 'Build-Module')]
+    [alias('New-PrepareModule', 'Build-Module', 'Invoke-ModuleBuilder')]
     [CmdletBinding(DefaultParameterSetName = 'Modern')]
     param (
         [Parameter(Position = 0, ParameterSetName = 'Modern')][scriptblock] $Settings,
