@@ -120,6 +120,17 @@
     if (-not $Configuration.Information.Manifest.CommandModuleDependencies) {
         $Configuration.Information.Manifest.CommandModuleDependencies = [ordered] @{}
     }
+    if (-not $Configuration.Steps.BuildModule.Artefacts) {
+        $Configuration.Steps.BuildModule.Artefacts = [System.Collections.Generic.List[System.Collections.IDictionary]]::new()
+    }
+    # Fix required fields:
+    $Configuration.Information.Manifest.RootModule = "$($ModuleName).psm1"
+    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry,
+    # use an empty array if there are no cmdlets to export.
+    $Configuration.Information.Manifest.CmdletsToExport = @()
+    # Variables to export from this module
+    #$Configuration.Information.Manifest.VariablesToExport = @()
+
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
             $ExecutedSettings = & $Settings
@@ -185,25 +196,26 @@
                         $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
                     }
                 } elseif ($Setting.Type -eq 'Releases') {
-                    foreach ($Key in $Setting.Releases.Keys) {
-                        $Configuration.Steps.BuildModule['Releases'][$Key] = $Setting.Releases[$Key]
-                    }
-                } elseif ($Setting.Type -eq 'ReleasesUnpacked') {
-                    foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
-                        #$Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
-                        foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
-                            if ($Setting.ReleasesUnpacked[$Key] -is [System.Collections.IDictionary]) {
-                                foreach ($Entry in $Setting.ReleasesUnpacked[$Key].Keys) {
-                                    if (-not $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key]) {
-                                        $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = [ordered] @{}
-                                    }
-                                    $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key][$Entry] = $Setting.ReleasesUnpacked[$Key][$Entry]
-                                }
-                            } else {
-                                $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
-                            }
-                        }
-                    }
+                    #foreach ($Key in $Setting.Releases.Keys) {
+                    #    $Configuration.Steps.BuildModule['Releases'][$Key] = $Setting.Releases[$Key]
+                    #}
+                } elseif ($Setting.Type -in 'Unpacked', 'Packed', 'Script', 'ScriptPacked') {
+                    $Configuration.Steps.BuildModule.Artefacts.Add($Setting.Configuration)
+
+                    #foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
+                    # foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
+                    #     if ($Setting.ReleasesUnpacked[$Key] -is [System.Collections.IDictionary]) {
+                    #         foreach ($Entry in $Setting.ReleasesUnpacked[$Key].Keys) {
+                    #             if (-not $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key]) {
+                    #                 $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = [ordered] @{}
+                    #             }
+                    #             $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key][$Entry] = $Setting.ReleasesUnpacked[$Key][$Entry]
+                    #         }
+                    #     } else {
+                    #         $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
+                    #     }
+                    # }
+                    #}
                 } elseif ($Setting.Type -eq 'Build') {
                     foreach ($Key in $Setting.BuildModule.Keys) {
                         $Configuration.Steps.BuildModule[$Key] = $Setting.BuildModule[$Key]
