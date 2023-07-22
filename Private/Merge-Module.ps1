@@ -442,7 +442,7 @@ function Merge-Module {
     }
 
     # Finalize PSM1 by adding export functions/aliases and internal modules loading
-    New-PSMFile -Path $PSM1FilePath `
+    $Success = New-PSMFile -Path $PSM1FilePath `
         -FunctionNames $FunctionsToExport `
         -FunctionAliaes $AliasesToExport `
         -AliasesAndFunctions $AliasesAndFunctions `
@@ -454,6 +454,9 @@ function Merge-Module {
         -LibariesPath $LibariesPath `
         -InternalModuleDependencies $Configuration.Information.Manifest.InternalModuleDependencies `
         -CommandModuleDependencies $Configuration.Information.Manifest.CommandModuleDependencies
+    if ($Success -eq $false) {
+        return $false
+    }
 
     # Format standard PSM1 file
     $Success = Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
