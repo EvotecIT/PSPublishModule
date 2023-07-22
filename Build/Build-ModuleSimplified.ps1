@@ -9,7 +9,7 @@ Import-Module "$PSScriptRoot\..\PSPublishModule.psm1" -Force
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '1.7.2'
+        ModuleVersion          = '1.7.X'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
