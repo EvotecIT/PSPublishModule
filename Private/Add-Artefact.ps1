@@ -21,42 +21,81 @@
         [string] $FileName,
         [nullable[bool]] $ZipIt,
         [string] $DestinationZip,
+        [bool] $ConvertToScript,
+        [string] $ScriptMerge,
         [System.Collections.IDictionary] $Configuration
     )
 
     $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
 
-    Write-TextWithTime -Text "Copying merged release to $ResolvedDestination" -PreAppend Plus {
-        $copyMainModuleSplat = @{
-            Enabled        = $true
-            IncludeTagName = $IncludeTag
-            ModuleName     = $ModuleName
-            Destination    = $DestinationMainModule
-        }
-        Copy-ArtefactMainModule @copyMainModuleSplat
+    if ($ConvertToScript) {
+        Write-TextWithTime -Text "Converting merged release to script" -PreAppend Plus {
+            $convertToScriptSplat = @{
+                Enabled        = $true
+                IncludeTagName = $IncludeTag
+                ModuleName     = $ModuleName
+                Destination    = $DestinationMainModule
+                ScriptMerge    = $ScriptMerge
+            }
+            Remove-EmptyValue -Hashtable $convertToScriptSplat
+            Copy-ArtefactToScript @convertToScriptSplat
 
-        $copyRequiredModuleSplat = @{
-            Enabled         = $CopyRequiredModules
-            RequiredModules = $RequiredModules
-            Destination     = $DestinationRequiredModules
-        }
-        Copy-ArtefactRequiredModule @copyRequiredModuleSplat
+            $copyRequiredModuleSplat = @{
+                Enabled         = $CopyRequiredModules
+                RequiredModules = $RequiredModules
+                Destination     = $DestinationRequiredModules
+            }
+            Copy-ArtefactRequiredModule @copyRequiredModuleSplat
 
-        $copyArtefactRequiredFoldersSplat = @{
-            FoldersInput        = $Folders
-            ProjectPath         = $ProjectPath
-            Destination         = $Destination
-            DestinationRelative = $DestinationFoldersRelative
-        }
-        Copy-ArtefactRequiredFolders @copyArtefactRequiredFoldersSplat
+            $copyArtefactRequiredFoldersSplat = @{
+                FoldersInput        = $Folders
+                ProjectPath         = $ProjectPath
+                Destination         = $Destination
+                DestinationRelative = $DestinationFoldersRelative
+            }
+            Copy-ArtefactRequiredFolders @copyArtefactRequiredFoldersSplat
 
-        $copyArtefactRequiredFilesSplat = @{
-            FilesInput          = $Files
-            ProjectPath         = $ProjectPath
-            Destination         = $Destination
-            DestinationRelative = $DestinationFilesRelative
+            $copyArtefactRequiredFilesSplat = @{
+                FilesInput          = $Files
+                ProjectPath         = $ProjectPath
+                Destination         = $Destination
+                DestinationRelative = $DestinationFilesRelative
+            }
+            Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
         }
-        Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
+    } else {
+        Write-TextWithTime -Text "Copying merged release to $ResolvedDestination" -PreAppend Plus {
+            $copyMainModuleSplat = @{
+                Enabled        = $true
+                IncludeTagName = $IncludeTag
+                ModuleName     = $ModuleName
+                Destination    = $DestinationMainModule
+            }
+            Copy-ArtefactMainModule @copyMainModuleSplat
+
+            $copyRequiredModuleSplat = @{
+                Enabled         = $CopyRequiredModules
+                RequiredModules = $RequiredModules
+                Destination     = $DestinationRequiredModules
+            }
+            Copy-ArtefactRequiredModule @copyRequiredModuleSplat
+
+            $copyArtefactRequiredFoldersSplat = @{
+                FoldersInput        = $Folders
+                ProjectPath         = $ProjectPath
+                Destination         = $Destination
+                DestinationRelative = $DestinationFoldersRelative
+            }
+            Copy-ArtefactRequiredFolders @copyArtefactRequiredFoldersSplat
+
+            $copyArtefactRequiredFilesSplat = @{
+                FilesInput          = $Files
+                ProjectPath         = $ProjectPath
+                Destination         = $Destination
+                DestinationRelative = $DestinationFilesRelative
+            }
+            Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
+        }
     }
     if ($ZipIt -and $DestinationZip) {
         $ResolvedDestinationZip = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationZip)
