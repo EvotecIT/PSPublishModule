@@ -14,7 +14,7 @@ function New-PSMFile {
         [Array] $InternalModuleDependencies,
         [System.Collections.IDictionary] $CommandModuleDependencies
     )
-    try {
+    Write-TextWithTime -Text "Adding alises/functions to load in PSM1 file - $Path" -PreAppend Plus {
         if ($FunctionNames.Count -gt 0) {
             $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
             $Functions = "'$Functions'"
@@ -99,15 +99,10 @@ function New-PSMFile {
             ) | Out-File -Append -LiteralPath $Path -Encoding utf8
         } else {
             # this loads functions/aliases as designed
-            "" | Out-File -Append -LiteralPath $Path -Encoding utf8
+            #"" | Out-File -Append -LiteralPath $Path -Encoding utf8
             "# Export functions and aliases as required" | Out-File -Append -LiteralPath $Path -Encoding utf8
             "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding utf8
         }
 
-    } catch {
-        $ErrorMessage = $_.Exception.Message
-        #Write-Warning "New-PSM1File from $ModuleName failed build. Error: $ErrorMessage"
-        Write-Error "New-PSM1File from $ModuleName failed build. Error: $ErrorMessage"
-        Exit
-    }
+    } -SpacesBefore '   '
 }
