@@ -1,10 +1,15 @@
 ﻿Clear-Host
-Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
+
+# please notice I'm using PSM1 here, as the module may not be built or PSD1 may be broken
+# since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
+# most modules should be run via PSD1 or by it's name (which in the background uses PD1)
+
+Import-Module "$PSScriptRoot\..\PSPublishModule.psm1" -Force
 
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '1.7.X'
+        ModuleVersion          = '1.7.2'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -97,6 +102,16 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\Modules"
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName
+
+    # those 2 are only useful for testing purposes
+    # New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName {
+    #     # Lets test this
+    #     # Invoke-ModuleBuilder
+    # }
+    # New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip" {
+    #     # Lets test this
+    #     # Invoke-ModuleBuilder
+    # }
 
     New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
 
