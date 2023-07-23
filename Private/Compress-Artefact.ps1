@@ -8,7 +8,8 @@
         [string] $ModuleVersion,
         [nullable[bool]] $IncludeTag,
         [nullable[bool]] $LegacyName,
-        [string] $ArtefactName
+        [string] $ArtefactName,
+        [string] $ID
     )
     if ($LegacyName) {
         # This is to support same, old configuration and not break existing projects
@@ -42,6 +43,21 @@
     $Configuration.CurrentSettings.ArtefactZipName = $FileName
     $Configuration.CurrentSettings.ArtefactZipPath = $ZipPath
 
+    if ($ID) {
+        # ID was provided
+        $Configuration.CurrentSettings['Artefact'][$ID] = [ordered] @{
+            'ZipName' = $FileName
+            'ZipPath' = $ZipPath
+        }
+    } else {
+        if (-not $Configuration.CurrentSettings['ArtefactDefault']) {
+            $Configuration.CurrentSettings['ArtefactDefault'] = [ordered] @{
+                'ZipName' = $FileName
+                'ZipPath' = $ZipPath
+            }
+        }
+    }
+
     $Success = Write-TextWithTime -Text "Compressing final merged release $ZipPath" {
         $null = New-Item -ItemType Directory -Path $Destination -Force
         # Keep in mind we're skipping hidden files, as compress-archive doesn't support those
@@ -57,7 +73,7 @@
         } elseif ($FilesToCompress.Count -gt 0) {
             Compress-Archive -Path $FilesToCompress.FullName -DestinationPath $ZipPath -Force -ErrorAction Stop
         }
-    } -PreAppend 'Plus'
+    } -PreAppend 'Plus' -SpacesBefore '      '
 
     if ($Success -eq $false) {
         return $false
