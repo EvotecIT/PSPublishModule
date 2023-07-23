@@ -338,23 +338,25 @@
         if ($Success -eq $false) {
             return $false
         }
-        # Old configuration still supported
-        $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'Releases'
-        if ($Success -eq $false) {
-            return $false
-        }
-        # Old configuration still supported
-        $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'ReleasesUnpacked'
-        if ($Success -eq $false) {
-            return $false
-        }
-        # new configuration
-        foreach ($Artefact in  $Configuration.Steps.BuildModule.Artefacts) {
-            $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -ChosenArtefact $Artefact
+        Write-TextWithTime -Text "Building artefacts" -PreAppend Information {
+            # Old configuration still supported
+            $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'Releases'
             if ($Success -eq $false) {
                 return $false
             }
-        }
+            # Old configuration still supported
+            $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'ReleasesUnpacked'
+            if ($Success -eq $false) {
+                return $false
+            }
+            # new configuration building multiple artefacts
+            foreach ($Artefact in  $Configuration.Steps.BuildModule.Artefacts) {
+                $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -ChosenArtefact $Artefact
+                if ($Success -eq $false) {
+                    return $false
+                }
+            }
+        } -ColorBefore Yellow -ColorTime Yellow -Color Yellow
     }
 
     # Import Modules Section, useful to check before publishing
@@ -372,17 +374,36 @@
         }
     }
 
-    # Publish Module Section
+    # Publish Module Section (old configuration)
     if ($Configuration.Steps.PublishModule.Enabled) {
         $Publishing = Start-PublishingGallery -Configuration $Configuration
         if ($Publishing -eq $false) {
             return $false
         }
     }
-    # Publish Module Section to GitHub
+    # Publish Module Section to GitHub (old configuration)
     if ($Configuration.Steps.PublishModule.GitHub) {
-        Start-PublishingGitHub -Configuration $Configuration -FullProjectPath $FullProjectPath -TagName $TagName -ProjectName $ProjectName
+        $Publishing = Start-PublishingGitHub -Configuration $Configuration -ProjectName $ProjectName
+        if ($Publishing -eq $false) {
+            return $false
+        }
     }
+
+    # new configuration allowing multiple galleries
+    foreach ($ChosenNuget in $Configuration.Steps.BuildModule.GalleryNugets) {
+        $Success = Start-PublishingGallery -Configuration $Configuration -ChosenNuget $ChosenNuget
+        if ($Success -eq $false) {
+            return $false
+        }
+    }
+    # new configuration allowing multiple githubs/releases
+    foreach ($ChosenNuget in $Configuration.Steps.BuildModule.GitHubNugets) {
+        $Success = Start-PublishingGitHub -Configuration $Configuration -ChosenNuget $ChosenNuget -ProjectName $ProjectName
+        if ($Success -eq $false) {
+            return $false
+        }
+    }
+
     if ($Configuration.Steps.BuildDocumentation) {
         Start-DocumentationBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -ProjectName $ProjectName
     }
