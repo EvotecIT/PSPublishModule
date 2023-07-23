@@ -137,7 +137,7 @@
             #RootFiles              = $RootFiles
             #AllFiles               = $AllFiles
             #Directories            = $Directories
-            #Files                  = $Files
+            Files                  = $Files
             #Exclude                = $Exclude
             #IncludeFilesRoot       = $IncludeFilesRoot
             DirectoriesWithPS1     = $DirectoriesWithPS1
