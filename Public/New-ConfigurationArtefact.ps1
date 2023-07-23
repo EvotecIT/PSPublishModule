@@ -6,6 +6,7 @@
     .DESCRIPTION
     Tells the module to create artefact of specified type
     There can be multiple artefacts created (even of same type)
+    At least one packed artefact is required for publishing to GitHub
 
     .PARAMETER Type
     There are 4 types of artefacts:
@@ -16,39 +17,44 @@
 
     .PARAMETER ID
     Optional ID of the artefact. To be used by New-ConfigurationPublish cmdlet
+    If not specified, the first packed artefact will be used for publishing to GitHub
 
     .PARAMETER Enable
-    Parameter description
+    Enable artefact creation. By default artefact creation is disabled.
 
     .PARAMETER IncludeTagName
-    Parameter description
+    Include tag name in artefact name. By default tag name is not included.
+    Alternatively you can provide ArtefactName parameter to specify your own artefact name (with or without TagName)
 
     .PARAMETER Path
-    Parameter description
+    Path where artefact will be created.
+    Please choose a separate directory for each artefact type, as logic may be interfering one another.
 
     .PARAMETER AddRequiredModules
-    Parameter description
+    Add required modules to artefact by copying them over. By default required modules are not added.
 
     .PARAMETER ModulesPath
-    Parameter description
+    Path where main module or required module (if not specified otherwise in RequiredModulesPath) will be copied to.
+    By default it will be put in the Path folder if not specified
 
     .PARAMETER RequiredModulesPath
-    Parameter description
+    Path where required modules will be copied to. By default it will be put in the Path folder if not specified.
+    If ModulesPath is specified, but RequiredModulesPath is not specified it will be put into ModulesPath folder.
 
     .PARAMETER CopyDirectories
-    Parameter description
+    Provide Hashtable of directories to copy to artefact. Key is source directory, value is destination directory.
 
     .PARAMETER CopyFiles
-    Parameter description
+    Provide Hashtable of files to copy to artefact. Key is source file, value is destination file.
 
     .PARAMETER CopyDirectoriesRelative
-    Parameter description
+    Define if destination directories should be relative to artefact root. By default they are not.
 
     .PARAMETER CopyFilesRelative
-    Parameter description
+    Define if destination files should be relative to artefact root. By default they are not.
 
     .PARAMETER Clear
-    Parameter description
+    Clear artefact directory before creating artefact. By default artefact directory is not cleared.
 
     .PARAMETER ArtefactName
     The name of the artefact. If not specified, the default name will be used.
@@ -65,9 +71,12 @@
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName
 
     .EXAMPLE
+    # Create artefact in form of a script. This is useful for very simple modules that should be just single PS1 file
     New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName
 
     .EXAMPLE
+    # Create artefact in form of a script. This is useful for very simple modules that should be just single PS1 file
+    # But additionally pack it into zip fileĄŚż$%#
     New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip"
 
     .NOTES
@@ -88,7 +97,8 @@
         [switch] $CopyDirectoriesRelative,
         [switch] $CopyFilesRelative,
         [switch] $Clear,
-        [string] $ArtefactName
+        [string] $ArtefactName,
+        [string] $ID
     )
 
     # if ($Type -eq 'Packed') {
