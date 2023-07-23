@@ -21,9 +21,9 @@
                     $DirectoryPath = [Io.Path]::GetDirectoryName($ResolvedDestination)
                     $null = New-Item -ItemType Directory -Force -ErrorAction Stop -Path $DirectoryPath
                     Copy-Item -LiteralPath $FullFilePath -Destination $ResolvedDestination -Force -ErrorAction Stop
-                } -PreAppend Plus -SpacesBefore "   " -Color Yellow
+                } -PreAppend Plus -SpacesBefore '      ' -Color Yellow
             } else {
-                Write-TextWithTime -Text "File $FullFilePath does not exist" -PreAppend Plus -SpacesBefore "   " -Color Red -ColorTime Red -ColorBefore Red
+                Write-TextWithTime -Text "File $FullFilePath does not exist" -PreAppend Plus -SpacesBefore '      ' -Color Red -ColorTime Red -ColorBefore Red
                 return $false
             }
         } elseif ($FilesInput[$File] -is [System.Collections.IDictionary]) {
@@ -41,9 +41,9 @@
                             $DirectoryPath = [Io.Path]::GetDirectoryName($ResolvedDestination)
                             $null = New-Item -ItemType Directory -Force -ErrorAction Stop -Path $DirectoryPath
                             Copy-Item -LiteralPath $FullFilePath -Destination $ResolvedDestination -Force -ErrorAction Stop
-                        } -PreAppend Plus -SpacesBefore "   " -Color Yellow
+                        } -PreAppend Plus -SpacesBefore '      ' -Color Yellow
                     } else {
-                        Write-TextWithTime -Text "File $FullFilePath does not exist" -PreAppend Plus -SpacesBefore "   " -Color Red -ColorTime Red -ColorBefore Red
+                        Write-TextWithTime -Text "File $FullFilePath does not exist" -PreAppend Plus -SpacesBefore '      ' -Color Red -ColorTime Red -ColorBefore Red
                         return $false
                     }
                 }
