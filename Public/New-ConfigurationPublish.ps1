@@ -1,114 +1,131 @@
 ﻿function New-ConfigurationPublish {
+    <#
+    .SYNOPSIS
+    Provide a way to configure publishing to PowerShell Gallery or GitHub
+
+    .DESCRIPTION
+    Provide a way to configure publishing to PowerShell Gallery or GitHub
+    You can configure publishing to both at the same time
+    You can publish to multiple PowerShellGalleries at the same time as well
+    You can have multiple GitHub configurations at the same time as well
+
+    .PARAMETER Type
+    Choose between PowerShellGallery and GitHub
+
+    .PARAMETER FilePath
+    API Key to be used for publishing to GitHub or PowerShell Gallery in clear text in file
+
+    .PARAMETER UserName
+    When used for GitHub this parameter is required to know to which repository to publish.
+    This parameter is not used for PSGallery publishing
+
+    .PARAMETER RepositoryName
+    When used for PowerShellGallery publishing this parameter provides a way to overwrite default PowerShellGallery and publish to a different repository
+    When not used, the default PSGallery will be used.
+    When used for GitHub publishing this parameter provides a way to overwrite default repository name and publish to a different repository
+    When not used, the default repository name will be used, that matches the module name
+
+    .PARAMETER ApiKey
+    API Key to be used for publishing to GitHub or PowerShell Gallery in clear text
+
+    .PARAMETER Enabled
+    Enable publishing to GitHub or PowerShell Gallery
+
+    .PARAMETER PreReleaseTag
+    Allow to publish to GitHub as pre-release. By default it will be published as release
+
+    .PARAMETER OverwriteTagName
+    Allow to overwrite tag name when publishing to GitHub. By default "v<ModuleVersion>" will be used.
+
+    .PARAMETER Force
+    Allow to publish lower version of module on PowerShell Gallery. By default it will fail if module with higher version already exists.
+
+    .PARAMETER ID
+    Optional ID of the artefact. If not specified, the default packed artefact will be used.
+    If no packed artefact is specified, the first packed artefact will be used (if enabled)
+    If no packed artefact is enabled, the publishing will fail
+
+    .EXAMPLE
+    New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
+
+    .EXAMPLE
+    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub'
+
+    .NOTES
+    General notes
+    #>
     [CmdletBinding()]
     param(
-        [ValidateSet('PowerShellGallery', 'GitHub')]
-        [string] $Type,
-        [string] $FilePath,
+        [Parameter(Mandatory, ParameterSetName = 'ApiKey')]
+        [Parameter(Mandatory, ParameterSetName = 'ApiFromFile')]
+        [ValidateSet('PowerShellGallery', 'GitHub')][string] $Type,
+
+        [Parameter(Mandatory, ParameterSetName = 'ApiFromFile')][string] $FilePath,
+
+        [Parameter(Mandatory, ParameterSetName = 'ApiKey')][string] $ApiKey,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
         [string] $UserName,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
         [string] $RepositoryName,
-        [string] $ApiKey,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
         [switch] $Enabled,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
         [string] $PreReleaseTag,
-        [switch] $Force
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
+        [string] $OverwriteTagName,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
+        [switch] $Force,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
+        [string] $ID
     )
-    $Options = [ordered] @{}
-    $Skip = $false
-    if ($Type -eq 'PowerShellGallery') {
-        $Options['PowerShellGallery'] = [ordered] @{}
-        if ($ApiKey) {
-            $Options.PowerShellGallery.ApiKey = $ApiKey
-            $Options.PowerShellGallery.FromFile = $false
-        } elseif ($FilePath) {
-            $Options.PowerShellGallery.ApiKey = $FilePath
-            $Options.PowerShellGallery.FromFile = $true
-        } else {
-            $Skip = $true
-        }
-        if (-not $Skip) {
-            [ordered] @{
-                Type          = $Type
-                Configuration = $Options
-            }
-        }
-    } elseif ($Type -eq 'GitHub') {
-        $Options['GitHub'] = [ordered] @{}
-        if ($ApiKey) {
-            $Options.GitHub.ApiKey = $ApiKey
-            $Options.GitHub.FromFile = $false
-        } elseif ($FilePath) {
-            $Options.GitHub.ApiKey = $FilePath
-            $Options.GitHub.FromFile = $true
-        } else {
-            $Skip = $true
-        }
-        # if user did try to set API KEY we would expect other stuff to be set
-        # otherwise lets skip it because maybe user wanted something else
-        if (-not $Skip) {
-            if (-not $UserName) {
-                throw 'UserName is required for GitHub. Please fix New-ConfigurationPublish'
-            }
-            $Options.GitHub.UserName = $UserName
-            if ($RepositoryName) {
-                $Options.GitHub.RepositoryName = $RepositoryName
-            }
-            [ordered] @{
-                Type          = $Type
-                Configuration = $Options
-            }
-        }
+
+
+    if ($FilePath) {
+        $ApiKeyToUse = Get-Content -Path $FilePath -ErrorAction Stop -Encoding UTF8
+    } else {
+        $ApiKeyToUse = $ApiKey
     }
 
-
-
     if ($Type -eq 'PowerShellGallery') {
-        if ($Enabled) {
-            [ordered] @{
-                Type          = 'PowerShellGalleryPublishing'
-                PublishModule = [ordered] @{
-                    Enabled = $true
-                }
-            }
-        }
-        if ($VerbosePreference) {
-            [ordered] @{
-                Type          = 'PowerShellGalleryPublishing'
-                PublishModule = [ordered] @{
-                    PSGalleryVerbose = $true
-                }
-            }
-        }
-        if ($PreReleaseTag) {
-            [ordered] @{
-                Type          = 'PowerShellGalleryPublishing'
-                PublishModule = [ordered] @{
-                    PreRelease = $PreReleaseTag
-                }
-            }
-        }
-        if ($Force) {
-            [ordered] @{
-                Type          = 'PowerShellGalleryPublishing'
-                PublishModule = [ordered] @{
-                    RequireForce = $Force.IsPresent
-                }
-            }
+        $TypeToUse = 'GalleryNuget'
+    } elseif ($Type -eq 'GitHub') {
+        $TypeToUse = 'GitHubNuget'
+        if (-not $UserName) {
+            throw 'UserName is required for GitHub. Please fix New-ConfigurationPublish and provide UserName'
         }
     } else {
-        if ($Enabled) {
-            [ordered] @{
-                Type          = 'GitHubPublishing'
-                PublishModule = [ordered] @{
-                    GitHub = $true
-                }
-            }
-        }
-        if ($VerbosePreference) {
-            [ordered] @{
-                Type          = 'GitHubPublishing'
-                PublishModule = [ordered] @{
-                    GitHubVerbose = $true
-                }
-            }
+        return
+    }
+
+    $Settings = [ordered] @{
+        Type          = $TypeToUse
+        Configuration = [ordered] @{
+            Type             = $Type
+            ApiKey           = $ApiKeyToUse
+            ID               = $ID
+            Enabled          = $Enabled
+            UserName         = $UserName
+            RepositoryName   = $RepositoryName
+            Force            = $Force.IsPresent
+            OverwriteTagName = $OverwriteTagName
+            PreReleaseTag    = $PreReleaseTag
+            Verbose          = $VerbosePreference
         }
     }
+    Remove-EmptyValue -Hashtable $Settings -Recursive 2
+    $Settings
 }
