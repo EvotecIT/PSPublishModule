@@ -1,5 +1,5 @@
 ﻿@{
-    AliasesToExport        = @('New-PrepareModule', 'Build-Module')
+    AliasesToExport        = @('New-PrepareModule', 'Build-Module', 'Invoke-ModuleBuilder')
     Author                 = 'Przemyslaw Klys'
     CmdletsToExport        = @()
     CompanyName            = 'Evotec'
