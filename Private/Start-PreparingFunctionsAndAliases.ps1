@@ -1,7 +1,9 @@
 ﻿function Start-PreparingFunctionsAndAliases {
     [CmdletBinding()]
     param(
-        [System.Collections.IDictionary] $Configuration
+        [System.Collections.IDictionary] $Configuration,
+        $FullProjectPath,
+        $Files
     )
     $AliasesAndFunctions = Write-TextWithTime -Text 'Preparing function and aliases names' {
         Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport

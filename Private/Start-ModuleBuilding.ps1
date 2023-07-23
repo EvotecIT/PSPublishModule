@@ -94,8 +94,9 @@
         $LinkPrivatePublicFiles = $Variables.LinkPrivatePublicFiles
         $DirectoriesWithClasses = $Variables.DirectoriesWithClasses
         $DirectoriesWithPS1 = $Variables.DirectoriesWithPS1
+        $Files = $Variables.Files
 
-        $AliasesAndFunctions = Start-PreparingFunctionsAndAliases -Configuration $Configuration
+        $AliasesAndFunctions = Start-PreparingFunctionsAndAliases -Configuration $Configuration -FullProjectPath $FullProjectPath -Files $Files
         if ($AliasesAndFunctions -eq $false) {
             return $false
         }
