@@ -42,6 +42,9 @@
     if (-not $Configuration.CurrentSettings) {
         $Configuration.CurrentSettings = [ordered] @{}
     }
+    if (-not $Configuration.CurrentSettings['Artefact']) {
+        $Configuration.CurrentSettings['Artefact'] = [ordered] @{}
+    }
     if ($ModuleName) {
         $Configuration.Information.ModuleName = $ModuleName
     }
@@ -123,6 +126,12 @@
     if (-not $Configuration.Steps.BuildModule.Artefacts) {
         $Configuration.Steps.BuildModule.Artefacts = [System.Collections.Generic.List[System.Collections.IDictionary]]::new()
     }
+    if (-not $Configuration.Steps.BuildModule.GitHubNugets) {
+        $Configuration.Steps.BuildModule.GitHubNugets = [System.Collections.Generic.List[System.Collections.IDictionary]]::new()
+    }
+    if (-not $Configuration.Steps.BuildModule.GalleryNugets) {
+        $Configuration.Steps.BuildModule.GalleryNugets = [System.Collections.Generic.List[System.Collections.IDictionary]]::new()
+    }
     # Fix required fields:
     $Configuration.Information.Manifest.RootModule = "$($ModuleName).psm1"
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry,
@@ -176,29 +185,34 @@
                 } elseif ($Setting.Type -eq 'BuildDocumentation') {
                     $Configuration.Steps.BuildDocumentation = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'GitHub') {
-                    $Configuration.Options.GitHub = $Setting.Configuration.GitHub
+                    # $Configuration.Options.GitHub = $Setting.Configuration.GitHub
                 } elseif ($Setting.Type -eq 'PowerShellGallery') {
-                    $Configuration.Options.PowerShellGallery = $Setting.Configuration.PowerShellGallery
+                    # $Configuration.Options.PowerShellGallery = $Setting.Configuration.PowerShellGallery
                 } elseif ($Setting.Type -eq 'PowerShellGalleryPublishing') {
-                    foreach ($Key in $Setting.PublishModule.Keys) {
-                        $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
-                    }
+                    # foreach ($Key in $Setting.PublishModule.Keys) {
+                    #     $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
+                    # }
                 } elseif ($Setting.Type -eq 'TestsBeforeMerge') {
                     $Configuration.Options.TestsBeforeMerge = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'TestsAfterMerge') {
                     $Configuration.Options.TestsAfterMerge = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'GitHubPublishing') {
-                    foreach ($Key in $Setting.PublishModule.Keys) {
-                        $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
-                    }
+                    #  foreach ($Key in $Setting.PublishModule.Keys) {
+                    #      $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
+                    #  }
+                    $Configuration.Steps.BuildModule.Nugets.Add($Setting.Configuration)
                 } elseif ($Setting.Type -eq 'ImportModules') {
-                    foreach ($Key in $Setting.ImportModules.Keys) {
-                        $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
-                    }
+                    # foreach ($Key in $Setting.ImportModules.Keys) {
+                    #     $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
+                    # }
                 } elseif ($Setting.Type -eq 'Releases') {
                     #foreach ($Key in $Setting.Releases.Keys) {
                     #    $Configuration.Steps.BuildModule['Releases'][$Key] = $Setting.Releases[$Key]
                     #}
+                } elseif ($Setting.Type -in 'GalleryNuget') {
+                    $Configuration.Steps.BuildModule.GalleryNugets.Add($Setting.Configuration)
+                } elseif ($Setting.Type -in 'GitHubNuget') {
+                    $Configuration.Steps.BuildModule.GitHubNugets.Add($Setting.Configuration)
                 } elseif ($Setting.Type -in 'Unpacked', 'Packed', 'Script', 'ScriptPacked') {
                     $Configuration.Steps.BuildModule.Artefacts.Add($Setting.Configuration)
 
