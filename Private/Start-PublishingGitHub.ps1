@@ -33,7 +33,8 @@
                 GitHubAccessToken    = $ChosenNuget.ApiKey
                 TagName              = $TagName
                 AssetFilePaths       = $ZipPath
-                IsPreRelease         = if ($ChosenNuget.PreReleaseTag) { $true } else { $false }
+                # settable via PSD1 manifest
+                IsPreRelease         = if ($Configuration.CurrentSettings.Prerelease) { $true } else { $false }
                 # those don't work, requires testing
                 #GenerateReleaseNotes = $true
                 #MakeLatest           = $true
