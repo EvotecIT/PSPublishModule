@@ -184,52 +184,23 @@
                     $Configuration.Options.Documentation = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'BuildDocumentation') {
                     $Configuration.Steps.BuildDocumentation = $Setting.Configuration
-                } elseif ($Setting.Type -eq 'GitHub') {
-                    # $Configuration.Options.GitHub = $Setting.Configuration.GitHub
-                } elseif ($Setting.Type -eq 'PowerShellGallery') {
-                    # $Configuration.Options.PowerShellGallery = $Setting.Configuration.PowerShellGallery
-                } elseif ($Setting.Type -eq 'PowerShellGalleryPublishing') {
-                    # foreach ($Key in $Setting.PublishModule.Keys) {
-                    #     $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
-                    # }
+                    #} elseif ($Setting.Type -eq 'GitHub') {
+                    #} elseif ($Setting.Type -eq 'PowerShellGallery') {
+                    #} elseif ($Setting.Type -eq 'PowerShellGalleryPublishing') {
                 } elseif ($Setting.Type -eq 'TestsBeforeMerge') {
                     $Configuration.Options.TestsBeforeMerge = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'TestsAfterMerge') {
                     $Configuration.Options.TestsAfterMerge = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'GitHubPublishing') {
-                    #  foreach ($Key in $Setting.PublishModule.Keys) {
-                    #      $Configuration.Steps.PublishModule[$Key] = $Setting.PublishModule[$Key]
-                    #  }
                     $Configuration.Steps.BuildModule.Nugets.Add($Setting.Configuration)
-                } elseif ($Setting.Type -eq 'ImportModules') {
-                    # foreach ($Key in $Setting.ImportModules.Keys) {
-                    #     $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
-                    # }
-                } elseif ($Setting.Type -eq 'Releases') {
-                    #foreach ($Key in $Setting.Releases.Keys) {
-                    #    $Configuration.Steps.BuildModule['Releases'][$Key] = $Setting.Releases[$Key]
-                    #}
+                    #} elseif ($Setting.Type -eq 'ImportModules') {
+                    #} elseif ($Setting.Type -eq 'Releases') {
                 } elseif ($Setting.Type -in 'GalleryNuget') {
                     $Configuration.Steps.BuildModule.GalleryNugets.Add($Setting.Configuration)
                 } elseif ($Setting.Type -in 'GitHubNuget') {
                     $Configuration.Steps.BuildModule.GitHubNugets.Add($Setting.Configuration)
                 } elseif ($Setting.Type -in 'Unpacked', 'Packed', 'Script', 'ScriptPacked') {
                     $Configuration.Steps.BuildModule.Artefacts.Add($Setting.Configuration)
-
-                    #foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
-                    # foreach ($Key in $Setting.ReleasesUnpacked.Keys) {
-                    #     if ($Setting.ReleasesUnpacked[$Key] -is [System.Collections.IDictionary]) {
-                    #         foreach ($Entry in $Setting.ReleasesUnpacked[$Key].Keys) {
-                    #             if (-not $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key]) {
-                    #                 $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = [ordered] @{}
-                    #             }
-                    #             $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key][$Entry] = $Setting.ReleasesUnpacked[$Key][$Entry]
-                    #         }
-                    #     } else {
-                    #         $Configuration.Steps.BuildModule['ReleasesUnpacked'][$Key] = $Setting.ReleasesUnpacked[$Key]
-                    #     }
-                    # }
-                    #}
                 } elseif ($Setting.Type -eq 'Build') {
                     foreach ($Key in $Setting.BuildModule.Keys) {
                         $Configuration.Steps.BuildModule[$Key] = $Setting.BuildModule[$Key]
