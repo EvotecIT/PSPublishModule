@@ -1,6 +1,6 @@
 ﻿### PSPublishModule Changelog
 
-#### 1.7.1
+#### 1.8.0
 - Added `RequiredVersion` to `New-ConfigurationModule` to allow specifying exact version instead the minimum version
 - Minor bugfix for potential issue with CommandModuleDependencies
 - Added ability to create multiple artefacts (not just 2) by using `New-ConfigurationArtefact`
@@ -9,6 +9,7 @@
   - Packed - packed module (as zip)
   - Script - script that is module in form of PS1 without PSD1 - only applicable to very simple modules
   - PackedScript - packed module (as zip) that is script that is module in form of PS1 without PSD1 - only applicable to very simple modules
+- Added ability to publish multiple artefacts (not just 2) by using `New-ConfigurationPublish`
 
 #### 1.7.0
 - Improve `New-ConfigurationBuild` by adding CertificatePFXPath, CertificatePFXBase64, CertificatePFXPassword to support GitHub Actions/AzureDevOps
