@@ -10,7 +10,7 @@ function New-PersonalManifest {
         [switch] $OnMerge
     )
 
-    $TemporaryManifest = @{ }
+    $TemporaryManifest = [ordered] @{ }
     $Manifest = $Configuration.Information.Manifest
 
     if ($UseWildcardForFunctions) {
@@ -30,7 +30,6 @@ function New-PersonalManifest {
     } elseif ($ScriptsToProcessLibrary) {
         $Manifest.ScriptsToProcess = @($ScriptsToProcessLibrary)
     }
-
     if ($Manifest.Contains('ExternalModuleDependencies')) {
         $TemporaryManifest.ExternalModuleDependencies = $Manifest.ExternalModuleDependencies
         $Manifest.Remove('ExternalModuleDependencies')
@@ -43,7 +42,9 @@ function New-PersonalManifest {
         $TemporaryManifest.CommandModuleDependencies = $Manifest.CommandModuleDependencies
         $Manifest.Remove('CommandModuleDependencies')
     }
-
+    if ($Manifest.PreRelease) {
+        $Configuration.CurrentSettings.PreRelease = $Manifest.PreRelease
+    }
     if ($OnMerge) {
         if ($Configuration.Options.Merge.Style.PSD1) {
             $PSD1Style = $Configuration.Options.Merge.Style.PSD1
@@ -88,28 +89,6 @@ function New-PersonalManifest {
         if ($Data.Path) {
             $Data.Remove('Path')
         }
-
-
-        # if ($Data.Tags) {
-        #     $Data.PrivateData.PSData.Tags = $Data.Tags
-        #     $Data.Remove('Tags')
-        # }
-        # if ($Data.LicenseUri) {
-        #     $Data.PrivateData.PSData.LicenseUri = $Data.LicenseUri
-        #     $Data.Remove('LicenseUri')
-        # }
-        # if ($Data.ProjectUri) {
-        #     $Data.PrivateData.PSData.ProjectUri = $Data.ProjectUri
-        #     $Data.Remove('ProjectUri')
-        # }
-        # if ($Data.IconUri) {
-        #     $Data.PrivateData.PSData.IconUri = $Data.IconUri
-        #     $Data.Remove('IconUri')
-        # }
-        # if ($Data.ReleaseNotes) {
-        #     $Data.PrivateData.PSData.ReleaseNotes = $Data.ReleaseNotes
-        #     $Data.Remove('ReleaseNotes')
-        # }
         $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies')
         foreach ($Entry in [string[]] $Data.Keys) {
             if ($Entry -in $ValidateEntriesPrivateData) {
@@ -131,6 +110,7 @@ function New-PersonalManifest {
             }
         }
 
+        # Old way of setting prerelease
         if ($Configuration.Steps.PublishModule.Prerelease) {
             $Data.PrivateData.PSData.Prerelease = $Configuration.Steps.PublishModule.Prerelease
         }
