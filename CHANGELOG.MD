@@ -10,6 +10,9 @@
   - Script - script that is module in form of PS1 without PSD1 - only applicable to very simple modules
   - PackedScript - packed module (as zip) that is script that is module in form of PS1 without PSD1 - only applicable to very simple modules
 - Added ability to publish multiple artefacts (not just 2) by using `New-ConfigurationPublish`
+- Removed `PreReleaseTag` from `New-ConfigurationPublish`
+- Added `PreReleaseTag` to `New-ConfigurationManifest` to allow specifying pre-release tag
+- `PreReleaseTag` is autoamtically used for GitHub publishing when Manifest is set to prerelease
 
 #### 1.7.0
 - Improve `New-ConfigurationBuild` by adding CertificatePFXPath, CertificatePFXBase64, CertificatePFXPassword to support GitHub Actions/AzureDevOps

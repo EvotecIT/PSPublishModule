@@ -76,9 +76,9 @@
         [Parameter(ParameterSetName = 'ApiFromFile')]
         [switch] $Enabled,
 
-        [Parameter(ParameterSetName = 'ApiKey')]
-        [Parameter(ParameterSetName = 'ApiFromFile')]
-        [string] $PreReleaseTag,
+        # [Parameter(ParameterSetName = 'ApiKey')]
+        # [Parameter(ParameterSetName = 'ApiFromFile')]
+        # [string] $PreReleaseTag,
 
         [Parameter(ParameterSetName = 'ApiKey')]
         [Parameter(ParameterSetName = 'ApiFromFile')]
@@ -122,7 +122,7 @@
             RepositoryName   = $RepositoryName
             Force            = $Force.IsPresent
             OverwriteTagName = $OverwriteTagName
-            PreReleaseTag    = $PreReleaseTag
+            #PreReleaseTag    = $PreReleaseTag
             Verbose          = $VerbosePreference
         }
     }
