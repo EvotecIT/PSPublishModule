@@ -23,13 +23,14 @@
         [string] $DestinationZip,
         [bool] $ConvertToScript,
         [string] $ScriptMerge,
-        [System.Collections.IDictionary] $Configuration
+        [System.Collections.IDictionary] $Configuration,
+        [string] $ID
     )
 
     $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
 
     if ($ConvertToScript) {
-        Write-TextWithTime -Text "Converting merged release to script" -PreAppend Plus {
+        Write-TextWithTime -Text "Converting merged release to script" -PreAppend Plus -SpacesBefore '      ' {
             $convertToScriptSplat = @{
                 Enabled        = $true
                 IncludeTagName = $IncludeTag
@@ -64,7 +65,7 @@
             Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
         }
     } else {
-        Write-TextWithTime -Text "Copying merged release to $ResolvedDestination" -PreAppend Plus {
+        Write-TextWithTime -Text "Copying merged release to $ResolvedDestination" -PreAppend Plus -SpacesBefore '      ' {
             $copyMainModuleSplat = @{
                 Enabled        = $true
                 IncludeTagName = $IncludeTag
@@ -99,10 +100,8 @@
     }
     if ($ZipIt -and $DestinationZip) {
         $ResolvedDestinationZip = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationZip)
-        Write-TextWithTime -Text "Zipping merged release to $ResolvedDestinationZip" -PreAppend Plus {
+        Write-TextWithTime -Text "Zipping merged release to $ResolvedDestinationZip" -PreAppend Plus -SpacesBefore '      ' {
             $zipSplat = @{
-                #Source        = $CompressPath
-                #Destination   = $FolderPathReleases
                 Source        = $ResolvedDestination
                 Destination   = $ResolvedDestinationZip
 
@@ -112,10 +111,11 @@
                 ModuleVersion = $ModuleVersion
                 IncludeTag    = $IncludeTag
                 ArtefactName  = $ArtefactName
+                ID            = $ID
             }
             Compress-Artefact @zipSplat
         }
-        Write-TextWithTime -Text "Removing temporary release from $ResolvedDestination ($ResolvedDestinationZip)" -PreAppend Plus {
+        Write-TextWithTime -Text "Removing temporary release from $ResolvedDestination ($ResolvedDestinationZip)" -SpacesBefore '      ' -PreAppend Plus {
             Remove-ItemAlternative -Path $ResolvedDestination -SkipFolder -Exclude '*.zip'
         }
     }
