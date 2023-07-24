@@ -43,7 +43,7 @@
         $Configuration.CurrentSettings = [ordered] @{}
     }
     if (-not $Configuration.CurrentSettings['Artefact']) {
-        $Configuration.CurrentSettings['Artefact'] = [ordered] @{}
+        $Configuration.CurrentSettings['Artefact'] = @()
     }
     if ($ModuleName) {
         $Configuration.Information.ModuleName = $ModuleName
