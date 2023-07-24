@@ -73,7 +73,7 @@
         } elseif ($FilesToCompress.Count -gt 0) {
             Compress-Archive -Path $FilesToCompress.FullName -DestinationPath $ZipPath -Force -ErrorAction Stop
         }
-    } -PreAppend 'Plus' -SpacesBefore '      '
+    } -PreAppend Addition -SpacesBefore '         ' -Color Yellow -ColorTime Green -ColorBefore Yellow -ColorError Red
 
     if ($Success -eq $false) {
         return $false
