@@ -59,10 +59,11 @@
     .PARAMETER ArtefactName
     The name of the artefact. If not specified, the default name will be used.
     You can use following variables that will be replaced with actual values:
-    - <ModuleName> / {ModuleName} - the name of the module
-    - <ModuleVersion> / {ModuleVersion} - the version of the module
-    - <ModuleVersionWithPreRelease> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag
-    - <TagName> / {TagName} - the name of the tag
+    - <ModuleName> / {ModuleName} - the name of the module i.e PSPublishModule
+    - <ModuleVersion> / {ModuleVersion} - the version of the module i.e 1.0.0
+    - <ModuleVersionWithPreRelease> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+    - <TagModuleVersionWithPreRelease> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
+    - <TagName> / {TagName} - the name of the tag - i.e. v1.0.0
 
     .EXAMPLE
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\Modules"
