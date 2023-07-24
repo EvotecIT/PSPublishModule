@@ -1,16 +1,16 @@
 ﻿Clear-Host
 
-# please notice I'm using PSM1 here, as the module may not be built or PSD1 may be broken
+# please notice I may be using PSM1 here, as the module may not be built or PSD1 may be broken
 # since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
 # most modules should be run via PSD1 or by it's name (which in the background uses PD1)
 
-Import-Module "$PSScriptRoot\..\PSPublishModule.psm1" -Force
+Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
         ModuleVersion          = '1.8.0'
-        PreReleaseTag          = 'Preview1'
+        PreReleaseTag          = 'Preview2'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -84,7 +84,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
     # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
     New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 
@@ -105,10 +105,25 @@ Build-Module -ModuleName 'PSPublishModule' {
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative
-    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
+
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\PackedWithModules" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
-    } -CopyFilesRelative
+    } -CopyFilesRelative -ArtefactName "PSPublishModule.v<ModuleVersion>-FullPackage.zip"
+
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.v<ModuleVersion>.zip"
+
+    New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
+
+    # global options for publishing to github/psgallery
+    # you can use FilePath where APIKey are saved in clear text or use APIKey directly
+    #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>'
+
+
+    ### FOR TESTING PURPOSES ONLY ###
+    ### SHOWING HHOW THINGS WORK HERE ###
+
     #New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed2" -IncludeTagName -ID 'Packed2'
     #New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed1" -IncludeTagName
 
@@ -122,11 +137,6 @@ Build-Module -ModuleName 'PSPublishModule' {
     #     # Invoke-ModuleBuilder
     # }
 
-    New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
-
-    # global options for publishing to github/psgallery
-    # you can use FilePath where APIKey are saved in clear text or use APIKey directly
-    #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
-    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub'
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubWithoutModules' -OverwriteTagName 'v1.8.0-Preview1'
     #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubAsScript'
 } -ExitCode
