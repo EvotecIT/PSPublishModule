@@ -46,8 +46,10 @@
                         # if pre-release is set, we want to use it in the name
                         if ($Configuration.CurrentSettings.PreRelease) {
                             $ModuleVersionWithPreRelease = $Configuration.CurrentSettings.PreRelease
+                            $TagModuleVersionWithPreRelease = "v$($ModuleVersionWithPreRelease)"
                         } else {
                             $ModuleVersionWithPreRelease = $ModuleVersion
+                            $TagModuleVersionWithPreRelease = "v$($ModuleVersion)"
                         }
                         $TagNameDefault = "v$($ModuleVersion)"
 
@@ -56,8 +58,10 @@
                         $TagName = $TagName.Replace('<ModuleName>', $ModuleName)
                         $TagName = $TagName.Replace('{ModuleVersion}', $ModuleVersion)
                         $TagName = $TagName.Replace('<ModuleVersion>', $ModuleVersion)
-                        $TagName = $TagName.Replace('{ModuleVersion}', $ModuleVersionWithPreRelease)
-                        $TagName = $TagName.Replace('<ModuleVersion>', $ModuleVersionWithPreRelease)
+                        $TagName = $TagName.Replace('{ModuleVersionWithPreRelease}', $ModuleVersionWithPreRelease)
+                        $TagName = $TagName.Replace('<ModuleVersionWithPreRelease>', $ModuleVersionWithPreRelease)
+                        $TagName = $TagName.Replace('{TagModuleVersionWithPreRelease}', $TagModuleVersionWithPreRelease)
+                        $TagName = $TagName.Replace('<TagModuleVersionWithPreRelease>', $TagModuleVersionWithPreRelease)
                         $TagName = $TagName.Replace('{TagName}', $TagNameDefault)
                         $TagName = $TagName.Replace('<TagName>', $TagNameDefault)
                     } else {
