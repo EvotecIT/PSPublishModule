@@ -52,29 +52,6 @@
                 # default values
                 $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Type)
             }
-            # if ($DestinationPaths.Desktop) {
-            #     $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Desktop, '*')
-            # } elseif ($DestinationPaths.Core) {
-            #     $CompressPath = [System.IO.Path]::Combine($DestinationPaths.Core, '*')
-            # }
-
-            # $compressArtefactSplat = @{
-            #     Configuration = $Configuration
-            #     LegacyName    = if ($Artefact -is [bool]) { $true } else { $false }
-            #     Source        = $CompressPath
-            #     Destination   = $FolderPathReleases
-            #     ModuleName    = $Configuration.Information.ModuleName
-            #     ModuleVersion = $Configuration.Information.Manifest.ModuleVersion
-            #     IncludeTag    = $Artefact.IncludeTagName
-            #     ArtefactName  = $Artefact.ArtefactName
-            # }
-
-            # $OutputArchive = Compress-Artefact @compressArtefactSplat
-            # if ($OutputArchive -eq $false) {
-            #     return $false
-            # }
-
-            #if ($Artefact) {
             if ($Artefact.RequiredModules.ModulesPath) {
                 $DirectPathForPrimaryModule = $Artefact.RequiredModules.ModulesPath
             } elseif ($Artefact.RequiredModules.Path) {
@@ -102,7 +79,7 @@
                             $CurrentModulePath = [System.IO.Path]::Combine($FullProjectPath, $DirectPathForPrimaryModule)
                         }
                     } else {
-                        $CurrentModulePath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked')
+                        $CurrentModulePath = [System.IO.Path]::Combine($FullProjectPath, $ChosenType)
                     }
                     if ($DirectPathForRequiredModules) {
                         if ($Artefact.Relative -eq $false) {
@@ -114,11 +91,9 @@
                         $RequiredModulesPath = $ArtefactsPath
                     }
                     $ArtefactsPath = $Artefact.Path
-                    # $FolderPathReleasesUnpacked = $ArtefactsPath
                 } else {
                     # default values
-                    $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName)
-                    #$FolderPathReleasesUnpacked = [System.IO.Path]::Combine($FullProjectPath, 'ReleasesUnpacked', $TagName )
+                    $ArtefactsPath = [System.IO.Path]::Combine($FullProjectPath, $ChosenType, $TagName)
                     $RequiredModulesPath = $ArtefactsPath
                     $CurrentModulePath = $ArtefactsPath
                 }
