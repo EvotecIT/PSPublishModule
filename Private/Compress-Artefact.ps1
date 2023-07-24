@@ -45,13 +45,16 @@
 
     if ($ID) {
         # ID was provided
-        $Configuration.CurrentSettings['Artefact'][$ID] = [ordered] @{
+        $ZipPackage = [ordered] @{
+            'Id'      = $ID
             'ZipName' = $FileName
             'ZipPath' = $ZipPath
         }
+        $Configuration.CurrentSettings['Artefact'] += $ZipPackage
     } else {
         if (-not $Configuration.CurrentSettings['ArtefactDefault']) {
             $Configuration.CurrentSettings['ArtefactDefault'] = [ordered] @{
+                'Id'      = 'Default'
                 'ZipName' = $FileName
                 'ZipPath' = $ZipPath
             }
