@@ -27,7 +27,7 @@
         } elseif ($DestinationPaths.Core) {
             Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $ResolvedDestination -Force
         }
-    } -SpacesBefore '   '
+    } -SpacesBefore '         '
     Write-TextWithTime -PreAppend Addition -Text "Cleaning up main module" -Color Yellow {
         $PSD1 = [io.path]::Combine($ResolvedDestination, "$ModuleName.psd1")
         Remove-Item -LiteralPath $PSD1 -Force -ErrorAction Stop
