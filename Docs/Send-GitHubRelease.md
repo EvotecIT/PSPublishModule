@@ -27,8 +27,9 @@ Allows you to specify all of the Release properties, such as the Tag, Name, Asse
 ### EXAMPLE 1
 ```
 # Import the module dynamically from the PowerShell Gallery. Use CurrentUser scope to avoid having to run as admin.
-Import-Module -Name New-GitHubRelease -Scope CurrentUser
 ```
+
+Import-Module -Name New-GitHubRelease -Scope CurrentUser
 
 # Specify the parameters required to create the release.
 Do it as a hash table for easier readability.

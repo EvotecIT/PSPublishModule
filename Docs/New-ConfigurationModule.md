@@ -13,8 +13,8 @@ Provides a way to configure Required Modules or External Modules that will be us
 ## SYNTAX
 
 ```
-New-ConfigurationModule [[-Type] <Object>] [-Name] <String[]> [[-Version] <String>] [[-Guid] <String>]
- [<CommonParameters>]
+New-ConfigurationModule [[-Type] <Object>] [-Name] <String[]> [[-Version] <String>]
+ [[-RequiredVersion] <String>] [[-Guid] <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -25,26 +25,29 @@ Provides a way to configure Required Modules or External Modules that will be us
 ### EXAMPLE 1
 ```
 # Add standard module dependencies (directly, but can be used with loop as well)
+```
+
 New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
 New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
 New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
-```
 
 ### EXAMPLE 2
 ```
 # Add external module dependencies, using loop for simplicity
+```
+
 foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
     New-ConfigurationModule -Type ExternalModule -Name $Module
 }
-```
 
 ### EXAMPLE 3
 ```
 # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
+```
+
 # And on that time only that function and dependant functions will be copied over
 # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
 New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-```
 
 ## PARAMETERS
 
@@ -95,6 +98,24 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -RequiredVersion
+RequiredVersion of PowerShell module that you want your module to depend on.
+This forces the module to require this specific version.
+When using Version, the module will be picked up if it's equal or higher than the version specified.
+When using RequiredVersion, the module will be picked up only if it's equal to the version specified.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Guid
 Guid of PowerShell module that you want your module to depend on.
 If you don't specify a Guid, any Guid of the module is acceptable, but it is recommended to specify it.
@@ -106,7 +127,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 4
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

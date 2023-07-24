@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationBuild
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Short description
 
 ## SYNTAX
 
@@ -16,27 +16,241 @@ schema: 2.0.0
 New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild]
  [-MergeFunctionsFromApprovedModules] [-SignModule] [-DotSourceClasses] [-DotSourceLibraries]
  [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning]
- [-MergeLibraryDebugging] [-ResolveBinaryConflicts] [[-ResolveBinaryConflictsName] <String>]
- [[-CertificateThumbprint] <String>] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>]
- [[-NETProjectName] <String>] [<CommonParameters>]
+ [-DoNotAttemptToFixRelativePaths] [-MergeLibraryDebugging] [-ResolveBinaryConflicts]
+ [[-ResolveBinaryConflictsName] <String>] [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>]
+ [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>] [[-NETConfiguration] <String>]
+ [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Long description
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+An example
+```
 
 ## PARAMETERS
 
-### -CertificateThumbprint
-{{ Fill CertificateThumbprint Description }}
+### -Enable
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DeleteTargetModuleBeforeBuild
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MergeModuleOnBuild
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MergeFunctionsFromApprovedModules
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SignModule
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DotSourceClasses
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DotSourceLibraries
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SeparateFileLibraries
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RefreshPSD1Only
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UseWildcardForFunctions
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -LocalVersioning
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DoNotAttemptToFixRelativePaths
+Configures module builder to not replace $PSScriptRoot\..\ with $PSScriptRoot\
+This is useful if you have a module that has a lot of relative paths that are required when using Private/Public folders,
+but for merge process those are not supposed to be there as the paths change.
+By default module builder will attempt to fix it.
+This option disables this functionality.
+Best practice is to use $MyInvocation.MyCommand.Module.ModuleBase or similar instead of relative paths.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MergeLibraryDebugging
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ResolveBinaryConflicts
+Parameter description
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ResolveBinaryConflictsName
+Parameter description
 
 ```yaml
 Type: String
@@ -50,134 +264,13 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -DeleteTargetModuleBeforeBuild
-{{ Fill DeleteTargetModuleBeforeBuild Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DotSourceClasses
-{{ Fill DotSourceClasses Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DotSourceLibraries
-{{ Fill DotSourceLibraries Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Enable
-{{ Fill Enable Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -LocalVersioning
-{{ Fill LocalVersioning Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeFunctionsFromApprovedModules
-{{ Fill MergeFunctionsFromApprovedModules Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeLibraryDebugging
-{{ Fill MergeLibraryDebugging Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeModuleOnBuild
-{{ Fill MergeModuleOnBuild Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETConfiguration
-{{ Fill NETConfiguration Description }}
+### -CertificateThumbprint
+Parameter description
 
 ```yaml
 Type: String
 Parameter Sets: (All)
 Aliases:
-Accepted values: Release, Debug
 
 Required: False
 Position: 2
@@ -186,11 +279,11 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -NETFramework
-{{ Fill NETFramework Description }}
+### -CertificatePFXPath
+Parameter description
 
 ```yaml
-Type: String[]
+Type: String
 Parameter Sets: (All)
 Aliases:
 
@@ -201,8 +294,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -NETProjectName
-{{ Fill NETProjectName Description }}
+### -CertificatePFXBase64
+Parameter description
 
 ```yaml
 Type: String
@@ -216,38 +309,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -RefreshPSD1Only
-{{ Fill RefreshPSD1Only Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ResolveBinaryConflicts
-{{ Fill ResolveBinaryConflicts Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ResolveBinaryConflictsName
-{{ Fill ResolveBinaryConflictsName Description }}
+### -CertificatePFXPassword
+Parameter description
 
 ```yaml
 Type: String
@@ -255,52 +318,52 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 0
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -SeparateFileLibraries
-{{ Fill SeparateFileLibraries Description }}
+### -NETConfiguration
+Parameter description
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: Named
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -SignModule
-{{ Fill SignModule Description }}
+### -NETFramework
+Parameter description
 
 ```yaml
-Type: SwitchParameter
+Type: String[]
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: Named
+Position: 7
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -UseWildcardForFunctions
-{{ Fill UseWildcardForFunctions Description }}
+### -NETProjectName
+Parameter description
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: Named
+Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -311,11 +374,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
+General notes
 
 ## RELATED LINKS

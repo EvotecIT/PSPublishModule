@@ -16,7 +16,7 @@ schema: 2.0.0
 New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <String[]>] [-GUID] <String>
  [-Author] <String> [[-CompanyName] <String>] [[-Copyright] <String>] [[-Description] <String>]
  [[-PowerShellVersion] <String>] [[-Tags] <String[]>] [[-IconUri] <String>] [[-ProjectUri] <String>]
- [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [<CommonParameters>]
+ [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [[-Prerelease] <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -194,6 +194,21 @@ Aliases:
 
 Required: False
 Position: 7
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Prerelease
+{{ Fill Prerelease Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases: PrereleaseTag
+
+Required: False
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
