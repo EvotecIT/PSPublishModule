@@ -14,8 +14,10 @@
     # if pre-release is set, we want to use it in the name
     if ($Configuration.CurrentSettings.PreRelease) {
         $ModuleVersionWithPreRelease = $Configuration.CurrentSettings.PreRelease
+        $TagModuleVersionWithPreRelease = "v$($ModuleVersionWithPreRelease)"
     } else {
         $ModuleVersionWithPreRelease = $ModuleVersion
+        $TagModuleVersionWithPreRelease = "v$($ModuleVersion)"
     }
     if ($LegacyName) {
         # This is to support same, old configuration and not break existing projects
@@ -27,8 +29,10 @@
         $FileName = $FileName.Replace('<ModuleName>', $ModuleName)
         $FileName = $FileName.Replace('{ModuleVersion}', $ModuleVersion)
         $FileName = $FileName.Replace('<ModuleVersion>', $ModuleVersion)
-        $FileName = $FileName.Replace('{ModuleVersion}', $ModuleVersionWithPreRelease)
-        $FileName = $FileName.Replace('<ModuleVersion>', $ModuleVersionWithPreRelease)
+        $FileName = $FileName.Replace('{ModuleVersionWithPreRelease}', $ModuleVersionWithPreRelease)
+        $FileName = $FileName.Replace('<ModuleVersionWithPreRelease>', $ModuleVersionWithPreRelease)
+        $FileName = $FileName.Replace('{TagModuleVersionWithPreRelease}', $TagModuleVersionWithPreRelease)
+        $FileName = $FileName.Replace('<TagModuleVersionWithPreRelease>', $TagModuleVersionWithPreRelease)
         $FileName = $FileName.Replace('{TagName}', $TagName)
         $FileName = $FileName.Replace('<TagName>', $TagName)
         # if user specified a file extension, we don't want to add .zip extension
