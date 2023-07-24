@@ -46,7 +46,7 @@
                         Copy-Item -LiteralPath $FolderToCopy -Destination $Destination -Recurse -Force
                     }
                 }
-            } -SpacesBefore '      '
+            } -SpacesBefore '         '
         }
     }
 }
