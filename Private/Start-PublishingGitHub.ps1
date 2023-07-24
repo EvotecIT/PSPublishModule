@@ -45,8 +45,9 @@
                         $ModuleVersion = $Configuration.Information.Manifest.ModuleVersion
                         # if pre-release is set, we want to use it in the name
                         if ($Configuration.CurrentSettings.PreRelease) {
-                            $ModuleVersionWithPreRelease = $Configuration.CurrentSettings.PreRelease
+                            $ModuleVersionWithPreRelease = "$($ModuleVersion)-$($Configuration.CurrentSettings.PreRelease)"
                             $TagModuleVersionWithPreRelease = "v$($ModuleVersionWithPreRelease)"
+
                         } else {
                             $ModuleVersionWithPreRelease = $ModuleVersion
                             $TagModuleVersionWithPreRelease = "v$($ModuleVersion)"
