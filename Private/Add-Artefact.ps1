@@ -65,7 +65,7 @@
             Copy-ArtefactRequiredFiles @copyArtefactRequiredFilesSplat
         }
     } else {
-        Write-TextWithTime -Text "Copying merged release to $ResolvedDestination" -PreAppend Plus -SpacesBefore '      ' {
+        Write-TextWithTime -Text "Copying merged release to $ResolvedDestination" -PreAppend Addition -SpacesBefore '      ' {
             $copyMainModuleSplat = @{
                 Enabled        = $true
                 IncludeTagName = $IncludeTag
@@ -100,7 +100,7 @@
     }
     if ($ZipIt -and $DestinationZip) {
         $ResolvedDestinationZip = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationZip)
-        Write-TextWithTime -Text "Zipping merged release to $ResolvedDestinationZip" -PreAppend Plus -SpacesBefore '      ' {
+        Write-TextWithTime -Text "Zipping merged release to $ResolvedDestinationZip" -PreAppend Information -SpacesBefore '      ' {
             $zipSplat = @{
                 Source        = $ResolvedDestination
                 Destination   = $ResolvedDestinationZip
@@ -115,8 +115,8 @@
             }
             Compress-Artefact @zipSplat
         }
-        Write-TextWithTime -Text "Removing temporary release from $ResolvedDestination ($ResolvedDestinationZip)" -SpacesBefore '      ' -PreAppend Plus {
+        Write-TextWithTime -Text "Removing temporary files from $ResolvedDestination" -SpacesBefore '      ' -PreAppend Minus {
             Remove-ItemAlternative -Path $ResolvedDestination -SkipFolder -Exclude '*.zip'
-        }
+        } -ColorBefore Yellow -ColorTime Green -ColorError Red -Color Yellow
     }
 }
