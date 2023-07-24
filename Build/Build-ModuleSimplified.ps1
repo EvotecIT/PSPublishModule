@@ -114,9 +114,9 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     # those 2 are only useful for testing purposes
     # New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName {
-    #     # Lets test this
-    #     # Invoke-ModuleBuilder
-    # }
+    #     # Lets test this, this will be added in the bottom of the script
+    #     Invoke-ModuleBuilder
+    # } -ID 'ToGitHubAsScript'
     # New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip" {
     #     # Lets test this
     #     # Invoke-ModuleBuilder
@@ -126,6 +126,7 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly
-    New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
-    New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub'
+    #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub'
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubAsScript'
 } -ExitCode
