@@ -41,18 +41,48 @@
             Write-TextWithTime -Text $TextToUse -PreAppend Information -ColorBefore Yellow {
                 if ($ZipPath -and (Test-Path -LiteralPath $ZipPath)) {
                     if ($ChosenNuget.OverwriteTagName) {
+                        $ModuleName = $Configuration.Information.Manifest.ModuleName
+                        $ModuleVersion = $Configuration.Information.Manifest.ModuleVersion
+                        # if pre-release is set, we want to use it in the name
+                        if ($Configuration.CurrentSettings.PreRelease) {
+                            $ModuleVersionWithPreRelease = $Configuration.CurrentSettings.PreRelease
+                        } else {
+                            $ModuleVersionWithPreRelease = $ModuleVersion
+                        }
+                        $TagNameDefault = "v$($ModuleVersion)"
+
                         $TagName = $ChosenNuget.OverwriteTagName
+                        $TagName = $TagName.Replace('{ModuleName}', $ModuleName)
+                        $TagName = $TagName.Replace('<ModuleName>', $ModuleName)
+                        $TagName = $TagName.Replace('{ModuleVersion}', $ModuleVersion)
+                        $TagName = $TagName.Replace('<ModuleVersion>', $ModuleVersion)
+                        $TagName = $TagName.Replace('{ModuleVersion}', $ModuleVersionWithPreRelease)
+                        $TagName = $TagName.Replace('<ModuleVersion>', $ModuleVersionWithPreRelease)
+                        $TagName = $TagName.Replace('{TagName}', $TagNameDefault)
+                        $TagName = $TagName.Replace('<TagName>', $TagNameDefault)
                     } else {
                         $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
                     }
+
+                    # normally we publish as prerelease if the module is prerelease edition
+                    # but since Github hides prerelease versions a bit, this is the way to overwrite this choice
+                    if ($Configuration.CurrentSettings.Prerelease) {
+                        if ($ChosenNuget.DoNotMarkAsPreRelease) {
+                            $IsPreRelease = $false
+                        } else {
+                            $IsPreRelease = $true
+                        }
+                    } else {
+                        $IsPreRelease = $false
+                    }
+
                     $sendGitHubReleaseSplat = [ordered] @{
                         GitHubUsername       = $ChosenNuget.UserName
                         GitHubRepositoryName = if ($ChosenNuget.RepositoryName) { $ChosenNuget.RepositoryName } else { $ProjectName }
                         GitHubAccessToken    = $ChosenNuget.ApiKey
                         TagName              = $TagName
                         AssetFilePaths       = $ListZips
-                        # settable via PSD1 manifest
-                        IsPreRelease         = if ($Configuration.CurrentSettings.Prerelease) { $true } else { $false }
+                        IsPreRelease         = $IsPreRelease
                         # those don't work, requires testing
                         #GenerateReleaseNotes = $true
                         #MakeLatest           = $true
