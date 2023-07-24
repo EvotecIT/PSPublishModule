@@ -35,7 +35,18 @@
     Allow to publish to GitHub as pre-release. By default it will be published as release
 
     .PARAMETER OverwriteTagName
-    Allow to overwrite tag name when publishing to GitHub. By default "v<ModuleVersion>" will be used.
+    Allow to overwrite tag name when publishing to GitHub. By default "v<ModuleVersion>" will be used i.e v1.0.0
+
+    You can use following variables that will be replaced with actual values:
+    - <ModuleName> / {ModuleName} - the name of the module i.e PSPublishModule
+    - <ModuleVersion> / {ModuleVersion} - the version of the module i.e 1.0.0
+    - <ModuleVersionWithPreRelease> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+    - <TagName> / {TagName} - the name of the tag - i.e. v1.0.0
+
+    .PARAMETER DoNotMarkAsPreRelease
+    Allow to publish to GitHub as release even if pre-release tag is set on the module version.
+    By default it will be published as pre-release if pre-release tag is set.
+    This setting prevents it.
 
     .PARAMETER Force
     Allow to publish lower version of module on PowerShell Gallery. By default it will fail if module with higher version already exists.
@@ -90,7 +101,11 @@
 
         [Parameter(ParameterSetName = 'ApiKey')]
         [Parameter(ParameterSetName = 'ApiFromFile')]
-        [string] $ID
+        [string] $ID,
+
+        [Parameter(ParameterSetName = 'ApiKey')]
+        [Parameter(ParameterSetName = 'ApiFromFile')]
+        [switch] $DoNotMarkAsPreRelease
     )
 
 
@@ -114,16 +129,16 @@
     $Settings = [ordered] @{
         Type          = $TypeToUse
         Configuration = [ordered] @{
-            Type             = $Type
-            ApiKey           = $ApiKeyToUse
-            ID               = $ID
-            Enabled          = $Enabled
-            UserName         = $UserName
-            RepositoryName   = $RepositoryName
-            Force            = $Force.IsPresent
-            OverwriteTagName = $OverwriteTagName
-            #PreReleaseTag    = $PreReleaseTag
-            Verbose          = $VerbosePreference
+            Type                  = $Type
+            ApiKey                = $ApiKeyToUse
+            ID                    = $ID
+            Enabled               = $Enabled
+            UserName              = $UserName
+            RepositoryName        = $RepositoryName
+            Force                 = $Force.IsPresent
+            OverwriteTagName      = $OverwriteTagName
+            DoNotMarkAsPreRelease = $DoNotMarkAsPreRelease.IsPresent
+            Verbose               = $VerbosePreference
         }
     }
     Remove-EmptyValue -Hashtable $Settings -Recursive 2
