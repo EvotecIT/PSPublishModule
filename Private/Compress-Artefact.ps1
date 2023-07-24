@@ -11,6 +11,12 @@
         [string] $ArtefactName,
         [string] $ID
     )
+    # if pre-release is set, we want to use it in the name
+    if ($Configuration.CurrentSettings.PreRelease) {
+        $ModuleVersionWithPreRelease = $Configuration.CurrentSettings.PreRelease
+    } else {
+        $ModuleVersionWithPreRelease = $ModuleVersion
+    }
     if ($LegacyName) {
         # This is to support same, old configuration and not break existing projects
         $FileName = -join ("v$($ModuleVersion)", '.zip')
@@ -21,6 +27,8 @@
         $FileName = $FileName.Replace('<ModuleName>', $ModuleName)
         $FileName = $FileName.Replace('{ModuleVersion}', $ModuleVersion)
         $FileName = $FileName.Replace('<ModuleVersion>', $ModuleVersion)
+        $FileName = $FileName.Replace('{ModuleVersion}', $ModuleVersionWithPreRelease)
+        $FileName = $FileName.Replace('<ModuleVersion>', $ModuleVersionWithPreRelease)
         $FileName = $FileName.Replace('{TagName}', $TagName)
         $FileName = $FileName.Replace('<TagName>', $TagName)
         # if user specified a file extension, we don't want to add .zip extension
