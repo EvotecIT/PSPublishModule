@@ -142,7 +142,7 @@
         # Turn on Strict Mode to help catch syntax-related errors.
         # 	This must come after a script's/function's param section.
         # 	Forces a function to be the first non-comment code to appear in a PowerShell Script/Module.
-        Set-StrictMode -Version Latest
+        #Set-StrictMode -Version Latest
 
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
 
@@ -167,7 +167,7 @@
         $result.ReleaseUrl = $null
         $result.ErrorMessage = $null
 
-        [bool] $thereAreNoAssetsToIncludeInTheRelease = ($AssetFilePaths -eq $null) -or ($AssetFilePaths.Count -le 0)
+        [bool] $thereAreNoAssetsToIncludeInTheRelease = ($null -eq $AssetFilePaths) -or ($AssetFilePaths.Count -le 0)
         if ($thereAreNoAssetsToIncludeInTheRelease) {
             $result.AllAssetUploadsSucceeded = $null
         }
