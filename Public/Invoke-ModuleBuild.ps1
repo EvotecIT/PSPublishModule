@@ -93,7 +93,7 @@ function Invoke-ModuleBuild {
         [parameter(ParameterSetName = 'Modern')]
         [switch] $ExitCode
     )
-    if ($Configuration){
+    if ($PsCmdlet.ParameterSetName -eq 'Configuration'){
         $ModuleName = $Configuration.Information.ModuleName
     }
 
