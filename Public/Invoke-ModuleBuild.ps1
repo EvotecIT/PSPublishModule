@@ -93,6 +93,10 @@ function Invoke-ModuleBuild {
         [parameter(ParameterSetName = 'Modern')]
         [switch] $ExitCode
     )
+    if ($Configuration){
+        $ModuleName = $Configuration.Information.ModuleName
+    }
+
     if ($Path) {
         # Path is given so we use it as is
         $FullProjectPath = [io.path]::Combine($Path, $ModuleName)
