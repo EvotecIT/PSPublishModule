@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.8.0-Preview3
+- Fixes `ModuleVersionWithPreRelease` -and `TagModuleVersionWithPreRelease` tags
+
 #### 1.8.0-Preview2
 - Fix for old configuration supporting releases and releases unpacked
 - Fix for ModuleName in old configuration
