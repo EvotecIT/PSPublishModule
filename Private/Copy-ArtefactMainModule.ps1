@@ -26,5 +26,5 @@
         } elseif ($DestinationPaths.Core) {
             Copy-Item -LiteralPath $DestinationPaths.Core -Recurse -Destination $ResolvedDestination -Force
         }
-    } -SpacesBefore '      '
+    } -SpacesBefore '         '
 }
