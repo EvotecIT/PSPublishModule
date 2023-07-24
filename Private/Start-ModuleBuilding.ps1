@@ -43,7 +43,7 @@
         $Configuration.Information.Manifest.ModuleVersion = 1.0.0
     }
     Write-Text '----------------------------------------------------'
-    Write-Text "[i] Project Name: $ProjectName" -Color Yellow
+    Write-Text "[i] Project/Module Name: $ProjectName" -Color Yellow
     if ($Configuration.Steps.BuildModule.LocalVersion) {
         Write-Text "[i] Current Local Version: $($Versioning.CurrentVersion)" -Color Yellow
     } else {
@@ -63,7 +63,11 @@
         Write-Text '[-] Section BuildModule is missing. Terminating.' -Color Red
         return $false
     }
-
+    # We need to make sure module name is set, otherwise bad things will happen
+    if (-not $Configuration.Information.ModuleName) {
+        Write-Text '[-] Section Information.ModuleName is missing. Terminating.' -Color Red
+        return $false
+    }
     # check if project exists
     if (-not (Test-Path -Path $FullProjectPath)) {
         Write-Text "[-] Project path doesn't exists $FullProjectPath. Terminating" -Color Red
