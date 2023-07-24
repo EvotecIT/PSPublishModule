@@ -1,6 +1,9 @@
 ﻿### PSPublishModule Changelog
 
-#### 1.8.0
+#### 1.8.0-Preview2
+- Fix for old configuration supporting releases and releases unpacked
+
+#### 1.8.0-Preview1
 - Added `RequiredVersion` to `New-ConfigurationModule` to allow specifying exact version instead the minimum version
 - Minor bugfix for potential issue with CommandModuleDependencies
 - Added ability to create multiple artefacts (not just 2) by using `New-ConfigurationArtefact`
