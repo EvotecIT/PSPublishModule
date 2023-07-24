@@ -3,6 +3,8 @@
 #### 1.8.0-Preview2
 - Fix for old configuration supporting releases and releases unpacked
 - Fix for ModuleName in old configuration
+- Allow to publish module Artefacts to GitHub using single `New-ConfigurationPublish` by marking multiple artefacts with same ID
+- Small visual improvements
 
 #### 1.8.0-Preview1
 - Added `RequiredVersion` to `New-ConfigurationModule` to allow specifying exact version instead the minimum version
