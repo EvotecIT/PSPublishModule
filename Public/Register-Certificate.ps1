@@ -11,7 +11,13 @@
     )
     if ($PSBoundParameters.Keys -contains 'LocalStore') {
         $Cert = Get-ChildItem -Path "Cert:\$LocalStore\My" -CodeSigningCert
-        if ($Cert.Count -eq 0) {
+        if ($Thumbprint) {
+            $Certificate = $Cert | Where-Object { $_.Thumbprint -eq $Thumbprint }
+            if (-not $Certificate) {
+                Write-Warning -Message "Register-Certificate - No certificates found by that thumbprint"
+                return
+            }
+        } elseif ($Cert.Count -eq 0) {
             Write-Warning -Message "Register-Certificate - No certificates found in store."
             return
         } elseif ($Cert.Count -eq 1) {
