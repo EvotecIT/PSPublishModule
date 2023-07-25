@@ -77,7 +77,10 @@
     Start-LibraryBuilding -RootDirectory $FullProjectPath -Version $Configuration.Information.Manifest.ModuleVersion -ModuleName $ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
 
     # Verify if manifest contains required modules and fix it if nessecary
-    Convert-RequiredModules -Configuration $Configuration
+    $Success = Convert-RequiredModules -Configuration $Configuration
+    if ($Success -eq $false) {
+        return $false
+    }
 
     if ($Configuration.Steps.BuildModule.Enable -eq $true) {
         $CurrentLocation = (Get-Location).Path
