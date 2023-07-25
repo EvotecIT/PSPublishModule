@@ -1,5 +1,10 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.8.0-Preview4
+- Added handling of wrong certificate thumbrint
+- Prevent failure on required modules
+- Stop on missing requirede module
+
 #### 1.8.0-Preview3
 - Fixes `ModuleVersionWithPreRelease` -and `TagModuleVersionWithPreRelease` tags
 
