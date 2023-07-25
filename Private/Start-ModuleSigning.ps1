@@ -8,6 +8,7 @@
         Write-TextWithTime -Text 'Applying signature to files' {
             $registerCertificateSplat = @{
                 WarningAction   = 'SilentlyContinue'
+                WarningVariable = 'Warnings'
                 LocalStore      = 'CurrentUser'
                 Path            = $FullModuleTemporaryPath
                 Include         = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
@@ -21,13 +22,13 @@
                         return $false
                     }
                     $registerCertificateSplat.Thumbprint = $Success.Thumbprint
-                    Write-Host  $Success.Thumbprint
+                    # Write-Host $Success.Thumbprint
                 } elseif ($Configuration.Options.Signing.CertificatePFXPath) {
                     $Success = Import-ValidCertificate -FilePath $Configuration.Options.Signing.CertificatePFXPath -PfxPassword $Configuration.Options.Signing.CertificatePFXPassword
                     if (-not $Success) {
                         return $false
                     }
-                    Write-Host  $Success.Thumbprint
+                    #Write-Host $Success.Thumbprint
                     $registerCertificateSplat.Thumbprint = $Success.Thumbprint
                 } else {
                     if ($Configuration.Options.Signing -and $Configuration.Options.Signing.Thumbprint) {
@@ -37,6 +38,11 @@
                     }
                 }
                 [Array] $SignedFiles = Register-Certificate @registerCertificateSplat
+                if ($Warnings) {
+                    foreach ($W in $Warnings) {
+                        Write-Text -Text "   [!] $($W.Message)" -Color Red
+                    }
+                }
                 if ($SignedFiles.Count -eq 0) {
                     throw "Please configure certificate for use, or disable signing."
                     return $false
