@@ -16,7 +16,7 @@
             Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
             IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
             ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
-            Prerelease                 = 'Preview3'
+            Prerelease                 = 'Preview4'
             ExternalModuleDependencies = @('PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
         }
     }
