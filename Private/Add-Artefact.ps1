@@ -116,7 +116,7 @@
             Compress-Artefact @zipSplat
         }
         Write-TextWithTime -Text "Removing temporary files from $ResolvedDestination" -SpacesBefore '      ' -PreAppend Minus {
-            Remove-ItemAlternative -Path $ResolvedDestination -SkipFolder -Exclude '*.zip'
+            Remove-ItemAlternative -Path $ResolvedDestination -SkipFolder -Exclude '*.zip' -ErrorAction Stop
         } -ColorBefore Yellow -ColorTime Green -ColorError Red -Color Yellow
     }
 }
