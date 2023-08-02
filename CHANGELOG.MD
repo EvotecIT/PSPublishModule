@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 1.8.0-Preview5
+- Fixes wrong path for packed zip
+
 #### 1.8.0-Preview4
 - Added handling of wrong certificate thumbrint
 - Prevent failure on required modules
