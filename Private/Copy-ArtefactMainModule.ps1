@@ -17,7 +17,7 @@
     $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($NameOfDestination)
     Write-TextWithTime -PreAppend Addition -Text "Copying main module to $ResolvedDestination" -Color Yellow {
         if (Test-Path -Path $NameOfDestination) {
-            Remove-ItemAlternative -LiteralPath $NameOfDestination
+            Remove-ItemAlternative -LiteralPath $NameOfDestination -ErrorAction Stop
         }
         $null = New-Item -ItemType Directory -Path $Destination -Force
 
