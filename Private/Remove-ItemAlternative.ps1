@@ -44,7 +44,11 @@
             try {
                 $Item.Delete()
             } catch {
-                Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                if ($ErrorActionPreference -eq 'Stop') {
+                    throw "Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                } else {
+                    Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                }
             }
         }
         $getChildItemSplat = @{
@@ -59,7 +63,11 @@
             try {
                 $Item.Delete()
             } catch {
-                Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                if ($ErrorActionPreference -eq 'Stop') {
+                    throw "Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                } else {
+                    Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                }
             }
         }
         if (-not $SkipFolder.IsPresent) {
@@ -67,10 +75,18 @@
             try {
                 $Item.Delete($true)
             } catch {
-                Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                if ($ErrorActionPreference -eq 'Stop') {
+                    throw "Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                } else {
+                    Write-Warning "Remove-ItemAlternative - Couldn't delete $($Item.FullName), error: $($_.Exception.Message)"
+                }
             }
         }
     } else {
-        Write-Warning "Remove-ItemAlternative - Path $Path doesn't exists. Skipping. "
+        if ($ErrorActionPreference -eq 'Stop') {
+            throw "Remove-ItemAlternative - Path $Path doesn't exists. Skipping."
+        } else {
+            Write-Warning "Remove-ItemAlternative - Path $Path doesn't exists. Skipping."
+        }
     }
 }
