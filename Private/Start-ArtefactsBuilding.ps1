@@ -131,7 +131,7 @@
                     ArtefactName                   = $Artefact.ArtefactName
                     ZipIt                          = if ($ChosenType -in 'Packed', 'Releases', 'ScriptPacked') { $true } else { $false }
                     ConvertToScript                = if ($ChosenType -in 'ScriptPacked', 'Script') { $true } else { $false }
-                    DestinationZip                 = $CurrentModulePath
+                    DestinationZip                 = $ArtefactsPath
                     ScriptMerge                    = $Artefact.ScriptMerge
                     ID                             = if ($ChosenArtefact.ID) { $ChosenArtefact.ID } else { $null }
                 }
