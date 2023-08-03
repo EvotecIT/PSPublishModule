@@ -9,8 +9,8 @@ Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '1.8.0'
-        PreReleaseTag          = 'Preview5'
+        ModuleVersion          = '2.0.0'
+        #PreReleaseTag          = 'Preview5'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -104,7 +104,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\Modules" -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
         "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
-    } -CopyFilesRelative  -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+    } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\PackedWithModules" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
         "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
