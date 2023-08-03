@@ -193,8 +193,10 @@
                     $Configuration.Options.TestsAfterMerge = $Setting.Configuration
                 } elseif ($Setting.Type -eq 'GitHubPublishing') {
                     $Configuration.Steps.BuildModule.Nugets.Add($Setting.Configuration)
-                    #} elseif ($Setting.Type -eq 'ImportModules') {
-                    #} elseif ($Setting.Type -eq 'Releases') {
+                } elseif ($Setting.Type -eq 'ImportModules') {
+                    foreach ($Key in $Setting.ImportModules.Keys) {
+                        $Configuration.Steps.ImportModules[$Key] = $Setting.ImportModules[$Key]
+                    }
                 } elseif ($Setting.Type -in 'GalleryNuget') {
                     $Configuration.Steps.BuildModule.GalleryNugets.Add($Setting.Configuration)
                 } elseif ($Setting.Type -in 'GitHubNuget') {
