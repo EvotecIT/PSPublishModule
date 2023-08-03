@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 2.0.0 - 2023.08.03
+- Fixes to Import-Module functionality
+
 #### 1.8.0-Preview5
 - Fixes wrong path for packed zip
 
