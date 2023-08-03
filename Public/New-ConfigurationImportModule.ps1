@@ -5,31 +5,18 @@
         [switch] $ImportRequiredModules
     )
 
+    $Output = [ordered] @{
+        Type          = 'ImportModules'
+        ImportModules = [ordered] @{}
+    }
     if ($PSBoundParameters.Keys.Contains('ImportSelf')) {
-        $Output = [ordered] @{
-            Type          = 'ImportModules'
-            ImportModules = [ordered] @{
-                Self = $ImportSelf
-            }
-        }
-        $Output
+        $Output['ImportModules']['Self'] = $ImportSelf
     }
     if ($PSBoundParameters.Keys.Contains('ImportRequiredModules')) {
-        $Output = [ordered] @{
-            Type          = 'ImportModules'
-            ImportModules = [ordered] @{
-                RequiredModules = $ImportRequiredModules
-            }
-        }
-        $Output
+        $Output['ImportModules']['RequiredModules'] = $ImportRequiredModules
     }
     if ($VerbosePreference) {
-        $Output = [ordered] @{
-            Type          = 'ImportModules'
-            ImportModules = [ordered] @{
-                Verbose = $true
-            }
-        }
-        $Output
+        $Output['ImportModules']['Verbose'] = $true
     }
+    $Output
 }
