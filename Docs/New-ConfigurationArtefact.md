@@ -13,10 +13,11 @@ Tells the module to create artefact of specified type
 ## SYNTAX
 
 ```
-New-ConfigurationArtefact [[-ScriptMerge] <ScriptBlock>] -Type <String> [-Enable] [-IncludeTagName]
- [-Path <String>] [-AddRequiredModules] [-ModulesPath <String>] [-RequiredModulesPath <String>]
- [-CopyDirectories <IDictionary>] [-CopyFiles <IDictionary>] [-CopyDirectoriesRelative] [-CopyFilesRelative]
- [-Clear] [-ArtefactName <String>] [-ID <String>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <ScriptBlock>] [[-PreScriptMerge] <ScriptBlock>] -Type <String>
+ [-Enable] [-IncludeTagName] [-Path <String>] [-AddRequiredModules] [-ModulesPath <String>]
+ [-RequiredModulesPath <String>] [-CopyDirectories <IDictionary>] [-CopyFiles <IDictionary>]
+ [-CopyDirectoriesRelative] [-CopyFilesRelative] [-Clear] [-ArtefactName <String>] [-ScriptName <String>]
+ [-ID <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -55,8 +56,9 @@ New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Art
 
 ## PARAMETERS
 
-### -ScriptMerge
-{{ Fill ScriptMerge Description }}
+### -PostScriptMerge
+ScriptBlock that will be added in the end of the script.
+It's only applicable to type of Script, PackedScript.
 
 ```yaml
 Type: ScriptBlock
@@ -65,6 +67,22 @@ Aliases:
 
 Required: False
 Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PreScriptMerge
+ScriptBlock that will be added in the beggining of the script.
+It's only applicable to type of Script, PackedScript.
+
+```yaml
+Type: ScriptBlock
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -282,6 +300,30 @@ v1.0.0
 Type: String
 Parameter Sets: (All)
 Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ScriptName
+The name of the script.
+If not specified, the default name will be used.
+Only applicable to Script and ScriptPacked artefacts.
+You can use following variables that will be replaced with actual values:
+- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
+- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
+- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
+- \<TagName\> / {TagName} - the name of the tag - i.e.
+v1.0.0
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases: FileName
 
 Required: False
 Position: Named
