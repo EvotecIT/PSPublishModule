@@ -133,9 +133,21 @@ Build-Module -ModuleName 'PSPublishModule' {
     #     Invoke-ModuleBuilder
     # } -ID 'ToGitHubAsScript'
     # New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip" {
+    #     Invoke-ModuleBuilder
+    # } -PreScriptMerge {
     #     # Lets test this
-    #     # Invoke-ModuleBuilder
-    # }
+    #     param (
+    #         [int]$Mode
+    #     )
+    # } -ScriptName 'Invoke-ModuleBuilder.ps1'
+    # New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" {
+    #     Invoke-ModuleBuilder
+    # } -PreScriptMerge {
+    #     # Lets test this
+    #     param (
+    #         [int]$Mode
+    #     )
+    # } -ScriptName 'Invoke-ModuleBuilder.ps1'
 
     #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubWithoutModules' -OverwriteTagName 'v1.8.0-Preview1'
     #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubAsScript'
