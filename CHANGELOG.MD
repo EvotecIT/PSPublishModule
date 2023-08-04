@@ -1,5 +1,11 @@
 ﻿### PSPublishModule Changelog
 
+#### 2.0.1 - 2023.08.04
+- Improve `New-ConfigurationArtefact` to allow for more flexibility for "scripts"
+  - Added `PreScriptMerge` and `PostScriptMerge`
+  - Remove `ScriptMerge` (renamed to `PostScriptMerge`)
+  - Added `ScriptName` to allow for custom name of script (renames the file from usual module name)
+
 #### 2.0.0 - 2023.08.03
 - Fixes to Import-Module functionality
 
