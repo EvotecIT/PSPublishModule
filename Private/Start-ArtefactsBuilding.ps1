@@ -129,10 +129,12 @@
                     Configuration                  = $Configuration
                     IncludeTag                     = $Artefact.IncludeTagName
                     ArtefactName                   = $Artefact.ArtefactName
+                    ScriptName                     = $Artefact.ScriptName
                     ZipIt                          = if ($ChosenType -in 'Packed', 'Releases', 'ScriptPacked') { $true } else { $false }
                     ConvertToScript                = if ($ChosenType -in 'ScriptPacked', 'Script') { $true } else { $false }
                     DestinationZip                 = $ArtefactsPath
-                    ScriptMerge                    = $Artefact.ScriptMerge
+                    PreScriptMerge                 = $Artefact.PreScriptMerge
+                    PostScriptMerge                = $Artefact.PostScriptMerge
                     ID                             = if ($ChosenArtefact.ID) { $ChosenArtefact.ID } else { $null }
                 }
                 Remove-EmptyValue -Hashtable $SplatArtefact

@@ -6,8 +6,8 @@
         [string] $ArtefactName,
         [alias('IncludeTagName')][nullable[bool]] $IncludeTag,
         [nullable[bool]] $LegacyName,
-        [nullable[bool]]  $CopyMainModule,
-        [nullable[bool]]  $CopyRequiredModules,
+        [nullable[bool]] $CopyMainModule,
+        [nullable[bool]] $CopyRequiredModules,
         [string] $ProjectPath,
         [string] $Destination,
         [string] $DestinationMainModule,
@@ -17,12 +17,14 @@
         [alias('FilesOutput')][System.Collections.IDictionary] $Files,
         [alias('DirectoryOutput')][System.Collections.IDictionary] $Folders,
         [array] $RequiredModules,
-        [string] $TagName,
-        [string] $FileName,
+        # [string] $TagName,
+        #[string] $FileName,
         [nullable[bool]] $ZipIt,
         [string] $DestinationZip,
         [bool] $ConvertToScript,
-        [string] $ScriptMerge,
+        [string] $ScriptName,
+        [string] $PreScriptMerge,
+        [string] $PostScriptMerge,
         [System.Collections.IDictionary] $Configuration,
         [string] $ID
     )
@@ -32,11 +34,15 @@
     if ($ConvertToScript) {
         Write-TextWithTime -Text "Converting merged release to script" -PreAppend Plus -SpacesBefore '      ' {
             $convertToScriptSplat = @{
-                Enabled        = $true
-                IncludeTagName = $IncludeTag
-                ModuleName     = $ModuleName
-                Destination    = $DestinationMainModule
-                ScriptMerge    = $ScriptMerge
+                Enabled         = $true
+                IncludeTagName  = $IncludeTag
+                ModuleName      = $ModuleName
+                Destination     = $DestinationMainModule
+                PreScriptMerge  = $PreScriptMerge
+                PostScriptMerge = $PostScriptMerge
+                ScriptName      = $ScriptName
+                Configuration   = $Configuration
+                ModuleVersion   = $ModuleVersion
             }
             Remove-EmptyValue -Hashtable $convertToScriptSplat
             Copy-ArtefactToScript @convertToScriptSplat

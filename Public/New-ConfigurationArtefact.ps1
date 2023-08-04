@@ -8,6 +8,12 @@
     There can be multiple artefacts created (even of same type)
     At least one packed artefact is required for publishing to GitHub
 
+    .PARAMETER PreScriptMerge
+    ScriptBlock that will be added in the beggining of the script. It's only applicable to type of Script, PackedScript.
+
+    .PARAMETER PostScriptMerge
+    ScriptBlock that will be added in the end of the script. It's only applicable to type of Script, PackedScript.
+
     .PARAMETER Type
     There are 4 types of artefacts:
     - Unpacked - unpacked module (useful for testing)
@@ -65,6 +71,16 @@
     - <TagModuleVersionWithPreRelease> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
     - <TagName> / {TagName} - the name of the tag - i.e. v1.0.0
 
+    .PARAMETER ScriptName
+    The name of the script. If not specified, the default name will be used.
+    Only applicable to Script and ScriptPacked artefacts.
+    You can use following variables that will be replaced with actual values:
+    - <ModuleName> / {ModuleName} - the name of the module i.e PSPublishModule
+    - <ModuleVersion> / {ModuleVersion} - the version of the module i.e 1.0.0
+    - <ModuleVersionWithPreRelease> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+    - <TagModuleVersionWithPreRelease> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
+    - <TagName> / {TagName} - the name of the tag - i.e. v1.0.0
+
     .EXAMPLE
     New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\Modules"
 
@@ -86,7 +102,8 @@
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Position = 0)][ScriptBlock] $ScriptMerge,
+        [Parameter(Position = 0)][ScriptBlock] $PostScriptMerge,
+        [Parameter(Position = 1)][ScriptBlock] $PreScriptMerge,
         [Parameter(Mandatory)][ValidateSet('Unpacked', 'Packed', 'Script', 'ScriptPacked')][string] $Type,
         [switch] $Enable,
         [switch] $IncludeTagName,
@@ -100,145 +117,70 @@
         [switch] $CopyFilesRelative,
         [switch] $Clear,
         [string] $ArtefactName,
+        [alias('FileName')][string] $ScriptName,
         [string] $ID
     )
-
-    # if ($Type -eq 'Packed') {
-    #     $ArtefactType = 'Releases'
-    # } else {
-    #     $ArtefactType = 'ReleasesUnpacked'
-    # }
-
     $Artefact = [ordered ] @{
         Type          = $Type #$ArtefactType
         Configuration = [ordered] @{
             Type            = $Type
-            RequiredModules = [ordered] @{
-
-            }
+            RequiredModules = [ordered] @{}
         }
     }
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
         $Artefact['Configuration']['Enabled'] = $Enable
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         Enabled = $Enable
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('IncludeTagName')) {
         $Artefact['Configuration']['IncludeTagName'] = $IncludeTagName
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         IncludeTagName = $IncludeTagName
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('Path')) {
         $Artefact['Configuration']['Path'] = $Path
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         Path = $Path
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('RequiredModulesPath')) {
         $Artefact['Configuration']['RequiredModules']['Path'] = $RequiredModulesPath
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         RequiredModules = @{
-        #             Path = $RequiredModulesPath
-        #         }
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('AddRequiredModules')) {
         $Artefact['Configuration']['RequiredModules']['Enabled'] = $true
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         RequiredModules = @{
-        #             Enabled = $true
-        #         }
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('ModulesPath')) {
         $Artefact['Configuration']['RequiredModules']['ModulesPath'] = $ModulesPath
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         RequiredModules = @{
-        #             ModulesPath = $ModulesPath
-        #         }
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('CopyDirectories')) {
         $Artefact['Configuration']['DirectoryOutput'] = $CopyDirectories
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         DirectoryOutput = $CopyDirectories
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('CopyDirectoriesRelative')) {
         $Artefact['Configuration']['DestinationDirectoriesRelative'] = $CopyDirectoriesRelative.IsPresent
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         DestinationDirectoriesRelative = $CopyDirectoriesRelative.IsPresent
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('CopyFiles')) {
         $Artefact['Configuration']['FilesOutput'] = $CopyFiles
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         FilesOutput = $CopyFiles
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('CopyFilesRelative')) {
         $Artefact['Configuration']['DestinationFilesRelative'] = $CopyFilesRelative.IsPresent
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         DestinationFilesRelative = $CopyFilesRelative.IsPresent
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('Clear')) {
         $Artefact['Configuration']['Clear'] = $Clear
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         Clear = $Clear
-        #     }
-        # }
     }
     if ($PSBoundParameters.ContainsKey('ArtefactName')) {
         $Artefact['Configuration']['ArtefactName'] = $ArtefactName
-        # [ordered] @{
-        #     Type          = $ArtefactType
-        #     $ArtefactType = [ordered] @{
-        #         ArtefactName = $ArtefactName
-        #     }
-        # }
     }
-    if ($PSBoundParameters.ContainsKey('ScriptMerge')) {
+    if ($PSBoundParameters.ContainsKey('ScriptName')) {
+        $Artefact['Configuration']['ScriptName'] = $ScriptName
+    }
+    if ($PSBoundParameters.ContainsKey('PreScriptMerge')) {
         try {
-            $Artefact['Configuration']['ScriptMerge'] = Invoke-Formatter -ScriptDefinition $ScriptMerge.ToString()
+            $Artefact['Configuration']['PreScriptMerge'] = Invoke-Formatter -ScriptDefinition $PreScriptMerge.ToString()
         } catch {
             Write-Text -Text "[i] Unable to format merge script provided by user. Error: $($_.Exception.Message). Using original script." -Color Red
-            $Artefact['Configuration']['ScriptMerge'] = $ScriptMerge.ToString()
+            $Artefact['Configuration']['PreScriptMerge'] = $PreScriptMerge.ToString()
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('PostScriptMerge')) {
+        try {
+            $Artefact['Configuration']['PostScriptMerge'] = Invoke-Formatter -ScriptDefinition $PostScriptMerge.ToString()
+        } catch {
+            Write-Text -Text "[i] Unable to format merge script provided by user. Error: $($_.Exception.Message). Using original script." -Color Red
+            $Artefact['Configuration']['PostScriptMerge'] = $PostScriptMerge.ToString()
         }
     }
     if ($PSBoundParameters.ContainsKey('ID')) {
