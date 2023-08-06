@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 2.0.2 - 2023.08.06
+- Fail build script if copying of module fails
+
 #### 2.0.1 - 2023.08.04
 - Improve `New-ConfigurationArtefact` to allow for more flexibility for "scripts"
   - Added `PreScriptMerge` and `PostScriptMerge`
