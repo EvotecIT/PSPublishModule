@@ -343,7 +343,7 @@
                 } -PreAppend Plus
             }
         }
-        if ($Success -eq $false) {
+        if ($Success -contains $false) {
             return $false
         }
         Write-TextWithTime -Text "Building artefacts" -PreAppend Information {
