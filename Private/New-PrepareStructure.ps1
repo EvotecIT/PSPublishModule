@@ -235,7 +235,7 @@
 
     # We build module or do other stuff with it
     $Success = Start-ModuleBuilding -Configuration $Configuration -PathToProject $PathToProject
-    if ($Success -eq $false) {
+    if ($Success -contains $false) {
         return $false
     }
 }
