@@ -62,10 +62,6 @@ Function Get-FunctionAliases {
                             }
                         }
                     )
-                    #[PSCustomObject] @{
-                    #    Name  = $Function.Name
-                    #    Alias = $AliasTarget
-                    #}
                     $OutputList[$Function.Name] = $AliasTarget
                 }
                 $OutputList
@@ -95,47 +91,3 @@ Function Get-FunctionAliases {
         }
     }
 }
-
-<#
-
-Measure-Command {
-    $Files = Get-ChildItem -LiteralPath 'C:\Support\GitHub\PSWriteHTML\Public'
-
-    $Functions = foreach ($_ in $Files) {
-        Get-AliasTarget -Path $_.FullName
-    }
-}
-
-
-
-
-Measure-Command {
-    $Files = Get-ChildItem -LiteralPath 'C:\Support\GitHub\PSWriteHTML\Public'
-
-    $Functions = foreach ($_ in $Files) {
-        [System.Management.Automation.Language.Parser]::ParseFile($_ , [ref]$null, [ref]$null)
-    }
-
-}
-
-#>
-
-<#
-            $AliasDefinitions = $FileAst.FindAll( {
-                    param ($ast)
-
-                    $ast -is [System.Management.Automation.Language.StringConstantExpressionAst] -And $ast.Value -match '(New|Set)-Alias'
-                }, $true)
-            #>
-
-#Measure-Command {
-# Get-AliasTarget -Path 'C:\Support\GitHub\PSSharedGoods\Public\Objects\Format-Stream.ps1' #| Select-Object -ExpandProperty Alias
-#Get-AliasTarget -path 'C:\Support\GitHub\PSPublishModule\Private\Get-AliasTarget.ps1'
-# get-aliastarget -path 'C:\Support\GitHub\PSPublishModule\Private\Start-ModuleBuilding.ps1'
-#}
-#Get-AliasTarget -Path 'C:\Add-TableContent.ps1'
-
-#Get-AliasTarget -Path 'C:\Support\GitHub\PSWriteHTML\Private\Add-TableContent.ps1'
-#Get-FunctionNames -Path 'C:\Support\GitHub\PSWriteHTML\Private\Add-TableContent.ps1'
-
-#Get-FunctionAliases -Path 'C:\Support\GitHub\PSSharedGoods\Public\Objects\Format-Stream.ps1'
