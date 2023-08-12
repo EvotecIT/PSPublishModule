@@ -1,5 +1,8 @@
 ﻿### PSPublishModule Changelog
 
+#### 2.0.3
+- Fix for non-terminating error when can't delete folders
+
 #### 2.0.2 - 2023.08.06
 - Fail build script if copying of module fails
 
