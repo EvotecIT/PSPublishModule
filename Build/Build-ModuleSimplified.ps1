@@ -96,7 +96,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         CertificateThumbprint          = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
-        DoNotAttemptToFixRelativePaths = $true
+        DoNotAttemptToFixRelativePaths = $false
     }
 
     New-ConfigurationBuild @newConfigurationBuildSplat
