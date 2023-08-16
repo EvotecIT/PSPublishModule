@@ -50,7 +50,7 @@
                     $CurrentVersion = [version] $ModuleGallery.Version
                 } catch {
                     #throw "Couldn't find module $Module to asses version information. Terminating."
-                    $CurrentVersion = $null
+                    $CurrentVersion = [version] $null
                 }
             } else {
                 if (Test-Path -LiteralPath $LocalPSD1) {
@@ -84,25 +84,22 @@
                 break
             }
         }
+
         if ($null -eq $CurrentVersion) {
-            $VersionToUpgrade = ''
+            $PreparedVersion.$StepType = 1
         } else {
-            $VersionToUpgrade = $CurrentVersion.$StepType
+            $PreparedVersion.$StepType = $CurrentVersion.$StepType
         }
 
-        if ($VersionToUpgrade -eq '') {
-            $ExpectedVersion = 1
-        } else {
-            $ExpectedVersion = $CurrentVersion.$StepType + 1
+        if([version] (($PreparedVersion.Values | Where-Object {$null -ne $_ }) -join '.') -gt $CurrentVersion) {
+            $PreparedVersion.$StepType = 0
         }
 
-        $PreparedVersion.$StepType = $ExpectedVersion
-        $Numbers = foreach ($Key in $PreparedVersion.Keys) {
-            if ($PreparedVersion[$Key]) {
-                $PreparedVersion[$Key]
-            }
+        while ([version] (($PreparedVersion.Values | Where-Object {$null -ne $_ }) -join '.') -le $CurrentVersion) {
+            $PreparedVersion.$StepType = $PreparedVersion.$StepType + 1
         }
-        $ProposedVersion = $Numbers -join '.'
+
+        $ProposedVersion = ([version] (($PreparedVersion.Values | Where-Object {$null -ne $_ }) -join '.')).ToString()
 
         $FinalVersion = $null
         $VersionCheck = [version]::TryParse($ProposedVersion, [ref] $FinalVersion)
