@@ -1,7 +1,7 @@
 ﻿# PSPublishModule - PowerShell Module
 
 <p align="center">
-  <a href="https://dev.azure.com/evotecpl/PSPublishModule/_build/latest?definitionId=3"><img src="https://img.shields.io/azure-devops/build/evotecpl/a5ce5d3e-9ae2-49a0-9905-53eb41205fc9/7?label=Azure%20Pipelines&style=flat-square"></a>
+  <a href="https://github.com/EvotecIT/PSPublishModule/actions/workflows/BuildModule.yml"><img src="https://github.com/EvotecIT/PSPublishModule/actions/workflows/BuildModule.yml/badge.svg"></a>
   <a href="https://www.powershellgallery.com/packages/PSPublishModule"><img src="https://img.shields.io/powershellgallery/v/PSPublishModule.svg?style=flat-square"></a>
   <a href="https://www.powershellgallery.com/packages/PSPublishModule"><img src="https://img.shields.io/powershellgallery/vpre/PSPublishModule.svg?label=powershell%20gallery%20preview&colorB=yellow&style=flat-square"></a>
   <a href="https://github.com/EvotecIT/PSPublishModule"><img src="https://img.shields.io/github/license/EvotecIT/PSPublishModule.svg?style=flat-square"></a>
