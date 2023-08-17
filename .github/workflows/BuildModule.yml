@@ -25,35 +25,10 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
-      # - name: Setup PowerShell module cache
-      #   id: cacher
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: "~/.local/share/powershell/Modules"
-      #     key: ${{ runner.os }}-MyModules
-
-      - name: Install required PowerShell modules
-      #   if: steps.cacher.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-            Set-PSRepository PSGallery -InstallationPolicy Trusted
-            Install-Module PSPublishModule -ErrorAction Stop
-
       - name: Test with Pester
         shell: pwsh
-        run: |
-           Write-Host "Pwd: $pwd" -ForegroundColor Yellow
-           Write-Host "PSScriptRoot $PSScriptRoot" -ForegroundColor Yellow
+        run: .\PSPublishModule.Tests.ps1
 
-           Get-ChildItem -Path $PSScriptRoot | ft
-
-           Get-ChildItem -Path . | ft
-
-           Invoke-Pester -Script .\Tests -Passthru | Export-CliXml -Path Unit.Tests.xml
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v3
-        with:
-          name: ubuntu-Unit-Tests
-          path: Unit.Tests.xml
-      #    if: ${{ always() }}
+      - name: Build Module
+        shell: pwsh
+        run: .\Build\Build-Module.ps1
