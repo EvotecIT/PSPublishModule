@@ -1,4 +1,4 @@
-﻿Describe 'Step-Version - Tests' {
+﻿Describe 'Step-Version' {
     It 'Testing version 0.1.X' {
         $Features = Import-Module $PSScriptRoot\..\PSPublishModule.psd1 -PassThru
         $Output = & $Features {
