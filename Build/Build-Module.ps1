@@ -1,239 +1,121 @@
-﻿Clear-Host
+﻿# please notice I may be using PSM1 here, as the module may not be built or PSD1 may be broken
+# since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
+# most modules should be run via PSD1 or by it's name (which in the background uses PD1)
+
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
-$Configuration = @{
-    Information = @{
-        ModuleName        = 'PSPublishModule'
-        #DirectoryProjects = 'C:\Support\GitHub'
-
-        # Where from to export aliases / functions
-        FunctionsToExport = 'Public'
-        AliasesToExport   = 'Public'
-
-        # Those options below are not nessecary but can be used to configure other options. Those are "defaults"
-        Exclude           = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
-        IncludeRoot       = '*.psm1', '*.psd1', 'License*'
-        IncludePS1        = 'Private', 'Public', 'Enums', 'Classes'
-        IncludeAll        = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
-
-        IncludeCustomCode = {
-
-        }
-        IncludeToArray    = @{
-            'Rules' = 'Examples'
-        }
-
-        LibrariesCore     = 'Lib\Core'
-        LibrariesDefault  = 'Lib\Default'
-        LibrariesStandard = 'Lib\Standard'
-
-        # manifest information
-        Manifest          = @{
-            # Version number of this module.
-            ModuleVersion              = '1.0.X'
-            # Supported PSEditions
-            CompatiblePSEditions       = @('Desktop', 'Core')
-            # ID used to uniquely identify this module
-            GUID                       = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-            # Author of this module
-            Author                     = 'Przemyslaw Klys'
-            # Company or vendor of this module
-            CompanyName                = 'Evotec'
-            # Copyright statement for this module
-            Copyright                  = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
-            # Description of the functionality provided by this module
-            Description                = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
-            # Minimum version of the Windows PowerShell engine required by this module
-            PowerShellVersion          = '5.1'
-            # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-            Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
-            IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
-            ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
-
-            RequiredModules            = @(
-                @{ ModuleName = 'platyps'; ModuleVersion = "Latest"; Guid = 'Auto' }
-                @{ ModuleName = 'powershellget'; ModuleVersion = "2.2.5"; Guid = '1d73a601-4a6c-43c5-ba3f-619b18bbb404' }
-                @{ ModuleName = 'PSScriptAnalyzer'; ModuleVersion = "Latest"; Guid = 'd6245802-193d-4068-a631-8863a4342a18' }
-                @{ ModuleName = 'Pester' ; ModuleVersion = "Latest"; Guid = 'Auto' }
-            )
-            ExternalModuleDependencies = @(
-                "Microsoft.PowerShell.Utility"
-                "Microsoft.PowerShell.Archive"
-                "Microsoft.PowerShell.Management"
-                "Microsoft.PowerShell.Security"
-            )
-            DotNetFrameworkVersion     = '4.5.2'
-        }
+Build-Module -ModuleName 'PSPublishModule' {
+    # Usual defaults as per standard module
+    $Manifest = [ordered] @{
+        ModuleVersion          = '2.0.X'
+        #PreReleaseTag          = 'Preview5'
+        CompatiblePSEditions   = @('Desktop', 'Core')
+        GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
+        Author                 = 'Przemyslaw Klys'
+        CompanyName            = 'Evotec'
+        Copyright              = "(c) 2011 - $((Get-Date).Year) Przemyslaw Klys @ Evotec. All rights reserved."
+        Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
+        PowerShellVersion      = '5.1'
+        Tags                   = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
+        IconUri                = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
+        ProjectUri             = 'https://github.com/EvotecIT/PSPublishModule'
+        DotNetFrameworkVersion = '4.5.2'
     }
-    Options     = @{
-        Merge             = @{
-            Sort           = 'None'
-            FormatCodePSM1 = @{
-                Enabled           = $false
-                RemoveComments    = $false
-                FormatterSettings = @{
-                    IncludeRules = @(
-                        'PSPlaceOpenBrace',
-                        'PSPlaceCloseBrace',
-                        'PSUseConsistentWhitespace',
-                        'PSUseConsistentIndentation',
-                        'PSAlignAssignmentStatement',
-                        'PSUseCorrectCasing'
-                    )
+    New-ConfigurationManifest @Manifest
 
-                    Rules        = @{
-                        PSPlaceOpenBrace           = @{
-                            Enable             = $true
-                            OnSameLine         = $true
-                            NewLineAfter       = $true
-                            IgnoreOneLineBlock = $true
-                        }
+    # Add standard module dependencies (directly, but can be used with loop as well)
+    New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
 
-                        PSPlaceCloseBrace          = @{
-                            Enable             = $true
-                            NewLineAfter       = $false
-                            IgnoreOneLineBlock = $true
-                            NoEmptyLineBefore  = $false
-                        }
-
-                        PSUseConsistentIndentation = @{
-                            Enable              = $true
-                            Kind                = 'space'
-                            PipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
-                            IndentationSize     = 4
-                        }
-
-                        PSUseConsistentWhitespace  = @{
-                            Enable          = $true
-                            CheckInnerBrace = $true
-                            CheckOpenBrace  = $true
-                            CheckOpenParen  = $true
-                            CheckOperator   = $true
-                            CheckPipe       = $true
-                            CheckSeparator  = $true
-                        }
-
-                        PSAlignAssignmentStatement = @{
-                            Enable         = $true
-                            CheckHashtable = $true
-                        }
-
-                        PSUseCorrectCasing         = @{
-                            Enable = $true
-                        }
-                    }
-                }
-            }
-            FormatCodePSD1 = @{
-                Enabled        = $true
-                RemoveComments = $false
-            }
-            Integrate      = @{
-                ApprovedModules = 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-            }
-            # Style          = @{
-            #     PSD1 = 'Native'
-            # }
-        }
-        Standard          = @{
-            FormatCodePSM1 = @{
-
-            }
-            FormatCodePSD1 = @{
-                Enabled = $true
-                #RemoveComments = $true
-            }
-            # Style          = @{
-            #     PSD1 = 'Native'
-            # }
-        }
-        PowerShellGallery = @{
-            ApiKey   = 'C:\Support\Important\PowerShellGalleryAPI.txt'
-            FromFile = $true
-        }
-        GitHub            = @{
-            ApiKey   = 'C:\Support\Important\GithubAPI.txt'
-            FromFile = $true
-            UserName = 'EvotecIT'
-            #RepositoryName = 'PSPublishModule' # not required, uses project name
-        }
-        Documentation     = @{
-            Path       = 'Docs'
-            PathReadme = 'Docs\Readme.md'
-        }
-        Style             = @{
-            PSD1 = 'Minimal' # Native
-        }
-        Signing           = @{
-            CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
-        }
+    # Add external module dependencies, using loop for simplicity
+    foreach ($Module in @('PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
+        New-ConfigurationModule -Type ExternalModule -Name $Module
     }
-    Steps       = @{
-        BuildLibraries     = @{
-            Enable        = $false # build once every time nuget gets updated
-            Configuration = 'Release'
-            Framework     = 'netstandard2.0', 'net472'
-            #ProjectName   = 'ImagePlayground.PowerShell'
-        }
-        BuildModule        = @{  # requires Enable to be on to process all of that
-            Enable                  = $true
-            DeleteBefore            = $false
-            Merge                   = $true
-            MergeMissing            = $true
-            SignMerged              = $true
-            CreateFileCatalog       = $false
-            Releases                = $true
-            #ReleasesUnpacked        = $false
-            ReleasesUnpacked        = @{
-                Enabled         = $true
-                IncludeTagName  = $false
-                Path            = "$PSScriptRoot\..\Artefacts"
-                RequiredModules = @{
-                    Enabled = $true
-                    Path    = "$PSScriptRoot\..\Artefacts\Modules"
-                }
-                DirectoryOutput = @{
 
-                }
-                FilesOutput     = @{
+    # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
+    # And on that time only that function and dependant functions will be copied over
+    # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
+    New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
-                }
-            }
-            RefreshPSD1Only         = $false
-            # only when there are classes
-            ClassesDotSource        = $false
-            LibrarySeparateFile     = $false
-            LibraryDotSource        = $false
-            # Applicable only for non-merge/publish situation
-            # It's simply to make life easier during debugging
-            # It makes all functions/aliases exportable
-            UseWildcardForFunctions = $false
+    #New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module' -IgnoreModuleName 'platyPS'
 
-            # special features for binary modules
-            DebugDLL                = $false
-            ResolveBinaryConflicts  = $false # mostly for memory and other libraries
-            # ResolveBinaryConflicts  = @{
-            #     ProjectName = 'ImagePlayground.PowerShell'
-            # }
-            LocalVersion            = $false # bumps version in PSD1 on every build
-        }
-        BuildDocumentation = @{
-            Enable        = $true # enables documentation processing
-            StartClean    = $true # always starts clean
-            UpdateWhenNew = $true # always updates right after update
-        }
-        ImportModules      = @{
-            Self            = $true
-            RequiredModules = $false
-            Verbose         = $false
-        }
-        PublishModule      = @{  # requires Enable to be on to process all of that
-            Enabled      = $false
-            Prerelease   = ''
-            RequireForce = $false
-            GitHub       = $false
-        }
+    $ConfigurationFormat = [ordered] @{
+        RemoveComments                              = $false
+
+        PlaceOpenBraceEnable                        = $true
+        PlaceOpenBraceOnSameLine                    = $true
+        PlaceOpenBraceNewLineAfter                  = $true
+        PlaceOpenBraceIgnoreOneLineBlock            = $false
+
+        PlaceCloseBraceEnable                       = $true
+        PlaceCloseBraceNewLineAfter                 = $true
+        PlaceCloseBraceIgnoreOneLineBlock           = $false
+        PlaceCloseBraceNoEmptyLineBefore            = $true
+
+        UseConsistentIndentationEnable              = $true
+        UseConsistentIndentationKind                = 'space'
+        UseConsistentIndentationPipelineIndentation = 'IncreaseIndentationAfterEveryPipeline'
+        UseConsistentIndentationIndentationSize     = 4
+
+        UseConsistentWhitespaceEnable               = $true
+        UseConsistentWhitespaceCheckInnerBrace      = $true
+        UseConsistentWhitespaceCheckOpenBrace       = $true
+        UseConsistentWhitespaceCheckOpenParen       = $true
+        UseConsistentWhitespaceCheckOperator        = $true
+        UseConsistentWhitespaceCheckPipe            = $true
+        UseConsistentWhitespaceCheckSeparator       = $true
+
+        AlignAssignmentStatementEnable              = $true
+        AlignAssignmentStatementCheckHashtable      = $true
+
+        UseCorrectCasingEnable                      = $true
     }
-}
+    # format PSD1 and PSM1 files when merging into a single file
+    # enable formatting is not required as Configuration is provided
+    New-ConfigurationFormat -ApplyTo 'OnMergePSM1', 'OnMergePSD1' -Sort None @ConfigurationFormat
+    # format PSD1 and PSM1 files within the module
+    # enable formatting is required to make sure that formatting is applied (with default settings)
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'DefaultPSM1' -EnableFormatting -Sort None
+    # when creating PSD1 use special style without comments and with only required parameters
+    New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
-New-PrepareModule -Configuration $Configuration
+    # configuration for documentation, at the same time it enables documentation processing
+    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+
+    New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+
+    $newConfigurationBuildSplat = @{
+        Enable                         = $true
+        # temporary not signing
+        SignModule                     = $false
+        DeleteTargetModuleBeforeBuild  = $true
+        MergeModuleOnBuild             = $true
+        CertificateThumbprint          = ''
+        #CertificatePFXBase64           = $BasePfx
+        #CertificatePFXPassword         = "zGT"
+        DoNotAttemptToFixRelativePaths = $false
+    }
+
+    New-ConfigurationBuild @newConfigurationBuildSplat
+
+    New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\Modules" -AddRequiredModules -CopyFiles @{
+        "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
+        "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
+    } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\PackedWithModules" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
+        "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
+        "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
+    } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
+
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+
+    New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
+
+    # global options for publishing to github/psgallery
+    # you can use FilePath where APIKey are saved in clear text or use APIKey directly
+    #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>'
+} -ExitCode
