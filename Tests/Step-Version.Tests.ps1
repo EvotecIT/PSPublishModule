@@ -1,7 +1,7 @@
 ﻿Describe 'Step-Version' {
     It 'Testing version 0.1.X' {
         if (-not (Get-Module -ListAvailable -Name 'PSPublishModule')) {
-            $ModuleToLoad = "$PSScriptRoot\..\PSPublishModule\PSPublishModule.psd1"
+            $ModuleToLoad = "$PSScriptRoot\..\PSPublishModule.psd1"
         } else {
             $ModuleToLoad = 'PSPublishModule'
         }
@@ -13,7 +13,7 @@
     }
     It "Testing version 0.2.X" {
         if (-not (Get-Module -ListAvailable -Name 'PSPublishModule')) {
-            $ModuleToLoad = "$PSScriptRoot\..\PSPublishModule\PSPublishModule.psd1"
+            $ModuleToLoad = "$PSScriptRoot\..\PSPublishModule.psd1"
         } else {
             $ModuleToLoad = 'PSPublishModule'
         }
