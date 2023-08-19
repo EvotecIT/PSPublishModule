@@ -5,17 +5,25 @@
         [System.Collections.IDictionary] $FormatCode
     )
     if ($FormatCode.Enabled) {
-        if ($FormatCode.RemoveComments) {
-            # Write-Verbose "Removing Comments"
-            $ContentBefore = Get-Content -LiteralPath $FilePath -Encoding UTF8
-            Write-Text "[i] Removing Comments - Lines in code before: $($ContentBefore.Count)" -Color Yellow
+        if ($FormatCode.RemoveComments -or $FormatCode.RemoveCommentsInParamBlock -or $FormatCode.RemoveCommentsBeforeParamBlock) {
             $Output = Write-TextWithTime -Text "[+] Removing Comments - $FilePath" {
-                Remove-Comments -FilePath $FilePath
+                $removeCommentsSplat = @{
+                    SourceFilePath                 = $FilePath
+                    RemoveCommentsInParamBlock     = $FormatCode.RemoveCommentsInParamBlock
+                    RemoveCommentsBeforeParamBlock = $FormatCode.RemoveCommentsBeforeParamBlock
+                    RemoveAllEmptyLines            = $FormatCode.RemoveAllEmptyLines
+                    RemoveEmptyLines               = $FormatCode.RemoveEmptyLines
+                }
+                Remove-Comments @removeCommentsSplat
             }
-            if ($Output -and $Output.StartPosition -and $Output.StartPosition.EndLine -gt 1) {
-                Write-Text "[i] Removing Comments - Lines in code after: $($Output.StartPosition.EndLine)" -Color Yellow
-            } else {
-                Write-Text "[i] Removing Comments - Lines in code after: 0" -Color Red
+        } elseif ($FormatCode.RemoveAllEmptyLines -or $FormatCode.RemoveEmptyLines) {
+            $Output = Write-TextWithTime -Text "[+] Removing Empty Lines - $FilePath" {
+                $removeEmptyLinesSplat = @{
+                    SourceFilePath      = $FilePath
+                    RemoveAllEmptyLines = $FormatCode.RemoveAllEmptyLines
+                    RemoveEmptyLines    = $FormatCode.RemoveEmptyLines
+                }
+                Remove-EmptyLines @removeEmptyLinesSplat
             }
         } else {
             $Output = Write-TextWithTime -Text "Reading file content - $FilePath" {
