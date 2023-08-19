@@ -11,7 +11,12 @@
         [switch] $EnableFormatting,
 
         [validateSet('None', 'Asc', 'Desc')][string] $Sort,
+
         [switch] $RemoveComments,
+        [switch] $RemoveEmptyLines,
+        [switch] $RemoveAllEmptyLines,
+        [switch] $RemoveCommentsInParamBlock,
+        [switch] $RemoveCommentsBeforeParamBlock,
 
         [switch] $PlaceOpenBraceEnable,
         [switch] $PlaceOpenBraceOnSameLine,
@@ -58,6 +63,18 @@
         $Formatting = [ordered] @{}
         if ($PSBoundParameters.ContainsKey('RemoveComments')) {
             $Formatting.RemoveComments = $RemoveComments.IsPresent
+        }
+        if ($PSBoundParameters.ContainsKey('RemoveEmptyLines')) {
+            $Formatting.RemoveEmptyLines = $RemoveEmptyLines.IsPresent
+        }
+        if ($PSBoundParameters.ContainsKey('RemoveAllEmptyLines')) {
+            $Formatting.RemoveAllEmptyLines = $RemoveAllEmptyLines.IsPresent
+        }
+        if ($PSBoundParameters.ContainsKey('RemoveCommentsInParamBlock')) {
+            $Formatting.RemoveCommentsInParamBlock = $RemoveCommentsInParamBlock.IsPresent
+        }
+        if ($PSBoundParameters.ContainsKey('RemoveCommentsBeforeParamBlock')) {
+            $Formatting.RemoveCommentsBeforeParamBlock = $RemoveCommentsBeforeParamBlock.IsPresent
         }
 
         $Formatting.FormatterSettings = [ordered] @{
