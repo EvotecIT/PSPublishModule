@@ -69,12 +69,13 @@
     }
 
     $Tokens = $Errors = @()
-    $Ast = [Parser]::ParseInput($Content, [ref]$Tokens, [ref]$Errors)
+    $Ast = [System.Management.Automation.Language.Parser]::ParseInput($Content, [ref]$Tokens, [ref]$Errors)
     #$functionDefinition = $ast.Find({ $args[0] -is [FunctionDefinitionAst] }, $false)
     $groupedTokens = $Tokens | Group-Object { $_.Extent.StartLineNumber }
     $DoNotRemove = $false
     $DoNotRemoveCommentParam = $false
     $CountParams = 0
+    $ParamFound = $false
     $toRemove = foreach ($line in $groupedTokens) {
         if ($Ast.Body.ParamBlock.Extent.StartLineNumber -gt $line.Name) {
             continue
@@ -94,6 +95,7 @@
                 continue
             }
             if ($token.Extent.Text -eq 'param') {
+                $ParamFound = $true
                 $DoNotRemove = $false
             }
             if ($DoNotRemove) {
@@ -106,14 +108,15 @@
                 }
                 continue
             }
-            if ($token.Extent.Text -eq '(') {
+            if ($ParamFound -and ($token.Extent.Text -eq '(' -or $token.Extent.Text -eq '@(')) {
                 $CountParams += 1
-            } elseif ($token.Extent.Text -eq ')') {
+            } elseif ($ParamFound -and $token.Extent.Text -eq ')') {
                 $CountParams -= 1
             }
-            if ($token.Extent.Text -eq ')') {
+            if ($ParamFound -and $token.Extent.Text -eq ')') {
                 if ($CountParams -eq 0) {
                     $DoNotRemoveCommentParam = $false
+                    $ParamFound = $false
                 }
             }
             if ($DoNotRemoveCommentParam) {
@@ -124,25 +127,7 @@
             if ($token.Kind -ne 'Comment') {
                 continue
             }
-
-            if ($token.Extent.StartColumnNumber -and $i -eq 0) {
-                # [PSCustomObject]@{
-                #     # added to look like the same object for easy of use
-                #     Text       = $null
-                #     TokenFlags = $null
-                #     Kind       = $null
-                #     HasError   = $null
-                #     Extent     = [PSCustomObject]@{
-                #         StartOffset = $token.Extent.StartOffset - $token.Extent.StartColumnNumber + 1
-                #         EndOffset   = $token.Extent.StartOffset
-                #     }
-                # }
-            }
             $token
-
-            if ($tokens[$i + 1].Kind -eq 'NewLine') {
-                #$tokens[$i + 1]
-            }
         }
     }
     $toRemove = $toRemove | Sort-Object { $_.Extent.StartOffset } -Descending
