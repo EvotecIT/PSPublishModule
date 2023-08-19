@@ -61,7 +61,11 @@
 
         [Parameter(ParameterSetName = 'Content')]
         [Parameter(ParameterSetName = 'FilePath')]
-        [switch] $RemoveCommentsBeforeParamBlock
+        [switch] $RemoveCommentsBeforeParamBlock,
+
+        [Parameter(ParameterSetName = 'Content')]
+        [Parameter(ParameterSetName = 'FilePath')]
+        [switch] $DoNotRemoveSignatureBlock
     )
     if ($SourceFilePath) {
         $Fullpath = Resolve-Path -LiteralPath $SourceFilePath
@@ -76,6 +80,7 @@
     $DoNotRemoveCommentParam = $false
     $CountParams = 0
     $ParamFound = $false
+    $SignatureBlock = $false
     $toRemove = foreach ($line in $groupedTokens) {
         if ($Ast.Body.ParamBlock.Extent.StartLineNumber -gt $line.Name) {
             continue
@@ -122,10 +127,24 @@
             if ($DoNotRemoveCommentParam) {
                 continue
             }
-
             # if token not comment we leave it as is
             if ($token.Kind -ne 'Comment') {
                 continue
+            }
+
+            # kind of useless to not remove signature block if we're not removing comments
+            # this changes the structure of a file and signature will be invalid
+            if ($DoNotRemoveSignatureBlock) {
+                if ($token.Kind -eq 'Comment' -and $token.Text -eq '# SIG # Begin signature block') {
+                    $SignatureBlock = $true
+                    continue
+                }
+                if ($SignatureBlock) {
+                    if ($token.Kind -eq 'Comment' -and $token.Text -eq '# SIG # End signature block') {
+                        $SignatureBlock = $false
+                    }
+                    continue
+                }
             }
             $token
         }
