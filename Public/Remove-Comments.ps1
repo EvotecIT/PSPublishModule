@@ -1,145 +1,170 @@
 ﻿function Remove-Comments {
-    # We are not restricting scriptblock type as Tokenize() can take several types
-    [CmdletBinding()]
-    Param (
-        [string] $FilePath,
-        [parameter( ValueFromPipeline = $True )] $Scriptblock,
-        [string] $ScriptContent
+    <#
+    .SYNOPSIS
+    Remove comments from PowerShell file
+
+    .DESCRIPTION
+    Remove comments from PowerShell file and optionally remove empty lines
+    By default comments in param block are not removed
+    By default comments before param block are not removed
+
+    .PARAMETER SourceFilePath
+    File path to the source file
+
+    .PARAMETER Content
+    Content of the file
+
+    .PARAMETER DestinationFilePath
+    File path to the destination file. If not provided, the content will be returned
+
+    .PARAMETER RemoveEmptyLines
+    Remove empty lines if more than one empty line is found
+
+    .PARAMETER RemoveAllEmptyLines
+    Remove all empty lines from the content
+
+    .PARAMETER RemoveCommentsInParamBlock
+    Remove comments in param block. By default comments in param block are not removed
+
+    .PARAMETER RemoveCommentsBeforeParamBlock
+    Remove comments before param block. By default comments before param block are not removed
+
+    .EXAMPLE
+    Remove-Comments -SourceFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript.ps1' -DestinationFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript1.ps1' -RemoveAllEmptyLines -RemoveCommentsInParamBlock -RemoveCommentsBeforeParamBlock
+
+    .NOTES
+    Most of the work done by Chris Dent, with improvements by Przemyslaw Klys
+
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'FilePath')]
+    param(
+        [Parameter(Mandatory, ParameterSetName = 'FilePath')]
+        [alias('FilePath', 'Path', 'LiteralPath')][string] $SourceFilePath,
+
+        [Parameter(Mandatory, ParameterSetName = 'Content')][string] $Content,
+
+        [Parameter(ParameterSetName = 'Content')]
+        [Parameter(ParameterSetName = 'FilePath')]
+        [alias('Destination')][string] $DestinationFilePath,
+
+        [Parameter(ParameterSetName = 'Content')]
+        [Parameter(ParameterSetName = 'FilePath')]
+        [switch] $RemoveAllEmptyLines,
+
+        [Parameter(ParameterSetName = 'Content')]
+        [Parameter(ParameterSetName = 'FilePath')]
+        [switch] $RemoveEmptyLines,
+
+        [Parameter(ParameterSetName = 'Content')]
+        [Parameter(ParameterSetName = 'FilePath')]
+        [switch] $RemoveCommentsInParamBlock,
+
+        [Parameter(ParameterSetName = 'Content')]
+        [Parameter(ParameterSetName = 'FilePath')]
+        [switch] $RemoveCommentsBeforeParamBlock
     )
-
-
-    if ($PSBoundParameters['FilePath']) {
-        $ScriptBlockString = [IO.File]::ReadAllText((Resolve-Path $FilePath))
-        $ScriptBlock = [ScriptBlock]::Create($ScriptBlockString)
-    } elseif ($PSBoundParameters['ScriptContent']) {
-        $ScriptBlock = [ScriptBlock]::Create($ScriptContent)
-    } else {
-        # Convert the scriptblock to a string so that it can be referenced with array notation
-        #$ScriptBlockString = $ScriptBlock.ToString()
+    if ($SourceFilePath) {
+        $Fullpath = Resolve-Path -LiteralPath $SourceFilePath
+        $Content = [IO.File]::ReadAllText($FullPath)
     }
-    # Convert input to a single string if needed
-    $OldScript = $ScriptBlock -join [environment]::NewLine
 
-    # If no work to do
-    # We're done
-    If ( -not $OldScript.Trim( " `n`r`t" ) ) { return }
-
-    # Use the PowerShell tokenizer to break the script into identified tokens
-    $Tokens = [System.Management.Automation.PSParser]::Tokenize( $OldScript, [ref]$Null )
-
-    # Define useful, allowed comments
-    $AllowedComments = @(
-        'requires'
-        '.SYNOPSIS'
-        '.DESCRIPTION'
-        '.PARAMETER'
-        '.EXAMPLE'
-        '.INPUTS'
-        '.OUTPUTS'
-        '.NOTES'
-        '.LINK'
-        '.COMPONENT'
-        '.ROLE'
-        '.FUNCTIONALITY'
-        '.FORWARDHELPCATEGORY'
-        '.REMOTEHELPRUNSPACE'
-        '.EXTERNALHELP' )
-
-    # Strip out the Comments, but not useful comments
-    # (Bug: This will break comment-based help that uses leading # instead of multiline <#,
-    # because only the headings will be left behind.)
-
-    $Tokens = $Tokens.ForEach{
-        If ( $_.Type -ne 'Comment' ) {
-            $_
-        } Else {
-            $CommentText = $_.Content.Substring( $_.Content.IndexOf( '#' ) + 1 )
-            $FirstInnerToken = [System.Management.Automation.PSParser]::Tokenize( $CommentText, [ref]$Null ) |
-            Where-Object { $_.Type -ne 'NewLine' } |
-            Select-Object -First 1
-            If ( $FirstInnerToken.Content -in $AllowedComments ) {
-                $_
+    $Tokens = $Errors = @()
+    $Ast = [Parser]::ParseInput($Content, [ref]$Tokens, [ref]$Errors)
+    #$functionDefinition = $ast.Find({ $args[0] -is [FunctionDefinitionAst] }, $false)
+    $groupedTokens = $Tokens | Group-Object { $_.Extent.StartLineNumber }
+    $DoNotRemove = $false
+    $DoNotRemoveCommentParam = $false
+    $CountParams = 0
+    $toRemove = foreach ($line in $groupedTokens) {
+        if ($Ast.Body.ParamBlock.Extent.StartLineNumber -gt $line.Name) {
+            continue
+        }
+        $tokens = $line.Group
+        for ($i = 0; $i -lt $line.Count; $i++) {
+            $token = $tokens[$i]
+            if ($token.Extent.StartOffset -lt $Ast.Body.ParamBlock.Extent.StartOffset) {
+                continue
             }
-        } }
 
-    # Initialize script string
-    #$NewScriptText = ''
-    $SkipNext = $False
-
-    $ScriptProcessing = @(
-        # If there are at least 2 tokens to process...
-        If ( $Tokens.Count -gt 1 ) {
-            # For each token (except the last one)...
-            ForEach ( $i in ( 0..($Tokens.Count - 2) ) ) {
-                # If token is not a line continuation and not a repeated new line or semicolon...
-                If (-not $SkipNext -and
-                    $Tokens[$i  ].Type -ne 'LineContinuation' -and (
-                        $Tokens[$i  ].Type -notin ( 'NewLine', 'StatementSeparator' ) -or
-                        $Tokens[$i + 1].Type -notin ( 'NewLine', 'StatementSeparator', 'GroupEnd' ) ) ) {
-                    # Add Token to new script
-                    # For string and variable, reference old script to include $ and quotes
-                    If ( $Tokens[$i].Type -in ( 'String', 'Variable' ) ) {
-                        $OldScript.Substring( $Tokens[$i].Start, $Tokens[$i].Length )
-                    } Else {
-                        $Tokens[$i].Content
-                    }
-
-                    # If the token does not never require a trailing space
-                    # And the next token does not never require a leading space
-                    # And this token and the next are on the same line
-                    # And this token and the next had white space between them in the original...
-                    If ($Tokens[$i  ].Type -notin ( 'NewLine', 'GroupStart', 'StatementSeparator' ) -and
-                        $Tokens[$i + 1].Type -notin ( 'NewLine', 'GroupEnd', 'StatementSeparator' ) -and
-                        $Tokens[$i].EndLine -eq $Tokens[$i + 1].StartLine -and
-                        $Tokens[$i + 1].StartColumn - $Tokens[$i].EndColumn -gt 0 ) {
-                        # Add a space to new script
-                        ' '
-                    }
-
-                    # If the next token is a new line or semicolon following
-                    # an open parenthesis or curly brace, skip it
-                    $SkipNext = $Tokens[$i].Type -eq 'GroupStart' -and $Tokens[$i + 1].Type -in ( 'NewLine', 'StatementSeparator' )
+            # Lets find comments between function and param block and not remove them
+            if ($token.Extent.Text -eq 'function') {
+                if (-not $RemoveCommentsBeforeParamBlock) {
+                    $DoNotRemove = $true
                 }
-
-                # Else (Token is a line continuation or a repeated new line or semicolon)...
-                Else {
-                    # [Do not include it in the new script]
-
-                    # If the next token is a new line or semicolon following
-                    # an open parenthesis or curly brace, skip it
-                    $SkipNext = $SkipNext -and $Tokens[$i + 1].Type -in ( 'NewLine', 'StatementSeparator' )
+                continue
+            }
+            if ($token.Extent.Text -eq 'param') {
+                $DoNotRemove = $false
+            }
+            if ($DoNotRemove) {
+                continue
+            }
+            # lets find comments between param block and end of param block
+            if ($token.Extent.Text -eq 'param') {
+                if (-not $RemoveCommentsInParamBlock) {
+                    $DoNotRemoveCommentParam = $true
+                }
+                continue
+            }
+            if ($token.Extent.Text -eq '(') {
+                $CountParams += 1
+            } elseif ($token.Extent.Text -eq ')') {
+                $CountParams -= 1
+            }
+            if ($token.Extent.Text -eq ')') {
+                if ($CountParams -eq 0) {
+                    $DoNotRemoveCommentParam = $false
                 }
             }
-        }
+            if ($DoNotRemoveCommentParam) {
+                continue
+            }
 
-        # If there is a last token to process...
-        If ( $Tokens ) {
-            # Add last token to new script
-            # For string and variable, reference old script to include $ and quotes
-            If ( $Tokens[$i].Type -in ( 'String', 'Variable' ) ) {
-                $OldScript.Substring( $Tokens[-1].Start, $Tokens[-1].Length )
-            } Else {
-                $Tokens[-1].Content
+            # if token not comment we leave it as is
+            if ($token.Kind -ne 'Comment') {
+                continue
+            }
+
+            if ($token.Extent.StartColumnNumber -and $i -eq 0) {
+                # [PSCustomObject]@{
+                #     # added to look like the same object for easy of use
+                #     Text       = $null
+                #     TokenFlags = $null
+                #     Kind       = $null
+                #     HasError   = $null
+                #     Extent     = [PSCustomObject]@{
+                #         StartOffset = $token.Extent.StartOffset - $token.Extent.StartColumnNumber + 1
+                #         EndOffset   = $token.Extent.StartOffset
+                #     }
+                # }
+            }
+            $token
+
+            if ($tokens[$i + 1].Kind -eq 'NewLine') {
+                #$tokens[$i + 1]
             }
         }
-    )
-    [string] $NewScriptText = $ScriptProcessing -join ''
-    # Trim any leading new lines from the new script
-    $NewScriptText = $NewScriptText.TrimStart( "`n`r;" )
-    #return [scriptblock]::Create( $NewScriptText )
-
-
-    # Return the new script as the same type as the input
-    If ( $Scriptblock.Count -eq 1 ) {
-        If ( $Scriptblock[0] -is [scriptblock] ) {
-            # Return single scriptblock
-            return [scriptblock]::Create( $NewScriptText )
-        } Else {
-            # Return single string
-            return $NewScriptText
-        }
-    } Else {
-        # Return array of strings
-        return $NewScriptText.Split( "`n`r", [System.StringSplitOptions]::RemoveEmptyEntries )
+    }
+    $toRemove = $toRemove | Sort-Object { $_.Extent.StartOffset } -Descending
+    foreach ($token in $toRemove) {
+        $StartIndex = $token.Extent.StartOffset
+        $HowManyChars = $token.Extent.EndOffset - $token.Extent.StartOffset
+        $content = $content.Remove($StartIndex, $HowManyChars)
+    }
+    if ($RemoveEmptyLines) {
+        # Remove empty lines if more than one empty line is found. If it's just one line, leave it as is
+        $Content = $Content -replace '(?m)^\s*$', ''
+    }
+    if ($RemoveAllEmptyLines) {
+        # Remove all empty lines from the content
+        $Content = $Content -replace '(?m)^\s*$(\r?\n)?', ''
+    }
+    if ($Content) {
+        $Content = $Content.Trim()
+    }
+    if ($DestinationFilePath) {
+        $Content | Set-Content -Path $DestinationFilePath -Encoding utf8
+    } else {
+        $Content
     }
 }
