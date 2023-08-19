@@ -25,29 +25,26 @@ Provides a way to configure Required Modules or External Modules that will be us
 ### EXAMPLE 1
 ```
 # Add standard module dependencies (directly, but can be used with loop as well)
-```
-
 New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
 New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
 New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
+```
 
 ### EXAMPLE 2
 ```
 # Add external module dependencies, using loop for simplicity
-```
-
 foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
     New-ConfigurationModule -Type ExternalModule -Name $Module
 }
+```
 
 ### EXAMPLE 3
 ```
 # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
-```
-
 # And on that time only that function and dependant functions will be copied over
 # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
 New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
+```
 
 ## PARAMETERS
 

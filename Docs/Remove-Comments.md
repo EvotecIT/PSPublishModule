@@ -8,71 +8,158 @@ schema: 2.0.0
 # Remove-Comments
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Remove comments from PowerShell file
 
 ## SYNTAX
 
+### FilePath (Default)
 ```
-Remove-Comments [[-FilePath] <String>] [[-Scriptblock] <Object>] [[-ScriptContent] <String>]
+Remove-Comments -SourceFilePath <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines]
+ [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock]
+ [-DoNotRemoveSignatureBlock] [<CommonParameters>]
+```
+
+### Content
+```
+Remove-Comments -Content <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines] [-RemoveEmptyLines]
+ [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock]
  [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Remove comments from PowerShell file and optionally remove empty lines
+By default comments in param block are not removed
+By default comments before param block are not removed
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+Remove-Comments -SourceFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript.ps1' -DestinationFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript1.ps1' -RemoveAllEmptyLines -RemoveCommentsInParamBlock -RemoveCommentsBeforeParamBlock
+```
 
 ## PARAMETERS
 
-### -FilePath
-{{ Fill FilePath Description }}
+### -SourceFilePath
+File path to the source file
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: FilePath
+Aliases: FilePath, Path, LiteralPath
 
-Required: False
-Position: 0
+Required: True
+Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ScriptContent
-{{ Fill ScriptContent Description }}
+### -Content
+Content of the file
 
 ```yaml
 Type: String
-Parameter Sets: (All)
+Parameter Sets: Content
 Aliases:
 
-Required: False
-Position: 2
+Required: True
+Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Scriptblock
-{{ Fill Scriptblock Description }}
+### -DestinationFilePath
+File path to the destination file.
+If not provided, the content will be returned
 
 ```yaml
-Type: Object
+Type: String
+Parameter Sets: (All)
+Aliases: Destination
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveAllEmptyLines
+Remove all empty lines from the content
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 1
-Default value: None
-Accept pipeline input: True (ByValue)
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveEmptyLines
+Remove empty lines if more than one empty line is found
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveCommentsInParamBlock
+Remove comments in param block.
+By default comments in param block are not removed
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveCommentsBeforeParamBlock
+Remove comments before param block.
+By default comments before param block are not removed
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DoNotRemoveSignatureBlock
+{{ Fill DoNotRemoveSignatureBlock Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
@@ -81,11 +168,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### System.Object
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
+Most of the work done by Chris Dent, with improvements by Przemyslaw Klys
 
 ## RELATED LINKS
