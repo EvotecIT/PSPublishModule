@@ -76,12 +76,12 @@ function New-PersonalManifest {
         if ($PSD1Style -eq 'Native') {
             Write-Text -Text '[-] Native PSD1 style is not available when using PreRelease or ExternalModuleDependencies. Switching to Minimal.' -Color Yellow
         }
-        if ($Data.ScriptsToProcess.Count -eq 0) {
+        #if ($Data.ScriptsToProcess.Count -eq 0) {
             #$Data.Remove('ScriptsToProcess')
-        }
-        if ($Data.CmdletsToExport.Count -eq 0) {
+        #}
+        #if ($Data.CmdletsToExport.Count -eq 0) {
             # $Data.Remove('CmdletsToExport')
-        }
+        #}
         $Data = $Manifest
         $Data.PrivateData = @{
             PSData = [ordered]@{}
