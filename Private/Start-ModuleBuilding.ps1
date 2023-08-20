@@ -122,6 +122,20 @@
                 return $false
             }
         }
+        Write-TextWithTime -Text "Verifying created PSD1 is readable" -PreAppend Information {
+            if (Test-Path -LiteralPath $PSD1FilePath) {
+                try {
+                    $null = Import-PowerShellDataFile -Path $PSD1FilePath -ErrorAction Stop
+                } catch {
+                    Write-Text "[-] PSD1 Reading $PSD1FilePath failed. Error: $($_.Exception.Message)" -Color Red
+                    return $false
+                }
+            } else {
+                Write-Text "[-] PSD1 Reading $PSD1FilePath failed. File not created..." -Color Red
+                return $false
+            }
+        } -ColorBefore Yellow -ColorTime Yellow -Color Yellow
+
         # Restore configuration, as some PersonalManifest plays with those
         $Configuration = $SaveConfiguration
 
