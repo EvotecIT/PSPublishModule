@@ -45,7 +45,7 @@
 
         [Parameter(ParameterSetName = 'Content')]
         [Parameter(ParameterSetName = 'FilePath')]
-        [alias('Destination')][string] $DestinationFilePath,
+        [alias('Destination', 'OutputFile', 'OutputFilePath')][string] $DestinationFilePath,
 
         [Parameter(ParameterSetName = 'Content')]
         [Parameter(ParameterSetName = 'FilePath')]
