@@ -10,9 +10,10 @@ $removeCommentsSplat = @{
 $removeCommentsSplat = @{
     SourceFilePath                 = 'C:\Support\GitHub\PSPublishModule\Examples\TestScript.ps1'
     DestinationFilePath            = 'C:\Support\GitHub\PSPublishModule\Examples\TestScript1.ps1'
-    RemoveAllEmptyLines            = $true
-    RemoveCommentsInParamBlock     = $true
-    RemoveCommentsBeforeParamBlock = $true
+    # RemoveAllEmptyLines            = $true
+    RemoveEmptyLines               = $true
+    RemoveCommentsInParamBlock     = $false
+    RemoveCommentsBeforeParamBlock = $false
 }
 
 Remove-Comments @removeCommentsSplat
