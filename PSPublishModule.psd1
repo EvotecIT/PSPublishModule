@@ -38,23 +38,3 @@
         }, 'PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
 }
-
-    <#
-    .Synopsis
-
-    .Description
-
-    .Parameter inputObject
-        The hashtable to turn into a script
-    .Parameter scriptBlock
-        Determines if a string or a scriptblock is returned
-    .Example
-
-    .Outputs
-        [string]
-    .Outputs
-        [ScriptBlock]
-    .Link
-        https://github.com/StartAutomating/Pipeworks
-        about_hash_tables
-    #>
