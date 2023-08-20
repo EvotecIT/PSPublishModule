@@ -77,7 +77,7 @@ If not provided, the content will be returned
 ```yaml
 Type: String
 Parameter Sets: (All)
-Aliases: Destination
+Aliases: Destination, OutputFile, OutputFilePath
 
 Required: False
 Position: Named
