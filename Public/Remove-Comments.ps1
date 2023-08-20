@@ -69,7 +69,7 @@
     )
     if ($SourceFilePath) {
         $Fullpath = Resolve-Path -LiteralPath $SourceFilePath
-        $Content = [IO.File]::ReadAllText($FullPath)
+        $Content = [IO.File]::ReadAllText($FullPath, [System.Text.Encoding]::UTF8)
     }
 
     $Tokens = $Errors = @()
@@ -157,7 +157,11 @@
     }
     if ($RemoveEmptyLines) {
         # Remove empty lines if more than one empty line is found. If it's just one line, leave it as is
+        #$Content = $Content -replace '(?m)^\s*$', ''
+        #$Content = $Content -replace "(`r?`n){2,}", "`r`n"
+        # $Content = $Content -replace "(`r?`n){2,}", "`r`n`r`n"
         $Content = $Content -replace '(?m)^\s*$', ''
+        $Content = $Content -replace "(?:`r?`n|\n|\r)", "`r`n"
     }
     if ($RemoveAllEmptyLines) {
         # Remove all empty lines from the content
