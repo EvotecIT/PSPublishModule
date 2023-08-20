@@ -23,7 +23,8 @@
                 $Configuration.Information.Manifest.RequiredModules = $null
             } catch {
                 Write-Text "[-] Reading $PathToPSD1 failed. Error: $($_.Exception.Message)" -Color Red
-                return $false
+                Write-Text "[+] Building $PathToPSD1 from scratch." -Color Yellow
+                $Configuration.Information.Manifest = [ordered] @{}
             }
         } else {
             $Configuration.Information.Manifest = [ordered] @{}
