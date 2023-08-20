@@ -44,7 +44,8 @@ Build-Module -ModuleName 'PSPublishModule' {
     #New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module' -IgnoreModuleName 'platyPS'
 
     $ConfigurationFormat = [ordered] @{
-        RemoveComments                              = $false
+        RemoveComments                              = $true
+        RemoveEmptyLines                            = $true
 
         PlaceOpenBraceEnable                        = $true
         PlaceOpenBraceOnSameLine                    = $true
