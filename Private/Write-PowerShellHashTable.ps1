@@ -42,7 +42,8 @@ function Write-PowerShellHashtable {
             })
         $depth = $callStack.Count
         if ($inputObject -isnot [System.Collections.IDictionary]) {
-            $newInputObject = [ordered] @{
+
+            $newInputObject = @{
                 PSTypeName = @($inputobject.pstypenames)[-1]
             }
             foreach ($prop in $inputObject.psobject.properties) {
@@ -52,15 +53,19 @@ function Write-PowerShellHashtable {
         }
 
         if ($inputObject -is [System.Collections.IDictionary]) {
+            #region Indent
             $scriptString = ""
             $indent = $depth * 4
             $scriptString += "@{
 "
+            #endregion Indent
+            #region Include
             $items = $inputObject.GetEnumerator()
 
             if ($Sort) {
                 $items = $items | Sort-Object Key
             }
+
 
             foreach ($kv in $items) {
                 $scriptString += " " * $indent
@@ -76,7 +81,10 @@ function Write-PowerShellHashtable {
                     $scriptString += "$keyString="
                 }
 
+
+
                 $value = $kv.Value
+                # Write-Verbose "$value"
                 if ($value -is [string]) {
                     $value = "'" + $value.Replace("'", "''").Replace("’", "’’").Replace("‘", "‘‘") + "'"
                 } elseif ($value -is [ScriptBlock]) {
@@ -90,11 +98,12 @@ function Write-PowerShellHashtable {
                 } elseif ($value -is [System.Collections.IList] -and $value.Count -eq 0) {
                     $value = '@()'
                 } elseif ($value -is [System.Collections.IList] -and $value.Count -gt 0) {
+                    #} elseif ($value -and $value.GetType -and ($value.GetType().IsArray -or $value -is [Collections.IList])) {
                     $value = foreach ($v in $value) {
                         if ($v -is [System.Collections.IDictionary]) {
-                            Write-PowerShellHashtable $v -Sort:$Sort
+                            Write-PowerShellHashtable $v -Sort:$Sort.IsPresent
                         } elseif ($v -is [Object] -and $v -isnot [string]) {
-                            Write-PowerShellHashtable $v -Sort:$Sort
+                            Write-PowerShellHashtable $v -Sort:$Sort.IsPresent
                         } else {
                             ("'" + "$v".Replace("'", "''").Replace("’", "’’").Replace("‘", "‘‘") + "'")
                         }
@@ -105,11 +114,11 @@ function Write-PowerShellHashtable {
                     $ofs = $oldOfs
                 } elseif ($value -as [System.Collections.IDictionary[]]) {
                     $value = foreach ($v in $value) {
-                        Write-PowerShellHashtable $v -Sort:$Sort
+                        Write-PowerShellHashtable $v -Sort:$Sort.IsPresent
                     }
                     $value = $value -join ","
                 } elseif ($value -is [System.Collections.IDictionary]) {
-                    $value = "$(Write-PowerShellHashtable $value -Sort:$Sort)"
+                    $value = "$(Write-PowerShellHashtable $value -Sort:$Sort.IsPresent)"
                 } elseif ($value -as [Double]) {
                     $value = "$value"
                 } else {
@@ -117,12 +126,14 @@ function Write-PowerShellHashtable {
                     if ($valueString[0] -eq "'" -and
                         $valueString[1] -eq "@" -and
                         $valueString[2] -eq "{") {
-                        $value = Write-PowerShellHashtable -InputObject $value -Sort:$Sort
+                        $value = Write-PowerShellHashtable -InputObject $value -Sort:$Sort.IsPresent
                     } else {
                         $value = $valueString
                     }
+
                 }
-                $scriptString += "$value"
+                $scriptString += "$value
+"
             }
             $scriptString += " " * ($depth - 1) * 4
             $scriptString += "}"
@@ -131,6 +142,7 @@ function Write-PowerShellHashtable {
             } else {
                 $scriptString
             }
+            #endregion Include
         }
     }
 }
