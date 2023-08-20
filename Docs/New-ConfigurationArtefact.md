@@ -35,21 +35,24 @@ New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefac
 ### EXAMPLE 2
 ```
 # standard artefact, packed with tag name without any additional modules or required modules
-New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName
 ```
+
+New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName
 
 ### EXAMPLE 3
 ```
 # Create artefact in form of a script. This is useful for very simple modules that should be just single PS1 file
-New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName
 ```
+
+New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName
 
 ### EXAMPLE 4
 ```
 # Create artefact in form of a script. This is useful for very simple modules that should be just single PS1 file
-# But additionally pack it into zip fileĄŚż$%#
-New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip"
 ```
+
+# But additionally pack it into zip fileĄŚż$%#
+New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-\<ModuleName\>-$((Get-Date).ToString('yyyy-MM-dd')).zip"
 
 ## PARAMETERS
 
