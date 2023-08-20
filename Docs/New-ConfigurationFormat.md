@@ -14,6 +14,7 @@ schema: 2.0.0
 
 ```
 New-ConfigurationFormat [-ApplyTo] <String[]> [-EnableFormatting] [[-Sort] <String>] [-RemoveComments]
+ [-RemoveEmptyLines] [-RemoveAllEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock]
  [-PlaceOpenBraceEnable] [-PlaceOpenBraceOnSameLine] [-PlaceOpenBraceNewLineAfter]
  [-PlaceOpenBraceIgnoreOneLineBlock] [-PlaceCloseBraceEnable] [-PlaceCloseBraceNewLineAfter]
  [-PlaceCloseBraceIgnoreOneLineBlock] [-PlaceCloseBraceNoEmptyLineBefore] [-UseConsistentIndentationEnable]
@@ -237,8 +238,68 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -RemoveAllEmptyLines
+{{ Fill RemoveAllEmptyLines Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -RemoveComments
 {{ Fill RemoveComments Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveCommentsBeforeParamBlock
+{{ Fill RemoveCommentsBeforeParamBlock Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveCommentsInParamBlock
+{{ Fill RemoveCommentsInParamBlock Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RemoveEmptyLines
+{{ Fill RemoveEmptyLines Description }}
 
 ```yaml
 Type: SwitchParameter
