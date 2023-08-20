@@ -1,5 +1,14 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.5
+
+### What's new
+- Fixes remove comments functionality
+- Added remove empty lines functionality
+- Small fixes on PSD1 generation (sorting fixed)
+
+**Full Changelog**: https://github.com/EvotecIT/PSPublishModule/compare/v2.0.4...v2.0.5
+
 ## 2.0.4
 ### What's Changed
 * Adding support for Manual version bumping. by @cocazoulou in https://github.com/EvotecIT/PSPublishModule/pull/21
