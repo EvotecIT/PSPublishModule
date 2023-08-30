@@ -60,36 +60,36 @@
     if ($ModuleName) {
         $Configuration.Information.ModuleName = $ModuleName
     }
-    if ($ExcludeFromPackage) {
+    if ($PSBoundParameters.ContainsKey('ExcludeFromPackage')) {
         $Configuration.Information.Exclude = $ExcludeFromPackage
     }
-    if ($IncludeRoot) {
+    if ($PSBoundParameters.ContainsKey('IncludeRoot')) {
         $Configuration.Information.IncludeRoot = $IncludeRoot
     }
-    if ($IncludePS1) {
+    if ($PSBoundParameters.ContainsKey('IncludePS1')) {
         $Configuration.Information.IncludePS1 = $IncludePS1
     }
     if ($PSBoundParameters.ContainsKey('IncludeAll')) {
         $Configuration.Information.IncludeAll = $IncludeAll
     }
-    if ($IncludeCustomCode) {
+    if ($PSBoundParameters.ContainsKey('IncludeCustomCode')) {
         $Configuration.Information.IncludeCustomCode = $IncludeCustomCode
     }
-    if ($IncludeToArray) {
+    if ($PSBoundParameters.ContainsKey('IncludeToArray')) {
         $Configuration.Information.IncludeToArray = $IncludeToArray
     }
-    if ($LibrariesCore) {
+    if ($PSBoundParameters.ContainsKey('LibrariesCore')) {
         $Configuration.Information.LibrariesCore = $LibrariesCore
     }
-    if ($LibrariesDefault) {
+    if ($PSBoundParameters.ContainsKey('LibrariesDefault')) {
         $Configuration.Information.LibrariesDefault = $LibrariesDefault
     }
-    if ($LibrariesStandard) {
+    if ($PSBoundParameters.ContainsKey('LibrariesStandard')) {
         $Configuration.Information.LibrariesStandard = $LibrariesStandard
     }
-    if ($DirectoryProjects) {
-        $Configuration.Information.DirectoryProjects = $Path
-    }
+    #if ($DirectoryProjects) {
+    #    $Configuration.Information.DirectoryProjects = $Path
+    #}
     if ($FunctionsToExportFolder) {
         $Configuration.Information.FunctionsToExport = $FunctionsToExportFolder
     }
