@@ -191,7 +191,7 @@ function Invoke-ModuleBuild {
         LibrariesDefault        = $LibrariesDefault
         LibrariesStandard       = $LibrariesStandard
     }
-   # Remove-EmptyValue -Hashtable $newPrepareStructureSplat
+    #Remove-EmptyValue -Hashtable $newPrepareStructureSplat
 
     $ModuleOutput = New-PrepareStructure @newPrepareStructureSplat
 
