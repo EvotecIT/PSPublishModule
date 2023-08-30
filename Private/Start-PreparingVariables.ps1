@@ -8,17 +8,17 @@
         $LinkDirectories = @()
         $LinkPrivatePublicFiles = @()
 
-        if ($Configuration.Information.Exclude) {
+        if ($null -ne $Configuration.Information.Exclude) {
             $Exclude = $Configuration.Information.Exclude
         } else {
             $Exclude = '.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'
         }
-        if ($Configuration.Information.IncludeRoot) {
+        if ($null -ne $Configuration.Information.IncludeRoot) {
             $IncludeFilesRoot = $Configuration.Information.IncludeRoot
         } else {
             $IncludeFilesRoot = '*.psm1', '*.psd1', 'License*'
         }
-        if ($Configuration.Information.IncludePS1) {
+        if ($null -ne $Configuration.Information.IncludePS1) {
             $DirectoriesWithPS1 = $Configuration.Information.IncludePS1
         } else {
             $DirectoriesWithPS1 = 'Classes', 'Private', 'Public', 'Enums'
@@ -27,12 +27,12 @@
         # mostly done for internal project and testimo
         $DirectoriesWithArrays = $Configuration.Information.IncludeAsArray.Values
 
-        if ($Configuration.Information.IncludeClasses) {
+        if ($null -ne $Configuration.Information.IncludeClasses) {
             $DirectoriesWithClasses = $Configuration.Information.IncludeClasses
         } else {
             $DirectoriesWithClasses = 'Classes'
         }
-        if ($Configuration.Information.IncludeAll) {
+        if ($null -ne $Configuration.Information.IncludeAll) {
             $DirectoriesWithAll = $Configuration.Information.IncludeAll | ForEach-Object {
                 if ($_.EndsWith('\')) {
                     $_
@@ -127,7 +127,6 @@
             }
         )
         $LinkPrivatePublicFiles = $LinkPrivatePublicFiles | Select-Object -Unique
-
 
         [ordered] @{
             LinkDirectories        = $LinkDirectories

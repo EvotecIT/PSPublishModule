@@ -93,7 +93,7 @@ function Invoke-ModuleBuild {
         [parameter(ParameterSetName = 'Modern')]
         [switch] $ExitCode
     )
-    if ($PsCmdlet.ParameterSetName -eq 'Configuration'){
+    if ($PsCmdlet.ParameterSetName -eq 'Configuration') {
         $ModuleName = $Configuration.Information.ModuleName
     }
 
@@ -174,7 +174,26 @@ function Invoke-ModuleBuild {
         }
     }
 
-    $ModuleOutput = New-PrepareStructure -Configuration $Configuration -Settings $Settings -PathToProject $FullProjectPath -ModuleName $ModuleName
+    $newPrepareStructureSplat = [ordered] @{
+        Configuration           = $Configuration
+        Settings                = $Settings
+        PathToProject           = $FullProjectPath
+        ModuleName              = $ModuleName
+        FunctionsToExportFolder = $FunctionsToExportFolder
+        AliasesToExportFolder   = $AliasesToExportFolder
+        ExcludeFromPackage      = $ExcludeFromPackage
+        IncludeRoot             = $IncludeRoot
+        IncludePS1              = $IncludePS1
+        IncludeAll              = $IncludeAll
+        IncludeCustomCode       = $IncludeCustomCode
+        IncludeToArray          = $IncludeToArray
+        LibrariesCore           = $LibrariesCore
+        LibrariesDefault        = $LibrariesDefault
+        LibrariesStandard       = $LibrariesStandard
+    }
+   # Remove-EmptyValue -Hashtable $newPrepareStructureSplat
+
+    $ModuleOutput = New-PrepareStructure @newPrepareStructureSplat
 
     $Execute = "$($GlobalTime.Elapsed.Days) days, $($GlobalTime.Elapsed.Hours) hours, $($GlobalTime.Elapsed.Minutes) minutes, $($GlobalTime.Elapsed.Seconds) seconds, $($GlobalTime.Elapsed.Milliseconds) milliseconds"
     if ($ModuleOutput -notcontains $false) {

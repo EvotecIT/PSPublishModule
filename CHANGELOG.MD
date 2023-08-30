@@ -1,5 +1,8 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.6
+- Fixes problem with defaults such as IncludeAll, IncludePS1 and similar always being set preventing user from overwriting values on demand
+
 ## 2.0.5
 
 ### What's new

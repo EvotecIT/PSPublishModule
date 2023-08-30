@@ -4,7 +4,18 @@
         [System.Collections.IDictionary]$Configuration,
         [scriptblock] $Settings,
         [string] $PathToProject,
-        [string] $ModuleName
+        [string] $ModuleName,
+        [string] $FunctionsToExportFolder,
+        [string] $AliasesToExportFolder,
+        [string[]] $ExcludeFromPackage,
+        [string[]] $IncludeRoot,
+        [string[]] $IncludePS1,
+        [string[]] $IncludeAll,
+        [scriptblock] $IncludeCustomCode,
+        [System.Collections.IDictionary] $IncludeToArray,
+        [string] $LibrariesCore,
+        [string] $LibrariesDefault,
+        [string] $LibrariesStandard
     )
     # Lets precreate structure if it's not available
     if (-not $Configuration) {
@@ -58,7 +69,7 @@
     if ($IncludePS1) {
         $Configuration.Information.IncludePS1 = $IncludePS1
     }
-    if ($IncludeAll) {
+    if ($PSBoundParameters.ContainsKey('IncludeAll')) {
         $Configuration.Information.IncludeAll = $IncludeAll
     }
     if ($IncludeCustomCode) {
