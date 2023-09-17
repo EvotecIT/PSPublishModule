@@ -16,7 +16,7 @@ Tells the module to create artefact of specified type
 New-ConfigurationArtefact [[-PostScriptMerge] <ScriptBlock>] [[-PreScriptMerge] <ScriptBlock>] -Type <String>
  [-Enable] [-IncludeTagName] [-Path <String>] [-AddRequiredModules] [-ModulesPath <String>]
  [-RequiredModulesPath <String>] [-CopyDirectories <IDictionary>] [-CopyFiles <IDictionary>]
- [-CopyDirectoriesRelative] [-CopyFilesRelative] [-Clear] [-ArtefactName <String>] [-ScriptName <String>]
+ [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <String>] [-ScriptName <String>]
  [-ID <String>] [<CommonParameters>]
 ```
 
@@ -144,6 +144,14 @@ Accept wildcard characters: False
 Path where artefact will be created.
 Please choose a separate directory for each artefact type, as logic may be interfering one another.
 
+You can use following variables that will be replaced with actual values:
+- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
+- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
+- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
+- \<TagName\> / {TagName} - the name of the tag - i.e.
+v1.0.0
+
 ```yaml
 Type: String
 Parameter Sets: (All)
@@ -175,6 +183,13 @@ Accept wildcard characters: False
 ### -ModulesPath
 Path where main module or required module (if not specified otherwise in RequiredModulesPath) will be copied to.
 By default it will be put in the Path folder if not specified
+You can use following variables that will be replaced with actual values:
+- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
+- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
+- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
+- \<TagName\> / {TagName} - the name of the tag - i.e.
+v1.0.0
 
 ```yaml
 Type: String
@@ -192,6 +207,13 @@ Accept wildcard characters: False
 Path where required modules will be copied to.
 By default it will be put in the Path folder if not specified.
 If ModulesPath is specified, but RequiredModulesPath is not specified it will be put into ModulesPath folder.
+You can use following variables that will be replaced with actual values:
+- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
+- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
+- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
+- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
+- \<TagName\> / {TagName} - the name of the tag - i.e.
+v1.0.0
 
 ```yaml
 Type: String
@@ -269,9 +291,9 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Clear
-Clear artefact directory before creating artefact.
-By default artefact directory is not cleared.
+### -DoNotClear
+Do not clear artefact directory before creating artefact.
+By default artefact directory is cleared.
 
 ```yaml
 Type: SwitchParameter
