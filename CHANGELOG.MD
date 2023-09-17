@@ -1,5 +1,9 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.7
+- Added to `New-ConfigurationArtefact` replacement of variables in paths (for example `<TagModuleVersionWithPreRelease>`)
+- Added to `New-ConfigurationArtefact` - `DoNotClear` parameter to allow for not clearing of artefact folder, by default it will delete it's content with excluded .zip files (if any)
+
 ## 2.0.6
 - Fixes problem with defaults such as IncludeAll, IncludePS1 and similar always being set preventing user from overwriting values on demand
 
