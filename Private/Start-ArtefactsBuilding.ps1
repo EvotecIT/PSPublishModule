@@ -36,6 +36,13 @@
         return
     }
 
+    $ModuleName                     = $Configuration.Information.ModuleName
+    $ModuleVersion                  = $Configuration.Information.Manifest.ModuleVersion
+
+    # Lets replace variables user may have used in paths
+    $FullProjectPath = Initialize-ReplacePath -ReplacementPath $FullProjectPath -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
+    $Artefact.Path = Initialize-ReplacePath -ReplacementPath $Artefact.Path -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
+
     Write-TextWithTime -Text $TextToDisplay -PreAppend Information -SpacesBefore '   ' {
         if ($Artefact -or $Artefact.Enabled) {
             if ($Artefact -is [System.Collections.IDictionary]) {
@@ -76,6 +83,7 @@
                         if ($Artefact.Relative -eq $false) {
                             $CurrentModulePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DirectPathForPrimaryModule)
                         } else {
+                            $DirectPathForPrimaryModule = Initialize-ReplacePath -ReplacementPath $DirectPathForPrimaryModule -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
                             $CurrentModulePath = [System.IO.Path]::Combine($FullProjectPath, $DirectPathForPrimaryModule)
                         }
                     } else {
@@ -85,6 +93,7 @@
                         if ($Artefact.Relative -eq $false) {
                             $RequiredModulesPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DirectPathForRequiredModules)
                         } else {
+                            $DirectPathForRequiredModules = Initialize-ReplacePath -ReplacementPath $DirectPathForRequiredModules -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
                             $RequiredModulesPath = [System.IO.Path]::Combine($FullProjectPath, $DirectPathForRequiredModules)
                         }
                     } else {
@@ -135,6 +144,7 @@
                     DestinationZip                 = $ArtefactsPath
                     PreScriptMerge                 = $Artefact.PreScriptMerge
                     PostScriptMerge                = $Artefact.PostScriptMerge
+                    DoNotClear                     = $Artefact.DoNotClear
                     ID                             = if ($ChosenArtefact.ID) { $ChosenArtefact.ID } else { $null }
                 }
                 Remove-EmptyValue -Hashtable $SplatArtefact

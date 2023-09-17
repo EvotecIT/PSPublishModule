@@ -26,11 +26,23 @@
         [string] $PreScriptMerge,
         [string] $PostScriptMerge,
         [System.Collections.IDictionary] $Configuration,
-        [string] $ID
+        [string] $ID,
+        [switch] $DoNotClear
     )
 
-    $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
+    $DestinationMainModule = Initialize-ReplacePath -ReplacementPath $DestinationMainModule -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
+    $DestinationRequiredModules = Initialize-ReplacePath -ReplacementPath $DestinationRequiredModules -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
+    $DestinationZip = Initialize-ReplacePath -ReplacementPath $DestinationZip -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
+    $Destination = Initialize-ReplacePath -ReplacementPath $Destination -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
 
+    $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
+    if (-not $DoNotClear) {
+        if (Test-Path -LiteralPath $ResolvedDestination) {
+            Write-TextWithTime -Text "Removing files/folders from $ResolvedDestination before copying artefacts" -SpacesBefore '      ' -PreAppend Minus {
+                Remove-ItemAlternative -Path $ResolvedDestination -SkipFolder -Exclude '*.zip' -ErrorAction Stop
+            } -ColorBefore Yellow -ColorTime Green -ColorError Red -Color Yellow
+        }
+    }
     if ($ConvertToScript) {
         Write-TextWithTime -Text "Converting merged release to script" -PreAppend Plus -SpacesBefore '      ' {
             $convertToScriptSplat = @{
