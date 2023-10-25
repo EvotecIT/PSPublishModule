@@ -68,7 +68,11 @@
 
         New-Item -Path $ModuleBinFrameworkFolder -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
         try {
-            Copy-Item -Path $PublishDirFolder -Destination $ModuleBinFrameworkFolder -Recurse -Filter "*.dll" -ErrorAction Stop
+            if ($LibraryConfiguration.ExcludeMainLibrary) {
+                Copy-Item -Path $PublishDirFolder -Destination $ModuleBinFrameworkFolder -Recurse -Filter "*.dll" -Exclude "$ModuleName.dll" -ErrorAction Stop
+            } else {
+                Copy-Item -Path $PublishDirFolder -Destination $ModuleBinFrameworkFolder -Recurse -Filter "*.dll" -ErrorAction Stop
+            }
         } catch {
             Write-Text "[-] Copying $PublishDirFolder to $ModuleBinFrameworkFolder failed. Error: $($_.Exception.Message)" -Color Red
         }
