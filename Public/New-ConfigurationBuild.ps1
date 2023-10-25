@@ -76,6 +76,11 @@
     .PARAMETER NETProjectName
     Parameter description
 
+    .PARAMETER NETExcludeMainLibrary
+    Exclude main library from build, this is useful if you have C# project that you want to build
+    that is used mostly for generating libraries that are used in PowerShell module
+    It won't include main library in the build, but it will include all other libraries
+
     .EXAMPLE
     An example
 
@@ -108,10 +113,10 @@
         [string] $CertificatePFXBase64,
         [string] $CertificatePFXPassword,
 
-        #[switch] $NETBuild,
         [ValidateSet('Release', 'Debug')][string] $NETConfiguration, # may need to allow user choice
         [string[]] $NETFramework,
-        [string] $NETProjectName
+        [string] $NETProjectName,
+        [switch] $NETExcludeMainLibrary
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -318,6 +323,15 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 ProjectName = $NETProjectName
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETExcludeMainLibrary')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                ExcludeMainLibrary = $NETExcludeMainLibrary.IsPresent
             }
         }
     }
