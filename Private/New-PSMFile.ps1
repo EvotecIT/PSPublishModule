@@ -14,6 +14,13 @@ function New-PSMFile {
         [Array] $InternalModuleDependencies,
         [System.Collections.IDictionary] $CommandModuleDependencies
     )
+
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     Write-TextWithTime -Text "Adding alises/functions to load in PSM1 file - $Path" -PreAppend Plus {
         if ($FunctionNames.Count -gt 0) {
             $Functions = ($FunctionNames | Sort-Object -Unique) -join "','"
@@ -29,21 +36,21 @@ function New-PSMFile {
             $Aliases = @()
         }
 
-        "" | Out-File -Append -LiteralPath $Path -Encoding utf8
+        "" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
 
         # This allows for loading modules in PSM1 file directly
         if ($InternalModuleDependencies.Count -gt 0) {
             @(
                 "# Added internal module loading to cater for special cases "
                 ""
-            ) | Out-File -Append -LiteralPath $Path -Encoding utf8
+            ) | Out-File -Append -LiteralPath $Path -Encoding $Encoding
             $ModulesText = "'$($InternalModuleDependencies -join "','")'"
             @"
             `$ModulesOptional = $ModulesText
             foreach (`$Module in `$ModulesOptional) {
                 Import-Module -Name `$Module -ErrorAction SilentlyContinue
             }
-"@ | Out-File -Append -LiteralPath $Path -Encoding utf8
+"@ | Out-File -Append -LiteralPath $Path -Encoding $Encoding
         }
 
         # This allows to export functions only if module loading works correctly
@@ -96,12 +103,12 @@ function New-PSMFile {
 
                 Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)
 "@
-            ) | Out-File -Append -LiteralPath $Path -Encoding utf8
+            ) | Out-File -Append -LiteralPath $Path -Encoding $Encoding
         } else {
             # this loads functions/aliases as designed
             #"" | Out-File -Append -LiteralPath $Path -Encoding utf8
-            "# Export functions and aliases as required" | Out-File -Append -LiteralPath $Path -Encoding utf8
-            "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding utf8
+            "# Export functions and aliases as required" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+            "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
         }
 
     } -SpacesBefore '   '

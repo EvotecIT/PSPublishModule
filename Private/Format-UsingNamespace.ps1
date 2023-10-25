@@ -6,6 +6,12 @@
         [string] $FilePathUsing
     )
 
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     if ($FilePathSave -eq '') {
         $FilePathSave = $FilePath
     }
@@ -33,12 +39,12 @@
             # Repeat using namespaces
             $null = New-Item -Path $FilePathUsing -ItemType file -Force
             $UsingNamespaces = $UsingNamespaces.Trim() | Sort-Object -Unique
-            $UsingNamespaces | Out-File -Append -LiteralPath $FilePathUsing -Encoding utf8
+            $UsingNamespaces | Out-File -Append -LiteralPath $FilePathUsing -Encoding $Encoding
 
-            $Content | Out-File -Append -LiteralPath $FilePathSave -Encoding utf8
+            $Content | Out-File -Append -LiteralPath $FilePathSave -Encoding $Encoding
             return $true
         } else {
-            $Content | Out-File -Append -LiteralPath $FilePathSave -Encoding utf8
+            $Content | Out-File -Append -LiteralPath $FilePathSave -Encoding $Encoding
             return $False
         }
     }

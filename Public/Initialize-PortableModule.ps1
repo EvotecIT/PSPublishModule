@@ -7,6 +7,12 @@
         [switch] $Import
     )
 
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     if (-not $Name) {
         Write-Warning "Initialize-ModulePortable - Module name not given. Terminating."
         return
@@ -62,7 +68,7 @@
             "   Import-Module `$_ -Verbose:`$false -Force"
             "}"
         )
-        $Content | Set-Content -Path $Path\$Name.ps1 -Force
+        $Content | Set-Content -Path $Path\$Name.ps1 -Force -Encoding $Encoding
     }
     if ($Import) {
         $ListFiles = foreach ($PSD1 in $PSD1Files) {

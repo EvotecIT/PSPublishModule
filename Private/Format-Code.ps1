@@ -4,6 +4,13 @@
         [string] $FilePath,
         [System.Collections.IDictionary] $FormatCode
     )
+
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     if ($FormatCode.Enabled) {
         if ($FormatCode.RemoveComments -or $FormatCode.RemoveCommentsInParamBlock -or $FormatCode.RemoveCommentsBeforeParamBlock) {
             $Output = Write-TextWithTime -Text "[+] Removing Comments - $FilePath" {
@@ -57,7 +64,7 @@
                 }
             }
             try {
-                $Final | Out-File -LiteralPath $FilePath -NoNewline -Encoding utf8 -ErrorAction Stop
+                $Final | Out-File -LiteralPath $FilePath -NoNewline -Encoding $Encoding -ErrorAction Stop
             } catch {
                 $ErrorMessage = $_.Exception.Message
                 #Write-Warning "Merge module on file $FilePath failed. Error: $ErrorMessage"

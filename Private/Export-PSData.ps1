@@ -27,9 +27,15 @@ function Export-PSData {
         $AllObjects.AddRange($InputObject)
     }
     end {
+        if ($PSVersionTable.PSVersion.Major -gt 5) {
+            $Encoding = 'UTF8BOM'
+        } else {
+            $Encoding = 'UTF8'
+        }
+
         #region Convert to Hashtables and export
         $Text = $AllObjects | Write-PowerShellHashtable -Sort:$Sort.IsPresent
-        $Text | Out-File -FilePath $DataFile -Encoding UTF8
+        $Text | Out-File -FilePath $DataFile -Encoding $Encoding
         #endregion Convert to Hashtables and export
     }
 

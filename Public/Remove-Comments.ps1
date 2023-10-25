@@ -67,6 +67,13 @@
         [Parameter(ParameterSetName = 'FilePath')]
         [switch] $DoNotRemoveSignatureBlock
     )
+
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     if ($SourceFilePath) {
         $Fullpath = Resolve-Path -LiteralPath $SourceFilePath
         $Content = [IO.File]::ReadAllText($FullPath, [System.Text.Encoding]::UTF8)
@@ -171,7 +178,7 @@
         $Content = $Content.Trim()
     }
     if ($DestinationFilePath) {
-        $Content | Set-Content -Path $DestinationFilePath -Encoding utf8
+        $Content | Set-Content -Path $DestinationFilePath -Encoding $Encoding
     } else {
         $Content
     }

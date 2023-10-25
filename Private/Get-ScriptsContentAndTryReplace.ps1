@@ -42,13 +42,19 @@
         [switch] $DoNotAttemptToFixRelativePaths
     )
 
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     if ($DoNotAttemptToFixRelativePaths) {
         Write-TextWithTime -Text "Without expanding variables (`$PSScriptRoot\..\.. etc.)" {
             foreach ($FilePath in $Files) {
                 $Content = Get-Content -Path $FilePath -Raw -Encoding utf8
                 if ($Content.Count -gt 0) {
                     try {
-                        $Content | Out-File -Append -LiteralPath $OutputPath -Encoding utf8
+                        $Content | Out-File -Append -LiteralPath $OutputPath -Encoding $Encoding
                     } catch {
                         $ErrorMessage = $_.Exception.Message
                         Write-Text "[-] Get-ScriptsContentAndTryReplace - Merge on file $FilePath failed. Error: $ErrorMessage" -Color Red
@@ -85,7 +91,7 @@
                     }
                 }
                 try {
-                    $Content | Out-File -Append -LiteralPath $OutputPath -Encoding utf8
+                    $Content | Out-File -Append -LiteralPath $OutputPath -Encoding $Encoding
                 } catch {
                     $ErrorMessage = $_.Exception.Message
                     Write-Text "[-] Get-ScriptsContentAndTryReplace - Merge on file $FilePath failed. Error: $ErrorMessage" -Color Red

@@ -15,6 +15,12 @@
         return
     }
 
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     if ($IncludeTagName) {
         $NameOfDestination = [io.path]::Combine($Destination, $TagName)
     } else {
@@ -96,7 +102,7 @@
         }
 
         # Output the updated content
-        Set-Content -LiteralPath $PS1 -Value $Content -Force -ErrorAction Stop -Encoding UTF8
+        Set-Content -LiteralPath $PS1 -Value $Content -Force -ErrorAction Stop -Encoding $Encoding
 
     } -SpacesBefore '   '
 }

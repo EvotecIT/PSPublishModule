@@ -21,6 +21,13 @@ function Merge-Module {
         [System.Collections.IDictionary] $IncludeAsArray
 
     )
+
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
+    }
+
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Merging files into PSM1" -Color Blue
 
@@ -84,7 +91,7 @@ function Merge-Module {
     }
 
     if ($ArrayIncludes.Count -gt 0) {
-        $ArrayIncludes | Out-File -Append -LiteralPath $PSM1FilePath -Encoding utf8
+        $ArrayIncludes | Out-File -Append -LiteralPath $PSM1FilePath -Encoding $Encoding
     }
     $Success = Get-ScriptsContentAndTryReplace -Files $ScriptFunctions -OutputPath $PSM1FilePath -DoNotAttemptToFixRelativePaths:$Configuration.Steps.BuildModule.DoNotAttemptToFixRelativePaths
     if ($Success -eq $false) {
@@ -314,12 +321,12 @@ function Merge-Module {
             Write-Text "[+] Merge mergable commands" -Color Blue
 
 
-            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
+            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding $Encoding
             $IntegrateContent = @(
                 $MissingFunctions.Functions
                 $PSM1Content
             )
-            $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+            $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding $Encoding
 
             # Overwrite Required Modules
             $NewRequiredModules = foreach ($_ in $Configuration.Information.Manifest.RequiredModules) {
@@ -391,7 +398,7 @@ function Merge-Module {
             $DotSourcePath = ". `$PSScriptRoot\$ModuleName.Libraries.ps1"
         }
         if ($LibariesPath) {
-            $LibraryContent | Out-File -Append -LiteralPath $LibariesPath -Encoding utf8
+            $LibraryContent | Out-File -Append -LiteralPath $LibariesPath -Encoding $Encoding
         }
     }
 
@@ -434,11 +441,11 @@ function Merge-Module {
             }
             $PSM1Content
         )
-        $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding UTF8
+        $IntegrateContent | Set-Content -LiteralPath $PSM1FilePath -Encoding $Encoding
     }
 
     if ($Configuration.Information.Manifest.DotNetFrameworkVersion) {
-        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Out-File -Append -LiteralPath $PSM1FilePath -Encoding UTF8
+        Find-NetFramework -RequireVersion $Configuration.Information.Manifest.DotNetFrameworkVersion | Out-File -Append -LiteralPath $PSM1FilePath -Encoding $Encoding
     }
 
     # Finalize PSM1 by adding export functions/aliases and internal modules loading
