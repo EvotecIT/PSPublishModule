@@ -374,7 +374,7 @@
             # new configuration building multiple artefacts
             foreach ($Artefact in  $Configuration.Steps.BuildModule.Artefacts) {
                 $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -ChosenArtefact $Artefact
-                if ($Success -eq $false) {
+                if ($Success -contains $false) {
                     return $false
                 }
             }
