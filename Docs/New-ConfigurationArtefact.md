@@ -17,7 +17,7 @@ New-ConfigurationArtefact [[-PostScriptMerge] <ScriptBlock>] [[-PreScriptMerge] 
  [-Enable] [-IncludeTagName] [-Path <String>] [-AddRequiredModules] [-ModulesPath <String>]
  [-RequiredModulesPath <String>] [-CopyDirectories <IDictionary>] [-CopyFiles <IDictionary>]
  [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <String>] [-ScriptName <String>]
- [-ID <String>] [<CommonParameters>]
+ [-ID <String>] [-PostScriptMergePath <String>] [-PreScriptMergePath <String>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -59,6 +59,7 @@ New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Art
 ### -PostScriptMerge
 ScriptBlock that will be added in the end of the script.
 It's only applicable to type of Script, PackedScript.
+If useed with PostScriptMergePath, this will be ignored.
 
 ```yaml
 Type: ScriptBlock
@@ -75,6 +76,7 @@ Accept wildcard characters: False
 ### -PreScriptMerge
 ScriptBlock that will be added in the beggining of the script.
 It's only applicable to type of Script, PackedScript.
+If useed with PreScriptMergePath, this will be ignored.
 
 ```yaml
 Type: ScriptBlock
@@ -358,6 +360,38 @@ Accept wildcard characters: False
 Optional ID of the artefact.
 To be used by New-ConfigurationPublish cmdlet
 If not specified, the first packed artefact will be used for publishing to GitHub
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PostScriptMergePath
+Path to file that will be added in the end of the script.
+It's only applicable to type of Script, PackedScript.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PreScriptMergePath
+Path to file that will be added in the beggining of the script.
+It's only applicable to type of Script, PackedScript.
 
 ```yaml
 Type: String

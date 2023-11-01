@@ -19,7 +19,7 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [-DoNotAttemptToFixRelativePaths] [-MergeLibraryDebugging] [-ResolveBinaryConflicts]
  [[-ResolveBinaryConflictsName] <String>] [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>]
  [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>] [[-NETConfiguration] <String>]
- [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [<CommonParameters>]
+ [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -365,6 +365,23 @@ Aliases:
 Required: False
 Position: 8
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETExcludeMainLibrary
+Exclude main library from build, this is useful if you have C# project that you want to build
+that is used mostly for generating libraries that are used in PowerShell module
+It won't include main library in the build, but it will include all other libraries
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
