@@ -70,8 +70,13 @@
             & `$importModule -Force -Assembly (`$Type.Assembly)
         }
     } catch {
-        Write-Warning -Message "Importing module `$Library failed. Fix errors before continuing. Error: `$(`$_.Exception.Message)"
-        `$true
+        if (`$ErrorActionPreference -eq 'Stop') {
+            throw
+        } else {
+            Write-Warning -Message "Importing module `$Library failed. Fix errors before continuing. Error: `$(`$_.Exception.Message)"
+            # we will continue, but it's not a good idea to do so
+            # return
+        }
     }
 "@
     $Output
