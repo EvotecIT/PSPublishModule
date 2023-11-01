@@ -19,7 +19,8 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [-DoNotAttemptToFixRelativePaths] [-MergeLibraryDebugging] [-ResolveBinaryConflicts]
  [[-ResolveBinaryConflictsName] <String>] [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>]
  [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>] [[-NETConfiguration] <String>]
- [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [<CommonParameters>]
+ [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary]
+ [[-NETExcludeLibraryFilter] <String[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -382,6 +383,21 @@ Aliases:
 Required: False
 Position: Named
 Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETExcludeLibraryFilter
+Provide list of filters for libraries that you want to exclude from build, this is useful if you have C# project that you want to build, but don't want to include all libraries for some reason
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 9
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
