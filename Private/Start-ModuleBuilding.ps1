@@ -74,7 +74,10 @@
         return $false
     }
 
-    Start-LibraryBuilding -RootDirectory $FullProjectPath -Version $Configuration.Information.Manifest.ModuleVersion -ModuleName $ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
+    $Success = Start-LibraryBuilding -RootDirectory $FullProjectPath -Version $Configuration.Information.Manifest.ModuleVersion -ModuleName $ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
+    if ($Success -eq $false) {
+        return $false
+    }
 
     # Verify if manifest contains required modules and fix it if nessecary
     $Success = Convert-RequiredModules -Configuration $Configuration
@@ -360,7 +363,7 @@
         if ($Success -contains $false) {
             return $false
         }
-        Write-TextWithTime -Text "Building artefacts" -PreAppend Information {
+        $Success = Write-TextWithTime -Text "Building artefacts" -PreAppend Information {
             # Old configuration still supported
             $Success = Start-ArtefactsBuilding -Configuration $Configuration -FullProjectPath $FullProjectPath -DestinationPaths $DestinationPaths -Type 'Releases'
             if ($Success -eq $false) {
@@ -379,6 +382,9 @@
                 }
             }
         } -ColorBefore Yellow -ColorTime Yellow -Color Yellow
+        if ($Success -contains $false) {
+            return $false
+        }
     }
 
     # Import Modules Section, useful to check before publishing
