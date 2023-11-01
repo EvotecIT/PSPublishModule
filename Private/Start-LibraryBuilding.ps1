@@ -41,9 +41,18 @@
     }
     $null = New-Item -Path $ModuleBinFolder -ItemType Directory -Force
 
-    Push-Location -Path $SourceFolder
-
-    [xml] $ProjectInformation = Get-Content -Raw -LiteralPath $ModuleProjectFile -Encoding UTF8
+    try {
+        Push-Location -Path $SourceFolder -ErrorAction Stop
+    } catch {
+        Write-Text "[-] Couldn't switch to folder $SourceFolder. Error: $($_.Exception.Message)" -Color Red
+        return $false
+    }
+    try {
+        [xml] $ProjectInformation = Get-Content -Raw -LiteralPath $ModuleProjectFile -Encoding UTF8 -ErrorAction Stop
+    } catch {
+        Write-Text "[-] Can't read $ModuleProjectFile file. Error: $($_.Exception.Message)" -Color Red
+        return $false
+    }
     $SupportedFrameworks = foreach ($PropertyGroup in $ProjectInformation.Project.PropertyGroup) {
         if ($PropertyGroup.TargetFrameworks) {
             $PropertyGroup.TargetFrameworks -split ";"
