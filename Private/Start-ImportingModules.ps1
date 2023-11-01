@@ -5,6 +5,9 @@
         [System.Collections.IDictionary] $Configuration
     )
     $TemporaryVerbosePreference = $VerbosePreference
+    $TemporaryErrorPreference = $global:ErrorActionPreference
+    $global:ErrorActionPreference = 'Stop'
+
     if ($null -ne $ImportModules.Verbose) {
         $VerbosePreference = $true
     } else {
@@ -29,8 +32,11 @@
     }
     if ($Configuration.Steps.ImportModules.Self) {
         Write-TextWithTime -Text 'Importing module - SELF' {
+            # global:Write-Warning ($Message) { throw 'Import warnings raised: $Message' }
             Import-Module -Name $ProjectName -Force -ErrorAction Stop -Verbose:$VerbosePreference
+            #Remove-Item function:Write-Warning
         } -PreAppend 'Information'
     }
+    $global:ErrorActionPreference = $TemporaryErrorPreference
     $VerbosePreference = $TemporaryVerbosePreference
 }
