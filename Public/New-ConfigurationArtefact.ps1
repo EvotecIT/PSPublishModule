@@ -10,9 +10,17 @@
 
     .PARAMETER PreScriptMerge
     ScriptBlock that will be added in the beggining of the script. It's only applicable to type of Script, PackedScript.
+    If useed with PreScriptMergePath, this will be ignored.
 
     .PARAMETER PostScriptMerge
     ScriptBlock that will be added in the end of the script. It's only applicable to type of Script, PackedScript.
+    If useed with PostScriptMergePath, this will be ignored.
+
+    .PARAMETER PreScriptMergePath
+    Path to file that will be added in the beggining of the script. It's only applicable to type of Script, PackedScript.
+
+    .PARAMETER PostScriptMergePath
+    Path to file that will be added in the end of the script. It's only applicable to type of Script, PackedScript.
 
     .PARAMETER Type
     There are 4 types of artefacts:
@@ -137,7 +145,9 @@
         [switch] $DoNotClear,
         [string] $ArtefactName,
         [alias('FileName')][string] $ScriptName,
-        [string] $ID
+        [string] $ID,
+        [string] $PostScriptMergePath,
+        [string] $PreScriptMergePath
     )
     $Artefact = [ordered ] @{
         Type          = $Type #$ArtefactType
@@ -145,6 +155,12 @@
             Type            = $Type
             RequiredModules = [ordered] @{}
         }
+    }
+
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Encoding = 'UTF8BOM'
+    } else {
+        $Encoding = 'UTF8'
     }
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -200,6 +216,29 @@
         } catch {
             Write-Text -Text "[i] Unable to format merge script provided by user. Error: $($_.Exception.Message). Using original script." -Color Red
             $Artefact['Configuration']['PostScriptMerge'] = $PostScriptMerge.ToString()
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('PreScriptMergePath')) {
+        $ScriptContent = Get-Content -Path $PreScriptMergePath -Raw -Encoding $Encoding
+        if ($ScriptContent) {
+            try {
+                $Artefact['Configuration']['PreScriptMerge'] = Invoke-Formatter -ScriptDefinition $ScriptContent
+            } catch {
+                Write-Text -Text "[i] Unable to format merge script provided by user. Error: $($_.Exception.Message). Using original script." -Color Red
+                $Artefact['Configuration']['PreScriptMerge'] = $ScriptContent.ToString()
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('PostScriptMergePath')) {
+        $ScriptContent = Get-Content -Path $PostScriptMergePath -Raw -Encoding $Encoding
+        if ($ScriptContent) {
+            try {
+                $Artefact['Configuration']['PostScriptMerge'] = Invoke-Formatter -ScriptDefinition $ScriptContent.ToString()
+            } catch {
+                Write-Text -Text "[i] Unable to format merge script provided by user. Error: $($_.Exception.Message). Using original script." -Color Red
+                $Artefact['Configuration']['PostScriptMerge'] = $ScriptContent.ToString()
+            }
         }
     }
     if ($PSBoundParameters.ContainsKey('ID')) {
