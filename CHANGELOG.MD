@@ -1,5 +1,10 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.8
+- Improve error handling
+- Added `NETExcludeMainLibrary` to not include Initialize library if no logic is required
+- Added `PreScriptMergePath` and `PostScriptMergePath` to allow for files implementation instead of direct code in `New-ConfigurationArtefact`
+
 ## 2.0.7
 - Added to `New-ConfigurationArtefact` replacement of variables in paths (for example `<TagModuleVersionWithPreRelease>`)
 - Added to `New-ConfigurationArtefact` - `DoNotClear` parameter to allow for not clearing of artefact folder, by default it will delete it's content with excluded .zip files (if any)
