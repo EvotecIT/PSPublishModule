@@ -3,7 +3,9 @@
 ## 2.0.8
 - Improve error handling
 - Added `NETExcludeMainLibrary` to not include Initialize library if no logic is required
+- Added `NETExcludeLibraryFilter` to allow for excluding libraries from being copied on build
 - Added `PreScriptMergePath` and `PostScriptMergePath` to allow for files implementation instead of direct code in `New-ConfigurationArtefact`
+  - This supplements using `PreScriptMerge` and `PostScriptMerge` (which are still supported, but overwritten when using `PreScriptMergePath` and `PostScriptMergePath`)
 
 ## 2.0.7
 - Added to `New-ConfigurationArtefact` replacement of variables in paths (for example `<TagModuleVersionWithPreRelease>`)
