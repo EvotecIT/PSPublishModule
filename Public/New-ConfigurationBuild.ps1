@@ -81,6 +81,9 @@
     that is used mostly for generating libraries that are used in PowerShell module
     It won't include main library in the build, but it will include all other libraries
 
+    .PARAMETER NETExcludeLibraryFilter
+    Provide list of filters for libraries that you want to exclude from build, this is useful if you have C# project that you want to build, but don't want to include all libraries for some reason
+
     .EXAMPLE
     An example
 
@@ -116,7 +119,8 @@
         [ValidateSet('Release', 'Debug')][string] $NETConfiguration, # may need to allow user choice
         [string[]] $NETFramework,
         [string] $NETProjectName,
-        [switch] $NETExcludeMainLibrary
+        [switch] $NETExcludeMainLibrary,
+        [string[]] $NETExcludeLibraryFilter
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -332,6 +336,14 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 ExcludeMainLibrary = $NETExcludeMainLibrary.IsPresent
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('NETExcludeLibraryFilter')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                ExcludeLibraryFilter = $NETExcludeLibraryFilter
             }
         }
     }
