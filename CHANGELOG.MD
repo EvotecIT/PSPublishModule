@@ -1,5 +1,10 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.9
+- Added usage of OpenAuthenticode from @jborean93 to allow for signing of modules on Linux/MacOS
+  - The module is not automatically installed, you need to install it yourself
+  - May need to be updated, as haven't really tested it
+
 ## 2.0.8
 - Improve error handling
 - Added `NETExcludeMainLibrary` to not include Initialize library if no logic is required
