@@ -30,16 +30,26 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
 
     # Add external module dependencies, using loop for simplicity
-    foreach ($Module in @('PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
-        New-ConfigurationModule -Type ExternalModule -Name $Module
-    }
+    New-ConfigurationModule -Type ExternalModule -Name @(
+        'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security'
+    )
 
     # Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
     # And on that time only that function and dependant functions will be copied over
     # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
     New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
-    #New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module' -IgnoreModuleName 'platyPS'
+    New-ConfigurationModuleSkip -IgnoreModuleName 'PKI', 'OpenAuthenticode' -IgnoreFunctionName @(
+        # ignore functions from OpenAuthenticode module when used during linux/macos build
+        'Set-OpenAuthenticodeSignature'
+        'Get-OpenAuthenticodeSignature'
+        # ignore functions from Microsoft.PowerShell.Security, as those are not on linux/macos
+        'Get-AuthenticodeSignature'
+        'Set-AuthenticodeSignature'
+        # ignore functions from PKI module when used during linux/macos build
+        #'Import-PfxCertificate'
+    )
+
 
     $ConfigurationFormat = [ordered] @{
         RemoveComments                              = $false
