@@ -18,14 +18,14 @@
     } else {
         return $false
     }
-    if ($TemporaryFile) {
-        $CodeSigningCert = Import-PfxCertificate -FilePath $pfxCertFilePath -Password $($PfxPassword | ConvertTo-SecureString -AsPlainText -Force) -CertStoreLocation Cert:\CurrentUser\My -ErrorAction Stop
-        if ($CodeSigningCert) {
-            return $CodeSigningCert
-        } else {
-            return $false
-        }
-    } else {
-        return $false
-    }
+    # if ($TemporaryFile) {
+    #     $CodeSigningCert = Import-PfxCertificate -FilePath $pfxCertFilePath -Password $($PfxPassword | ConvertTo-SecureString -AsPlainText -Force) -CertStoreLocation Cert:\CurrentUser\My -ErrorAction Stop
+    #     if ($CodeSigningCert) {
+    #         return $CodeSigningCert
+    #     } else {
+    #         return $false
+    #     }
+    # } else {
+    #     return $false
+    # }
 }
