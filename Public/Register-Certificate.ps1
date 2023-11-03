@@ -6,8 +6,9 @@
         [alias('CertificateThumbprint')][Parameter(ParameterSetName = 'Store')][string] $Thumbprint,
         [Parameter(Mandatory)][string] $Path,
         [string] $TimeStampServer = 'http://timestamp.digicert.com',
-        [ValidateSet('All', 'NonRoot', 'Signer')] [string] $IncludeChain = 'All',
-        [string[]] $Include = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
+        [ValidateSet('All', 'NotRoot', 'Signer')] [string] $IncludeChain = 'All',
+        [string[]] $Include = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat'),
+        [ValidateSet('SHA1', 'SHA256', 'SHA384', 'SHA512')][string] $HashAlgorithm = 'SHA256'
     )
     if ($PSBoundParameters.Keys -contains 'LocalStore') {
         $Cert = Get-ChildItem -Path "Cert:\$LocalStore\My" -CodeSigningCert
@@ -48,9 +49,37 @@
     }
     if ($Certificate -and $Path) {
         if (Test-Path -LiteralPath $Path) {
-            Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue | Where-Object {
+            if ($null -ne $IsWindows -and $IsWindows -eq $false) {
+                # This is for Linux/MacOS, we need to use OpenAuthenticode module
+                $ModuleOpenAuthenticode = Get-Module -ListAvailable -Name 'OpenAuthenticode'
+                if ($null -eq $ModuleOpenAuthenticode) {
+                    Write-Warning -Message "Register-Certificate - OpenAuthenticode module not found. Please install it from PSGallery"
+                    return
+                }
+                if ($IncludeChain -eq 'All') {
+                    $IncludeOption = 'WholeChain'
+                } elseif ($IncludeChain -eq 'NotRoot') {
+                    $IncludeOption = 'ExcludeRoot'
+                } elseif ($IncludeChain -eq 'Signer') {
+                    $IncludeOption = 'EndCertOnly'
+                } else {
+                    $IncludeOption = 'None'
+                }
+                Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue | Where-Object {
+                        ($_ | Get-OpenAuthenticodeSignature).Status -eq 'NotSigned'
+                } | Set-OpenAuthenticodeSignature -Certificate $Certificate -TimeStampServer $TimeStampServer -IncludeChain $IncludeOption -HashAlgorithm $HashAlgorithm
+
+            } else {
+                # This is for Windows, we need to use PKI module, it's usually installed by default
+                $ModuleSigning = Get-Command -Name Set-AuthenticodeSignature
+                if (-not $ModuleSigning) {
+                    Write-Warning -Message "Register-Certificate - Code signing commands not found. Skipping signing."
+                    return
+                }
+                Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue | Where-Object {
                 ($_ | Get-AuthenticodeSignature).Status -eq 'NotSigned'
-            } | Set-AuthenticodeSignature -Certificate $Certificate -TimestampServer $TimeStampServer -IncludeChain $IncludeChain -HashAlgorithm Sha256
+                } | Set-AuthenticodeSignature -Certificate $Certificate -TimestampServer $TimeStampServer -IncludeChain $IncludeChain -HashAlgorithm $HashAlgorithm
+            }
         }
     }
 }
