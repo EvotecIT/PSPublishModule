@@ -9,11 +9,11 @@
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @('Convert-CommandsToList', 'Get-MissingFunctions', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Invoke-ModuleBuild', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '2.0.8'
+    ModuleVersion          = '2.0.9'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
-            ExternalModuleDependencies = @('PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
+            ExternalModuleDependencies = @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
             IconUri                    = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
             ProjectUri                 = 'https://github.com/EvotecIT/PSPublishModule'
             Tags                       = @('Windows', 'MacOS', 'Linux', 'Build', 'Module')
@@ -35,6 +35,6 @@
             Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName    = 'Pester'
             ModuleVersion = '5.5.0'
-        }, 'PKI', 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
+        }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
 }
