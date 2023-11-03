@@ -15,13 +15,15 @@ schema: 2.0.0
 ### PFX
 ```
 Register-Certificate -CertificatePFX <String> -Path <String> [-TimeStampServer <String>]
- [-IncludeChain <String>] [-Include <String[]>] [-WhatIf] [-Confirm] [<CommonParameters>]
+ [-IncludeChain <String>] [-Include <String[]>] [-HashAlgorithm <String>] [-WhatIf] [-Confirm]
+ [<CommonParameters>]
 ```
 
 ### Store
 ```
 Register-Certificate -LocalStore <String> [-Thumbprint <String>] -Path <String> [-TimeStampServer <String>]
- [-IncludeChain <String>] [-Include <String[]>] [-WhatIf] [-Confirm] [<CommonParameters>]
+ [-IncludeChain <String>] [-Include <String[]>] [-HashAlgorithm <String>] [-WhatIf] [-Confirm]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -68,6 +70,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -HashAlgorithm
+{{ Fill HashAlgorithm Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: SHA1, SHA256, SHA384, SHA512
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Include
 {{ Fill Include Description }}
 
@@ -90,7 +108,7 @@ Accept wildcard characters: False
 Type: String
 Parameter Sets: (All)
 Aliases:
-Accepted values: All, NonRoot, Signer
+Accepted values: All, NotRoot, Signer
 
 Required: False
 Position: Named
