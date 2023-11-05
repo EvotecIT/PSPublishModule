@@ -245,7 +245,7 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: Lib\Core
+Default value: [io.path]::Combine("Lib", "Core")
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -260,7 +260,7 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: Lib\Default
+Default value: [io.path]::Combine("Lib", "Default")
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -275,7 +275,7 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: Lib\Standard
+Default value: [io.path]::Combine("Lib", "Standard")
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
