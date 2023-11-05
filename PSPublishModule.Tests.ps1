@@ -1,4 +1,5 @@
-﻿$ModuleName = (Get-ChildItem $PSScriptRoot\*.psd1).BaseName
+﻿$ItemPath = [System.IO.Path]::Combine($PSScriptRoot, "*.psd1")
+$ModuleName = (Get-ChildItem -Path $ItemPath).BaseName
 $PrimaryModule = Get-ChildItem -Path $PSScriptRoot -Filter '*.psd1' -Recurse -ErrorAction SilentlyContinue -Depth 1
 if (-not $PrimaryModule) {
     throw "Path $PSScriptRoot doesn't contain PSD1 files. Failing tests."
@@ -41,7 +42,8 @@ foreach ($Module in $PSDInformation.RequiredModules) {
     }
 }
 try {
-    Import-Module $PSScriptRoot\*.psd1 -Force -ErrorAction Stop
+    $Path = [System.IO.Path]::Combine($PSScriptRoot, "*.psd1")
+    Import-Module -Name $Path -Force -ErrorAction Stop
 } catch {
     Write-Color 'Failed to import module', $_.Exception.Message -Color Red
     exit 1
