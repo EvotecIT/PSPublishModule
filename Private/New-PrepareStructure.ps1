@@ -43,11 +43,13 @@
     }
     # This deals with OneDrive redirection or similar
     if (-not $Configuration.Information.DirectoryModulesCore) {
-        $Configuration.Information.DirectoryModulesCore = "$([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments))\PowerShell\Modules"
+        $PathCore = [io.path]::Combine($([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)), "PowerShell", 'Modules')
+        $Configuration.Information.DirectoryModulesCore = $PathCore
     }
     # This deals with OneDrive redirection or similar
     if (-not $Configuration.Information.DirectoryModules) {
-        $Configuration.Information.DirectoryModules = "$([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments))\WindowsPowerShell\Modules"
+        $PathStandard = [io.path]::Combine($([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)), "WindowsPowerShell", 'Modules')
+        $Configuration.Information.DirectoryModules = $PathStandard
     }
     # This is to use within module between different stages
     # kind of temporary settings storage

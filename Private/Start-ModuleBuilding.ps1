@@ -28,8 +28,8 @@
     }
     [string] $ProjectName = $Configuration.Information.ModuleName
 
-    $PSD1FilePath = "$FullProjectPath\$ProjectName.psd1"
-    $PSM1FilePath = "$FullProjectPath\$ProjectName.psm1"
+    $PSD1FilePath = [System.IO.Path]::Combine($FullProjectPath, "$ProjectName.psd1")
+    $PSM1FilePath = [System.IO.Path]::Combine($FullProjectPath, "$ProjectName.psm1")
 
     if ($Configuration.Information.Manifest.ModuleVersion) {
         if ($Configuration.Steps.BuildModule.LocalVersion) {
@@ -157,29 +157,33 @@
 
         if ($Configuration.Steps.BuildModule.Merge) {
             foreach ($Directory in $LinkDirectories) {
-                $Dir = "$FullTemporaryPath\$Directory"
-                Add-Directory $Dir
+                $Dir = [System.IO.Path]::Combine($FullTemporaryPath, "$Directory")
+                Add-Directory -Directory $Dir
             }
             # Workaround to link files that are not ps1/psd1
-            [Array] $CompareWorkaround = foreach ($_ in $DirectoriesWithPS1) {
-                -join ($_, '\')
+            [Array] $CompareWorkaround = foreach ($Directory in $DirectoriesWithPS1) {
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                    $Dir = [System.IO.Path]::Combine($Directory, "\")
+                } else {
+                    $Dir = [System.IO.Path]::Combine($Directory, "/")
+                }
+                #-join ($_, '\')
             }
 
             $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -notin $CompareWorkaround }
-            #$LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -ne 'Public\' -and $_ -ne 'Private\' }
             foreach ($Directory in $LinkDirectoriesWithSupportFiles) {
-                $Dir = "$FullModuleTemporaryPath\$Directory"
-                Add-Directory $Dir
+                $Dir = [System.IO.Path]::Combine($FullModuleTemporaryPath, "$Directory")
+                Add-Directory -Directory $Dir
             }
 
             $LinkingFilesTime = Write-Text "[+] Linking files from root and sub directories" -Start
-            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
-            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+            Copy-InternalFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
+            Copy-InternalFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullTemporaryPath -FullProjectPath $FullProjectPath
             Write-Text -End -Time $LinkingFilesTime
 
             # Workaround to link files that are not ps1/psd1
             $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
-            Set-LinkedFiles -LinkFiles $FilesToLink -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
+            Copy-InternalFiles -LinkFiles $FilesToLink -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
 
             if ($Configuration.Information.LibrariesStandard) {
                 # User provided option, we don't care
@@ -187,39 +191,36 @@
                 # User provided option for core and default we don't care
             } else {
                 # user hasn't provided any option, we set it to default
-                $Configuration.Information.LibrariesStandard = "Lib\Standard"
-                $Configuration.Information.LibrariesCore = "Lib\Core"
-                $Configuration.Information.LibrariesDefault = "Lib\Default"
+                $Configuration.Information.LibrariesStandard = [System.IO.Path]::Combine("Lib", "Standard")
+                $Configuration.Information.LibrariesCore = [System.IO.Path]::Combine("Lib", "Core")
+                $Configuration.Information.LibrariesDefault = [System.IO.Path]::Combine("Lib", "Default")
             }
 
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
-                # if ($Framework -eq 'Core') {
-                $StartsWithCore = "$($Configuration.Information.LibrariesCore)\"
-                # } else {
-                #     $StartsWithCore = "$($Configuration.Information.LibrariesStandard)\"
-                # }
-                # $FilesLibrariesCore = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                    $StartsWithCore = [System.IO.Path]::Combine($Configuration.Information.LibrariesCore, "\")
+                } else {
+                    $StartsWithCore = [System.IO.Path]::Combine($Configuration.Information.LibrariesCore, "/")
+                }
             }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
-                # if ($FrameworkNet -eq 'Default') {
-                $StartsWithDefault = "$($Configuration.Information.LibrariesDefault)\"
-                # } else {
-                #     $StartsWithDefault = "$($Configuration.Information.LibrariesStandard)\"
-                # }
-                # $FilesLibrariesDefault = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                    $StartsWithDefault = [System.IO.Path]::Combine($Configuration.Information.LibrariesDefault, "\")
+                } else {
+                    $StartsWithDefault = [System.IO.Path]::Combine($Configuration.Information.LibrariesDefault, "/")
+                }
             }
-            # if ($StartsWithCore -eq $StartsWithDefault) {
-            #     $FilesLibrariesStandard = $FilesLibrariesCore
-            # }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesStandard)) {
-                $StartsWithStandard = "$($Configuration.Information.LibrariesStandard)\"
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                    $StartsWithStandard = [System.IO.Path]::Combine($Configuration.Information.LibrariesStandard, "\")
+                } else {
+                    $StartsWithStandard = [System.IO.Path]::Combine($Configuration.Information.LibrariesStandard, "/")
+                }
             }
-
 
             $CoreFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
             $DefaultFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
             $StandardFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
-
 
             $Default = $false
             $Core = $false
@@ -317,12 +318,12 @@
         }
         if (-not $Configuration.Steps.BuildModule.Merge) {
             foreach ($Directory in $LinkDirectories) {
-                $Dir = "$FullModuleTemporaryPath\$Directory"
-                Add-Directory $Dir
+                $Dir = [System.IO.Path]::Combine($FullModuleTemporaryPath, "$Directory")
+                Add-Directory -Directory $Dir
             }
             $LinkingFilesTime = Write-Text "[+] Linking files from root and sub directories" -Start
-            Set-LinkedFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
-            Set-LinkedFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
+            Copy-InternalFiles -LinkFiles $LinkFilesRoot -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
+            Copy-InternalFiles -LinkFiles $LinkPrivatePublicFiles -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
             Write-Text -End -Time $LinkingFilesTime
         }
 

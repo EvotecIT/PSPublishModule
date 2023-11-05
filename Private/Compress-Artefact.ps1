@@ -79,8 +79,11 @@
         # and I don't feel like rewritting it myself :-)
         # but i believe we should not be copying them in the first place
         # from what I saw most are PowerShellGet cache files
+
+
         [Array] $DirectoryToCompress = Get-ChildItem -Path $Source -Directory -ErrorAction SilentlyContinue
-        [Array] $FilesToCompress = Get-ChildItem -Path "$Source\*" -File -Exclude '*.zip' -ErrorAction SilentlyContinue
+        $FilesToCompressSource = [System.IO.Path]::Combine($Source, "*")
+        [Array] $FilesToCompress = Get-ChildItem -Path $FilesToCompressSource -File -Exclude '*.zip' -ErrorAction SilentlyContinue
         if ($DirectoryToCompress.Count -gt 0 -and $FilesToCompress.Count -gt 0) {
             Compress-Archive -Path @(
                 $DirectoryToCompress.FullName

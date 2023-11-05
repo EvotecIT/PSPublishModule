@@ -7,8 +7,8 @@ function New-PrepareManifest {
         $FunctionToExport,
         [string] $ProjectUrl
     )
-
-    Set-Location "$projectPath\$ProjectName"
+    $Location = [System.IO.Path]::Combine($projectPath, $ProjectName)
+    Set-Location -Path $Location
     $manifest = @{
         Path              = ".\$ProjectName.psd1"
         RootModule        = "$ProjectName.psm1"

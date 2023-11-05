@@ -86,9 +86,9 @@ function Invoke-ModuleBuild {
         [parameter(ParameterSetName = 'Modern')][string[]] $IncludeAll = @('Images', 'Resources', 'Templates', 'Bin', 'Lib', 'Data'),
         [parameter(ParameterSetName = 'Modern')][scriptblock] $IncludeCustomCode,
         [parameter(ParameterSetName = 'Modern')][System.Collections.IDictionary] $IncludeToArray,
-        [parameter(ParameterSetName = 'Modern')][string] $LibrariesCore = 'Lib\Core',
-        [parameter(ParameterSetName = 'Modern')][string] $LibrariesDefault = 'Lib\Default',
-        [parameter(ParameterSetName = 'Modern')][string] $LibrariesStandard = 'Lib\Standard',
+        [parameter(ParameterSetName = 'Modern')][string] $LibrariesCore = [io.path]::Combine("Lib", "Core"),
+        [parameter(ParameterSetName = 'Modern')][string] $LibrariesDefault = [io.path]::Combine("Lib", "Default"),
+        [parameter(ParameterSetName = 'Modern')][string] $LibrariesStandard = [io.path]::Combine("Lib", "Standard"),
         [parameter(ParameterSetName = 'Configuration')]
         [parameter(ParameterSetName = 'Modern')]
         [switch] $ExitCode
@@ -102,11 +102,10 @@ function Invoke-ModuleBuild {
         $FullProjectPath = [io.path]::Combine($Path, $ModuleName)
     } else {
         # this assumes that the script running this in Build or Publish folder (or any other folder that is 1 level below the root of the project)
-        $PathToProject = Get-Item -LiteralPath "$($MyInvocation.PSScriptRoot)/.."
-        $FullProjectPath = Get-Item -LiteralPath $PathToProject
+        $ProjectPathToUse = [io.path]::Combine($MyInvocation.PSScriptRoot, "..")
+        $FullProjectPath = Get-Item -LiteralPath $ProjectPathToUse
     }
 
-    Write-Host "[i] Module Build Initializing..." -ForegroundColor Yellow
     $GlobalTime = [System.Diagnostics.Stopwatch]::StartNew()
 
     if ($Path -and $ModuleName) {
@@ -131,43 +130,70 @@ function Invoke-ModuleBuild {
                     $SubFolder = [io.path]::Combine($FullProjectPath, $Folder)
                     Add-Directory -Directory $SubFolder
                 }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\.gitignore")) {
-                    Write-Text -Text "   [+] Copying '.gitignore' file" -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
+                # this is a workaround for module before build and after build as the path changes
+                $PathToData = [io.path]::Combine($PSScriptRoot, "..", "Data")
+                if (-not (Test-Path -LiteralPath $PathToData)) {
+                    $PathToData = [io.path]::Combine($PSScriptRoot, "Data")
                 }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\CHANGELOG.MD")) {
-                    Write-Text -Text "   [+] Copying CHANGELOG.MD file" -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-CHANGELOG.MD" -Destination "$FullProjectPath\CHANGELOG.MD"
+                $FilesToCopy = [ordered] @{
+                    '.gitignore'       = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-Gitignore.txt")
+                        Destination = [io.path]::Combine($FullProjectPath, ".gitignore")
+                    }
+                    'CHANGELOG.MD'     = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-CHANGELOG.MD")
+                        Destination = [io.path]::Combine($FullProjectPath, "CHANGELOG.MD")
+                    }
+                    'README.MD'        = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-README.MD")
+                        Destination = [io.path]::Combine($FullProjectPath, "README.MD")
+                    }
+                    'License'          = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-LicenseMIT.txt")
+                        Destination = [io.path]::Combine($FullProjectPath, "License")
+                    }
+                    'Build-Module.ps1' = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-ModuleBuilder.txt")
+                        Destination = [io.path]::Combine($FullProjectPath, "Build", "Build-Module.ps1")
+                    }
+                    "$ModuleName.psm1" = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-ModulePSM1.txt")
+                        Destination = [io.path]::Combine($FullProjectPath, "$ModuleName.psm1")
+                    }
+                    "$ModuleName.psd1" = @{
+                        Source      = [io.path]::Combine($PathToData, "Example-ModulePSD1.txt")
+                        Destination = [io.path]::Combine($FullProjectPath, "$ModuleName.psd1")
+                    }
                 }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\README.MD")) {
-                    Write-Text -Text "   [+] Copying README.MD file" -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-README.MD" -Destination "$FullProjectPath\README.MD"
-                }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\License")) {
-                    Write-Text -Text "   [+] Copying MIT License file" -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-                }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\Build\Build-Module.ps1")) {
-                    Write-Text -Text "   [+] Copying Build-Module.ps1 file" -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleBuilder.txt" -Destination "$FullProjectPath\Build\Build-Module.ps1"
-                    $CopiedBuildModule = $True
-                }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\$ModuleName.psm1")) {
-                    Write-Text -Text "   [+] Copying Module PSM1 file." -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModulePSM1.txt" -Destination "$FullProjectPath\$ModuleName.psm1"
-                }
-                if (-not (Test-Path -LiteralPath "$FullProjectPath\$ModuleName.psd1")) {
-                    Write-Text -Text "   [+] Copying Module PSD1 file." -Color DarkGray
-                    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModulePSD1.txt" -Destination "$FullProjectPath\$ModuleName.psd1"
-                    $CopiedPSD1 = $True
+                foreach ($File in $FilesToCopy.Keys) {
+                    $ValueToProcess = $FilesToCopy[$File]
+                    $SourceFilePath = $ValueToProcess.Source
+                    $DestinationFilePath = $ValueToProcess.Destination
+                    if (-not (Test-Path -LiteralPath $DestinationFilePath)) {
+                        Write-Text -Text "   [+] Copying '$($File)' file ($SourceFilePath)" -Color DarkGray
+                        Copy-Item -Path $SourceFilePath -Destination $DestinationFilePath -ErrorAction Stop
+                        if ($File -eq 'Build-Module.ps1') {
+                            $CopiedBuildModule = $True
+                        } elseif ($File -eq "$ModuleName.psd1") {
+                            $CopiedPSD1 = $True
+                        }
+                    }
                 }
                 # lets update module builder to proper module name and guid
                 $Guid = (New-Guid).Guid
                 if ($CopiedBuildModule) {
-                    Register-DataForInitialModule -FilePath "$FullProjectPath\Build\Build-Module.ps1" -ModuleName $ModuleName -Guid $Guid
+                    $FilePath = [io.path]::Combine($FullProjectPath, "Build", "Build-Module.ps1")
+                    $Success = Register-DataForInitialModule -FilePath $FilePath -ModuleName $ModuleName -Guid $Guid
+                    if ($Success -eq $false) {
+                        if ($ExitCode) { Exit 1 } else { return }
+                    }
                 }
                 if ($CopiedPSD1) {
-                    Register-DataForInitialModule -FilePath "$FullProjectPath\$ModuleName.psd1" -ModuleName $ModuleName -Guid $Guid
+                    $FilePath = [io.path]::Combine($FullProjectPath, "$ModuleName.psd1")
+                    $Success = Register-DataForInitialModule -FilePath $FilePath -ModuleName $ModuleName -Guid $Guid
+                    if ($Success -eq $false) {
+                        if ($ExitCode) { Exit 1 } else { return }
+                    }
                 }
                 Write-Text -Text "[i] Preparing module structure for $ModuleName in $Path. Completed." -Color DarkGray
             }
@@ -191,7 +217,6 @@ function Invoke-ModuleBuild {
         LibrariesDefault        = $LibrariesDefault
         LibrariesStandard       = $LibrariesStandard
     }
-    #Remove-EmptyValue -Hashtable $newPrepareStructureSplat
 
     $ModuleOutput = New-PrepareStructure @newPrepareStructureSplat
 

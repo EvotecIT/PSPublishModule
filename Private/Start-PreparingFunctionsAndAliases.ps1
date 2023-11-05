@@ -49,7 +49,11 @@
             }
         }
         if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.ScriptsToProcess)) {
-            $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)\"
+            } else {
+                $StartsWithEnums = "$($Configuration.Information.ScriptsToProcess)/"
+            }
             $FilesEnums = @(
                 $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithEnums) }
             )

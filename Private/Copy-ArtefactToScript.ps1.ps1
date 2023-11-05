@@ -34,9 +34,11 @@
         $null = New-Item -ItemType Directory -Path $Destination -Force
 
         if ($DestinationPaths.Desktop) {
-            Copy-Item -Path "$($DestinationPaths.Desktop)\*" -Recurse -Destination "$ResolvedDestination" -Force
+            $DestinationToUse = [System.IO.Path]::Combine($DestinationPaths.Desktop, "*")
+            Copy-Item -Path $DestinationToUse -Recurse -Destination "$ResolvedDestination" -Force
         } elseif ($DestinationPaths.Core) {
-            Copy-Item -Path "$($DestinationPaths.Core)\*" -Recurse -Destination "$ResolvedDestination" -Force
+            $DestinationToUse = [System.IO.Path]::Combine($DestinationPaths.Core, "*")
+            Copy-Item -Path $DestinationToUse -Recurse -Destination "$ResolvedDestination" -Force
         }
     } -SpacesBefore '         '
     Write-TextWithTime -PreAppend Addition -Text "Cleaning up main module" -Color Yellow {

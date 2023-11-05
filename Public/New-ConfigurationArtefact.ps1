@@ -170,24 +170,50 @@
         $Artefact['Configuration']['IncludeTagName'] = $IncludeTagName
     }
     if ($PSBoundParameters.ContainsKey('Path')) {
-        $Artefact['Configuration']['Path'] = $Path
+        if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+            $Artefact['Configuration']['Path'] = $Path.Replace('/', '\')
+        } else {
+            $Artefact['Configuration']['Path'] = $Path.Replace('\', '/')
+        }
     }
     if ($PSBoundParameters.ContainsKey('RequiredModulesPath')) {
-        $Artefact['Configuration']['RequiredModules']['Path'] = $RequiredModulesPath
+        if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+            $Artefact['Configuration']['RequiredModules']['Path'] = $RequiredModulesPath.Replace('/', '\')
+        } else {
+            $Artefact['Configuration']['RequiredModules']['Path'] = $RequiredModulesPath.Replace('\', '/')
+        }
     }
     if ($PSBoundParameters.ContainsKey('AddRequiredModules')) {
         $Artefact['Configuration']['RequiredModules']['Enabled'] = $true
     }
     if ($PSBoundParameters.ContainsKey('ModulesPath')) {
-        $Artefact['Configuration']['RequiredModules']['ModulesPath'] = $ModulesPath
+        if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+            $Artefact['Configuration']['RequiredModules']['ModulesPath'] = $ModulesPath.Replace('/', '\')
+        } else {
+            $Artefact['Configuration']['RequiredModules']['ModulesPath'] = $ModulesPath.Replace('\', '/')
+        }
     }
     if ($PSBoundParameters.ContainsKey('CopyDirectories')) {
+        foreach ($Directory in [string[]] $CopyDirectories.Keys) {
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $CopyDirectories[$Directory] = $CopyDirectories[$Directory].Replace('/', '\')
+            } else {
+                $CopyDirectories[$Directory] = $CopyDirectories[$Directory].Replace('\', '/')
+            }
+        }
         $Artefact['Configuration']['DirectoryOutput'] = $CopyDirectories
     }
     if ($PSBoundParameters.ContainsKey('CopyDirectoriesRelative')) {
         $Artefact['Configuration']['DestinationDirectoriesRelative'] = $CopyDirectoriesRelative.IsPresent
     }
     if ($PSBoundParameters.ContainsKey('CopyFiles')) {
+        foreach ($File in [string[]] $CopyFiles.Keys) {
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $CopyFiles[$File] = $CopyFiles[$File].Replace('/', '\')
+            } else {
+                $CopyFiles[$File] = $CopyFiles[$File].Replace('\', '/')
+            }
+        }
         $Artefact['Configuration']['FilesOutput'] = $CopyFiles
     }
     if ($PSBoundParameters.ContainsKey('CopyFilesRelative')) {

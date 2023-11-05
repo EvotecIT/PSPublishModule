@@ -4,7 +4,8 @@
         [string] $Path,
         [string] $Name
     )
-    $PrimaryModule = Get-ChildItem -LiteralPath "$Path\$Name" -Filter '*.psd1' -Recurse -ErrorAction SilentlyContinue -Depth 1
+    $LiteralPath = [System.IO.Path]::Combine($Path, $Name)
+    $PrimaryModule = Get-ChildItem -LiteralPath $LiteralPath -Filter '*.psd1' -Recurse -ErrorAction SilentlyContinue -Depth 1
     if ($PrimaryModule) {
         $Module = Get-Module -ListAvailable $PrimaryModule.FullName -ErrorAction SilentlyContinue -Verbose:$false
         if ($Module) {

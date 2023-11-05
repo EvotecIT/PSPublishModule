@@ -31,16 +31,8 @@ function Merge-Module {
     $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Text "[+] Merging files into PSM1" -Color Blue
 
-    $PSM1FilePath = "$ModulePathTarget\$ModuleName.psm1"
-    $PSD1FilePath = "$ModulePathTarget\$ModuleName.psd1"
-
-    # [Array] $ClassesFunctions = foreach ($Directory in $DirectoriesWithPS1) {
-    #     if ($PSEdition -eq 'Core') {
-    #         Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
-    #     } else {
-    #         Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
-    #     }
-    # }
+    $PSM1FilePath = [System.IO.Path]::Combine($ModulePathTarget, "$ModuleName.psm1")
+    $PSD1FilePath = [System.IO.Path]::Combine($ModulePathTarget, "$ModuleName.psd1")
 
     [Array] $ArrayIncludes = foreach ($VariableName in $IncludeAsArray.Keys) {
         $FilePathVariables = [System.IO.Path]::Combine($ModulePathSource, $IncludeAsArray[$VariableName], "*.ps1")
@@ -69,17 +61,19 @@ function Merge-Module {
     }
 
     [Array] $ScriptFunctions = foreach ($Directory in $ListDirectoriesPS1) {
+        $PathToFiles = [System.IO.Path]::Combine($ModulePathSource, $Directory, "*.ps1")
         if ($PSEdition -eq 'Core') {
-            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+            Get-ChildItem -Path $PathToFiles -ErrorAction SilentlyContinue -Recurse -FollowSymlink
         } else {
-            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+            Get-ChildItem -Path $PathToFiles -ErrorAction SilentlyContinue -Recurse
         }
     }
     [Array] $ClassesFunctions = foreach ($Directory in $ClassesPS1) {
+        $PathToFiles = [System.IO.Path]::Combine($ModulePathSource, $Directory, "*.ps1")
         if ($PSEdition -eq 'Core') {
-            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+            Get-ChildItem -Path $PathToFiles -ErrorAction SilentlyContinue -Recurse -FollowSymlink
         } else {
-            Get-ChildItem -Path $ModulePathSource\$Directory\*.ps1 -ErrorAction SilentlyContinue -Recurse
+            Get-ChildItem -Path $PathToFiles -ErrorAction SilentlyContinue -Recurse
         }
     }
     if ($Sort -eq 'ASC') {
@@ -99,7 +93,7 @@ function Merge-Module {
     }
 
     # Using file is needed if there are 'using namespaces' - this is a workaround provided by seeminglyscience
-    $FilePathUsing = "$ModulePathTarget\$ModuleName.Usings.ps1"
+    $FilePathUsing = [System.IO.Path]::Combine($ModulePathTarget, "$ModuleName.Usings.ps1")
 
     $UsingInPlace = Format-UsingNamespace -FilePath $PSM1FilePath -FilePathUsing $FilePathUsing
     if ($UsingInPlace) {
@@ -390,11 +384,11 @@ function Merge-Module {
     # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
     if ($LibraryContent.Count -gt 0) {
         if ($Configuration.Steps.BuildModule.LibrarySeparateFile -eq $true) {
-            $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
+            $LibariesPath = [System.IO.Path]::Combine($ModulePathTarget, "$ModuleName.Libraries.ps1")
             $ScriptsToProcessLibrary = "$ModuleName.Libraries.ps1"
         }
         if ($Configuration.Steps.BuildModule.LibraryDotSource -eq $true) {
-            $LibariesPath = "$ModulePathTarget\$ModuleName.Libraries.ps1"
+            $LibariesPath = [System.IO.Path]::Combine($ModulePathTarget, "$ModuleName.Libraries.ps1")
             $DotSourcePath = ". `$PSScriptRoot\$ModuleName.Libraries.ps1"
         }
         if ($LibariesPath) {
@@ -404,7 +398,7 @@ function Merge-Module {
 
 
     if ($ClassesFunctions.Count -gt 0) {
-        $ClassesPath = "$ModulePathTarget\$ModuleName.Classes.ps1"
+        $ClassesPath = [System.IO.Path]::Combine($ModulePathTarget, "$ModuleName.Classes.ps1")
         $DotSourceClassPath = ". `$PSScriptRoot\$ModuleName.Classes.ps1"
         $Success = Get-ScriptsContentAndTryReplace -Files $ClassesFunctions -OutputPath $ClassesPath -DoNotAttemptToFixRelativePaths:$Configuration.Steps.BuildModule.DoNotAttemptToFixRelativePaths
         if ($Success -eq $false) {

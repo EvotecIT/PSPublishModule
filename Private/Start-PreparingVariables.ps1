@@ -34,16 +34,30 @@
         }
         if ($null -ne $Configuration.Information.IncludeAll) {
             $DirectoriesWithAll = $Configuration.Information.IncludeAll | ForEach-Object {
-                if ($_.EndsWith('\')) {
-                    $_
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                    if ($_.EndsWith('\')) {
+                        $_
+                    } else {
+                        "$_\"
+                    }
                 } else {
-                    "$_\"
+                    if ($_.EndsWith('/')) {
+                        $_
+                    } else {
+                        "$_/"
+                    }
+
                 }
             }
         } else {
-            $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $DirectoriesWithAll = 'Images\', 'Resources\', 'Templates\', 'Bin\', 'Lib\', 'Data\'
+            } else {
+                $DirectoriesWithAll = 'Images/', 'Resources/', 'Templates/', 'Bin/', 'Lib/', 'Data/'
+            }
         }
 
+        $Path = [io.path]::Combine($FullProjectPath, '*')
         if ($PSEdition -eq 'core') {
             $Directories = @(
                 $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude -FollowSymlink
@@ -53,7 +67,7 @@
                 )
             )
             $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
-            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File -FollowSymlink
+            $FilesRoot = Get-ChildItem -Path $Path -Include $IncludeFilesRoot -File -FollowSymlink
         } else {
             $Directories = @(
                 $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
@@ -63,21 +77,34 @@
                 )
             )
             $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude | Get-ChildItem -File -Recurse
-            $FilesRoot = Get-ChildItem -Path "$FullProjectPath\*" -Include $IncludeFilesRoot -File
+            $FilesRoot = Get-ChildItem -Path $Path -Include $IncludeFilesRoot -File
         }
         $LinkDirectories = @(
-            foreach ($directory in $Directories) {
-                $RelativeDirectoryPath = (Resolve-Path -LiteralPath $directory.FullName -Relative).Replace('.\', '')
-                $RelativeDirectoryPath = "$RelativeDirectoryPath\"
+            foreach ($Directory in $Directories) {
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                    $RelativeDirectoryPath = (Resolve-Path -LiteralPath $Directory.FullName -Relative).Replace('.\', '')
+                    $RelativeDirectoryPath = "$RelativeDirectoryPath\"
+                } else {
+                    $RelativeDirectoryPath = (Resolve-Path -LiteralPath $Directory.FullName -Relative).Replace('./', '')
+                    $RelativeDirectoryPath = "$RelativeDirectoryPath/"
+                }
                 $RelativeDirectoryPath
             }
         )
         $AllFiles = foreach ($File in $Files) {
-            $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            } else {
+                $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('./', '')
+            }
             $RelativeFilePath
         }
         $RootFiles = foreach ($File in $FilesRoot) {
-            $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('.\', '')
+            } else {
+                $RelativeFilePath = (Resolve-Path -LiteralPath $File.FullName -Relative).Replace('./', '')
+            }
             $RelativeFilePath
         }
         # Link only files in Root Directory
@@ -111,11 +138,9 @@
                                 $file
                             }
                         }
-                        # Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithPS1
                         continue
                     }
                     '*.*' {
-                        #Add-FilesWithFolders -file $file -FullProjectPath $FullProjectPath -directory $DirectoriesWithAll
                         foreach ($dir in $DirectoriesWithAll) {
                             if ($file -like "$dir*") {
                                 $file
@@ -133,15 +158,8 @@
             LinkFilesRoot          = $LinkFilesRoot
             LinkPrivatePublicFiles = $LinkPrivatePublicFiles
             DirectoriesWithClasses = $DirectoriesWithClasses
-            #RootFiles              = $RootFiles
-            #AllFiles               = $AllFiles
-            #Directories            = $Directories
             Files                  = $Files
-            #Exclude                = $Exclude
-            #IncludeFilesRoot       = $IncludeFilesRoot
             DirectoriesWithPS1     = $DirectoriesWithPS1
-            #DirectoriesWithArrays  = $DirectoriesWithArrays
-            #DirectoriesWithAll     = $DirectoriesWithAll
         }
     }
 }

@@ -5,14 +5,20 @@ function New-CreateModule {
         [string] $ModulePath,
         [string] $ProjectPath
     )
-    $FullProjectPath = "$projectPath\$projectName"
+    $FullProjectPath = [io.path]::Combine($ProjectPath, $ProjectName)
     $Folders = 'Private', 'Public', 'Examples', 'Ignore', 'Publish', 'Enums', 'Data'
-    Add-Directory $FullProjectPath
-    foreach ($folder in $Folders) {
-        Add-Directory "$FullProjectPath\$folder"
+    Add-Directory -Directory $FullProjectPath
+    foreach ($Folder in $Folders) {
+        $PathToCreate = [io.path]::Combine($FullProjectPath, $Folder)
+        Add-Directory -Directory $PathToCreate
     }
-
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-Gitignore.txt" -Destination "$FullProjectPath\.gitignore"
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-LicenseMIT.txt" -Destination "$FullProjectPath\License"
-    Copy-File -Source "$PSScriptRoot\..\Data\Example-ModuleStarter.txt" -Destination "$FullProjectPath\$ProjectName.psm1"
+    $Source = [io.path]::Combine($PSScriptRoot, "..", 'Data', 'Example-Gitignore.txt')
+    $Destination = [io.path]::Combine($FullProjectPath, '.gitignore')
+    Copy-Item -Path $Source -Destination $Destination -ErrorAction Stop
+    $Source = [io.path]::Combine($PSScriptRoot, "..", 'Data', 'Example-LicenseMIT.txt')
+    $Destination = [io.path]::Combine($FullProjectPath, 'License')
+    Copy-Item -Path $Source -Destination $Destination -ErrorAction Stop
+    $Source = [io.path]::Combine($PSScriptRoot, "..", 'Data', 'Example-ModuleStarter.txt')
+    $Destination = [io.path]::Combine($FullProjectPath, "$ProjectName.psm1")
+    Copy-Item -Path $Source -Destination $Destination -ErrorAction Stop
 }

@@ -6,7 +6,8 @@ function Get-FunctionAliasesFromFolder {
         [Array] $Files
     )
     $FilesPS1 = foreach ($File in $Files) {
-        if ($file.FullName -like "*\Public\*") {
+        $Path = [io.path]::Combine("*", 'Public', '*')
+        if ($file.FullName -like $Path) {
             if ($File.Extension -eq '.ps1' -or $File.Extension -eq '*.psm1') {
                 $File
             }
