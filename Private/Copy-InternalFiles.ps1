@@ -1,4 +1,4 @@
-function Set-LinkedFiles {
+function Copy-InternalFiles {
     [CmdletBinding()]
     param(
         [string[]] $LinkFiles,
@@ -7,9 +7,9 @@ function Set-LinkedFiles {
         [switch] $Delete
     )
 
-    foreach ($file in $LinkFiles) {
-        [string] $Path = "$FullModulePath\$file"
-        [string] $Path2 = "$FullProjectPath\$file"
+    foreach ($File in $LinkFiles) {
+        [string] $Path = [System.IO.Path]::Combine($FullModulePath, $File)
+        [string] $Path2 = [System.IO.Path]::Combine($FullProjectPath, $File)
 
         if ($Delete) {
             if (Test-ReparsePoint -path $Path) {
@@ -17,7 +17,6 @@ function Set-LinkedFiles {
                 #Write-Verbose "Removing symlink first $path"
                 Remove-Item $Path -Confirm:$false
             }
-
         }
         #Write-Verbose "Creating symlink from $path2 (source) to $path (target)"
         #Write-Color 'Creating symlink from ', $path2, ' (source) to ', $path, ' (target)' -Color White, Yellow, White, Yellow, White
