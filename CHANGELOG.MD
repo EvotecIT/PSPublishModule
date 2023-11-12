@@ -1,5 +1,8 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.10
+- Fix for paths that I've broken in 2.0.9
+
 ## 2.0.9
 - Added usage of OpenAuthenticode from @jborean93 to allow for signing of modules on Linux/MacOS
   - The module is not automatically installed, you need to install it yourself
