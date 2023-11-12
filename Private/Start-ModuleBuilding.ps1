@@ -163,9 +163,9 @@
             # Workaround to link files that are not ps1/psd1
             [Array] $CompareWorkaround = foreach ($Directory in $DirectoriesWithPS1) {
                 if ($null -eq $IsWindows -or $IsWindows -eq $true) {
-                    $Dir = [System.IO.Path]::Combine($Directory, "\")
+                    $Dir = -join ($Directory, "\")
                 } else {
-                    $Dir = [System.IO.Path]::Combine($Directory, "/")
+                    $Dir = -join ($Directory, "/")
                 }
                 #-join ($_, '\')
             }
@@ -198,23 +198,23 @@
 
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesCore)) {
                 if ($null -eq $IsWindows -or $IsWindows -eq $true) {
-                    $StartsWithCore = [System.IO.Path]::Combine($Configuration.Information.LibrariesCore, "\")
+                    $StartsWithCore = -join ($Configuration.Information.LibrariesCore, "\")
                 } else {
-                    $StartsWithCore = [System.IO.Path]::Combine($Configuration.Information.LibrariesCore, "/")
+                    $StartsWithCore = -join ($Configuration.Information.LibrariesCore, "/")
                 }
             }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesDefault)) {
                 if ($null -eq $IsWindows -or $IsWindows -eq $true) {
-                    $StartsWithDefault = [System.IO.Path]::Combine($Configuration.Information.LibrariesDefault, "\")
+                    $StartsWithDefault = -join ($Configuration.Information.LibrariesDefault, "\")
                 } else {
-                    $StartsWithDefault = [System.IO.Path]::Combine($Configuration.Information.LibrariesDefault, "/")
+                    $StartsWithDefault = -join ($Configuration.Information.LibrariesDefault, "/")
                 }
             }
             if (-not [string]::IsNullOrWhiteSpace($Configuration.Information.LibrariesStandard)) {
                 if ($null -eq $IsWindows -or $IsWindows -eq $true) {
-                    $StartsWithStandard = [System.IO.Path]::Combine($Configuration.Information.LibrariesStandard, "\")
+                    $StartsWithStandard = -join ($Configuration.Information.LibrariesStandard, "\")
                 } else {
-                    $StartsWithStandard = [System.IO.Path]::Combine($Configuration.Information.LibrariesStandard, "/")
+                    $StartsWithStandard = -join ($Configuration.Information.LibrariesStandard, "/")
                 }
             }
 
