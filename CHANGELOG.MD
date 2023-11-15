@@ -1,5 +1,8 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.11
+- Fix for broken script generation if `New-ConfigurationCommand` is used
+
 ## 2.0.10
 - Fix for paths that I've broken in 2.0.9
 
