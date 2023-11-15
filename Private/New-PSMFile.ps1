@@ -100,7 +100,7 @@ function New-PSMFile {
                         `$Alias
                     }
                 }
-
+                # Export functions and aliases as required
                 Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)
 "@
             ) | Out-File -Append -LiteralPath $Path -Encoding $Encoding
