@@ -1,5 +1,9 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.12
+- Always publish to Github with PreReleaseTag if it's set
+- Add support for HelpOut module to be used for help generation (platyPS will stay for now as well)
+
 ## 2.0.11
 - Fix for broken script generation if `New-ConfigurationCommand` is used
 
