@@ -9,7 +9,7 @@
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @('Convert-CommandsToList', 'Get-MissingFunctions', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Invoke-ModuleBuild', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '2.0.11'
+    ModuleVersion          = '2.0.12'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
@@ -23,6 +23,10 @@
             Guid          = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'
             ModuleName    = 'platyPS'
             ModuleVersion = '0.14.2'
+        }, @{
+            Guid          = '3f57070a-240f-4406-8e8e-6351ffe6f85b'
+            ModuleName    = 'HelpOut'
+            ModuleVersion = '0.5.1'
         }, @{
             Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
             ModuleName    = 'powershellget'
