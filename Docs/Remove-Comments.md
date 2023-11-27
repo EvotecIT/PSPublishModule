@@ -1,176 +1,95 @@
----
-external help file: PSPublishModule-help.xml
-Module Name: PSPublishModule
-online version:
-schema: 2.0.0
----
+Remove-Comments
+---------------
 
-# Remove-Comments
-
-## SYNOPSIS
+### Synopsis
 Remove comments from PowerShell file
 
-## SYNTAX
+---
 
-### FilePath (Default)
-```
-Remove-Comments -SourceFilePath <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines]
- [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock]
- [-DoNotRemoveSignatureBlock] [<CommonParameters>]
-```
+### Description
 
-### Content
-```
-Remove-Comments -Content <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines] [-RemoveEmptyLines]
- [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock]
- [<CommonParameters>]
-```
-
-## DESCRIPTION
 Remove comments from PowerShell file and optionally remove empty lines
 By default comments in param block are not removed
 By default comments before param block are not removed
 
-## EXAMPLES
+---
 
-### EXAMPLE 1
-```
+### Examples
+> EXAMPLE 1
+
+```PowerShell
 Remove-Comments -SourceFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript.ps1' -DestinationFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript1.ps1' -RemoveAllEmptyLines -RemoveCommentsInParamBlock -RemoveCommentsBeforeParamBlock
 ```
 
-## PARAMETERS
+---
 
-### -SourceFilePath
+### Parameters
+#### **SourceFilePath**
 File path to the source file
 
-```yaml
-Type: String
-Parameter Sets: FilePath
-Aliases: FilePath, Path, LiteralPath
+|Type      |Required|Position|PipelineInput|Aliases                          |
+|----------|--------|--------|-------------|---------------------------------|
+|`[String]`|true    |named   |false        |FilePath<br/>Path<br/>LiteralPath|
 
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Content
+#### **Content**
 Content of the file
 
-```yaml
-Type: String
-Parameter Sets: Content
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|true    |named   |false        |
 
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
+#### **DestinationFilePath**
+File path to the destination file. If not provided, the content will be returned
 
-### -DestinationFilePath
-File path to the destination file.
-If not provided, the content will be returned
+|Type      |Required|Position|PipelineInput|Aliases                                      |
+|----------|--------|--------|-------------|---------------------------------------------|
+|`[String]`|false   |named   |false        |Destination<br/>OutputFile<br/>OutputFilePath|
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases: Destination, OutputFile, OutputFilePath
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RemoveAllEmptyLines
+#### **RemoveAllEmptyLines**
 Remove all empty lines from the content
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RemoveEmptyLines
+#### **RemoveEmptyLines**
 Remove empty lines if more than one empty line is found
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
+#### **RemoveCommentsInParamBlock**
+Remove comments in param block. By default comments in param block are not removed
 
-### -RemoveCommentsInParamBlock
-Remove comments in param block.
-By default comments in param block are not removed
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+#### **RemoveCommentsBeforeParamBlock**
+Remove comments before param block. By default comments before param block are not removed
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-### -RemoveCommentsBeforeParamBlock
-Remove comments before param block.
-By default comments before param block are not removed
+#### **DoNotRemoveSignatureBlock**
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
+---
 
-### -DoNotRemoveSignatureBlock
-{{ Fill DoNotRemoveSignatureBlock Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
-
-## INPUTS
-
-## OUTPUTS
-
-## NOTES
+### Notes
 Most of the work done by Chris Dent, with improvements by Przemyslaw Klys
 
-## RELATED LINKS
+---
+
+### Syntax
+```PowerShell
+Remove-Comments -SourceFilePath <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines] [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock] [<CommonParameters>]
+```
+```PowerShell
+Remove-Comments -Content <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines] [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock] [<CommonParameters>]
+```

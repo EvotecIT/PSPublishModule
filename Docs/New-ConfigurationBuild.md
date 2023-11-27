@@ -1,415 +1,213 @@
----
-external help file: PSPublishModule-help.xml
-Module Name: PSPublishModule
-online version:
-schema: 2.0.0
----
+New-ConfigurationBuild
+----------------------
 
-# New-ConfigurationBuild
-
-## SYNOPSIS
+### Synopsis
 Short description
 
-## SYNTAX
+---
 
-```
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild]
- [-MergeFunctionsFromApprovedModules] [-SignModule] [-DotSourceClasses] [-DotSourceLibraries]
- [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning]
- [-DoNotAttemptToFixRelativePaths] [-MergeLibraryDebugging] [-ResolveBinaryConflicts]
- [[-ResolveBinaryConflictsName] <String>] [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>]
- [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>] [[-NETConfiguration] <String>]
- [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary]
- [[-NETExcludeLibraryFilter] <String[]>] [<CommonParameters>]
-```
+### Description
 
-## DESCRIPTION
 Long description
 
-## EXAMPLES
+---
 
-### EXAMPLE 1
-```
+### Examples
+> EXAMPLE 1
+
+```PowerShell
 An example
 ```
 
-## PARAMETERS
+---
 
-### -Enable
+### Parameters
+#### **Enable**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DeleteTargetModuleBeforeBuild
+#### **DeleteTargetModuleBeforeBuild**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeModuleOnBuild
+#### **MergeModuleOnBuild**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeFunctionsFromApprovedModules
+#### **MergeFunctionsFromApprovedModules**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SignModule
+#### **SignModule**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DotSourceClasses
+#### **DotSourceClasses**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DotSourceLibraries
+#### **DotSourceLibraries**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SeparateFileLibraries
+#### **SeparateFileLibraries**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RefreshPSD1Only
+#### **RefreshPSD1Only**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -UseWildcardForFunctions
+#### **UseWildcardForFunctions**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -LocalVersioning
+#### **LocalVersioning**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DoNotAttemptToFixRelativePaths
+#### **DoNotAttemptToFixRelativePaths**
 Configures module builder to not replace $PSScriptRoot\..\ with $PSScriptRoot\
 This is useful if you have a module that has a lot of relative paths that are required when using Private/Public folders,
 but for merge process those are not supposed to be there as the paths change.
-By default module builder will attempt to fix it.
-This option disables this functionality.
+By default module builder will attempt to fix it. This option disables this functionality.
 Best practice is to use $MyInvocation.MyCommand.Module.ModuleBase or similar instead of relative paths.
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeLibraryDebugging
+#### **MergeLibraryDebugging**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ResolveBinaryConflicts
+#### **ResolveBinaryConflicts**
 Parameter description
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ResolveBinaryConflictsName
+#### **ResolveBinaryConflictsName**
 Parameter description
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |1       |false        |
 
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificateThumbprint
+#### **CertificateThumbprint**
 Parameter description
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |2       |false        |
 
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXPath
+#### **CertificatePFXPath**
 Parameter description
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |3       |false        |
 
-Required: False
-Position: 3
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXBase64
+#### **CertificatePFXBase64**
 Parameter description
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |4       |false        |
 
-Required: False
-Position: 4
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXPassword
+#### **CertificatePFXPassword**
 Parameter description
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |5       |false        |
 
-Required: False
-Position: 5
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
+#### **NETConfiguration**
+Parameter description
+Valid Values:
 
-### -NETConfiguration
+* Release
+* Debug
+
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |6       |false        |
+
+#### **NETFramework**
 Parameter description
 
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+|Type        |Required|Position|PipelineInput|
+|------------|--------|--------|-------------|
+|`[String[]]`|false   |7       |false        |
 
-Required: False
-Position: 6
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETFramework
+#### **NETProjectName**
 Parameter description
 
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[String]`|false   |8       |false        |
 
-Required: False
-Position: 7
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETProjectName
-Parameter description
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 8
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETExcludeMainLibrary
+#### **NETExcludeMainLibrary**
 Exclude main library from build, this is useful if you have C# project that you want to build
 that is used mostly for generating libraries that are used in PowerShell module
 It won't include main library in the build, but it will include all other libraries
 
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[Switch]`|false   |named   |false        |
 
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETExcludeLibraryFilter
+#### **NETExcludeLibraryFilter**
 Provide list of filters for libraries that you want to exclude from build, this is useful if you have C# project that you want to build, but don't want to include all libraries for some reason
 
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
+|Type        |Required|Position|PipelineInput|
+|------------|--------|--------|-------------|
+|`[String[]]`|false   |9       |false        |
 
-Required: False
-Position: 9
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
+---
 
-### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
-
-## INPUTS
-
-## OUTPUTS
-
-## NOTES
+### Notes
 General notes
 
-## RELATED LINKS
+---
+
+### Syntax
+```PowerShell
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-DoNotAttemptToFixRelativePaths] [-MergeLibraryDebugging] [-ResolveBinaryConflicts] [[-ResolveBinaryConflictsName] <String>] [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [[-NETExcludeLibraryFilter] <String[]>] [<CommonParameters>]
+```

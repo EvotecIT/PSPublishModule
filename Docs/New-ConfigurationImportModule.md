@@ -1,75 +1,48 @@
----
-external help file: PSPublishModule-help.xml
-Module Name: PSPublishModule
-online version:
-schema: 2.0.0
----
+New-ConfigurationImportModule
+-----------------------------
 
-# New-ConfigurationImportModule
+### Synopsis
 
-## SYNOPSIS
-{{ Fill in the Synopsis }}
-
-## SYNTAX
-
-```
 New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [<CommonParameters>]
+
+---
+
+### Description
+
+---
+
+### Parameters
+#### **ImportRequiredModules**
+
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[switch]`|false   |Named   |false        |
+
+#### **ImportSelf**
+
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[switch]`|false   |Named   |false        |
+
+---
+
+### Inputs
+None
+
+---
+
+### Outputs
+* [Object](https://learn.microsoft.com/en-us/dotnet/api/System.Object)
+
+---
+
+### Syntax
+```PowerShell
+syntaxItem
 ```
-
-## DESCRIPTION
-{{ Fill in the Description }}
-
-## EXAMPLES
-
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+```PowerShell
+----------
 ```
-
-{{ Add example description here }}
-
-## PARAMETERS
-
-### -ImportRequiredModules
-{{ Fill ImportRequiredModules Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+```PowerShell
+{@{name=New-ConfigurationImportModule; CommonParameters=True; parameter=System.Object[]}}
 ```
-
-### -ImportSelf
-{{ Fill ImportSelf Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
-
-## INPUTS
-
-### None
-
-## OUTPUTS
-
-### System.Object
-## NOTES
-
-## RELATED LINKS

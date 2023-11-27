@@ -1,90 +1,54 @@
+New-ConfigurationTest
+---------------------
+
+### Synopsis
+
+New-ConfigurationTest [-TestsPath] <string> [-Enable] [-Force] [<CommonParameters>]
+
 ---
-external help file: PSPublishModule-help.xml
-Module Name: PSPublishModule
-online version:
-schema: 2.0.0
+
+### Description
+
 ---
 
-# New-ConfigurationTest
+### Parameters
+#### **Enable**
 
-## SYNOPSIS
-{{ Fill in the Synopsis }}
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[switch]`|false   |Named   |false        |
 
-## SYNTAX
+#### **Force**
 
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[switch]`|false   |Named   |false        |
+
+#### **TestsPath**
+
+|Type      |Required|Position|PipelineInput|
+|----------|--------|--------|-------------|
+|`[string]`|true    |0       |false        |
+
+---
+
+### Inputs
+None
+
+---
+
+### Outputs
+* [Object](https://learn.microsoft.com/en-us/dotnet/api/System.Object)
+
+---
+
+### Syntax
+```PowerShell
+syntaxItem
 ```
-New-ConfigurationTest [-TestsPath] <String> [-Enable] [-Force] [<CommonParameters>]
+```PowerShell
+----------
 ```
-
-## DESCRIPTION
-{{ Fill in the Description }}
-
-## EXAMPLES
-
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+```PowerShell
+{@{name=New-ConfigurationTest; CommonParameters=True; parameter=System.Object[]}}
 ```
-
-{{ Add example description here }}
-
-## PARAMETERS
-
-### -Enable
-{{ Fill Enable Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Force
-{{ Fill Force Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -TestsPath
-{{ Fill TestsPath Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
-
-## INPUTS
-
-### None
-
-## OUTPUTS
-
-### System.Object
-## NOTES
-
-## RELATED LINKS

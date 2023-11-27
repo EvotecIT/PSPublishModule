@@ -1,45 +1,37 @@
----
-external help file: PSPublishModule-help.xml
-Module Name: PSPublishModule
-online version:
-schema: 2.0.0
----
+New-ConfigurationExecute
+------------------------
 
-# New-ConfigurationExecute
+### Synopsis
 
-## SYNOPSIS
-{{ Fill in the Synopsis }}
-
-## SYNTAX
-
-```
 New-ConfigurationExecute [<CommonParameters>]
+
+---
+
+### Description
+
+---
+
+### Parameters
+
+---
+
+### Inputs
+None
+
+---
+
+### Outputs
+* [Object](https://learn.microsoft.com/en-us/dotnet/api/System.Object)
+
+---
+
+### Syntax
+```PowerShell
+syntaxItem
 ```
-
-## DESCRIPTION
-{{ Fill in the Description }}
-
-## EXAMPLES
-
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+```PowerShell
+----------
 ```
-
-{{ Add example description here }}
-
-## PARAMETERS
-
-### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
-
-## INPUTS
-
-### None
-
-## OUTPUTS
-
-### System.Object
-## NOTES
-
-## RELATED LINKS
+```PowerShell
+{@{name=New-ConfigurationExecute; CommonParameters=True; parameter=System.Object[]}}
+```
