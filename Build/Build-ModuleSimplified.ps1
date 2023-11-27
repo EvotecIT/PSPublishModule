@@ -26,7 +26,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationManifest @Manifest
 
     # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
+    New-ConfigurationModule -Type RequiredModule -Name 'platyPS', 'HelpOut' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
@@ -96,7 +96,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     # configuration for documentation, at the same time it enables documentation processing
     New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
-    New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+    New-ConfigurationImportModule -ImportSelf #-ImportRequiredModules
 
     $newConfigurationBuildSplat = @{
         Enable                         = $true
