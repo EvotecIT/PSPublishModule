@@ -66,7 +66,12 @@
                         $TagName = $TagName.Replace('{TagName}', $TagNameDefault)
                         $TagName = $TagName.Replace('<TagName>', $TagNameDefault)
                     } else {
-                        $TagName = "v$($Configuration.Information.Manifest.ModuleVersion)"
+                        $ModuleVersion = $Configuration.Information.Manifest.ModuleVersion
+                        if ($Configuration.CurrentSettings.PreRelease) {
+                            $TagName = "v$($ModuleVersion)-$($Configuration.CurrentSettings.PreRelease)"
+                        } else {
+                            $TagName = "v$($ModuleVersion)"
+                        }
                     }
 
                     # normally we publish as prerelease if the module is prerelease edition
