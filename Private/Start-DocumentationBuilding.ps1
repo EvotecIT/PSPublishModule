@@ -23,33 +23,41 @@
             if (-not (Test-Path -Path $DocumentationPath)) {
                 $null = New-Item -Path "$FullProjectPath\Docs" -ItemType Directory -Force
             }
-            [Array] $Files = Get-ChildItem -Path $DocumentationPath
-            if ($Files.Count -gt 0) {
-                if ($Configuration.Steps.BuildDocumentation.StartClean -ne $true) {
-                    try {
-                        $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
-                    } catch {
-                        Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
-                    }
-                } else {
-                    Remove-ItemAlternative -Path $DocumentationPath -SkipFolder
-                    [Array] $Files = Get-ChildItem -Path $DocumentationPath
-                }
-            }
-            if ($Files.Count -eq 0) {
+            if ($Configuration.Steps.BuildDocumentation.Tool -eq 'HelpOut') {
                 try {
-                    $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
+                    Save-MarkdownHelp -Module $ProjectName -OutputPath $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -SkipCommandType Alias -Wiki
                 } catch {
                     Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
                 }
-                $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath -ErrorAction SilentlyContinue
-                #Start-Sleep -Seconds 1
-                # this is temporary workaround - due to diff output on update
-                if ($Configuration.Steps.BuildDocumentation.UpdateWhenNew) {
+            } else {
+                [Array] $Files = Get-ChildItem -Path $DocumentationPath
+                if ($Files.Count -gt 0) {
+                    if ($Configuration.Steps.BuildDocumentation.StartClean -ne $true) {
+                        try {
+                            $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
+                        } catch {
+                            Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
+                        }
+                    } else {
+                        Remove-ItemAlternative -Path $DocumentationPath -SkipFolder
+                        [Array] $Files = Get-ChildItem -Path $DocumentationPath
+                    }
+                }
+                if ($Files.Count -eq 0) {
                     try {
-                        $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
+                        $null = New-MarkdownHelp -Module $ProjectName -WithModulePage -OutputFolder $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
                     } catch {
                         Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
+                    }
+                    $null = Move-Item -Path "$DocumentationPath\$ProjectName.md" -Destination $ReadMePath -ErrorAction SilentlyContinue
+                    #Start-Sleep -Seconds 1
+                    # this is temporary workaround - due to diff output on update
+                    if ($Configuration.Steps.BuildDocumentation.UpdateWhenNew) {
+                        try {
+                            $null = Update-MarkdownHelpModule $DocumentationPath -RefreshModulePage -ModulePagePath $ReadMePath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -ExcludeDontShow
+                        } catch {
+                            Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
+                        }
                     }
                 }
             }
