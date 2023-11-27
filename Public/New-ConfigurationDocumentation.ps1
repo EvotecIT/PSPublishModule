@@ -22,6 +22,10 @@
     .PARAMETER PathReadme
     Path to the readme file that will be used for the documentation.
 
+    .PARAMETER Tool
+    Tool to use for documentation generation. By default `HelpOut` is used.
+    Available options are `PlatyPS` and `HelpOut`.
+
     .EXAMPLE
     New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
@@ -37,30 +41,30 @@
         [switch] $StartClean,
         [switch] $UpdateWhenNew,
         [Parameter(Mandatory)][string] $Path,
-        [Parameter(Mandatory)][string] $PathReadme
+        [Parameter(Mandatory)][string] $PathReadme,
+        [ValidateSet('PlatyPS', 'HelpOut')][string] $Tool = 'HelpOut'
     )
 
     if ($Path -or $PathReadme) {
-        $Documentation = [ordered] @{
-            Path       = $Path
-            PathReadme = $PathReadme
-        }
-        $Option = @{
+        $Option = [ordered] @{
             Type          = 'Documentation'
-            Configuration = $Documentation
+            Configuration = [ordered] @{
+                Path       = $Path
+                PathReadme = $PathReadme
+            }
         }
         $Option
     }
 
     if ($Enable -or $StartClean -or $UpdateWhenNew) {
-        $BuildDocumentation = @{
-            Enable        = $Enable
-            StartClean    = $StartClean
-            UpdateWhenNew = $UpdateWhenNew
-        }
-        $Option = @{
+        $Option = [ordered]@{
             Type          = 'BuildDocumentation'
-            Configuration = $BuildDocumentation
+            Configuration = [ordered]@{
+                Enable        = $Enable
+                StartClean    = $StartClean
+                UpdateWhenNew = $UpdateWhenNew
+                Tool          = $Tool
+            }
         }
         $Option
     }
