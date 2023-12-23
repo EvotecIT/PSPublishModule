@@ -84,8 +84,29 @@
     .PARAMETER NETExcludeLibraryFilter
     Provide list of filters for libraries that you want to exclude from build, this is useful if you have C# project that you want to build, but don't want to include all libraries for some reason
 
+    .PARAMETER NETIgnoreLibraryOnLoad
+    This is to exclude libraries from being loaded in PowerShell by PSM1/Librarties.ps1 files.
+    This is useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
+    For example library that's not NET based and is as dependency for other libraries
+
     .EXAMPLE
-    An example
+    $newConfigurationBuildSplat = @{
+        Enable                            = $true
+        SignModule                        = $true
+        MergeModuleOnBuild                = $true
+        MergeFunctionsFromApprovedModules = $true
+        CertificateThumbprint             = '483292C9E317AA1'
+        ResolveBinaryConflicts            = $true
+        ResolveBinaryConflictsName        = 'Transferetto'
+        NETProjectName                    = 'Transferetto'
+        NETConfiguration                  = 'Release'
+        NETFramework                      = 'netstandard2.0'
+        DotSourceLibraries                = $true
+        DotSourceClasses                  = $true
+        DeleteTargetModuleBeforeBuild     = $true
+    }
+
+    New-ConfigurationBuild @newConfigurationBuildSplat
 
     .NOTES
     General notes
@@ -120,7 +141,8 @@
         [string[]] $NETFramework,
         [string] $NETProjectName,
         [switch] $NETExcludeMainLibrary,
-        [string[]] $NETExcludeLibraryFilter
+        [string[]] $NETExcludeLibraryFilter,
+        [string[]] $NETIgnoreLibraryOnLoad
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -344,6 +366,17 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 ExcludeLibraryFilter = $NETExcludeLibraryFilter
+            }
+        }
+    }
+    # This is to exclude libraries from being loaded in PowerShell by PSM1/Librarties.ps1 files.
+    # This is useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
+    # For example library that's not NET based and is as dependency for other libraries
+    if ($PSBoundParameters.ContainsKey('NETIgnoreLibraryOnLoad')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                IgnoreLibraryOnLoad = $NETIgnoreLibraryOnLoad
             }
         }
     }

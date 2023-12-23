@@ -350,9 +350,14 @@ function Merge-Module {
     }
     $LibraryContent = @(
         if ($LibrariesStandard.Count -gt 0) {
-            foreach ($File in $LibrariesStandard) {
+            :nextFile foreach ($File in $LibrariesStandard) {
                 $Extension = $File.Substring($File.Length - 4, 4)
                 if ($Extension -eq '.dll') {
+                    foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
+                        if ($File -like "*\$IgnoredFile") {
+                            continue nextFile
+                        }
+                    }
                     $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
                     $Output
                 }
@@ -360,9 +365,14 @@ function Merge-Module {
         } elseif ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
             'if ($PSEdition -eq ''Core'') {'
             if ($LibrariesCore.Count -gt 0) {
-                foreach ($File in $LibrariesCore) {
+                :nextFile foreach ($File in $LibrariesCore) {
                     $Extension = $File.Substring($File.Length - 4, 4)
                     if ($Extension -eq '.dll') {
+                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
+                            if ($File -like "*\$IgnoredFile") {
+                                continue nextFile
+                            }
+                        }
                         $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
                         $Output
                     }
@@ -370,9 +380,14 @@ function Merge-Module {
             }
             '} else {'
             if ($LibrariesDefault.Count -gt 0) {
-                foreach ($File in $LibrariesDefault) {
+                :nextFile foreach ($File in $LibrariesDefault) {
                     $Extension = $File.Substring($File.Length - 4, 4)
                     if ($Extension -eq '.dll') {
+                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
+                            if ($File -like "*\$IgnoredFile") {
+                                continue nextFile
+                            }
+                        }
                         $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
                         $Output
                     }
