@@ -42,7 +42,7 @@
         [switch] $UpdateWhenNew,
         [Parameter(Mandatory)][string] $Path,
         [Parameter(Mandatory)][string] $PathReadme,
-        [ValidateSet('PlatyPS', 'HelpOut')][string] $Tool = 'HelpOut'
+        [ValidateSet('PlatyPS', 'HelpOut')][string] $Tool = 'PlatyPS'
     )
 
     if ($Path -or $PathReadme) {
