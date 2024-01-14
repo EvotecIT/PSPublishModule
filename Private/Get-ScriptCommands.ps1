@@ -9,17 +9,18 @@
     $astErr = $null
 
     if ($FilePath) {
-        $null = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref]$astTokens, [ref]$astErr)
+        $FileAst = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref]$astTokens, [ref]$astErr)
     } else {
-        $null = [System.Management.Automation.Language.Parser]::ParseInput($Code, [ref]$astTokens, [ref]$astErr)
+        $FileAst = [System.Management.Automation.Language.Parser]::ParseInput($Code, [ref]$astTokens, [ref]$astErr)
     }
-    $Commands = [System.Collections.Generic.List[Object]]::new()
-    Get-AstTokens -ASTTokens $astTokens -Commands $Commands
-    if ($CommandsOnly) {
-        $Commands.Text | Sort-Object -Unique
-    } else {
-        $Commands
-    }
+    #$Commands = [System.Collections.Generic.List[Object]]::new()
+
+    $Commands = Get-AstTokens -ASTTokens $astTokens -Commands $Commands -FileAst $FileAst
+    #if ($CommandsOnly) {
+    $Commands | Sort-Object -Unique
+    # } else {
+    #    $Commands
+    # }
     # $astTokens | Group-Object tokenflags -AsHashTable -AsString
     #$Commands = $astTokens | Where-Object { $_.TokenFlags -eq 'Command' } | Sort-Object -Property Value -Unique
 }

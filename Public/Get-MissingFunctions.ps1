@@ -11,9 +11,9 @@
     )
     $ListCommands = [System.Collections.Generic.List[Object]]::new()
     if ($FilePath) {
-        $CommandsUsedInCode = Get-ScriptCommands -FilePath $FilePath -CommandsOnly
+        $CommandsUsedInCode = Get-ScriptCommands -FilePath $FilePath
     } elseif ($Code) {
-        $CommandsUsedInCode = Get-ScriptCommands -CommandsOnly -Code $Code
+        $CommandsUsedInCode = Get-ScriptCommands -Code $Code
     } else {
         return
     }
