@@ -2,8 +2,9 @@
 
 ## 2.0.12
 - Always publish to Github with PreReleaseTag if it's set
-- Added support for HelpOut module to be used for help generation (platyPS will stay for now as well)
+- Added support for HelpOut module to be used for help generation (platyPS will stay default for now)
 - Added support for `NETIgnoreLibraryOnLoad` in `New-ConfigurationBuild` to allow for ignoring libraries on load (for example C/C++ dlls)
+- Improves detection of used functions/aliases in module (now it's more accurate)
 
 ## 2.0.11
 - Fix for broken script generation if `New-ConfigurationCommand` is used
