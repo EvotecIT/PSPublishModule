@@ -9,6 +9,10 @@
             if ($_.Value -notin $Commands) {
                 $Commands.Add($_)
             }
+        } elseif ($_.TokenFlags -eq 'CommandName' -and $_.Kind -eq 'Identifier') {
+            if ($_.Value -notin $Commands) {
+                $Commands.Add($_)
+            }
         } else {
             if ($_.NestedTokens) {
                 Get-AstTokens -ASTTokens $_.NestedTokens -Commands $Commands

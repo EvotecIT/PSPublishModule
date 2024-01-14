@@ -16,7 +16,7 @@
     $Commands = [System.Collections.Generic.List[Object]]::new()
     Get-AstTokens -ASTTokens $astTokens -Commands $Commands
     if ($CommandsOnly) {
-        $Commands.Value | Sort-Object -Unique
+        $Commands.Text | Sort-Object -Unique
     } else {
         $Commands
     }
