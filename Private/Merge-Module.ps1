@@ -122,6 +122,16 @@ function Merge-Module {
             $Configuration.Information.Manifest.ExternalModuleDependencies
         }
     )
+
+    [Array] $DuplicateModules = $RequiredModules | Group-Object | Where-Object { $_.Count -gt 1 } | Select-Object -ExpandProperty Name
+    if ($DuplicateModules.Count -gt 0) {
+        Write-Text "   [!] Duplicate modules detected in required modules configuration. Please fix your configuration." -Color Red
+        foreach ($DuplicateModule in $DuplicateModules) {
+            Write-Text "      [>] Duplicate module $DuplicateModule" -Color Red
+        }
+        return $false
+    }
+
     [Array] $ApprovedModules = $Configuration.Options.Merge.Integrate.ApprovedModules | Sort-Object -Unique
 
     $ModulesThatWillMissBecauseOfIntegrating = [System.Collections.Generic.List[string]]::new()
