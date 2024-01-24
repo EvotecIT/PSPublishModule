@@ -20,7 +20,7 @@
 
                     # This is to prevent filters from AD based cmdlets from being included in the list
                     # Since sometimes scriptblock is used in the filter, instead of a string it causes filter variables to be included in the list
-                    if ($node.GetCommandName() -in 'Get-ADComputer', 'Get-ADUser', 'Get-ADObject') {
+                    if ($node.GetCommandName() -in 'Get-ADComputer', 'Get-ADUser', 'Get-ADObject', 'Get-ADDomainController', 'Get-ADReplicationSubnet') {
                         return $false
                     }
                 }
