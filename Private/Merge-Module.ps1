@@ -358,83 +358,9 @@ function Merge-Module {
     if ($null -eq $Configuration.Steps.BuildModule.DebugDLL) {
         $Configuration.Steps.BuildModule.DebugDLL = $false
     }
-    $LibraryContent = @(
-        if ($LibrariesStandard.Count -gt 0) {
-            :nextFile foreach ($File in $LibrariesStandard) {
-                $Extension = $File.Substring($File.Length - 4, 4)
-                if ($Extension -eq '.dll') {
-                    foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
-                        if ($File -like "*\$IgnoredFile") {
-                            continue nextFile
-                        }
-                    }
-                    $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                    $Output
-                }
-            }
-        } elseif ($LibrariesCore.Count -gt 0 -and $LibrariesDefault.Count -gt 0) {
-            'if ($PSEdition -eq ''Core'') {'
-            if ($LibrariesCore.Count -gt 0) {
-                :nextFile foreach ($File in $LibrariesCore) {
-                    $Extension = $File.Substring($File.Length - 4, 4)
-                    if ($Extension -eq '.dll') {
-                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
-                            if ($File -like "*\$IgnoredFile") {
-                                continue nextFile
-                            }
-                        }
-                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                        $Output
-                    }
-                }
-            }
-            '} else {'
-            if ($LibrariesDefault.Count -gt 0) {
-                :nextFile foreach ($File in $LibrariesDefault) {
-                    $Extension = $File.Substring($File.Length - 4, 4)
-                    if ($Extension -eq '.dll') {
-                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
-                            if ($File -like "*\$IgnoredFile") {
-                                continue nextFile
-                            }
-                        }
-                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                        $Output
-                    }
-                }
-            }
-            '}'
-        } else {
-            if ($LibrariesCore.Count -gt 0) {
-                :nextFile foreach ($File in $LibrariesCore) {
-                    $Extension = $File.Substring($File.Length - 4, 4)
-                    if ($Extension -eq '.dll') {
-                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
-                            if ($File -like "*\$IgnoredFile") {
-                                continue nextFile
-                            }
-                        }
-                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                        $Output
-                    }
-                }
-            }
-            if ($LibrariesDefault.Count -gt 0) {
-                :nextFile foreach ($File in $LibrariesDefault) {
-                    $Extension = $File.Substring($File.Length - 4, 4)
-                    if ($Extension -eq '.dll') {
-                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
-                            if ($File -like "*\$IgnoredFile") {
-                                continue nextFile
-                            }
-                        }
-                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
-                        $Output
-                    }
-                }
-            }
-        }
-    )
+
+    [Array] $LibraryContent = New-LibraryContent -Configuration $Configuration -LibrariesStandard $LibrariesStandard -LibrariesCore $LibrariesCore -LibrariesDefault $LibrariesDefault
+
     # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
     if ($LibraryContent.Count -gt 0) {
         if ($Configuration.Steps.BuildModule.LibrarySeparateFile -eq $true) {
@@ -470,6 +396,9 @@ function Merge-Module {
             } elseif ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -eq $true) {
                 New-DLLResolveConflict
             }
+
+            Add-BinaryImportModule -Configuration $Configuration -LibrariesStandard $LibrariesStandard -LibrariesCore $LibrariesCore -LibrariesDefault $LibrariesDefault
+
             if ($LibraryContent.Count -gt 0) {
                 if ($DotSourcePath) {
                     "# Dot source all libraries by loading external file"
