@@ -13,14 +13,24 @@
     if ($LibraryConfiguration.Enable -ne $true) {
         return
     }
-
     $TranslateFrameworks = [ordered] @{
         'NetStandard2.0' = 'Standard'
         'netStandard2.1' = 'Standard'
         'net472'         = 'Default'
         'net48'          = 'Default'
+        'net482'         = 'Default'
         'net470'         = 'Default'
+        'net471'         = 'Default'
+        'net452'         = 'Default'
+        'net451'         = 'Default'
+        'netcoreapp2.1'  = 'Core'
         'netcoreapp3.1'  = 'Core'
+        'net5.0'         = 'Core'
+        'net6.0'         = 'Core'
+        'net6.0-windows' = 'Core'
+        'net7.0'         = 'Core'
+        'net7.0-windows' = 'Core'
+        'net8.0'         = 'Core'
     }
 
     if ($LibraryConfiguration.Configuration) {
@@ -56,6 +66,10 @@
     $SupportedFrameworks = foreach ($PropertyGroup in $ProjectInformation.Project.PropertyGroup) {
         if ($PropertyGroup.TargetFrameworks) {
             $PropertyGroup.TargetFrameworks -split ";"
+        } elseif ($PropertyGroup.TargetFrameworkVersion) {
+            throw "TargetFrameworkVersion is not supported. Please use TargetFrameworks/TargetFramework instead which may require different project profile."
+        } elseIf ($PropertyGroup.TargetFramework) {
+            $PropertyGroup.TargetFramework
         }
     }
 
