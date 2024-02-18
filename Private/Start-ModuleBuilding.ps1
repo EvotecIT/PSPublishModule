@@ -114,17 +114,24 @@
         # Copy Configuration
         $SaveConfiguration = Copy-DictionaryManual -Dictionary $Configuration
 
-        if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
-            $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess -UseWildcardForFunctions:$Configuration.Steps.BuildModule.UseWildcardForFunctions
-            if ($Success -eq $false) {
-                return $false
-            }
-        } else {
-            $Success = New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddScriptsToProcess
-            if ($Success -eq $false) {
-                return $false
-            }
+
+        $newPersonalManifestSplat = @{
+            Configuration       = $Configuration
+            ManifestPath        = $PSD1FilePath
+            AddScriptsToProcess = $true
         }
+        if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
+            $newPersonalManifestSplat.UseWildcardForFunctions = $Configuration.Steps.BuildModule.UseWildcardForFunctions
+        }
+        # if this is hybrid or binary module, we need to make changes to PSD1
+        if ($Configuration.Steps.BuildLibraries.BinaryModule) {
+            $newPersonalManifestSplat.BinaryModule = $Configuration.Steps.BuildLibraries.BinaryModule
+        }
+        $Success = New-PersonalManifest @newPersonalManifestSplat
+        if ($Success -eq $false) {
+            return $false
+        }
+
         Write-TextWithTime -Text "Verifying created PSD1 is readable" -PreAppend Information {
             if (Test-Path -LiteralPath $PSD1FilePath) {
                 try {
