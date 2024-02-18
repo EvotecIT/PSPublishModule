@@ -4,9 +4,11 @@
 - Always publish to Github with PreReleaseTag if it's set
 - Added support for HelpOut module to be used for help generation (platyPS will stay default for now)
 - Added support for `NETIgnoreLibraryOnLoad` in `New-ConfigurationBuild` to allow for ignoring libraries on load (for example C/C++ dlls)
+- Added support for `NETBinaryModule` in `New-ConfigurationBuild` to allow for building binary modules (C#) and doing Import-Module in PSM1 for them
 - Improves detection of used functions/aliases in module (now it's more accurate)
 - When using `New-ConfigurationArtefact` with Script artefact type and removal of comments it would break the whole script. This is now fixed
 - Fixes case where during binary module building the DLL would not be used at all
+- Improvement to `TargetFramework` and `TargetFrameworks` support when using C# projects. `TargetFrameworkVersion` is not supported.
 
 ## 2.0.11
 - Fix for broken script generation if `New-ConfigurationCommand` is used
