@@ -404,6 +404,35 @@ function Merge-Module {
                 }
             }
             '}'
+        } else {
+            if ($LibrariesCore.Count -gt 0) {
+                :nextFile foreach ($File in $LibrariesCore) {
+                    $Extension = $File.Substring($File.Length - 4, 4)
+                    if ($Extension -eq '.dll') {
+                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
+                            if ($File -like "*\$IgnoredFile") {
+                                continue nextFile
+                            }
+                        }
+                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
+                        $Output
+                    }
+                }
+            }
+            if ($LibrariesDefault.Count -gt 0) {
+                :nextFile foreach ($File in $LibrariesDefault) {
+                    $Extension = $File.Substring($File.Length - 4, 4)
+                    if ($Extension -eq '.dll') {
+                        foreach ($IgnoredFile in $Configuration.Steps.BuildLibraries.IgnoreLibraryOnLoad) {
+                            if ($File -like "*\$IgnoredFile") {
+                                continue nextFile
+                            }
+                        }
+                        $Output = New-DLLCodeOutput -DebugDLL $Configuration.Steps.BuildModule.DebugDLL -File $File
+                        $Output
+                    }
+                }
+            }
         }
     )
     # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
@@ -468,18 +497,25 @@ function Merge-Module {
     }
 
     # Finalize PSM1 by adding export functions/aliases and internal modules loading
-    $Success = New-PSMFile -Path $PSM1FilePath `
-        -FunctionNames $FunctionsToExport `
-        -FunctionAliaes $AliasesToExport `
-        -AliasesAndFunctions $AliasesAndFunctions `
-        -LibrariesStandard $LibrariesStandard `
-        -LibrariesCore $LibrariesCore `
-        -LibrariesDefault $LibrariesDefault `
-        -ModuleName $ModuleName `
-        -UsingNamespaces:$UsingInPlace `
-        -LibariesPath $LibariesPath `
-        -InternalModuleDependencies $Configuration.Information.Manifest.InternalModuleDependencies `
-        -CommandModuleDependencies $Configuration.Information.Manifest.CommandModuleDependencies
+    $newPSMFileSplat = @{
+        Path                       = $PSM1FilePath
+        FunctionNames              = $FunctionsToExport
+        FunctionAliaes             = $AliasesToExport
+        AliasesAndFunctions        = $AliasesAndFunctions
+        LibrariesStandard          = $LibrariesStandard
+        LibrariesCore              = $LibrariesCore
+        LibrariesDefault           = $LibrariesDefault
+        ModuleName                 = $ModuleName
+        UsingNamespaces            = $UsingInPlace
+        LibariesPath               = $LibariesPath
+        InternalModuleDependencies = $Configuration.Information.Manifest.InternalModuleDependencies
+        CommandModuleDependencies  = $Configuration.Information.Manifest.CommandModuleDependencies
+        # we need to inform PSM1 we have binary module (at least partially)
+        # this will let us export cmdlet *
+        BinaryModule               = $Configuration.Steps.BuildLibraries.BinaryModule
+    }
+
+    $Success = New-PSMFile @newPSMFileSplat
     if ($Success -eq $false) {
         return $false
     }
@@ -497,7 +533,19 @@ function Merge-Module {
         }
     }
     # Build PSD1 file
-    New-PersonalManifest -Configuration $Configuration -ManifestPath $PSD1FilePath -AddUsingsToProcess -ScriptsToProcessLibrary $ScriptsToProcessLibrary -OnMerge
+    $newPersonalManifestSplat = @{
+        Configuration           = $Configuration
+        ManifestPath            = $PSD1FilePath
+        AddUsingsToProcess      = $true
+        ScriptsToProcessLibrary = $ScriptsToProcessLibrary
+        OnMerge                 = $true
+    }
+
+    if ($Configuration.Steps.BuildLibraries.BinaryModule) {
+        $newPersonalManifestSplat.BinaryModule = $Configuration.Steps.BuildLibraries.BinaryModule
+    }
+
+    New-PersonalManifest @newPersonalManifestSplat
     # Format PSD1 file
     $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
     if ($Success -eq $false) {
