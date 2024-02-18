@@ -25,7 +25,7 @@
             }
             if ($Configuration.Steps.BuildDocumentation.Tool -eq 'HelpOut') {
                 try {
-                    Save-MarkdownHelp -Module $ProjectName -OutputPath $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -SkipCommandType Alias -Wiki
+                    Save-MarkdownHelp -Module $ProjectName -OutputPath $DocumentationPath -ErrorAction Stop -WarningVariable +WarningVariablesMarkdown -WarningAction SilentlyContinue -SkipCommandType Alias
                 } catch {
                     Write-Text "[-] Documentation warning: $($_.Exception.Message)" -Color Yellow
                 }
