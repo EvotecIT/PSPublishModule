@@ -89,6 +89,12 @@
     This is useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
     For example library that's not NET based and is as dependency for other libraries
 
+    .PARAMETER NETBinaryModule
+    Provide list of binary modules that you want to import-module in the module.
+    This is useful if you're building a module that has binary modules and you want to import them in the module.
+    In here you provide one or more binrary module names that you want to import in the module.
+    Just the DLL name with extension without path. Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
+
     .EXAMPLE
     $newConfigurationBuildSplat = @{
         Enable                            = $true
@@ -142,7 +148,8 @@
         [string] $NETProjectName,
         [switch] $NETExcludeMainLibrary,
         [string[]] $NETExcludeLibraryFilter,
-        [string[]] $NETIgnoreLibraryOnLoad
+        [string[]] $NETIgnoreLibraryOnLoad,
+        [string[]] $NETBinaryModule
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -377,6 +384,14 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 IgnoreLibraryOnLoad = $NETIgnoreLibraryOnLoad
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('NETBinaryModule')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                BinaryModule = $NETBinaryModule
             }
         }
     }
