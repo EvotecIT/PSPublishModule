@@ -85,7 +85,7 @@
         $Content = Get-Content -LiteralPath $PS1 -ErrorAction Stop -Encoding UTF8
 
         # Find the index of the line that contains "# Export functions and aliases as required" starting from the bottom of the file
-        $index = ($Content | Select-String -Pattern "# Export functions and aliases as required" -SimpleMatch | Select-Object -Last 1).LineNumber
+        $index = ($Content | Select-String -Pattern "Export-ModuleMember " -SimpleMatch | Select-Object -Last 2).LineNumber
 
         # Remove all lines below the index, including that line
         $Content = $Content[0..($index - 2)]
