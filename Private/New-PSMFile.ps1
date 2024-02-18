@@ -12,7 +12,8 @@ function New-PSMFile {
         [switch] $UsingNamespaces,
         [string] $LibariesPath,
         [Array] $InternalModuleDependencies,
-        [System.Collections.IDictionary] $CommandModuleDependencies
+        [System.Collections.IDictionary] $CommandModuleDependencies,
+        [string[]] $BinaryModule
     )
 
     if ($PSVersionTable.PSVersion.Major -gt 5) {
@@ -101,14 +102,28 @@ function New-PSMFile {
                     }
                 }
                 # Export functions and aliases as required
-                Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)
 "@
             ) | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+
+            # for now we just export everything
+            # we may need to change it in the future
+            if ($BinaryModule.Count -gt 0) {
+                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+            } else {
+                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+            }
+
         } else {
             # this loads functions/aliases as designed
             #"" | Out-File -Append -LiteralPath $Path -Encoding utf8
             "# Export functions and aliases as required" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
-            "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+            if ($BinaryModule.Count -gt 0) {
+                # for now we just export everything
+                # we may need to change it in the future
+                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+            } else {
+                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+            }
         }
 
     } -SpacesBefore '   '
