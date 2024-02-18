@@ -60,7 +60,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         PlaceOpenBraceIgnoreOneLineBlock            = $false
 
         PlaceCloseBraceEnable                       = $true
-        PlaceCloseBraceNewLineAfter                 = $true
+        PlaceCloseBraceNewLineAfter                 = $false
         PlaceCloseBraceIgnoreOneLineBlock           = $false
         PlaceCloseBraceNoEmptyLineBefore            = $true
 
