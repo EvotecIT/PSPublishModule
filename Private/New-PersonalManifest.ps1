@@ -7,7 +7,8 @@ function New-PersonalManifest {
         [switch] $AddUsingsToProcess,
         [string] $ScriptsToProcessLibrary,
         [switch] $UseWildcardForFunctions,
-        [switch] $OnMerge
+        [switch] $OnMerge,
+        [string[]] $BinaryModule
     )
 
     $TemporaryManifest = [ordered] @{ }
@@ -77,10 +78,10 @@ function New-PersonalManifest {
             Write-Text -Text '[-] Native PSD1 style is not available when using PreRelease or ExternalModuleDependencies. Switching to Minimal.' -Color Yellow
         }
         #if ($Data.ScriptsToProcess.Count -eq 0) {
-            #$Data.Remove('ScriptsToProcess')
+        #$Data.Remove('ScriptsToProcess')
         #}
         #if ($Data.CmdletsToExport.Count -eq 0) {
-            # $Data.Remove('CmdletsToExport')
+        # $Data.Remove('CmdletsToExport')
         #}
         $Data = $Manifest
         $Data.PrivateData = @{
@@ -151,6 +152,12 @@ function New-PersonalManifest {
         }
         if (-not $Data.RequiredModules) {
             $Data.Remove('RequiredModules')
+        }
+        # we export all cmdlets until we have a better way to handle this
+        # if module is hybrid (binary + script we need to ddo this)
+        if ($BinaryModule.Count -gt 0) {
+            #$Data.NestedModules = @($BinaryModule)
+            $Data.CmdletsToExport = @("*")
         }
         $Data | Export-PSData -DataFile $ManifestPath -Sort
     }
