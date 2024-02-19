@@ -95,6 +95,13 @@
     In here you provide one or more binrary module names that you want to import in the module.
     Just the DLL name with extension without path. Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
 
+    .PARAMETER NETHandleAssemblyWithSameName
+    Adds try/catch block to handle assembly with same name is already loaded exception and ignore it.
+    It's useful in PowerShell 7, as it's more strict about this than Windows PowerShell, and usually everything should work as expected.
+
+    .PARAMETER NETLineByLineAddType
+    Adds Add-Type line by line, this is useful if you have a lot of libraries and you want to see which one is causing the issue.
+
     .EXAMPLE
     $newConfigurationBuildSplat = @{
         Enable                            = $true
@@ -134,7 +141,7 @@
 
         [switch] $DoNotAttemptToFixRelativePaths,
 
-        [switch] $MergeLibraryDebugging,
+        [alias("NETMergeLibraryDebugging")][switch] $MergeLibraryDebugging,
         [switch] $ResolveBinaryConflicts,
         [string] $ResolveBinaryConflictsName,
 
@@ -149,7 +156,9 @@
         [switch] $NETExcludeMainLibrary,
         [string[]] $NETExcludeLibraryFilter,
         [string[]] $NETIgnoreLibraryOnLoad,
-        [string[]] $NETBinaryModule
+        [string[]] $NETBinaryModule,
+        [alias('HandleAssemblyWithSameName')][switch] $NETHandleAssemblyWithSameName,
+        [switch] $NETLineByLineAddType
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -387,11 +396,33 @@
             }
         }
     }
+    # this is to add binary modules that you want to import-module in the module
+    # it accepts one or more binrary module names that you want to import in the module
+    # just the DLL name with extension without path
     if ($PSBoundParameters.ContainsKey('NETBinaryModule')) {
         [ordered] @{
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 BinaryModule = $NETBinaryModule
+            }
+        }
+    }
+    # this is to add try/catch block to handle assembly with same name is already loaded exception and ignore it
+    if ($PSBoundParameters.ContainsKey('NETHandleAssemblyWithSameName')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                HandleAssemblyWithSameName = $NETHandleAssemblyWithSameName.IsPresent
+            }
+        }
+    }
+    # this is to add Add-Type line by line, this is useful if you have a lot of libraries and you want to see which one is causing the issue
+    # this is basically legacy setting that may come useful, and it was by default in the past
+    if ($PSBoundParameters.ContainsKey('NETLineByLineAddType')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                NETLineByLineAddType = $NETLineByLineAddType.IsPresent
             }
         }
     }
