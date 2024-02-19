@@ -359,7 +359,14 @@ function Merge-Module {
         $Configuration.Steps.BuildModule.DebugDLL = $false
     }
 
-    [Array] $LibraryContent = New-LibraryContent -Configuration $Configuration -LibrariesStandard $LibrariesStandard -LibrariesCore $LibrariesCore -LibrariesDefault $LibrariesDefault
+
+    if ($Configuration.Steps.BuildLibraries.NETLineByLineAddType) {
+        $DoNotOptimizeLoading = $Configuration.Steps.BuildLibraries.NETLineByLineAddType
+    } else {
+        $DoNotOptimizeLoading = $false
+    }
+
+    [Array] $LibraryContent = New-LibraryContent -Configuration $Configuration -LibrariesStandard $LibrariesStandard -LibrariesCore $LibrariesCore -LibrariesDefault $LibrariesDefault -OptimizedLoading:(-not $DoNotOptimizeLoading)
 
     # Add libraries (DLL) into separate file and either dot source it or load as script processing in PSD1 or both (for whatever reason)
     if ($LibraryContent.Count -gt 0) {
