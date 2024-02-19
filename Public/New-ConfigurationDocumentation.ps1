@@ -45,6 +45,21 @@
         [ValidateSet('PlatyPS', 'HelpOut')][string] $Tool = 'PlatyPS'
     )
 
+    if ($Tool -eq 'PlatyPS') {
+        $ModuleExists = Get-Module -Name 'PlatyPS' -ListAvailable
+        if (-not $ModuleExists) {
+            Write-Warning "Module PlatyPS is not installed. Please install it using Install-Module PlatyPS -Force -Verbose"
+            return
+        }
+    } elseif ($Tool -eq 'HelpOut') {
+        $ModuleExists = Get-Module -Name 'HelpOut' -ListAvailable
+        if (-not $ModuleExists) {
+            Write-Warning "Module HelpOut is not installed. Please install it using Install-Module HelpOut -Force -Verbose"
+            return
+        }
+    } else {
+        return
+    }
     if ($Path -or $PathReadme) {
         $Option = [ordered] @{
             Type          = 'Documentation'
