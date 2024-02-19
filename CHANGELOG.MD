@@ -9,6 +9,8 @@
 - When using `New-ConfigurationArtefact` with Script artefact type and removal of comments it would break the whole script. This is now fixed
 - Fixes case where during binary module building the DLL would not be used at all
 - Improvement to `TargetFramework` and `TargetFrameworks` support when using C# projects. `TargetFrameworkVersion` is not supported.
+- Added support for `NETHandleAssemblyWithSameName` in `New-ConfigurationBuild` to allow for handling of assemblies with same name (for example Newtonsoft.Json)
+- Improved loading of libraries to use foreach instead of loading one by one
 
 ## 2.0.11
 - Fix for broken script generation if `New-ConfigurationCommand` is used
