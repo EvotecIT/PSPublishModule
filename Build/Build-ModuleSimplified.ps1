@@ -26,10 +26,11 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationManifest @Manifest
 
     # Add standard module dependencies (directly, but can be used with loop as well)
-    New-ConfigurationModule -Type RequiredModule -Name 'platyPS', 'HelpOut' -Guid 'Auto' -Version 'Latest'
+    # New-ConfigurationModule -Type RequiredModule -Name 'platyPS', 'HelpOut' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
+
 
     # Add external module dependencies, using loop for simplicity
     New-ConfigurationModule -Type ExternalModule -Name @(
@@ -41,7 +42,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
     New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
-    New-ConfigurationModuleSkip -IgnoreModuleName 'PKI', 'OpenAuthenticode' -IgnoreFunctionName @(
+    New-ConfigurationModuleSkip -IgnoreModuleName 'PKI', 'OpenAuthenticode', 'platyPS', 'HelpOut' -IgnoreFunctionName @(
         # ignore functions from OpenAuthenticode module when used during linux/macos build
         'Set-OpenAuthenticodeSignature'
         'Get-OpenAuthenticodeSignature'
