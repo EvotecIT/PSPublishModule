@@ -27,7 +27,7 @@
                 "           } catch {"
                 if ($HandleAssemblyWithSameName) {
                     "               if (`$_.Exception.Message -like '*Assembly with same name is already loaded*') {"
-                    "                   Write-Warning -Message `"Assembly with same name is already loaded. Ignoring '`$(`$_.InvocationInfo.Statement)'.`""
+                    "                   Write-Warning -Message `"Assembly with same name is already loaded. Ignoring '`$L'.`""
                     "               } else {"
                     "                   Write-Warning `"Processing `$(`$ImportName) Exception: `$(`$_.Exception.Message)`"",
                     "                   `$LoaderExceptions = `$(`$_.Exception.LoaderExceptions) | Sort-Object -Unique",
@@ -61,12 +61,11 @@
                     }
                     ")"
                     "foreach (`$L in `$LibrariesToLoad) {"
-
                     '   try {'
                     '       Add-Type -Path $PSScriptRoot\$L -ErrorAction Stop'
                     '   } catch {'
                     "       if (`$_.Exception.Message -like '*Assembly with same name is already loaded*') {"
-                    "           Write-Warning -Message `"Assembly with same name is already loaded. Ignoring '`$(`$_.InvocationInfo.Statement)'.`""
+                    "           Write-Warning -Message `"Assembly with same name is already loaded. Ignoring '`$L'.`""
                     '       } else {'
                     '           throw $_'
                     '       }'
