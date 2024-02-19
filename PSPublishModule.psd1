@@ -20,14 +20,6 @@
         }
     }
     RequiredModules        = @(@{
-            Guid          = '0bdcabef-a4b7-4a6d-bf7e-d879817ebbff'
-            ModuleName    = 'platyPS'
-            ModuleVersion = '0.14.2'
-        }, @{
-            Guid          = '3f57070a-240f-4406-8e8e-6351ffe6f85b'
-            ModuleName    = 'HelpOut'
-            ModuleVersion = '0.5.1'
-        }, @{
             Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
             ModuleName    = 'powershellget'
             ModuleVersion = '2.2.5'
