@@ -11,6 +11,7 @@
 - Improvement to `TargetFramework` and `TargetFrameworks` support when using C# projects. `TargetFrameworkVersion` is not supported.
 - Added support for `NETHandleAssemblyWithSameName` in `New-ConfigurationBuild` to allow for handling of assemblies with same name (for example Newtonsoft.Json)
 - Improved loading of libraries to use foreach instead of loading one by one
+- Removed dependency on `PlatyPS`/`HelpOut`. Now it's optional and can be used if needed. HelpOut does have some issues that I hope will be solved sooner or later
 
 ## 2.0.11
 - Fix for broken script generation if `New-ConfigurationCommand` is used
