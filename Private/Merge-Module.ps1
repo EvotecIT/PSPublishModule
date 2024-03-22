@@ -324,7 +324,6 @@ function Merge-Module {
             $TimeToExecute = [System.Diagnostics.Stopwatch]::StartNew()
             Write-Text "[+] Merge mergable commands" -Color Blue
 
-
             $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding $Encoding
             $IntegrateContent = @(
                 $MissingFunctions.Functions
@@ -395,7 +394,12 @@ function Merge-Module {
 
     # Adjust PSM1 file by adding dot sourcing or directly libraries to the PSM1 file
     if ($LibariesPath -gt 0 -or $ClassesPath -gt 0 -or $Configuration.Steps.BuildModule.ResolveBinaryConflicts) {
-        $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
+        if (Test-Path -LiteralPath $PSM1FilePath) {
+            $PSM1Content = Get-Content -LiteralPath $PSM1FilePath -Raw -Encoding UTF8
+        } else {
+            Write-Text "[+] PSM1 file doesn't exists. Creating empty content" -Color Blue
+            $PSM1Content = ''
+        }
         $IntegrateContent = @(
             # add resolve conflicting binary option
             if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
@@ -442,7 +446,7 @@ function Merge-Module {
         LibrariesCore              = $LibrariesCore
         LibrariesDefault           = $LibrariesDefault
         ModuleName                 = $ModuleName
-        UsingNamespaces            = $UsingInPlace
+        #UsingNamespaces            = $UsingInPlace
         LibariesPath               = $LibariesPath
         InternalModuleDependencies = $Configuration.Information.Manifest.InternalModuleDependencies
         CommandModuleDependencies  = $Configuration.Information.Manifest.CommandModuleDependencies
