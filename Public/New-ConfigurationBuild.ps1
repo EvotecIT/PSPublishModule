@@ -1,16 +1,16 @@
 ﻿function New-ConfigurationBuild {
     <#
     .SYNOPSIS
-    Short description
+    Allows to configure build process for the module
 
     .DESCRIPTION
-    Long description
+    Allows to configure build process for the module
 
     .PARAMETER Enable
-    Parameter description
+    Enable build process
 
     .PARAMETER DeleteTargetModuleBeforeBuild
-    Parameter description
+    Delete target module before build
 
     .PARAMETER MergeModuleOnBuild
     Parameter description
@@ -73,8 +73,12 @@
     .PARAMETER NETFramework
     Parameter description
 
+    .PARAMETER NETProjectPath
+    Path to the project that you want to build. This is useful if it's not in Sources folder directly within module directory
+
     .PARAMETER NETProjectName
-    Parameter description
+    By default it will assume same name as project name, but you can provide different name if needed.
+    It's required if NETProjectPath is provided
 
     .PARAMETER NETExcludeMainLibrary
     Exclude main library from build, this is useful if you have C# project that you want to build
@@ -150,6 +154,7 @@
         [string] $CertificatePFXBase64,
         [string] $CertificatePFXPassword,
 
+        [string] $NETProjectPath,
         [ValidateSet('Release', 'Debug')][string] $NETConfiguration, # may need to allow user choice
         [string[]] $NETFramework,
         [string] $NETProjectName,
@@ -423,6 +428,16 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 NETLineByLineAddType = $NETLineByLineAddType.IsPresent
+            }
+        }
+    }
+
+    # this is to add NET project path, this is useful if it's not in Sources folder directly within module directory
+    if ($PSBoundParameters.ContainsKey('NETProjectPath')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                NETProjectPath = $NETProjectPath
             }
         }
     }
