@@ -9,7 +9,7 @@ function New-PSMFile {
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
         [string] $ModuleName,
-        [switch] $UsingNamespaces,
+       # [switch] $UsingNamespaces,
         [string] $LibariesPath,
         [Array] $InternalModuleDependencies,
         [System.Collections.IDictionary] $CommandModuleDependencies,
@@ -37,7 +37,7 @@ function New-PSMFile {
             $Aliases = @()
         }
 
-        "" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+        "" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
 
         # This allows for loading modules in PSM1 file directly
         if ($InternalModuleDependencies.Count -gt 0) {
@@ -51,7 +51,7 @@ function New-PSMFile {
             foreach (`$Module in `$ModulesOptional) {
                 Import-Module -Name `$Module -ErrorAction SilentlyContinue
             }
-"@ | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+"@ | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
         }
 
         # This allows to export functions only if module loading works correctly
@@ -108,9 +108,9 @@ function New-PSMFile {
             # for now we just export everything
             # we may need to change it in the future
             if ($BinaryModule.Count -gt 0) {
-                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             } else {
-                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             }
 
         } else {
@@ -120,9 +120,9 @@ function New-PSMFile {
             if ($BinaryModule.Count -gt 0) {
                 # for now we just export everything
                 # we may need to change it in the future
-                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             } else {
-                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
+                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             }
         }
 
