@@ -41,9 +41,13 @@
     if ($LibraryConfiguration.ProjectName) {
         $ModuleName = $LibraryConfiguration.ProjectName
     }
-
-    $ModuleProjectFile = [System.IO.Path]::Combine($RootDirectory, "Sources", $ModuleName, "$ModuleName.csproj")
-    $SourceFolder = [System.IO.Path]::Combine($RootDirectory, "Sources", $ModuleName)
+    if ($LibraryConfiguration.NETProjectPath) {
+        $ModuleProjectFile = [System.IO.Path]::Combine($LibraryConfiguration.NETProjectPath, "$($LibraryConfiguration.ProjectName).csproj")
+        $SourceFolder = [System.IO.Path]::Combine($LibraryConfiguration.NETProjectPath)
+    } else {
+        $ModuleProjectFile = [System.IO.Path]::Combine($RootDirectory, "Sources", $ModuleName, "$ModuleName.csproj")
+        $SourceFolder = [System.IO.Path]::Combine($RootDirectory, "Sources", $ModuleName)
+    }
     $ModuleBinFolder = [System.IO.Path]::Combine($RootDirectory, "Lib")
     if (Test-Path -LiteralPath $ModuleBinFolder) {
         $Items = Get-ChildItem -LiteralPath $ModuleBinFolder -Recurse -Force
