@@ -67,9 +67,26 @@
         Write-Text "[-] Can't read $ModuleProjectFile file. Error: $($_.Exception.Message)" -Color Red
         return $false
     }
+
+    if ($IsLinux) {
+        $OSVersion = 'Linux'
+    } elseif ($IsMacOS) {
+        $OSVersion = 'OSX'
+    } else {
+        $OSVersion = 'Windows'
+    }
+
     $SupportedFrameworks = foreach ($PropertyGroup in $ProjectInformation.Project.PropertyGroup) {
         if ($PropertyGroup.TargetFrameworks) {
-            $PropertyGroup.TargetFrameworks -split ";"
+            if ($PropertyGroup.TargetFrameworks -is [array]) {
+                foreach ($Target in $PropertyGroup.TargetFrameworks) {
+                    if ($Target.Condition -like "*$OSVersion*" -and $Target.'#text') {
+                        $Target.'#text'.Trim() -split ";"
+                    }
+                }
+            } else {
+                $PropertyGroup.TargetFrameworks -split ";"
+            }
         } elseif ($PropertyGroup.TargetFrameworkVersion) {
             throw "TargetFrameworkVersion is not supported. Please use TargetFrameworks/TargetFramework instead which may require different project profile."
         } elseIf ($PropertyGroup.TargetFramework) {
