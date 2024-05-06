@@ -32,6 +32,9 @@
                 $Configuration.Information.Manifest = Import-PowerShellDataFile -Path $PathToPSD1 -ErrorAction Stop
                 # lets reset whatever is in PSD1 that we load
                 $Configuration.Information.Manifest.RequiredModules = $null
+                $Configuration.Information.Manifest.FunctionsToExport = $null
+                $Configuration.Information.Manifest.AliasesToExport = $null
+                $Configuration.Information.Manifest.CmdletsToExport = $null
             } catch {
                 Write-Text "[-] Reading $PathToPSD1 failed. Error: $($_.Exception.Message)" -Color Red
                 Write-Text "[+] Building $PathToPSD1 from scratch." -Color Yellow

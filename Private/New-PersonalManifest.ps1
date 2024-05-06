@@ -19,6 +19,15 @@ function New-PersonalManifest {
         $Manifest.AliasesToExport = @("*")
     }
 
+    # we export all cmdlets until we have a better way to handle this
+    # if module is hybrid (binary + script we need to ddo this)
+    if ($BinaryModule.Count -gt 0) {
+        #We export them only if they are not defined in New-ConfigurationManifest
+        if ($null -eq $Manifest.CmdletsToExport) {
+            $Data.CmdletsToExport = @("*")
+        }
+    }
+
     $Manifest.Path = $ManifestPath
 
     if (-not $AddScriptsToProcess) {
@@ -152,12 +161,6 @@ function New-PersonalManifest {
         }
         if (-not $Data.RequiredModules) {
             $Data.Remove('RequiredModules')
-        }
-        # we export all cmdlets until we have a better way to handle this
-        # if module is hybrid (binary + script we need to ddo this)
-        if ($BinaryModule.Count -gt 0) {
-            #$Data.NestedModules = @($BinaryModule)
-            $Data.CmdletsToExport = @("*")
         }
         $Data | Export-PSData -DataFile $ManifestPath -Sort
     }

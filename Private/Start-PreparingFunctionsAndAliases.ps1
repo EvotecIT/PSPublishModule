@@ -5,31 +5,42 @@
         $FullProjectPath,
         $Files
     )
+    if ($Configuration.Information.Manifest.FunctionsToExport -and $Configuration.Information.Manifest.AliasesToExport) {
+        return $true
+    }
+
     $AliasesAndFunctions = Write-TextWithTime -Text 'Preparing function and aliases names' {
         Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
     } -PreAppend Information
     Write-TextWithTime -Text "Checking for duplicates in funcions and aliases" {
-        if ($AliasesAndFunctions -is [System.Collections.IDictionary]) {
+        # if ($AliasesAndFunctions -is [System.Collections.IDictionary]) {
+
+        # if user hasn't defined functions we will use auto-detected functions
+        if ($null -eq $Configuration.Information.Manifest.FunctionsToExport) {
             $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Keys | Where-Object { $_ }
             if (-not $Configuration.Information.Manifest.FunctionsToExport) {
                 $Configuration.Information.Manifest.FunctionsToExport = @()
             }
+        }
+        # if user hasn't defined aliases we will use auto-detected aliases
+        if ($null -eq $Configuration.Information.Manifest.AliasesToExport) {
             # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
             $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Values | ForEach-Object { $_ } | Where-Object { $_ }
             if (-not $Configuration.Information.Manifest.AliasesToExport) {
                 $Configuration.Information.Manifest.AliasesToExport = @()
             }
-        } else {
-            # this is not used, as we're using Hashtable above, but maybe if we change mind we can go back
-            $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Name | Where-Object { $_ }
-            if (-not $Configuration.Information.Manifest.FunctionsToExport) {
-                $Configuration.Information.Manifest.FunctionsToExport = @()
-            }
-            $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias | ForEach-Object { $_ } | Where-Object { $_ }
-            if (-not $Configuration.Information.Manifest.AliasesToExport) {
-                $Configuration.Information.Manifest.AliasesToExport = @()
-            }
         }
+        # } else {
+        # this is not used, as we're using Hashtable above, but maybe if we change mind we can go back
+        # $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Name | Where-Object { $_ }
+        # if (-not $Configuration.Information.Manifest.FunctionsToExport) {
+        #     $Configuration.Information.Manifest.FunctionsToExport = @()
+        # }
+        # $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias | ForEach-Object { $_ } | Where-Object { $_ }
+        # if (-not $Configuration.Information.Manifest.AliasesToExport) {
+        #     $Configuration.Information.Manifest.AliasesToExport = @()
+        # }
+        # }
         $FoundDuplicateAliases = $false
         if ($Configuration.Information.Manifest.AliasesToExport) {
             $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object -Unique
