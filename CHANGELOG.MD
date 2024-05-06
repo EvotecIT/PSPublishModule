@@ -14,6 +14,7 @@
 - Removed dependency on `PlatyPS`/`HelpOut`. Now it's optional and can be used if needed. HelpOut does have some issues that I hope will be solved sooner or later
 - Improved creating empty PSM1 file when Public/Private folders have no files or are not present
 - Added `NETProjectPath` to `New-ConfigurationBuild` to allow for specifying path to project file (csproj) when building binary modules
+- Improve `New-ConfigurationManifest` allowing  to define `FunctionsToExport` and `CmdletsToExport` and `AliasesToExport` to allow for more control over exported functions/cmdlets/aliases (by default Aliaeses/Functions are exported but you can overwrite them)
 
 ## 2.0.11
 - Fix for broken script generation if `New-ConfigurationCommand` is used
