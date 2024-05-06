@@ -1,0 +1,1 @@
+﻿[appdomain]::currentdomain.getassemblies() | Sort-Object -Property fullname | Format-Table Fullname,Name,Location -AutoSize

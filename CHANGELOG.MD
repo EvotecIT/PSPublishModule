@@ -1,6 +1,6 @@
 ﻿# PSPublishModule Changelog
 
-## 2.0.12
+## 2.0.12 - 2024.05.06
 - Always publish to Github with PreReleaseTag if it's set
 - Added support for HelpOut module to be used for help generation (platyPS will stay default for now)
 - Added support for `NETIgnoreLibraryOnLoad` in `New-ConfigurationBuild` to allow for ignoring libraries on load (for example C/C++ dlls)
