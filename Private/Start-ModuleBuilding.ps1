@@ -114,7 +114,6 @@
         # Copy Configuration
         $SaveConfiguration = Copy-DictionaryManual -Dictionary $Configuration
 
-
         $newPersonalManifestSplat = @{
             Configuration       = $Configuration
             ManifestPath        = $PSD1FilePath
