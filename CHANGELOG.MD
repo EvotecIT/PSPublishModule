@@ -1,5 +1,9 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.13
+- When using `New-ConfigurtionManifest` and using `CmdletsToExport` it would not export them in PSM1 file. This is now fixed
+- Moved function to separate file to improve visibility
+
 ## 2.0.12 - 2024.05.06
 - Always publish to Github with PreReleaseTag if it's set
 - Added support for HelpOut module to be used for help generation (platyPS will stay default for now)
