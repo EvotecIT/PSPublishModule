@@ -1,6 +1,6 @@
 ﻿# PSPublishModule Changelog
 
-## 2.0.13
+## 2.0.13 - 2024.07.13
 - When using `New-ConfigurtionManifest` and using `CmdletsToExport` it would not export them in PSM1 file. This is now fixed
 - Moved function to separate file to improve visibility
 
