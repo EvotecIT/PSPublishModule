@@ -9,11 +9,12 @@ function New-PSMFile {
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
         [string] $ModuleName,
-       # [switch] $UsingNamespaces,
+        # [switch] $UsingNamespaces,
         [string] $LibariesPath,
         [Array] $InternalModuleDependencies,
         [System.Collections.IDictionary] $CommandModuleDependencies,
-        [string[]] $BinaryModule
+        [string[]] $BinaryModule,
+        [System.Collections.IDictionary] $Configuration
     )
 
     if ($PSVersionTable.PSVersion.Major -gt 5) {
@@ -52,6 +53,14 @@ function New-PSMFile {
                 Import-Module -Name `$Module -ErrorAction SilentlyContinue
             }
 "@ | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
+        }
+
+
+        if ($Configuration.Information.Manifest.CmdletsToExport) {
+            $Cmdlet = ($Configuration.Information.Manifest.CmdletsToExport | Sort-Object -Unique) -join "','"
+            $Cmdlet = "'$Cmdlet'"
+        } else {
+            $Cmdlet = '"*"'
         }
 
         # This allows to export functions only if module loading works correctly
@@ -107,8 +116,8 @@ function New-PSMFile {
 
             # for now we just export everything
             # we may need to change it in the future
-            if ($BinaryModule.Count -gt 0) {
-                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
+            if ($BinaryModule.Count -gt 0 -or $Cmdlet) {
+                "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad) -Cmdlet $Cmdlet" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             } else {
                 "Export-ModuleMember -Function @(`$FunctionsToLoad) -Alias @(`$AliasesToLoad)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             }
@@ -117,10 +126,10 @@ function New-PSMFile {
             # this loads functions/aliases as designed
             #"" | Out-File -Append -LiteralPath $Path -Encoding utf8
             "# Export functions and aliases as required" | Out-File -Append -LiteralPath $Path -Encoding $Encoding
-            if ($BinaryModule.Count -gt 0) {
+            if ($BinaryModule.Count -gt 0 -or $Cmdlet) {
                 # for now we just export everything
                 # we may need to change it in the future
-                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases) -Cmdlet '*'" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
+                "Export-ModuleMember -Function @($Functions) -Alias @($Aliases) -Cmdlet $Cmdlet" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             } else {
                 "Export-ModuleMember -Function @($Functions) -Alias @($Aliases)" | Out-File -Append -LiteralPath $Path -Encoding $Encoding -ErrorAction Stop
             }
