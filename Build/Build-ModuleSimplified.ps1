@@ -5,6 +5,9 @@
 # most modules should be run via PSD1 or by it's name (which in the background uses PD1)
 
 # This version is for local building
+# We need to rmeove library before we start, as it may contain old files, which will be in use once PSD1 loads
+# This is only required for PSPublisModule, as it's the only module that is being built by itself
+Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Lib" -Recurse -Force -ErrorAction Stop
 
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
@@ -103,25 +106,28 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationImportModule -ImportSelf #-ImportRequiredModules
 
     $newConfigurationBuildSplat = @{
-        Enable                         = $true
-        SignModule                     = $true
-        DeleteTargetModuleBeforeBuild  = $true
-        MergeModuleOnBuild             = $true
-        CertificateThumbprint          = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
+        Enable                            = $true
+        SignModule                        = $true
+        DeleteTargetModuleBeforeBuild     = $true
+        MergeModuleOnBuild                = $true
+        CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
-        DoNotAttemptToFixRelativePaths = $false
+        DoNotAttemptToFixRelativePaths    = $false
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                 = "$PSScriptRoot\..\Sources\PSPublishModule\PSPublishModule"
-        ResolveBinaryConflicts         = $true
-        ResolveBinaryConflictsName     = 'PSPublishModule'
-        NETProjectName                 = 'PSPublishModule'
-        NETConfiguration               = 'Release'
-        NETFramework                   = 'net6.0', 'net472'
-        NETHandleAssemblyWithSameName  = $true
-        DotSourceLibraries             = $true
-        DotSourceClasses               = $true
+        NETProjectPath                    = "$PSScriptRoot\..\Sources\PSPublishModule\PSPublishModule"
+        ResolveBinaryConflicts            = $true
+        ResolveBinaryConflictsName        = 'PSPublishModule'
+        NETProjectName                    = 'PSPublishModule'
+        NETConfiguration                  = 'Release'
+        NETFramework                      = 'net6.0', 'net472'
+        NETHandleAssemblyWithSameName     = $true
+        DotSourceLibraries                = $true
+        DotSourceClasses                  = $true
+
+        # This has to be disabled as it will not have DLLs required to do this
+        NETBinaryModuleCmdletScanDisabled = $true
     }
 
     New-ConfigurationBuild @newConfigurationBuildSplat
