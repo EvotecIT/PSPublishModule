@@ -1,6 +1,8 @@
-﻿# please notice I may be using PSM1 here, as the module may not be built or PSD1 may be broken
+﻿# please notice I may be using PSM1 here (not always), as the module may not be built or PSD1 may be broken
 # since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
 # most modules should be run via PSD1 or by it's name (which in the background uses PD1)
+
+# This version is used for GitHub Actions and is used to build the module
 
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
@@ -108,6 +110,17 @@ Build-Module -ModuleName 'PSPublishModule' {
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
         DoNotAttemptToFixRelativePaths = $false
+
+        # required for Cmdlet/Alias functionality
+        NETProjectPath                 = "$PSScriptRoot\..\Sources\PSPublishModule\PSPublishModule"
+        ResolveBinaryConflicts         = $true
+        ResolveBinaryConflictsName     = 'PSPublishModule'
+        NETProjectName                 = 'PSPublishModule'
+        NETConfiguration               = 'Release'
+        NETFramework                   = 'net6.0', 'net472'
+        NETHandleAssemblyWithSameName  = $true
+        DotSourceLibraries             = $true
+        DotSourceClasses               = $true
     }
 
     New-ConfigurationBuild @newConfigurationBuildSplat
