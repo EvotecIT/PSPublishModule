@@ -99,6 +99,10 @@
     In here you provide one or more binrary module names that you want to import in the module.
     Just the DLL name with extension without path. Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
 
+    .PARAMETER NETBinaryModuleCmdletScanDisabled
+    This is to disable scanning for cmdlets in binary modules, this is useful if you have a lot of binary modules and you don't want to scan them for cmdlets.
+    By default it will scan for cmdlets/aliases in binary modules and add them to the module PSD1/PSM1 files.
+
     .PARAMETER NETHandleAssemblyWithSameName
     Adds try/catch block to handle assembly with same name is already loaded exception and ignore it.
     It's useful in PowerShell 7, as it's more strict about this than Windows PowerShell, and usually everything should work as expected.
@@ -163,7 +167,8 @@
         [string[]] $NETIgnoreLibraryOnLoad,
         [string[]] $NETBinaryModule,
         [alias('HandleAssemblyWithSameName')][switch] $NETHandleAssemblyWithSameName,
-        [switch] $NETLineByLineAddType
+        [switch] $NETLineByLineAddType,
+        [switch] $NETBinaryModuleCmdletScanDisabled
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -438,6 +443,15 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 NETProjectPath = $NETProjectPath
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETBinaryModuleCmdletScanDisabled')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                BinaryModuleCmdletScanDisabled = $NETBinaryModuleCmdletScanDisabled.IsPresent
             }
         }
     }
