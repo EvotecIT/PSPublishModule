@@ -92,9 +92,6 @@
     if ($PSBoundParameters.ContainsKey('LibrariesStandard')) {
         $Configuration.Information.LibrariesStandard = $LibrariesStandard
     }
-    #if ($DirectoryProjects) {
-    #    $Configuration.Information.DirectoryProjects = $Path
-    #}
     if ($FunctionsToExportFolder) {
         $Configuration.Information.FunctionsToExport = $FunctionsToExportFolder
     }
@@ -153,7 +150,7 @@
     $Configuration.Information.Manifest.RootModule = "$($ModuleName).psm1"
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry,
     # use an empty array if there are no cmdlets to export.
-    $Configuration.Information.Manifest.CmdletsToExport = @()
+    #$Configuration.Information.Manifest.CmdletsToExport = @()
     # Variables to export from this module
     #$Configuration.Information.Manifest.VariablesToExport = @()
 
