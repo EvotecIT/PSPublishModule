@@ -4,7 +4,8 @@ function New-PSMFile {
         [string] $Path,
         [string[]] $FunctionNames,
         [string[]] $FunctionAliaes,
-        [System.Collections.IDictionary] $AliasesAndFunctions,
+        $AliasesAndFunctions,
+        [System.Collections.IDictionary] $CmdletsAliases,
         [Array] $LibrariesStandard,
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
@@ -68,14 +69,10 @@ function New-PSMFile {
             @(
                 "`$ModuleFunctions = @{"
                 foreach ($Module in $CommandModuleDependencies.Keys) {
-                    #$Commands = "'$($CommandModuleDependencies[$Module] -join "','")'"
                     "$Module = @{"
-
                     foreach ($Command in $($CommandModuleDependencies[$Module])) {
-                        #foreach ($Function in $AliasesAndFunctions.Keys) {
                         $Alias = "'$($AliasesAndFunctions[$Command] -join "','")'"
                         "    '$Command' = $Alias"
-                        #}
                     }
                     "}"
                 }
