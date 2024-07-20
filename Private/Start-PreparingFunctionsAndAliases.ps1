@@ -3,18 +3,18 @@
     param(
         [System.Collections.IDictionary] $Configuration,
         $FullProjectPath,
-        $Files
+        $Files,
+        [System.Collections.IDictionary] $CmdletsAliases
     )
-    if ($Configuration.Information.Manifest.FunctionsToExport -and $Configuration.Information.Manifest.AliasesToExport) {
+    if ($Configuration.Information.Manifest.FunctionsToExport -and $Configuration.Information.Manifest.AliasesToExport -and $Configuration.Information.Manifest.CmdletsToExport) {
         return $true
     }
 
     $AliasesAndFunctions = Write-TextWithTime -Text 'Preparing function and aliases names' {
-        Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files #-Folder $Configuration.Information.AliasesToExport
+        Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files
     } -PreAppend Information
-    Write-TextWithTime -Text "Checking for duplicates in funcions and aliases" {
-        # if ($AliasesAndFunctions -is [System.Collections.IDictionary]) {
 
+    Write-TextWithTime -Text "Checking for duplicates in funcions, aliases and cmdlets" {
         # if user hasn't defined functions we will use auto-detected functions
         if ($null -eq $Configuration.Information.Manifest.FunctionsToExport) {
             $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Keys | Where-Object { $_ }
@@ -25,22 +25,26 @@
         # if user hasn't defined aliases we will use auto-detected aliases
         if ($null -eq $Configuration.Information.Manifest.AliasesToExport) {
             # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-            $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Values | ForEach-Object { $_ } | Where-Object { $_ }
+            $Configuration.Information.Manifest.AliasesToExport = @(
+                $AliasesAndFunctions.Values | ForEach-Object { $_ } | Where-Object { $_ }
+                # cmdlets aliases will have duplicates if there is core/default folder
+                $CmdletsAliases.Values.AliasesToExport | ForEach-Object { $_ } | Where-Object { $_ }
+            )
             if (-not $Configuration.Information.Manifest.AliasesToExport) {
                 $Configuration.Information.Manifest.AliasesToExport = @()
             }
         }
-        # } else {
-        # this is not used, as we're using Hashtable above, but maybe if we change mind we can go back
-        # $Configuration.Information.Manifest.FunctionsToExport = $AliasesAndFunctions.Name | Where-Object { $_ }
-        # if (-not $Configuration.Information.Manifest.FunctionsToExport) {
-        #     $Configuration.Information.Manifest.FunctionsToExport = @()
-        # }
-        # $Configuration.Information.Manifest.AliasesToExport = $AliasesAndFunctions.Alias | ForEach-Object { $_ } | Where-Object { $_ }
-        # if (-not $Configuration.Information.Manifest.AliasesToExport) {
-        #     $Configuration.Information.Manifest.AliasesToExport = @()
-        # }
-        # }
+        # if user hasn't defined cmdlets we will use auto-detected cmdlets
+        if ($null -eq $Configuration.Information.Manifest.CmdletsToExport) {
+            $Configuration.Information.Manifest.CmdletsToExport = @(
+                $CmdletsAliases.Values.CmdletsToExport | ForEach-Object { $_ } | Where-Object { $_ }
+            )
+            if (-not $Configuration.Information.Manifest.CmdletsToExport) {
+                $Configuration.Information.Manifest.CmdletsToExport = @()
+            } else {
+                $Configuration.Information.Manifest.CmdletsToExport = $Configuration.Information.Manifest.CmdletsToExport
+            }
+        }
         $FoundDuplicateAliases = $false
         if ($Configuration.Information.Manifest.AliasesToExport) {
             $UniqueAliases = $Configuration.Information.Manifest.AliasesToExport | Select-Object -Unique
@@ -50,12 +54,34 @@
                     Write-Text "   [-] Alias $Alias is also used as function name. Fix it!" -Color Red
                     $FoundDuplicateAliases = $true
                 }
+                if ($Alias -in $Configuration.Information.Manifest.CmdletsToExport) {
+                    Write-Text "   [-] Alias $Alias is also used as cmdlet name. Fix it!" -Color Red
+                    $FoundDuplicateAliases = $true
+                }
             }
             foreach ($Alias in $DiffrenceAliases.InputObject) {
                 Write-TextWithTime -Text "   [-] Alias $Alias is used multiple times. Fix it!" -Color Red
                 $FoundDuplicateAliases = $true
             }
             if ($FoundDuplicateAliases) {
+                return $false
+            }
+        }
+        $FoundDuplicateCmdlets = $false
+        if ($Configuration.Information.Manifest.CmdletsToExport) {
+            $UniqueCmdlets = $Configuration.Information.Manifest.CmdletsToExport | Select-Object -Unique
+            $DiffrenceCmdlets = Compare-Object -ReferenceObject $Configuration.Information.Manifest.CmdletsToExport -DifferenceObject $UniqueCmdlets
+            foreach ($Cmdlet in $Configuration.Information.Manifest.CmdletsToExport) {
+                if ($Cmdlet -in $Configuration.Information.Manifest.FunctionsToExport) {
+                    Write-Text "   [-] Cmdlet $Cmdlet is also used as function name. Fix it!" -Color Red
+                    $FoundDuplicateCmdlets = $true
+                }
+            }
+            foreach ($Cmdlet in $DiffrenceCmdlets.InputObject) {
+                Write-TextWithTime -Text "   [-] Cmdlet $Cmdlet is used multiple times. Fix it!" -Color Red
+                $FoundDuplicateCmdlets = $true
+            }
+            if ($FoundDuplicateCmdlets) {
                 return $false
             }
         }
