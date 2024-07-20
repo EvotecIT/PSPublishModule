@@ -11,7 +11,8 @@
         [Array] $LinkPrivatePublicFiles,
         [string[]] $DirectoriesWithPS1,
         [string[]] $DirectoriesWithClasses,
-        [System.Collections.IDictionary] $AliasesAndFunctions
+        $AliasesAndFunctions,
+        [System.Collections.IDictionary] $CmdletsAliases
     )
     if ($Configuration.Steps.BuildModule.Merge) {
         foreach ($Directory in $LinkDirectories) {
@@ -127,20 +128,28 @@
         if ($FrameworkNet -eq 'Standard' -and $Framework -eq 'Standard') {
             $FilesLibrariesStandard = $FilesLibrariesCore
         }
-        $Success = Merge-Module -ModuleName $ProjectName `
-            -ModulePathSource $FullTemporaryPath `
-            -ModulePathTarget $FullModuleTemporaryPath `
-            -Sort $Configuration.Options.Merge.Sort `
-            -FunctionsToExport $Configuration.Information.Manifest.FunctionsToExport `
-            -AliasesToExport $Configuration.Information.Manifest.AliasesToExport `
-            -AliasesAndFunctions $AliasesAndFunctions `
-            -LibrariesStandard $FilesLibrariesStandard `
-            -LibrariesCore $FilesLibrariesCore `
-            -LibrariesDefault $FilesLibrariesDefault `
-            -FormatCodePSM1 $Configuration.Options.Merge.FormatCodePSM1 `
-            -FormatCodePSD1 $Configuration.Options.Merge.FormatCodePSD1 `
-            -Configuration $Configuration -DirectoriesWithPS1 $DirectoriesWithPS1 `
-            -ClassesPS1 $DirectoriesWithClasses -IncludeAsArray $Configuration.Information.IncludeAsArray
+
+        $mergeModuleSplat = @{
+            ModuleName          = $ProjectName
+            ModulePathSource    = $FullTemporaryPath
+            ModulePathTarget    = $FullModuleTemporaryPath
+            Sort                = $Configuration.Options.Merge.Sort
+            FunctionsToExport   = $Configuration.Information.Manifest.FunctionsToExport
+            AliasesToExport     = $Configuration.Information.Manifest.AliasesToExport
+            AliasesAndFunctions = $AliasesAndFunctions
+            CmdletsAliases      = $CmdletsAliases
+            LibrariesStandard   = $FilesLibrariesStandard
+            LibrariesCore       = $FilesLibrariesCore
+            LibrariesDefault    = $FilesLibrariesDefault
+            FormatCodePSM1      = $Configuration.Options.Merge.FormatCodePSM1
+            FormatCodePSD1      = $Configuration.Options.Merge.FormatCodePSD1
+            Configuration       = $Configuration
+            DirectoriesWithPS1  = $DirectoriesWithPS1
+            ClassesPS1          = $DirectoriesWithClasses
+            IncludeAsArray      = $Configuration.Information.IncludeAsArray
+        }
+
+        $Success = Merge-Module @mergeModuleSplat
 
         if ($Success -eq $false) {
             return $false
