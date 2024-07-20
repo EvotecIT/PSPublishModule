@@ -26,6 +26,7 @@
     param (
         [Parameter(Mandatory)][string] $Path
     )
+    Write-Text -Text "[-] Loading assembly $Path" -Color Cyan
     try {
         $resolver = [System.Reflection.PathAssemblyResolver]::new(
             [string[]]@(
@@ -36,18 +37,28 @@
         Write-Text -Text "[-] Can't create PathAssemblyResolver. Please enable 'NETBinaryModuleCmdletScanDisabled' option when building PSPublishModule or investigate why library doesn't load for different modules. Error: $($_.Exception.Message)" -Color Red
         return $false
     }
-    $context = [System.Reflection.MetadataLoadContext]::new($resolver)
+    try {
+        $context = [System.Reflection.MetadataLoadContext]::new($resolver)
+    } catch {
+        Write-Text -Text "[-] Can't create MetadataLoadContext for file $Path. Skipping file, as most likely non-powershell binary. Error: $($_.Exception.Message)" -Color DarkYellow
+        return
+    }
     try {
         $smaAssembly = $context.LoadFromAssemblyPath([PSObject].Assembly.Location)
         $cmdletType = $smaAssembly.GetType('System.Management.Automation.Cmdlet')
         $cmdletAttribute = $smaAssembly.GetType('System.Management.Automation.CmdletAttribute')
         $aliasAttribute = $smaAssembly.GetType('System.Management.Automation.AliasAttribute')
 
+
         $assembly = $context.LoadFromAssemblyPath($Path)
+
+        Write-Verbose -Message "Loaded assembly $($assembly.FullName), $($assembly.Location) searching for cmdlets and aliases"
 
         $cmdletsToExport = [System.Collections.Generic.List[string]]::new()
         $aliasesToExport = [System.Collections.Generic.List[string]]::new()
-        $assembly.GetTypes() | Where-Object {
+        $Types = $assembly.GetTypes()
+
+        $Types | Where-Object {
             $_.IsSubclassOf($cmdletType)
         } | ForEach-Object -Process {
             $cmdletInfo = $_.CustomAttributes | Where-Object { $_.AttributeType -eq $cmdletAttribute }
@@ -65,6 +76,10 @@
             CmdletsToExport = $cmdletsToExport
             AliasesToExport = $aliasesToExport
         }
+    } catch {
+        Write-Text -Text "[-] Can't load assembly $Path. Error: $($_.Exception.Message)" -Color Red
+        $context.Dispose()
+        return $false
     } finally {
         $context.Dispose()
     }
