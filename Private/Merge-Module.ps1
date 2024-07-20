@@ -9,7 +9,8 @@ function Merge-Module {
         [string] $Sort = 'NONE',
         [string[]] $FunctionsToExport,
         [string[]] $AliasesToExport,
-        [System.Collections.IDictionary] $AliasesAndFunctions,
+        $AliasesAndFunctions,
+        [System.Collections.IDictionary] $CmdletsAliases,
         [Array] $LibrariesStandard,
         [Array] $LibrariesCore,
         [Array] $LibrariesDefault,
@@ -319,6 +320,7 @@ function Merge-Module {
         FunctionNames              = $FunctionsToExport
         FunctionAliaes             = $AliasesToExport
         AliasesAndFunctions        = $AliasesAndFunctions
+        CmdletsAliases             = $CmdletsAliases
         LibrariesStandard          = $LibrariesStandard
         LibrariesCore              = $LibrariesCore
         LibrariesDefault           = $LibrariesDefault
