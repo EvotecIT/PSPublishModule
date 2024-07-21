@@ -11,7 +11,7 @@
     }
 
     $AliasesAndFunctions = Write-TextWithTime -Text 'Preparing function and aliases names' {
-        Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files
+        Get-FunctionAliasesFromFolder -FullProjectPath $FullProjectPath -Files $Files -FunctionsToExport $Configuration.Information.FunctionsToExport -AliasesToExport $Configuration.Information.AliasesToExport
     } -PreAppend Information
 
     Write-TextWithTime -Text "Checking for duplicates in funcions, aliases and cmdlets" {

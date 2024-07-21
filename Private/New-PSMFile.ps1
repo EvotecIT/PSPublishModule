@@ -4,7 +4,7 @@ function New-PSMFile {
         [string] $Path,
         [string[]] $FunctionNames,
         [string[]] $FunctionAliaes,
-        $AliasesAndFunctions,
+        [System.Collections.IDictionary] $AliasesAndFunctions,
         [System.Collections.IDictionary] $CmdletsAliases,
         [Array] $LibrariesStandard,
         [Array] $LibrariesCore,

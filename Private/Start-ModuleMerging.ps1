@@ -11,7 +11,7 @@
         [Array] $LinkPrivatePublicFiles,
         [string[]] $DirectoriesWithPS1,
         [string[]] $DirectoriesWithClasses,
-        $AliasesAndFunctions,
+        [System.Collections.IDictionary] $AliasesAndFunctions,
         [System.Collections.IDictionary] $CmdletsAliases
     )
     if ($Configuration.Steps.BuildModule.Merge) {
