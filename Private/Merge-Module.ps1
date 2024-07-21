@@ -9,7 +9,7 @@ function Merge-Module {
         [string] $Sort = 'NONE',
         [string[]] $FunctionsToExport,
         [string[]] $AliasesToExport,
-        $AliasesAndFunctions,
+        [System.Collections.IDictionary] $AliasesAndFunctions,
         [System.Collections.IDictionary] $CmdletsAliases,
         [Array] $LibrariesStandard,
         [Array] $LibrariesCore,
