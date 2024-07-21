@@ -1,8 +1,16 @@
 ﻿function New-DLLResolveConflict {
     [CmdletBinding()]
     param(
-        [string] $ProjectName
+        [string] $ProjectName,
+        [System.Collections.IDictionary] $LibraryConfiguration
     )
+
+    if ($LibraryConfiguration.SearchClass) {
+        $SearchClass = $LibraryConfiguration.SearchClass
+    } else {
+        $SearchClass = "`$LibraryName.Initialize"
+    }
+
     if ($ProjectName) {
         $StandardName = "'$ProjectName'"
     } else {
@@ -13,7 +21,7 @@
     # Get library name, from the PSM1 file name
     `$LibraryName = $StandardName
     `$Library = "`$LibraryName.dll"
-    `$Class = "`$LibraryName.Initialize"
+    `$Class = "$SearchClass"
 
     `$AssemblyFolders = Get-ChildItem -Path `$PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
 
