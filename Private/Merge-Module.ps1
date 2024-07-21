@@ -281,9 +281,9 @@ function Merge-Module {
         $IntegrateContent = @(
             # add resolve conflicting binary option
             if ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -is [System.Collections.IDictionary]) {
-                New-DLLResolveConflict -ProjectName $Configuration.Steps.BuildModule.ResolveBinaryConflicts.ProjectName
+                New-DLLResolveConflict -ProjectName $Configuration.Steps.BuildModule.ResolveBinaryConflicts.ProjectName -LibraryConfiguration $Configuration.Steps.BuildLibraries
             } elseif ($Configuration.Steps.BuildModule.ResolveBinaryConflicts -eq $true) {
-                New-DLLResolveConflict
+                New-DLLResolveConflict -LibraryConfiguration $Configuration.Steps.BuildLibraries
             }
 
             Add-BinaryImportModule -Configuration $Configuration -LibrariesStandard $LibrariesStandard -LibrariesCore $LibrariesCore -LibrariesDefault $LibrariesDefault
