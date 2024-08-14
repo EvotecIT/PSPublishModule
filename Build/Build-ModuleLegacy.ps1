@@ -2,7 +2,7 @@
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
 $Configuration = @{
-    Information = @{
+    Information        = @{
         ModuleName        = 'PSPublishModule'
         #DirectoryProjects = 'C:\Support\GitHub'
 
@@ -65,7 +65,7 @@ $Configuration = @{
             DotNetFrameworkVersion     = '4.5.2'
         }
     }
-    Options     = @{
+    Options            = @{
         Merge             = @{
             Sort           = 'None'
             FormatCodePSM1 = @{
@@ -168,7 +168,10 @@ $Configuration = @{
             CertificateThumbprint = '36A8A2D0E227D81A2D3B60DCE0CFCF23BEFC343B'
         }
     }
-    Steps       = @{
+    PlaceHolderOptions = @{
+        SkipBuiltinReplacements = $true
+    }
+    Steps              = @{
         BuildLibraries     = @{
             Enable        = $false # build once every time nuget gets updated
             Configuration = 'Release'
