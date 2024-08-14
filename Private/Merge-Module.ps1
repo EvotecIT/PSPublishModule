@@ -340,6 +340,11 @@ function Merge-Module {
         return $false
     }
 
+    $Success = Repair-CustomPlaceHolders -Path $PSM1FilePath -Configuration $Configuration
+    if ($Success -eq $false) {
+        return $false
+    }
+
     # Format standard PSM1 file
     $Success = Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
     if ($Success -eq $false) {

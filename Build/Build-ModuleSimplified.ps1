@@ -7,7 +7,7 @@
 # This version is for local building
 # We need to rmeove library before we start, as it may contain old files, which will be in use once PSD1 loads
 # This is only required for PSPublisModule, as it's the only module that is being built by itself
-Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Lib" -Recurse -Force -ErrorAction Stop
+Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Lib" -Recurse -Force -ErrorAction SilentlyContinue
 
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
@@ -114,6 +114,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
         DoNotAttemptToFixRelativePaths    = $false
+        SkipBuiltinReplacements           = $true
 
         # required for Cmdlet/Alias functionality
         NETProjectPath                    = "$PSScriptRoot\..\Sources\PSPublishModule\PSPublishModule"
