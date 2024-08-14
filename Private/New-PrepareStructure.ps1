@@ -154,6 +154,14 @@
     # Variables to export from this module
     #$Configuration.Information.Manifest.VariablesToExport = @()
 
+    # This is to store custom placeholders
+    if (-not $Configuration.PlaceHolder) {
+        $Configuration.PlaceHolder = [System.Collections.Generic.List[System.Collections.IDictionary]]::new()
+    }
+    if (-not $Configuration.PlaceHolderOption) {
+        $Configuration.PlaceHolderOption = [ordered] @{}
+    }
+
     Write-TextWithTime -Text "Reading configuration" {
         if ($Settings) {
             $ExecutedSettings = & $Settings
@@ -233,6 +241,12 @@
                         foreach ($Entry in $Setting.Options[$Key].Keys) {
                             $Configuration.Options[$Key][$Entry] = $Setting.Options[$Key][$Entry]
                         }
+                    }
+                } elseif ($Setting.Type -eq 'PlaceHolder') {
+                    $Configuration.PlaceHolder.Add($Setting.Configuration)
+                } elseif ($Setting.Type -eq 'PlaceHolderOption') {
+                    foreach ($Key in $Setting.PlaceHolderOption.Keys) {
+                        $Configuration.PlaceHolderOption[$Key] = $Setting.PlaceHolderOption[$Key]
                     }
                 }
             }
