@@ -1,5 +1,13 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.14 - 2024.08.14
+
+### What's Changed
+* Adding cmdlet detection by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/25
+* Add custom and builtin place holders replacement functionality by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/26
+
+**Full Changelog**: https://github.com/EvotecIT/PSPublishModule/compare/v2.0.13...v2.0.14
+
 ## 2.0.13 - 2024.07.13
 - When using `New-ConfigurtionManifest` and using `CmdletsToExport` it would not export them in PSM1 file. This is now fixed
 - Moved function to separate file to improve visibility
