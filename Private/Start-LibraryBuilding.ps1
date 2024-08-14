@@ -4,7 +4,8 @@
         [string] $ModuleName,
         [string] $RootDirectory,
         [string] $Version,
-        [System.Collections.IDictionary] $LibraryConfiguration
+        [System.Collections.IDictionary] $LibraryConfiguration,
+        [System.Collections.IDictionary] $CmdletsAliases
 
     )
     if ($LibraryConfiguration.Count -eq 0) {
@@ -94,6 +95,7 @@
         }
     }
 
+    $Count = 0
     foreach ($Framework in $TranslateFrameworks.Keys) {
         if ($SupportedFrameworks.Contains($Framework.ToLower()) -and $LibraryConfiguration.Framework.Contains($Framework.ToLower())) {
             Write-Text "[+] Building $Framework ($Configuration)"
@@ -118,6 +120,7 @@
             Write-Text "[-] Can't list files in $PublishDirFolder folder. Error: $($_.Exception.Message)" -Color Red
             return $false
         }
+        $Count++
         $Errors = $false
         :fileLoop foreach ($File in $List) {
             if ($LibraryConfiguration.ExcludeMainLibrary -and $File.Name -eq "$ModuleName.dll") {
@@ -127,6 +130,26 @@
                 foreach ($Library in $LibraryConfiguration.ExcludeLibraryFilter) {
                     if ($File.Name -like $Library) {
                         continue fileLoop
+                    }
+                }
+            }
+
+            if ($Count -eq 1) {
+                if (-not $LibraryConfiguration.BinaryModuleCmdletScanDisabled) {
+                    $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
+                    if ($CmdletsFound -eq $false) {
+                        $Errors = $true
+                    } else {
+                        if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
+                            Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
+                            if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
+                                Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                            }
+                            if ($CmdletsFound.AliasesToExport.Count -gt 0) {
+                                Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                            }
+                            $CmdletsAliases[$File.FullName] = $CmdletsFound
+                        }
                     }
                 }
             }

@@ -46,15 +46,6 @@
     By default module builder will attempt to fix it. This option disables this functionality.
     Best practice is to use $MyInvocation.MyCommand.Module.ModuleBase or similar instead of relative paths.
 
-    .PARAMETER MergeLibraryDebugging
-    Parameter description
-
-    .PARAMETER ResolveBinaryConflicts
-    Parameter description
-
-    .PARAMETER ResolveBinaryConflictsName
-    Parameter description
-
     .PARAMETER CertificateThumbprint
     Parameter description
 
@@ -99,12 +90,28 @@
     In here you provide one or more binrary module names that you want to import in the module.
     Just the DLL name with extension without path. Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
 
+    .PARAMETER NETBinaryModuleCmdletScanDisabled
+    This is to disable scanning for cmdlets in binary modules, this is useful if you have a lot of binary modules and you don't want to scan them for cmdlets.
+    By default it will scan for cmdlets/aliases in binary modules and add them to the module PSD1/PSM1 files.
+
     .PARAMETER NETHandleAssemblyWithSameName
     Adds try/catch block to handle assembly with same name is already loaded exception and ignore it.
     It's useful in PowerShell 7, as it's more strict about this than Windows PowerShell, and usually everything should work as expected.
 
     .PARAMETER NETLineByLineAddType
     Adds Add-Type line by line, this is useful if you have a lot of libraries and you want to see which one is causing the issue.
+
+    .PARAMETER NETMergeLibraryDebugging
+    Add special logic to simplify debugging of merged libraries, this is useful if you have a lot of libraries and you want to see which one is causing the issue.
+
+    .PARAMETER NETResolveBinaryConflicts
+    Add special logic to resolve binary conflicts. It uses by defalt the project name. If you want to use different name use NETResolveBinaryConflictsName
+
+    .PARAMETER NETResolveBinaryConflictsName
+    Add special logic to resolve binary conflicts for specific project name.
+
+    .PARAMETER NETSearchClass
+    Provide a name for class when using NETResolveBinaryConflicts or NETResolveBinaryConflictsName. By default it uses `$LibraryName.Initialize` however that may not be always the case
 
     .EXAMPLE
     $newConfigurationBuildSplat = @{
@@ -113,8 +120,8 @@
         MergeModuleOnBuild                = $true
         MergeFunctionsFromApprovedModules = $true
         CertificateThumbprint             = '483292C9E317AA1'
-        ResolveBinaryConflicts            = $true
-        ResolveBinaryConflictsName        = 'Transferetto'
+        NETResolveBinaryConflicts            = $true
+        NETResolveBinaryConflictsName        = 'Transferetto'
         NETProjectName                    = 'Transferetto'
         NETConfiguration                  = 'Release'
         NETFramework                      = 'netstandard2.0'
@@ -145,10 +152,6 @@
 
         [switch] $DoNotAttemptToFixRelativePaths,
 
-        [alias("NETMergeLibraryDebugging")][switch] $MergeLibraryDebugging,
-        [switch] $ResolveBinaryConflicts,
-        [string] $ResolveBinaryConflictsName,
-
         [string] $CertificateThumbprint,
         [string] $CertificatePFXPath,
         [string] $CertificatePFXBase64,
@@ -163,7 +166,12 @@
         [string[]] $NETIgnoreLibraryOnLoad,
         [string[]] $NETBinaryModule,
         [alias('HandleAssemblyWithSameName')][switch] $NETHandleAssemblyWithSameName,
-        [switch] $NETLineByLineAddType
+        [switch] $NETLineByLineAddType,
+        [switch] $NETBinaryModuleCmdletScanDisabled,
+        [alias("MergeLibraryDebugging")][switch] $NETMergeLibraryDebugging,
+        [alias("ResolveBinaryConflicts")][switch] $NETResolveBinaryConflicts,
+        [alias("ResolveBinaryConflictsName")][string] $NETResolveBinaryConflictsName,
+        [string] $NETSearchClass
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -269,28 +277,28 @@
         }
     }
 
-    if ($PSBoundParameters.ContainsKey('MergeLibraryDebugging')) {
+    if ($PSBoundParameters.ContainsKey('NETMergeLibraryDebugging')) {
         [ordered] @{
             Type        = 'Build'
             BuildModule = [ordered] @{
-                DebugDLL = $MergeLibraryDebugging.IsPresent
+                DebugDLL = $NETMergeLibraryDebugging.IsPresent
             }
         }
     }
-    if ($PSBoundParameters.ContainsKey('ResolveBinaryConflictsName')) {
+    if ($PSBoundParameters.ContainsKey('NETResolveBinaryConflictsName')) {
         [ordered] @{
             Type        = 'Build'
             BuildModule = [ordered] @{
                 ResolveBinaryConflicts = @{
-                    ProjectName = $ResolveBinaryConflictsName
+                    ProjectName = $NETResolveBinaryConflictsName
                 }
             }
         }
-    } elseif ($PSBoundParameters.ContainsKey('ResolveBinaryConflicts')) {
+    } elseif ($PSBoundParameters.ContainsKey('NETResolveBinaryConflicts')) {
         [ordered] @{
             Type        = 'Build'
             BuildModule = [ordered] @{
-                ResolveBinaryConflicts = $ResolveBinaryConflicts.IsPresent
+                ResolveBinaryConflicts = $NETResolveBinaryConflicts.IsPresent
             }
         }
     }
@@ -338,14 +346,6 @@
 
     # Build libraries configuration, this is useful if you have C# project that you want to build
     # so libraries are autogenerated and you can use them in your PowerShell module
-
-    # $BuildLibraries = @{
-    #     Enable        = $false # build once every time nuget gets updated
-    #     Configuration = 'Release'
-    #     Framework     = 'netstandard2.0', 'net472'
-    #     ProjectName   = 'ImagePlayground.PowerShell'
-    # }
-
     if ($PSBoundParameters.ContainsKey('NETConfiguration')) {
         [ordered] @{
             Type           = 'BuildLibraries'
@@ -438,6 +438,24 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 NETProjectPath = $NETProjectPath
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETBinaryModuleCmdletScanDisabled')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                BinaryModuleCmdletScanDisabled = $NETBinaryModuleCmdletScanDisabled.IsPresent
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETSearchClass')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                SearchClass = $NETSearchClass
             }
         }
     }

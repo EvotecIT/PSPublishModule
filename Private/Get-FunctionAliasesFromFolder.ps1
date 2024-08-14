@@ -3,22 +3,34 @@ function Get-FunctionAliasesFromFolder {
     param(
         [string] $FullProjectPath,
         [string[]] $Folder,
-        [Array] $Files
+        [Array] $Files,
+        [string] $FunctionsToExport,
+        [string] $AliasesToExport
     )
-    $FilesPS1 = foreach ($File in $Files) {
-        $Path = [io.path]::Combine("*", 'Public', '*')
-        if ($file.FullName -like $Path) {
-            if ($File.Extension -eq '.ps1' -or $File.Extension -eq '*.psm1') {
-                $File
+    [Array] $FilesPS1 = foreach ($File in $Files) {
+        if ($FunctionsToExport) {
+            $PathFunctions = [io.path]::Combine($FullProjectPath, $FunctionsToExport, '*')
+            if ($File.FullName -like $PathFunctions) {
+                if ($File.Extension -eq '.ps1' -or $File.Extension -eq '*.psm1') {
+                    $File
+                }
+            }
+        }
+        if ($AliasesToExport -and $AliasesToExport -ne $FunctionsToExport) {
+            $PathAliases = [io.path]::Combine($FullProjectPath, $AliasesToExport, '*')
+            if ($File.FullName -like $PathAliases) {
+                if ($File.Extension -eq '.ps1' -or $File.Extension -eq '*.psm1') {
+                    $File
+                }
             }
         }
     }
-    [Array] $Content = foreach ($File in $FilesPS1) {
+    [Array] $Content = foreach ($File in $FilesPS1 | Sort-Object -Unique) {
         ''
         Get-Content -LiteralPath $File.FullName -Raw -Encoding UTF8
     }
     $Code = $Content -join [System.Environment]::NewLine
 
-    $AliasesToExport = Get-FunctionAliases -Content $Code -AsHashtable
-    $AliasesToExport
+    $OutputAliasesToExport = Get-FunctionAliases -Content $Code -AsHashtable
+    $OutputAliasesToExport
 }
