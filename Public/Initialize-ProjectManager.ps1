@@ -29,7 +29,7 @@
     $ProjectsPath = Get-ChildItem -LiteralPath $Path -Directory
 
     $SortedProjects = foreach ($Project in $ProjectsPath) {
-        $AllFiles = Get-ChildItem -LiteralPath $Project.FullName -Exclude ".\.git"
+        $AllFiles = Get-ChildItem -LiteralPath $Project.FullName -Exclude ".\.git" -Recurse -Depth 2 -File
         $NewestFile = $AllFiles | Sort-Object -Descending -Property LastWriteTime | Select-Object -First 1
 
         [PSCustomObject] @{
