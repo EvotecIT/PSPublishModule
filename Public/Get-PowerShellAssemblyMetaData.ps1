@@ -28,13 +28,18 @@
     )
     Write-Text -Text "[-] Loading assembly $Path" -Color Cyan
     try {
+        $assemblyDirectory = Split-Path -Path $Path
+        $runtimeAssemblies = Get-ChildItem -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -Filter "*.dll"
+        $assemblyFiles = Get-ChildItem -Path $assemblyDirectory -Filter "*.dll"
+
         $resolver = [System.Reflection.PathAssemblyResolver]::new(
             [string[]]@(
-            (Get-ChildItem -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -Filter "*.dll").FullName
-                $Path
-            ))
+                $runtimeAssemblies.FullName
+                $assemblyFiles.FullName
+            )
+        )
     } catch {
-        Write-Text -Text "[-] Can't create PathAssemblyResolver. Please enable 'NETBinaryModuleCmdletScanDisabled' option when building PSPublishModule or investigate why library doesn't load for different modules. Error: $($_.Exception.Message)" -Color Red
+        Write-Text -Text "[-] Can't create PathAssemblyResolver. Please ensure all dependencies are present. Error: $($_.Exception.Message)" -Color Red
         return $false
     }
     try {
