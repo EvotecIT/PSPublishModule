@@ -75,11 +75,15 @@
                 $StartsWithStandard = -join ($Configuration.Information.LibrariesStandard, "/")
             }
         }
-
-        $CoreFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
-        $DefaultFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
-        $StandardFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
-
+        if ($null -ne $LinkPrivatePublicFiles) {
+            $CoreFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithCore) }
+            $DefaultFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithDefault) }
+            $StandardFiles = $LinkPrivatePublicFiles | Where-Object { ($_).StartsWith($StartsWithStandard) }
+        } else {
+            $CoreFiles = @()
+            $DefaultFiles = @()
+            $StandardFiles = @()
+        }
         $Default = $false
         $Core = $false
         $Standard = $false
