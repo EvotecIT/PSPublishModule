@@ -85,10 +85,17 @@
         $Content = Get-Content -LiteralPath $PS1 -ErrorAction Stop -Encoding UTF8
 
         # Find the index of the line that contains "# Export functions and aliases as required" starting from the bottom of the file
-        $index = ($Content | Select-String -Pattern "Export-ModuleMember " -SimpleMatch | Select-Object -Last 2).LineNumber
-
-        # Remove all lines below the index, including that line
-        $Content = $Content[0..($index - 2)]
+        if ($Content -contains "# Export functions and aliases as required") {
+            $Index = ($Content | Select-String -Pattern "# Export functions and aliases as required" -SimpleMatch | Select-Object -Last 1).LineNumber
+            $Content = $Content | Select-Object -First ($Index - 1)
+            # Remove all lines below the index, including that line
+            #$Content = $Content[0..($index - 2)]
+        } else {
+            $index = ($Content | Select-String -Pattern "Export-ModuleMember " -SimpleMatch | Select-Object -Last 1).LineNumber
+            # Remove all lines below the index, including that line
+            # $Content = $Content[0..($index - 2)]
+            $Content = $Content | Select-Object -First ($Index - 1)
+        }
 
         if ($PreScriptMerge) {
             $Content = @(
