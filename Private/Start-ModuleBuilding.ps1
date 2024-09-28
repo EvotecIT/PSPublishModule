@@ -86,7 +86,7 @@
     }
 
     $Success = Start-LibraryBuilding @startLibraryBuildingSplat
-    if ($Success -eq $false) {
+    if ($Success -contains $false) {
         return $false
     }
 
