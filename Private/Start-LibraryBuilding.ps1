@@ -99,7 +99,7 @@
     foreach ($Framework in $TranslateFrameworks.Keys) {
         if ($SupportedFrameworks.Contains($Framework.ToLower()) -and $LibraryConfiguration.Framework.Contains($Framework.ToLower())) {
             Write-Text "[+] Building $Framework ($Configuration)"
-            dotnet publish --configuration $Configuration --verbosity q -nologo -p:Version=$Version --framework $Framework
+            $null = dotnet publish --configuration $Configuration --verbosity q -nologo -p:Version=$Version --framework $Framework
             if ($LASTEXITCODE) {
                 Write-Host # This is to add new line, because the first line was opened up.
                 Write-Text "[-] Building $Framework - failed. Error: $LASTEXITCODE" -Color Red
