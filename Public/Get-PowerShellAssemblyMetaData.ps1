@@ -28,6 +28,21 @@
     )
     Write-Text -Text "[-] Loading assembly $Path" -Color Cyan
     try {
+        # Get the path to System.Management.Automation assembly
+        $smaAssembly = [System.Management.Automation.PSObject].Assembly
+        $smaAssemblyPath = $smaAssembly.Location
+
+        if (-not $smaAssemblyPath) {
+            $smaAssemblyPath = $smaAssembly.CodeBase
+            if ($smaAssemblyPath -like 'file://*') {
+                $smaAssemblyPath = $smaAssemblyPath -replace 'file:///', ''
+                $smaAssemblyPath = [System.Uri]::UnescapeDataString($smaAssemblyPath)
+            } else {
+                Write-Text -Text "[-] Could not determine the path to System.Management.Automation assembly." -Color Red
+                return $false
+            }
+        }
+
         $assemblyDirectory = Split-Path -Path $Path
         $runtimeAssemblies = Get-ChildItem -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -Filter "*.dll"
         $assemblyFiles = Get-ChildItem -Path $assemblyDirectory -Filter "*.dll"
@@ -36,6 +51,7 @@
             [string[]]@(
                 $runtimeAssemblies.FullName
                 $assemblyFiles.FullName
+                $smaAssemblyPath  # Include System.Management.Automation
             )
         )
     } catch {
@@ -44,16 +60,12 @@
     }
     try {
         $context = [System.Reflection.MetadataLoadContext]::new($resolver)
-    } catch {
-        Write-Text -Text "[-] Can't create MetadataLoadContext for file $Path. Skipping file, as most likely non-powershell binary. Error: $($_.Exception.Message)" -Color DarkYellow
-        return
-    }
-    try {
-        $smaAssembly = $context.LoadFromAssemblyPath([PSObject].Assembly.Location)
-        $cmdletType = $smaAssembly.GetType('System.Management.Automation.Cmdlet')
-        $cmdletAttribute = $smaAssembly.GetType('System.Management.Automation.CmdletAttribute')
-        $aliasAttribute = $smaAssembly.GetType('System.Management.Automation.AliasAttribute')
 
+        # Load the System.Management.Automation assembly into the context
+        $smaAssemblyInContext = $context.LoadFromAssemblyPath($smaAssemblyPath)
+        $cmdletType = $smaAssemblyInContext.GetType('System.Management.Automation.Cmdlet')
+        $cmdletAttribute = $smaAssemblyInContext.GetType('System.Management.Automation.CmdletAttribute')
+        $aliasAttribute = $smaAssemblyInContext.GetType('System.Management.Automation.AliasAttribute')
 
         $assembly = $context.LoadFromAssemblyPath($Path)
 
