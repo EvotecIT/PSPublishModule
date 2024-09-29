@@ -1,116 +1,224 @@
-Register-Certificate
---------------------
-
-### Synopsis
-
-Register-Certificate -CertificatePFX <string> -Path <string> [-TimeStampServer <string>] [-IncludeChain <string>] [-Include <string[]>] [-HashAlgorithm <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
-
-Register-Certificate -LocalStore <string> -Path <string> [-Thumbprint <string>] [-TimeStampServer <string>] [-IncludeChain <string>] [-Include <string[]>] [-HashAlgorithm <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
-
+---
+external help file: PSPublishModule-help.xml
+Module Name: PSPublishModule
+online version:
+schema: 2.0.0
 ---
 
-### Description
+# Register-Certificate
 
----
+## SYNOPSIS
+{{ Fill in the Synopsis }}
 
-### Parameters
-#### **CertificatePFX**
+## SYNTAX
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[string]`|true    |Named   |false        |
-
-#### **Confirm**
--Confirm is an automatic variable that is created when a command has ```[CmdletBinding(SupportsShouldProcess)]```.
--Confirm is used to -Confirm each operation.
-
-If you pass ```-Confirm:$false``` you will not be prompted.
-
-If the command sets a ```[ConfirmImpact("Medium")]``` which is lower than ```$confirmImpactPreference```, you will not be prompted unless -Confirm is passed.
-
-#### **HashAlgorithm**
-
-Valid Values:
-
-* SHA1
-* SHA256
-* SHA384
-* SHA512
-
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[string]`|false   |Named   |false        |
-
-#### **Include**
-
-|Type        |Required|Position|PipelineInput|
-|------------|--------|--------|-------------|
-|`[string[]]`|false   |Named   |false        |
-
-#### **IncludeChain**
-
-Valid Values:
-
-* All
-* NotRoot
-* Signer
-
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[string]`|false   |Named   |false        |
-
-#### **LocalStore**
-
-Valid Values:
-
-* LocalMachine
-* CurrentUser
-
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[string]`|true    |Named   |false        |
-
-#### **Path**
-
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[string]`|true    |Named   |false        |
-
-#### **Thumbprint**
-
-|Type      |Required|Position|PipelineInput|Aliases              |
-|----------|--------|--------|-------------|---------------------|
-|`[string]`|false   |Named   |false        |CertificateThumbprint|
-
-#### **TimeStampServer**
-
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[string]`|false   |Named   |false        |
-
-#### **WhatIf**
--WhatIf is an automatic variable that is created when a command has ```[CmdletBinding(SupportsShouldProcess)]```.
--WhatIf is used to see what would happen, or return operations without executing them
-
----
-
-### Inputs
-None
-
----
-
-### Outputs
-* [Object](https://learn.microsoft.com/en-us/dotnet/api/System.Object)
-
----
-
-### Syntax
-```PowerShell
-syntaxItem
+### PFX
 ```
-```PowerShell
-----------
+Register-Certificate -CertificatePFX <String> -Path <String> [-TimeStampServer <String>]
+ [-IncludeChain <String>] [-Include <String[]>] [-HashAlgorithm <String>] [-ProgressAction <ActionPreference>]
+ [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
-```PowerShell
-{@{name=Register-Certificate; CommonParameters=True; parameter=System.Object[]}, @{name=Register-Certificate; CommonParameters=True; parameter=System.Object[]}}
+
+### Store
 ```
+Register-Certificate -LocalStore <String> [-Thumbprint <String>] -Path <String> [-TimeStampServer <String>]
+ [-IncludeChain <String>] [-Include <String[]>] [-HashAlgorithm <String>] [-ProgressAction <ActionPreference>]
+ [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+## DESCRIPTION
+{{ Fill in the Description }}
+
+## EXAMPLES
+
+### Example 1
+```powershell
+PS C:\> {{ Add example code here }}
+```
+
+{{ Add example description here }}
+
+## PARAMETERS
+
+### -CertificatePFX
+{{ Fill CertificatePFX Description }}
+
+```yaml
+Type: String
+Parameter Sets: PFX
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Confirm
+Prompts you for confirmation before running the cmdlet.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases: cf
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -HashAlgorithm
+{{ Fill HashAlgorithm Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: SHA1, SHA256, SHA384, SHA512
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Include
+{{ Fill Include Description }}
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeChain
+{{ Fill IncludeChain Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: All, NotRoot, Signer
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -LocalStore
+{{ Fill LocalStore Description }}
+
+```yaml
+Type: String
+Parameter Sets: Store
+Aliases:
+Accepted values: LocalMachine, CurrentUser
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
+{{ Fill Path Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Thumbprint
+{{ Fill Thumbprint Description }}
+
+```yaml
+Type: String
+Parameter Sets: Store
+Aliases: CertificateThumbprint
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -TimeStampServer
+{{ Fill TimeStampServer Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -WhatIf
+Shows what would happen if the cmdlet runs.
+The cmdlet is not run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases: wi
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProgressAction
+{{ Fill ProgressAction Description }}
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+### None
+
+## OUTPUTS
+
+### System.Object
+## NOTES
+
+## RELATED LINKS

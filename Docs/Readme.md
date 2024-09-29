@@ -17,6 +17,9 @@ Locale: en-US
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 {{ Fill in the Description }}
 
+### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
+{{ Fill in the Description }}
+
 ### [Initialize-PortableModule](Initialize-PortableModule.md)
 {{ Fill in the Description }}
 
@@ -60,6 +63,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationPlaceHolder](New-ConfigurationPlaceHolder.md)
 {{ Fill in the Description }}
 
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)

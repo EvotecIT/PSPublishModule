@@ -1,88 +1,156 @@
-New-ConfigurationDocumentation
-------------------------------
-
-### Synopsis
-Enables or disables creation of documentation from the module using PlatyPS
-
+---
+external help file: PSPublishModule-help.xml
+Module Name: PSPublishModule
+online version:
+schema: 2.0.0
 ---
 
-### Description
+# New-ConfigurationDocumentation
 
+## SYNOPSIS
 Enables or disables creation of documentation from the module using PlatyPS
 
----
+## SYNTAX
 
-### Examples
-> EXAMPLE 1
+```
+New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [-Path] <String> [-PathReadme] <String>
+ [[-Tool] <String>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```
 
-```PowerShell
+## DESCRIPTION
+Enables or disables creation of documentation from the module using PlatyPS
+
+## EXAMPLES
+
+### EXAMPLE 1
+```
 New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 ```
-> EXAMPLE 2
 
-```PowerShell
+### EXAMPLE 2
+```
 New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs'
 ```
 
----
+## PARAMETERS
 
-### Parameters
-#### **Enable**
-Enables creation of documentation from the module. If not specified, the documentation will not be created.
+### -Enable
+Enables creation of documentation from the module.
+If not specified, the documentation will not be created.
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[Switch]`|false   |named   |false        |
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
 
-#### **StartClean**
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -StartClean
 Removes all files from the documentation folder before creating new documentation.
-Otherwise the `Update-MarkdownHelpModule` will be used to update the documentation.
+Otherwise the \`Update-MarkdownHelpModule\` will be used to update the documentation.
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[Switch]`|false   |named   |false        |
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
 
-#### **UpdateWhenNew**
-Updates the documentation right after running `New-MarkdownHelp` due to platyPS bugs.
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[Switch]`|false   |named   |false        |
+### -UpdateWhenNew
+Updates the documentation right after running \`New-MarkdownHelp\` due to platyPS bugs.
 
-#### **Path**
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
 Path to the folder where documentation will be created.
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[String]`|true    |1       |false        |
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
 
-#### **PathReadme**
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PathReadme
 Path to the readme file that will be used for the documentation.
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[String]`|true    |2       |false        |
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
 
-#### **Tool**
-Tool to use for documentation generation. By default `HelpOut` is used.
-Available options are `PlatyPS` and `HelpOut`.
-Valid Values:
+Required: True
+Position: 2
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
-* PlatyPS
-* HelpOut
+### -Tool
+Tool to use for documentation generation.
+By default \`HelpOut\` is used.
+Available options are \`PlatyPS\` and \`HelpOut\`.
 
-|Type      |Required|Position|PipelineInput|
-|----------|--------|--------|-------------|
-|`[String]`|false   |3       |false        |
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
 
----
+Required: False
+Position: 3
+Default value: PlatyPS
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
-### Notes
+### -ProgressAction
+{{ Fill ProgressAction Description }}
+
+```yaml
+Type: ActionPreference
+Parameter Sets: (All)
+Aliases: proga
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### CommonParameters
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+
+## INPUTS
+
+## OUTPUTS
+
+## NOTES
 General notes
 
----
-
-### Syntax
-```PowerShell
-New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [-Path] <String> [-PathReadme] <String> [[-Tool] <String>] [<CommonParameters>]
-```
+## RELATED LINKS
