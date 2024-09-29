@@ -8,7 +8,7 @@ schema: 2.0.0
 # Get-PowerShellAssemblyMetadata
 
 ## SYNOPSIS
-Gets the cmdlets and aliases in a dotnet assembly.
+{{ Fill in the Synopsis }}
 
 ## SYNTAX
 
@@ -21,15 +21,17 @@ Get-PowerShellAssemblyMetadata [-Path] <String> [-ProgressAction <ActionPreferen
 
 ## EXAMPLES
 
-### EXAMPLE 1
+### Example 1
+```powershell
+PS C:\> {{ Add example code here }}
 ```
-Get-PowerShellAssemblyMetadata -Path MyModule.dll
-```
+
+{{ Add example description here }}
 
 ## PARAMETERS
 
 ### -Path
-The assembly to inspect.
+{{ Fill Path Description }}
 
 ```yaml
 Type: String
@@ -37,7 +39,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
-Position: 1
+Position: 0
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -63,20 +65,11 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+### None
+
 ## OUTPUTS
 
+### System.Object
 ## NOTES
-This requires the System.Reflection.MetadataLoadContext assembly to be
-loaded through Add-Type.
-WinPS (5.1) will also need to load its deps
-    System.Memory
-    System.Collections.Immutable
-    System.Reflection.Metadata
-    System.Runtime.CompilerServices.Unsafe
-
-https://www.nuget.org/packages/System.Reflection.MetadataLoadContext
-
-Copyright: (c) 2024, Jordan Borean (@jborean93) \<jborean93@gmail.com\>
-MIT License (see LICENSE or https://opensource.org/licenses/MIT)
 
 ## RELATED LINKS

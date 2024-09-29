@@ -22,8 +22,9 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [[-NETExcludeLibraryFilter] <String[]>]
  [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>] [-NETHandleAssemblyWithSameName]
  [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging]
- [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [[-NETSearchClass] <String>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [-NETBinaryModuleDocumenation]
+ [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -544,6 +545,37 @@ Aliases: ResolveBinaryConflictsName
 Required: False
 Position: 12
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETBinaryModuleDocumenation
+Include documentation for binary modules, this is useful if you have a lot of binary modules and you want to include documentation for them (if available in XML format)
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases: NETDocumentation
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETDoNotCopyLibrariesRecursively
+Do not copy libraries recursively.
+Normally all libraries are copied recursively, but this option disables that functionality so it won't copy subfolders of libraries.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
