@@ -116,6 +116,9 @@
     .PARAMETER NETSearchClass
     Provide a name for class when using NETResolveBinaryConflicts or NETResolveBinaryConflictsName. By default it uses `$LibraryName.Initialize` however that may not be always the case
 
+    .PARAMETER NETDoNotCopyLibrariesRecursively
+    Do not copy libraries recursively. Normally all libraries are copied recursively, but this option disables that functionality so it won't copy subfolders of libraries.
+
     .PARAMETER SkipBuiltinReplacements
     Skip builtin replacements option disables builtin replacements that are done by module builder.
     This is useful if you use any of known replacements and you don't want them to be replaced by module builder.
@@ -188,6 +191,7 @@
         [alias("ResolveBinaryConflicts")][switch] $NETResolveBinaryConflicts,
         [alias("ResolveBinaryConflictsName")][string] $NETResolveBinaryConflictsName,
         [alias("NETDocumentation")][switch] $NETBinaryModuleDocumenation,
+        [switch] $NETDoNotCopyLibrariesRecursively,
         [string] $NETSearchClass
     )
 
@@ -482,6 +486,15 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 NETBinaryModuleDocumenation = $NETBinaryModuleDocumenation.IsPresent
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETDoNotCopyLibrariesRecursively')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                NETDoNotCopyLibrariesRecursively = $NETDoNotCopyLibrariesRecursively.IsPresent
             }
         }
     }
