@@ -15,8 +15,6 @@
         return
     }
     $TranslateFrameworks = [ordered] @{
-        'NetStandard2.0' = 'Standard'
-        'netStandard2.1' = 'Standard'
         'net472'         = 'Default'
         'net48'          = 'Default'
         'net482'         = 'Default'
@@ -24,6 +22,8 @@
         'net471'         = 'Default'
         'net452'         = 'Default'
         'net451'         = 'Default'
+        'NetStandard2.0' = 'Standard'
+        'netStandard2.1' = 'Standard'
         'netcoreapp2.1'  = 'Core'
         'netcoreapp3.1'  = 'Core'
         'net5.0'         = 'Core'
@@ -109,19 +109,31 @@
             continue
         }
 
+        $InitialFolder = [System.IO.Path]::Combine($SourceFolder, "bin", $Configuration, $Framework, "publish")
+        $InitialFolder = (Resolve-Path -Path $InitialFolder).Path
         $PublishDirFolder = [System.IO.Path]::Combine($SourceFolder, "bin", $Configuration, $Framework, "publish", "*")
         $ModuleBinFrameworkFolder = [System.IO.Path]::Combine($ModuleBinFolder, $TranslateFrameworks[$Framework])
 
-        New-Item -Path $ModuleBinFrameworkFolder -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
+        $null = New-Item -Path $ModuleBinFrameworkFolder -ItemType Directory -ErrorAction SilentlyContinue
 
         try {
-            $List = Get-ChildItem -Filter "*.dll" -ErrorAction Stop -Path $PublishDirFolder -File
+            $List = Get-ChildItem -Filter "*" -ErrorAction Stop -Path $PublishDirFolder -File -Recurse
+            $List = @(
+                foreach ($File in $List) {
+                    if ($File.Extension -in '.dll', '.so', 'dylib') {
+                        $File
+                    }
+                }
+            )
         } catch {
             Write-Text "[-] Can't list files in $PublishDirFolder folder. Error: $($_.Exception.Message)" -Color Red
             return $false
         }
         $Count++
         $Errors = $false
+
+        Write-Text -Text "[i] Preparing copying module files for $ModuleName from $InitialFolder" -Color DarkGray
+
         :fileLoop foreach ($File in $List) {
             if ($LibraryConfiguration.ExcludeMainLibrary -and $File.Name -eq "$ModuleName.dll") {
                 continue
@@ -136,25 +148,58 @@
 
             if ($Count -eq 1) {
                 if (-not $LibraryConfiguration.BinaryModuleCmdletScanDisabled) {
-                    $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
-                    if ($CmdletsFound -eq $false) {
-                        $Errors = $true
+                    # Skip assembly verification if it doesn't match the current PowerShell edition
+                    # We only have to do it once anyways as we expect support for both editions
+                    $SkipAssembly = $false
+                    if ($PSVersionTable.PSEdition -eq 'Core') {
+                        if ($TranslateFrameworks[$Framework] -eq 'Default') {
+                            $SkipAssembly = $true
+                        }
                     } else {
-                        if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
-                            Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
-                            if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
-                                Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                        if ($TranslateFrameworks[$Framework] -eq 'Core') {
+                            $SkipAssembly = $true
+                        }
+                    }
+
+                    if (-not $SkipAssembly) {
+                        $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
+                        if ($CmdletsFound -eq $false) {
+                            $Errors = $true
+                        } else {
+                            if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
+                                Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
+                                if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
+                                    Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                                }
+                                if ($CmdletsFound.AliasesToExport.Count -gt 0) {
+                                    Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                                }
+                                $CmdletsAliases[$File.FullName] = $CmdletsFound
                             }
-                            if ($CmdletsFound.AliasesToExport.Count -gt 0) {
-                                Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
-                            }
-                            $CmdletsAliases[$File.FullName] = $CmdletsFound
                         }
                     }
                 }
             }
             try {
-                Copy-Item -Path $File.FullName -Destination $ModuleBinFrameworkFolder -ErrorAction Stop
+                if ($LibraryConfiguration.NETDoNotCopyLibrariesRecursively) {
+                    Write-Text -Text "   [+] Copying '$($File.FullName)' to folder '$ModuleBinFrameworkFolder'" -Color DarkGray
+                    Copy-Item -Path $File.FullName -Destination $ModuleBinFrameworkFolder -ErrorAction Stop
+                } else {
+                    #     # Calculate the relative path of the file
+                    $relativePath = $File.FullName.Substring($InitialFolder.Length + 1)
+
+                    #     # Combine the destination path with the relative path
+                    $destinationFilePath = [System.IO.Path]::Combine($ModuleBinFrameworkFolder, $relativePath)
+
+                    #     # Create the directory if it doesn't exist
+                    $destinationDirectory = [System.IO.Path]::GetDirectoryName($destinationFilePath)
+                    if (-not (Test-Path -Path $destinationDirectory)) {
+                        New-Item -ItemType Directory -Path $destinationDirectory -Force
+                    }
+                    Write-Text -Text "   [+] Copying '$($File.FullName)' as file '$destinationFilePath'" -Color DarkGray
+                    # Copy the file to the destination
+                    Copy-Item -Path $File.FullName -Destination $destinationFilePath -ErrorAction Stop
+                }
             } catch {
                 Write-Text "[-] Copying $File to $ModuleBinFrameworkFolder failed. Error: $($_.Exception.Message)" -Color Red
                 $Errors = $true
@@ -163,6 +208,8 @@
         if ($Errors) {
             return $false
         }
+
+        Write-Text -Text "[i] Preparing copying module files for $ModuleName from $($InitialFolder). Completed!" -Color DarkGray
 
         # Copying XML files if required
         if ($LibraryConfiguration.NETBinaryModuleDocumenation) {
