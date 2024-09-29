@@ -30,7 +30,7 @@
         }, @{
             Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName    = 'Pester'
-            ModuleVersion = '5.5.0'
+            ModuleVersion = '5.6.1'
         }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
 }
