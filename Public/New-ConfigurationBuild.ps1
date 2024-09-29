@@ -90,6 +90,9 @@
     In here you provide one or more binrary module names that you want to import in the module.
     Just the DLL name with extension without path. Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
 
+    .PARAMETER NETBinaryModuleDocumenation
+    Include documentation for binary modules, this is useful if you have a lot of binary modules and you want to include documentation for them (if available in XML format)
+
     .PARAMETER NETBinaryModuleCmdletScanDisabled
     This is to disable scanning for cmdlets in binary modules, this is useful if you have a lot of binary modules and you don't want to scan them for cmdlets.
     By default it will scan for cmdlets/aliases in binary modules and add them to the module PSD1/PSM1 files.
@@ -184,6 +187,7 @@
         [alias("MergeLibraryDebugging")][switch] $NETMergeLibraryDebugging,
         [alias("ResolveBinaryConflicts")][switch] $NETResolveBinaryConflicts,
         [alias("ResolveBinaryConflictsName")][string] $NETResolveBinaryConflictsName,
+        [alias("NETDocumentation")][switch] $NETBinaryModuleDocumenation,
         [string] $NETSearchClass
     )
 
@@ -469,6 +473,15 @@
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
                 SearchClass = $NETSearchClass
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETBinaryModuleDocumenation')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                NETBinaryModuleDocumenation = $NETBinaryModuleDocumenation.IsPresent
             }
         }
     }

@@ -163,6 +163,39 @@
         if ($Errors) {
             return $false
         }
+
+        # Copying XML files if required
+        if ($LibraryConfiguration.NETBinaryModuleDocumenation) {
+            $Errors = $false
+            try {
+                $List = Get-ChildItem -Filter "*.xml" -ErrorAction Stop -Path $PublishDirFolder -File
+            } catch {
+                Write-Text "[-] Can't list files in $PublishDirFolder folder. Error: $($_.Exception.Message)" -Color Red
+                return $false
+            }
+            :fileLoop foreach ($File in $List) {
+                if ($LibraryConfiguration.ExcludeMainLibrary -and $File.Name -eq "$ModuleName.dll") {
+                    continue
+                }
+
+                $Culture = 'en-US'
+                #$TargetPathFolder = [System.IO.Path]::Combine($ModuleBinFrameworkFolder)
+                $TargetPathFolder = [System.IO.Path]::Combine($ModuleBinFrameworkFolder, $Culture)
+                $TargetPath = [System.IO.Path]::Combine($TargetPathFolder, ($File.Name -replace ".xml", ".dll-Help.xml"))
+                if (-not (Test-Path -Path $TargetPathFolder)) {
+                    $null = New-Item -Path $TargetPathFolder -ItemType Directory -ErrorAction SilentlyContinue
+                }
+                try {
+                    Copy-Item -Path $File.FullName -Destination $TargetPath -ErrorAction Stop
+                } catch {
+                    Write-Text "[-] Copying $File to $TargetPath failed. Error: $($_.Exception.Message)" -Color Red
+                    $Errors = $true
+                }
+            }
+            if ($Errors) {
+                return $false
+            }
+        }
     }
     Try {
         Pop-Location -ErrorAction Stop
