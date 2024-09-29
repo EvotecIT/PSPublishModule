@@ -45,15 +45,15 @@
 
         $assemblyDirectory = Split-Path -Path $Path
         $runtimeAssemblies = Get-ChildItem -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -Filter "*.dll"
-        $assemblyFiles = Get-ChildItem -Path $assemblyDirectory -Filter "*.dll"
+        $assemblyFiles = Get-ChildItem -Path $assemblyDirectory -Filter "*.dll" -Recurse
 
-        $resolver = [System.Reflection.PathAssemblyResolver]::new(
-            [string[]]@(
-                $runtimeAssemblies.FullName
-                $assemblyFiles.FullName
-                $smaAssemblyPath  # Include System.Management.Automation
-            )
+        $resolverPaths = [string[]] @(
+            $runtimeAssemblies.FullName
+            $assemblyFiles.FullName
+            $smaAssemblyPath  # Include System.Management.Automation
         )
+
+        $resolver = [System.Reflection.PathAssemblyResolver]::new($resolverPaths)
     } catch {
         Write-Text -Text "[-] Can't create PathAssemblyResolver. Please ensure all dependencies are present. Error: $($_.Exception.Message)" -Color Red
         return $false
