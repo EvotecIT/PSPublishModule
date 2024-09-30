@@ -129,7 +129,6 @@
             Write-Text "[-] Can't list files in $PublishDirFolder folder. Error: $($_.Exception.Message)" -Color Red
             return $false
         }
-        $Count++
         $Errors = $false
 
         Write-Text -Text "[i] Preparing copying module files for $ModuleName from $InitialFolder" -Color DarkGray
@@ -146,42 +145,40 @@
                 }
             }
 
-            if ($Count -eq 1) {
-                if (-not $LibraryConfiguration.BinaryModuleCmdletScanDisabled) {
-                    # Skip assembly verification if it doesn't match the current PowerShell edition
-                    # We only have to do it once anyways as we expect support for both editions
-                    $SkipAssembly = $false
-                    if ($PSVersionTable.PSEdition -eq 'Core') {
-                        if ($TranslateFrameworks[$Framework] -eq 'Default') {
-                            $SkipAssembly = $true
+            if (-not $LibraryConfiguration.BinaryModuleCmdletScanDisabled) {
+                # Skip assembly verification if it doesn't match the current PowerShell edition
+                # We only have to do it once anyways as we expect support for both editions
+                $SkipAssembly = $false
+                if ($PSVersionTable.PSEdition -eq 'Core') {
+                    if ($TranslateFrameworks[$Framework] -eq 'Default') {
+                        $SkipAssembly = $true
+                    }
+                } else {
+                    if ($TranslateFrameworks[$Framework] -eq 'Core') {
+                        $SkipAssembly = $true
+                    }
+                }
+
+                if (-not $SkipAssembly) {
+                    # we only scan the assembly in main folder, and skip nested folders
+                    if ($InitialFolder -eq $File.DirectoryName) {
+                        $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
+                        if ($CmdletsFound -eq $false) {
+                            $Errors = $true
+                        } else {
+                            if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
+                                Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
+                                if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
+                                    Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                                }
+                                if ($CmdletsFound.AliasesToExport.Count -gt 0) {
+                                    Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                                }
+                                $CmdletsAliases[$File.FullName] = $CmdletsFound
+                            }
                         }
                     } else {
-                        if ($TranslateFrameworks[$Framework] -eq 'Core') {
-                            $SkipAssembly = $true
-                        }
-                    }
-
-                    if (-not $SkipAssembly) {
-                        # we only scan the assembly in main folder, and skip nested folders
-                        if ($InitialFolder -eq $File.Directory) {
-                            $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
-                            if ($CmdletsFound -eq $false) {
-                                $Errors = $true
-                            } else {
-                                if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
-                                    Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
-                                    if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
-                                        Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
-                                    }
-                                    if ($CmdletsFound.AliasesToExport.Count -gt 0) {
-                                        Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
-                                    }
-                                    $CmdletsAliases[$File.FullName] = $CmdletsFound
-                                }
-                            }
-                        } else {
-                            Write-Text -Text "   [-] Skipping $($File.FullName) as it's not in the same folder as the assembly" -Color Yellow
-                        }
+                        Write-Text -Text "   [-] Skipping $($File.FullName) as it's not in the same folder as the assembly" -Color Yellow
                     }
                 }
             }
