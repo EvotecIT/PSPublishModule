@@ -13,6 +13,36 @@
         $Handle = $false
     }
 
+    # remove library that's nested in another folder, and not directly in the root
+    # this is to prevent loading of libraries that are usually required by other libraries
+    # but should not be loaded directly
+    # for example: PSWriteOffice\Lib\Default\arm64\libSkiaSharp.dll
+    $LibrariesDefault = foreach ($Library in $LibrariesDefault) {
+        # count the number of slashes in the path
+        $SlashCount = ($Library -split '\\').Count
+        if ($SlashCount -gt 3) {
+            continue
+        }
+        $Library
+    }
+    $LibrariesCore = foreach ($Library in $LibrariesCore) {
+        # count the number of slashes in the path
+        $SlashCount = ($Library -split '\\').Count
+        if ($SlashCount -gt 3) {
+            continue
+        }
+        $Library
+    }
+    $LibrariesStandard = foreach ($Library in $LibrariesStandard) {
+        # count the number of slashes in the path
+        $SlashCount = ($Library -split '\\').Count
+        if ($SlashCount -gt 3) {
+            continue
+        }
+        $Library
+    }
+
+
     if ($OptimizedLoading) {
         $LibraryContent = @(
             if ($LibrariesStandard.Count -gt 0) {
