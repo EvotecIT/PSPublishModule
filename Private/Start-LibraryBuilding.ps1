@@ -162,20 +162,25 @@
                     }
 
                     if (-not $SkipAssembly) {
-                        $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
-                        if ($CmdletsFound -eq $false) {
-                            $Errors = $true
-                        } else {
-                            if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
-                                Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
-                                if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
-                                    Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                        # we only scan the assembly in main folder, and skip nested folders
+                        if ($InitialFolder -eq $File.Directory) {
+                            $CmdletsFound = Get-PowerShellAssemblyMetadata -Path $File.FullName
+                            if ($CmdletsFound -eq $false) {
+                                $Errors = $true
+                            } else {
+                                if ($CmdletsFound.CmdletsToExport.Count -gt 0 -or $CmdletsFound.AliasesToExport.Count -gt 0) {
+                                    Write-Text -Text "Found $($CmdletsFound.CmdletsToExport.Count) cmdlets and $($CmdletsFound.AliasesToExport.Count) aliases in $File" -Color Yellow -PreAppend Information -SpacesBefore "   "
+                                    if ($CmdletsFound.CmdletsToExport.Count -gt 0) {
+                                        Write-Text -Text "Cmdlets: $($CmdletsFound.CmdletsToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                                    }
+                                    if ($CmdletsFound.AliasesToExport.Count -gt 0) {
+                                        Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
+                                    }
+                                    $CmdletsAliases[$File.FullName] = $CmdletsFound
                                 }
-                                if ($CmdletsFound.AliasesToExport.Count -gt 0) {
-                                    Write-Text -Text "Aliases: $($CmdletsFound.AliasesToExport -join ', ')" -Color Yellow -PreAppend Plus -SpacesBefore "      "
-                                }
-                                $CmdletsAliases[$File.FullName] = $CmdletsFound
                             }
+                        } else {
+                            Write-Text -Text "   [-] Skipping $($File.FullName) as it's not in the same folder as the assembly" -Color Yellow
                         }
                     }
                 }
@@ -201,7 +206,7 @@
                     Copy-Item -Path $File.FullName -Destination $destinationFilePath -ErrorAction Stop
                 }
             } catch {
-                Write-Text "[-] Copying $File to $ModuleBinFrameworkFolder failed. Error: $($_.Exception.Message)" -Color Red
+                Write-Text "   [-] Copying $File to $ModuleBinFrameworkFolder failed. Error: $($_.Exception.Message)" -Color Red
                 $Errors = $true
             }
         }
@@ -215,7 +220,7 @@
         if ($LibraryConfiguration.NETBinaryModuleDocumenation) {
             $Errors = $false
             try {
-                $List = Get-ChildItem -Filter "*.xml" -ErrorAction Stop -Path $PublishDirFolder -File
+                $List = Get-ChildItem -Filter "*.dll-Help.xml" -ErrorAction Stop -Path $PublishDirFolder -File
             } catch {
                 Write-Text "[-] Can't list files in $PublishDirFolder folder. Error: $($_.Exception.Message)" -Color Red
                 return $false
@@ -228,7 +233,7 @@
                 $Culture = 'en-US'
                 #$TargetPathFolder = [System.IO.Path]::Combine($ModuleBinFrameworkFolder)
                 $TargetPathFolder = [System.IO.Path]::Combine($ModuleBinFrameworkFolder, $Culture)
-                $TargetPath = [System.IO.Path]::Combine($TargetPathFolder, ($File.Name -replace ".xml", ".dll-Help.xml"))
+                $TargetPath = [System.IO.Path]::Combine($TargetPathFolder, $File.Name)
                 if (-not (Test-Path -Path $TargetPathFolder)) {
                     $null = New-Item -Path $TargetPathFolder -ItemType Directory -ErrorAction SilentlyContinue
                 }
