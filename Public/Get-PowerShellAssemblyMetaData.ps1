@@ -26,7 +26,7 @@
     param (
         [Parameter(Mandatory)][string] $Path
     )
-    Write-Text -Text "[-] Loading assembly $Path" -Color Cyan
+    Write-Text -Text "   [+] Loading assembly $Path" -Color Cyan
     try {
         # Get the path to System.Management.Automation assembly
         $smaAssembly = [System.Management.Automation.PSObject].Assembly
@@ -55,7 +55,7 @@
 
         $resolver = [System.Reflection.PathAssemblyResolver]::new($resolverPaths)
     } catch {
-        Write-Text -Text "[-] Can't create PathAssemblyResolver. Please ensure all dependencies are present. Error: $($_.Exception.Message)" -Color Red
+        Write-Text -Text "   [-] Can't create PathAssemblyResolver. Please ensure all dependencies are present. Error: $($_.Exception.Message)" -Color Red
         return $false
     }
     try {
@@ -94,7 +94,7 @@
             AliasesToExport = $aliasesToExport
         }
     } catch {
-        Write-Text -Text "[-] Can't load assembly $Path. Error: $($_.Exception.Message)" -Color Red
+        Write-Text -Text "   [-] Can't load assembly $Path. Error: $($_.Exception.Message)" -Color Red
         $context.Dispose()
         return $false
     } finally {
