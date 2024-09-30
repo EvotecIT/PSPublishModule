@@ -124,6 +124,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         NETConfiguration                  = 'Release'
         NETFramework                      = 'net6.0', 'net472'
         NETHandleAssemblyWithSameName     = $true
+        #NETDocumentation                  = $true
         DotSourceLibraries                = $true
         DotSourceClasses                  = $true
 
