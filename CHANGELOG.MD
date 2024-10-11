@@ -1,5 +1,12 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.15 - 2024.10.11
+* Improve error handling
+* Improve DLL handling
+* Add new options for binary cmdlet scanning
+* Fixes detecting cmdlets in binary modules for PS 5.1
+* Other small improvements
+
 ## 2.0.14 - 2024.08.14
 
 ### What's Changed
