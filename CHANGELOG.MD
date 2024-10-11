@@ -1,11 +1,18 @@
 ﻿# PSPublishModule Changelog
 
 ## 2.0.15 - 2024.10.11
+### What's Changed
+* Update BuildModule.yml by @SamErde in https://github.com/EvotecIT/PSPublishModule/pull/27
 * Improve error handling
 * Improve DLL handling
 * Add new options for binary cmdlet scanning
 * Fixes detecting cmdlets in binary modules for PS 5.1
 * Other small improvements
+
+### New Contributors
+* @SamErde made their first contribution in https://github.com/EvotecIT/PSPublishModule/pull/27
+
+**Full Changelog**: https://github.com/EvotecIT/PSPublishModule/compare/v2.0.14...v2.0.15
 
 ## 2.0.14 - 2024.08.14
 
