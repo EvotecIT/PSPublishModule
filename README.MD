@@ -76,6 +76,22 @@ That's it. Whenever there's a new version you simply run the command and you can
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
 
 ```powershell
+New-PrepareModule -ModuleName "YourModule" -Path "C:\DirectoryWhereTheModuleWillBeCreated"
+```
+
+Once run the script will precrate the module folder with nessecary fies
+
+![NewPrepareModule](https://raw.githubusercontent.com/EvotecIT/PSPublishModule/refs/heads/master/Docs/Images/NewPrepareModule.png)
+
+The structure of the module has all the basics that are required to start building the module. The module is ready to be built and published.
+
+![NewPrepareModuleStructure](https://raw.githubusercontent.com/EvotecIT/PSPublishModule/refs/heads/master/Docs/Images/NewPrepareModule1.png)
+
+The configuration example below shows how PSPublishModule is built internally. It's a good starting point for building your own module.
+You can also look at the `Examples` and `Build` folders in this repository to see how it's used in real life.
+Additionally all Evotec projects use this, so you can look at any of them to see how it's used.
+
+```powershell
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
