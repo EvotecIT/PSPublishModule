@@ -10,14 +10,14 @@
     Write-TextWithTime -Text "Preparing structure" -PreAppend Information {
         if ($Configuration.Steps.BuildModule.DeleteBefore -eq $true) {
             Write-TextWithTime -Text "Deleting old module (Desktop destination) $($DestinationPaths.Desktop)" {
-                $Success = Remove-Directory -Directory $($DestinationPaths.Desktop) -ErrorAction Stop
+                $Success = Remove-Directory -Directory $($DestinationPaths.Desktop) -ErrorAction Stop -SpacesBefore "   "
                 if ($Success -eq $false) {
                     return $false
                 }
             } -PreAppend Minus -SpacesBefore "   " -Color Blue -ColorError Red -ColorTime Green -ColorBefore Yellow
 
             Write-TextWithTime -Text "Deleting old module (Core destination) $($DestinationPaths.Core)" {
-                $Success = Remove-Directory -Directory $($DestinationPaths.Core)
+                $Success = Remove-Directory -Directory $($DestinationPaths.Core) -SpacesBefore "   "
                 if ($Success -eq $false) {
                     return $false
                 }
@@ -27,14 +27,14 @@
         Set-Location -Path $FullProjectPath
 
         Write-TextWithTime -Text "Cleaning up temporary path $($FullModuleTemporaryPath)" {
-            $Success = Remove-Directory -Directory $FullModuleTemporaryPath
+            $Success = Remove-Directory -Directory $FullModuleTemporaryPath -SpacesBefore "   "
             if ($Success -eq $false) {
                 return $false
             }
             Add-Directory -Directory $FullModuleTemporaryPath
         } -PreAppend Minus -SpacesBefore "   " -Color Blue -ColorError Red -ColorTime Green -ColorBefore Yellow
         Write-TextWithTime -Text "Cleaning up temporary path $($FullTemporaryPath)" {
-            $Success = Remove-Directory -Directory $FullTemporaryPath
+            $Success = Remove-Directory -Directory $FullTemporaryPath -SpacesBefore "   "
             if ($Success -eq $false) {
                 return $false
             }
