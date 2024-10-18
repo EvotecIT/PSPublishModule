@@ -2,12 +2,13 @@
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)][string] $Text,
-        [System.ConsoleColor] $Color = [System.ConsoleColor]::Cyan,
-        [System.ConsoleColor] $ColorTime = [System.ConsoleColor]::Green,
+        [System.ConsoleColor] $Color,
+        [System.ConsoleColor] $ColorBefore,
+        [System.ConsoleColor] $ColorTime,
         [switch] $Start,
         [switch] $End,
         [System.Diagnostics.Stopwatch] $Time,
-        [ValidateSet('Plus', 'Minus', 'Information', 'Addition')][string] $PreAppend,
+        [ValidateSet('Plus', 'Minus', 'Information', 'Addition', 'Error')][string] $PreAppend,
         [string] $SpacesBefore
     )
     if ($PreAppend) {
@@ -31,8 +32,22 @@
             if (-not $ColorBefore) {
                 $ColorBefore = [System.ConsoleColor]::Yellow
             }
+        } elseif ($PreAppend -eq 'Error') {
+            $TextBefore = "$SpacesBefore[e] "
+            if (-not $ColorBefore) {
+                $ColorBefore = [System.ConsoleColor]::Red
+            }
+            if (-not $Color) {
+                $Color = [System.ConsoleColor]::Red
+            }
         }
         Write-Host -Object "$TextBefore" -NoNewline -ForegroundColor $ColorBefore
+    }
+    if (-not $Color) {
+        $Color = [System.ConsoleColor]::Cyan
+    }
+    if (-not $ColorTime) {
+        $ColorTime = [System.ConsoleColor]::Green
     }
     if (-not $Start -and -not $End) {
         Write-Host "$Text" -ForegroundColor $Color
