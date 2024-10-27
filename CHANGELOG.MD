@@ -1,5 +1,8 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.16 - 2024.10.27
+- Improve error handling
+
 ## 2.0.15 - 2024.10.11
 ### What's Changed
 * Update BuildModule.yml by @SamErde in https://github.com/EvotecIT/PSPublishModule/pull/27
