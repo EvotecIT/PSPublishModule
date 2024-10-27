@@ -1,70 +1,67 @@
 ﻿function New-ConfigurationManifest {
     <#
     .SYNOPSIS
-    Short description
+    Creates a new configuration manifest for a PowerShell module.
 
     .DESCRIPTION
-    Long description
+    This function generates a new configuration manifest for a PowerShell module. The manifest includes metadata about the module such as version, author, company, and other relevant information. It also allows specifying the functions, cmdlets, and aliases to export.
 
     .PARAMETER ModuleVersion
-    This setting specifies the version of the module. When multiple versions of a module exist on a system, the latest version is loaded by default when you run Import-Module
+    Specifies the version of the module. When multiple versions of a module exist on a system, the latest version is loaded by default when you run Import-Module.
 
     .PARAMETER CompatiblePSEditions
-    This setting specifies the module's compatible PSEditions.
+    Specifies the module's compatible PowerShell editions. Valid values are 'Desktop' and 'Core'.
 
     .PARAMETER GUID
-    This setting specifies a unique identifier for the module. The GUID is used to distinguish between modules with the same name.
+    Specifies a unique identifier for the module. The GUID is used to distinguish between modules with the same name.
 
     .PARAMETER Author
-    This setting identifies the module author.
+    Identifies the module author.
 
     .PARAMETER CompanyName
-    This setting identifies the company or vendor who created the module.
+    Identifies the company or vendor who created the module.
 
     .PARAMETER Copyright
-    This setting specifies a copyright statement for the module.
+    Specifies a copyright statement for the module.
 
     .PARAMETER Description
-    This setting describes the module at a high level.
+    Describes the module at a high level.
 
     .PARAMETER PowerShellVersion
-    This setting specifies the minimum version of PowerShell this module requires.
+    Specifies the minimum version of PowerShell this module requires. Default is '5.1'.
 
     .PARAMETER Tags
-    Parameter description
+    Specifies tags for the module.
 
     .PARAMETER IconUri
-    Parameter description
+    Specifies the URI for the module's icon.
 
     .PARAMETER ProjectUri
-    Parameter description
+    Specifies the URI for the module's project page.
 
     .PARAMETER DotNetFrameworkVersion
-    This setting specifies the minimum version of the Microsoft .NET Framework that the module requires.
+    Specifies the minimum version of the Microsoft .NET Framework that the module requires.
 
     .PARAMETER LicenseUri
-    Parameter description
+    Specifies the URI for the module's license.
 
     .PARAMETER Prerelease
-    Parameter description
+    Specifies the prerelease tag for the module.
 
     .PARAMETER FunctionsToExport
-    Allows ability to define functions to export in the module manifest.
-    By default functions are auto-detected, but this allows you to override that.
+    Defines functions to export in the module manifest. By default, functions are auto-detected, but this allows you to override that.
 
     .PARAMETER AliasesToExport
-    Allows ability to define aliases to export in the module manifest.
-    By default aliases are auto-detected, but this allows you to override that.
+    Defines aliases to export in the module manifest. By default, aliases are auto-detected, but this allows you to override that.
 
     .PARAMETER CmdletsToExport
-    Allows ability to define commands to export in the module manifest.
-    Currently module is not able to auto-detect commands, so you can use it to define, or module will use wildcard if it detects binary module.
+    Defines cmdlets to export in the module manifest. By default, cmdlets are auto-detected, but this allows you to override that.
 
     .EXAMPLE
-    An example
+    New-ConfigurationManifest -ModuleVersion '1.0.0' -GUID '12345678-1234-1234-1234-1234567890ab' -Author 'John Doe' -CompanyName 'Example Corp' -Description 'This is an example module.'
 
     .NOTES
-    General notes
+    This function helps in creating a standardized module manifest for PowerShell modules.
     #>
     [CmdletBinding()]
     param(
