@@ -34,8 +34,11 @@
             }
         } else {
             $Output = Write-TextWithTime -Text "Reading file content - $FilePath" {
-                Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8
+                Get-Content -LiteralPath $FilePath -Raw -Encoding UTF8 -ErrorAction Stop
             } -PreAppend Plus -SpacesBefore '   '
+        }
+        if ($Output -eq $false) {
+            return $false
         }
         if ($null -eq $FormatCode.FormatterSettings) {
             $FormatCode.FormatterSettings = $Script:FormatterSettings
