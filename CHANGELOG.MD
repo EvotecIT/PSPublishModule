@@ -1,5 +1,8 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.17 - 2024.11.08
+- Make sure to error out on PSM1 file missing
+
 ## 2.0.16 - 2024.10.27
 - Improve error handling
 
