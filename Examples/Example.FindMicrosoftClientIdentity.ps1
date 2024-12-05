@@ -26,7 +26,7 @@ $Output1 = foreach ($F in $Folder) {
         }
     }
 }
-$Output1 | Format-Table -AutoSize
+$Output1 | Format-Table -AutoSize -Property Version, Name
 
 # Could not load type 'Microsoft.Identity.Client.Extensions.Msal.MsalCachePersistenceException
 $Output2 = foreach ($F in $Folder) {
@@ -41,4 +41,4 @@ $Output2 = foreach ($F in $Folder) {
         }
     }
 }
-$Output2 | Format-Table -AutoSize
+$Output2 | Format-Table -AutoSize -Property Version, Name
