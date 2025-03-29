@@ -52,7 +52,13 @@
             enabled  = $true
         }
     }
-    $PathProjects = [io.path]::Combine($Env:APPDATA, "Code\User\globalStorage\alefragnani.project-manager"), [io.path]::Combine($Env:APPDATA, "Code - Insiders\User\globalStorage\alefragnani.project-manager")
+    $PathProjects = @(
+        [io.path]::Combine($Env:APPDATA, "Code\User\globalStorage\alefragnani.project-manager"),
+        [io.path]::Combine($Env:APPDATA, "Cursor\User\globalStorage\alefragnani.project-manager"),
+        [io.path]::Combine($Env:APPDATA, "Cursor - Insiders\User\globalStorage\alefragnani.project-manager"),
+        [io.path]::Combine($Env:APPDATA, "Code - Insiders\User\globalStorage\alefragnani.project-manager")
+    )
+
 
     foreach ($Project in $PathProjects) {
         if (Test-Path -LiteralPath $Project) {
