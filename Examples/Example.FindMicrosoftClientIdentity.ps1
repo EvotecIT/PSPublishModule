@@ -19,26 +19,35 @@ $Output1 = foreach ($F in $Folder) {
         Get-ChildItem -LiteralPath $F -Recurse -Filter "*.dll" | ForEach-Object {
             if ($_.Name -like "Microsoft.IdentityModel.Abstractions.dll") {
                 [PSCustomObject] @{
-                    Name    = $_.FullName
+                    Name    = $_.Name
+                    Path    = $_.FullName
                     Version = $_.VersionInfo.FileVersion
                 }
             }
         }
     }
 }
-$Output1 | Format-Table -AutoSize -Property Version, Name
+$Output1 | Group-Object -Property Name | ForEach-Object {
+    "DLL Name: $($_.Name)"
+    $_.Group | Format-Table -AutoSize -Property Version, Path
+    ''
+}
 
-# Could not load type 'Microsoft.Identity.Client.Extensions.Msal.MsalCachePersistenceException
 $Output2 = foreach ($F in $Folder) {
     if (Test-Path -Path $F) {
         Get-ChildItem -LiteralPath $F -Recurse -Filter "*.dll" | ForEach-Object {
             if ($_.Name -like "Microsoft.Identity.Client.*") {
                 [PSCustomObject] @{
-                    Name    = $_.FullName
+                    Name    = $_.Name
+                    Path    = $_.FullName
                     Version = $_.VersionInfo.FileVersion
                 }
             }
         }
     }
 }
-$Output2 | Format-Table -AutoSize -Property Version, Name
+$Output2 | Group-Object -Property Name | ForEach-Object {
+    "DLL Name: $($_.Name)"
+    $_.Group | Format-Table -AutoSize -Property Version, Path
+    ''
+}

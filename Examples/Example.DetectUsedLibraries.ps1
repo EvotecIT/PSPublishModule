@@ -1,1 +1,2 @@
 ﻿[appdomain]::currentdomain.getassemblies() | Sort-Object -Property fullname | Format-Table Fullname, Name, Location -AutoSize
+[appdomain]::currentdomain.getassemblies() | Where-Object { $_.FullName -like "*identity*" } | Sort-Object -Property fullname | Format-Table Fullname, Name, Location -AutoSize
