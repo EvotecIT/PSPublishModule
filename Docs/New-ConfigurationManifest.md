@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationManifest
 
 ## SYNOPSIS
-Short description
+Creates a new configuration manifest for a PowerShell module.
 
 ## SYNTAX
 
@@ -22,20 +22,22 @@ New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <St
 ```
 
 ## DESCRIPTION
-Long description
+This function generates a new configuration manifest for a PowerShell module.
+The manifest includes metadata about the module such as version, author, company, and other relevant information.
+It also allows specifying the functions, cmdlets, and aliases to export.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```
-An example
+New-ConfigurationManifest -ModuleVersion '1.0.0' -GUID '12345678-1234-1234-1234-1234567890ab' -Author 'John Doe' -CompanyName 'Example Corp' -Description 'This is an example module.'
 ```
 
 ## PARAMETERS
 
 ### -ModuleVersion
-This setting specifies the version of the module.
-When multiple versions of a module exist on a system, the latest version is loaded by default when you run Import-Module
+Specifies the version of the module.
+When multiple versions of a module exist on a system, the latest version is loaded by default when you run Import-Module.
 
 ```yaml
 Type: String
@@ -50,7 +52,8 @@ Accept wildcard characters: False
 ```
 
 ### -CompatiblePSEditions
-This setting specifies the module's compatible PSEditions.
+Specifies the module's compatible PowerShell editions.
+Valid values are 'Desktop' and 'Core'.
 
 ```yaml
 Type: String[]
@@ -65,7 +68,7 @@ Accept wildcard characters: False
 ```
 
 ### -GUID
-This setting specifies a unique identifier for the module.
+Specifies a unique identifier for the module.
 The GUID is used to distinguish between modules with the same name.
 
 ```yaml
@@ -81,7 +84,7 @@ Accept wildcard characters: False
 ```
 
 ### -Author
-This setting identifies the module author.
+Identifies the module author.
 
 ```yaml
 Type: String
@@ -96,7 +99,7 @@ Accept wildcard characters: False
 ```
 
 ### -CompanyName
-This setting identifies the company or vendor who created the module.
+Identifies the company or vendor who created the module.
 
 ```yaml
 Type: String
@@ -111,7 +114,7 @@ Accept wildcard characters: False
 ```
 
 ### -Copyright
-This setting specifies a copyright statement for the module.
+Specifies a copyright statement for the module.
 
 ```yaml
 Type: String
@@ -126,7 +129,7 @@ Accept wildcard characters: False
 ```
 
 ### -Description
-This setting describes the module at a high level.
+Describes the module at a high level.
 
 ```yaml
 Type: String
@@ -141,7 +144,8 @@ Accept wildcard characters: False
 ```
 
 ### -PowerShellVersion
-This setting specifies the minimum version of PowerShell this module requires.
+Specifies the minimum version of PowerShell this module requires.
+Default is '5.1'.
 
 ```yaml
 Type: String
@@ -156,7 +160,7 @@ Accept wildcard characters: False
 ```
 
 ### -Tags
-Parameter description
+Specifies tags for the module.
 
 ```yaml
 Type: String[]
@@ -171,7 +175,7 @@ Accept wildcard characters: False
 ```
 
 ### -IconUri
-Parameter description
+Specifies the URI for the module's icon.
 
 ```yaml
 Type: String
@@ -186,7 +190,7 @@ Accept wildcard characters: False
 ```
 
 ### -ProjectUri
-Parameter description
+Specifies the URI for the module's project page.
 
 ```yaml
 Type: String
@@ -201,7 +205,7 @@ Accept wildcard characters: False
 ```
 
 ### -DotNetFrameworkVersion
-This setting specifies the minimum version of the Microsoft .NET Framework that the module requires.
+Specifies the minimum version of the Microsoft .NET Framework that the module requires.
 
 ```yaml
 Type: String
@@ -216,7 +220,7 @@ Accept wildcard characters: False
 ```
 
 ### -LicenseUri
-Parameter description
+Specifies the URI for the module's license.
 
 ```yaml
 Type: String
@@ -231,7 +235,7 @@ Accept wildcard characters: False
 ```
 
 ### -Prerelease
-Parameter description
+Specifies the prerelease tag for the module.
 
 ```yaml
 Type: String
@@ -246,8 +250,8 @@ Accept wildcard characters: False
 ```
 
 ### -FunctionsToExport
-Allows ability to define functions to export in the module manifest.
-By default functions are auto-detected, but this allows you to override that.
+Defines functions to export in the module manifest.
+By default, functions are auto-detected, but this allows you to override that.
 
 ```yaml
 Type: String[]
@@ -262,8 +266,8 @@ Accept wildcard characters: False
 ```
 
 ### -CmdletsToExport
-Allows ability to define commands to export in the module manifest.
-Currently module is not able to auto-detect commands, so you can use it to define, or module will use wildcard if it detects binary module.
+Defines cmdlets to export in the module manifest.
+By default, cmdlets are auto-detected, but this allows you to override that.
 
 ```yaml
 Type: String[]
@@ -278,8 +282,8 @@ Accept wildcard characters: False
 ```
 
 ### -AliasesToExport
-Allows ability to define aliases to export in the module manifest.
-By default aliases are auto-detected, but this allows you to override that.
+Defines aliases to export in the module manifest.
+By default, aliases are auto-detected, but this allows you to override that.
 
 ```yaml
 Type: String[]
@@ -316,6 +320,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## OUTPUTS
 
 ## NOTES
-General notes
+This function helps in creating a standardized module manifest for PowerShell modules.
 
 ## RELATED LINKS

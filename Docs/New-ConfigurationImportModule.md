@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationImportModule
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Creates a configuration for importing PowerShell modules.
 
 ## SYNTAX
 
@@ -18,21 +18,20 @@ New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-ProgressA
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+This function generates a configuration object for importing PowerShell modules.
+It allows specifying whether to import the current module itself and/or any required modules.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+```
 
 ## PARAMETERS
 
-### -ImportRequiredModules
-{{ Fill ImportRequiredModules Description }}
+### -ImportSelf
+Indicates whether to import the current module itself.
 
 ```yaml
 Type: SwitchParameter
@@ -41,13 +40,13 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: None
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ImportSelf
-{{ Fill ImportSelf Description }}
+### -ImportRequiredModules
+Indicates whether to import any required modules specified in the module manifest.
 
 ```yaml
 Type: SwitchParameter
@@ -56,7 +55,7 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: None
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -81,11 +80,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
+This function helps in creating a standardized import configuration for PowerShell modules.
 
 ## RELATED LINKS
