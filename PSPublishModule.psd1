@@ -4,7 +4,7 @@
     CmdletsToExport        = @()
     CompanyName            = 'Evotec'
     CompatiblePSEditions   = @('Desktop', 'Core')
-    Copyright              = '(c) 2011 - 2024 Przemyslaw Klys @ Evotec. All rights reserved.'
+    Copyright              = '(c) 2011 - 2025 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @('Convert-CommandsToList', 'Get-MissingFunctions', 'Get-PowerShellAssemblyMetadata', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Invoke-ModuleBuild', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Register-Certificate', 'Remove-Comments', 'Send-GitHubRelease', 'Test-BasicModule', 'Test-ScriptFile', 'Test-ScriptModule')
@@ -30,7 +30,7 @@
         }, @{
             Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName    = 'Pester'
-            ModuleVersion = '5.6.1'
+            ModuleVersion = '5.7.1'
         }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
 }
