@@ -26,7 +26,7 @@
         }, @{
             Guid          = 'd6245802-193d-4068-a631-8863a4342a18'
             ModuleName    = 'PSScriptAnalyzer'
-            ModuleVersion = '1.22.0'
+            ModuleVersion = '1.24.0'
         }, @{
             Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName    = 'Pester'
