@@ -18,7 +18,9 @@
         [string]$ScriptFile,
 
         [Parameter(Mandatory = $true)]
-        [string]$Version
+        [string]$Version,
+
+        [System.Collections.IDictionary] $CurrentVersionHash
     )
 
     if (!(Test-Path -Path $ScriptFile)) {
@@ -26,17 +28,19 @@
         return $false
     }
 
+    $CurrentFileVersion = $CurrentVersionHash[$ScriptFile]
+
     try {
         $content = Get-Content -Path $ScriptFile -Raw
         $newContent = $content -replace "ModuleVersion\s*=\s*['""][\d\.]+['""]", "ModuleVersion        = '$Version'"
 
         if ($content -eq $newContent) {
-            Write-Verbose "No version change needed for $ScriptFile"
+            Write-Verbose "No version change needed for $ScriptFile,"
             return $true
         }
-        Write-Verbose -Message "Updating version in $ScriptFile to $Version"
+        Write-Verbose -Message "Updating version in $ScriptFile from '$CurrentFileVersion' to '$Version'"
 
-        if ($PSCmdlet.ShouldProcess("Build script $ScriptFile", "Update version to $Version")) {
+        if ($PSCmdlet.ShouldProcess("Build script $ScriptFile", "Update version from '$CurrentFileVersion' to '$Version'")) {
             $newContent | Set-Content -Path $ScriptFile -NoNewline
             Write-Host "Updated version in $ScriptFile to $Version" -ForegroundColor Green
         }
