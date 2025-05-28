@@ -1,28 +1,24 @@
 ﻿function Update-VersionInBuildScript {
     <#
     .SYNOPSIS
-        Updates the version in the Build-Module.ps1 script.
+    Updates the version in the Build-Module.ps1 script.
 
     .DESCRIPTION
-        Modifies the ModuleVersion entry in the Build-Module.ps1 script with the new version.
+    Modifies the ModuleVersion entry in the Build-Module.ps1 script with the new version.
 
     .PARAMETER ScriptFile
-        Path to the Build-Module.ps1 file.
+    Path to the Build-Module.ps1 file.
 
     .PARAMETER Version
-        The new version string to set.
-
-    .PARAMETER DryRun
-        If specified, shows what would be changed without making actual changes.
+    The new version string to set.
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory = $true)]
         [string]$ScriptFile,
 
         [Parameter(Mandatory = $true)]
-        [string]$Version,
-
-        [switch]$DryRun
+        [string]$Version
     )
 
     if (!(Test-Path -Path $ScriptFile)) {
@@ -38,12 +34,11 @@
             Write-Verbose "No version change needed for $ScriptFile"
             return $true
         }
+        Write-Verbose -Message "Updating version in $ScriptFile to $Version"
 
-        if (-not $DryRun) {
+        if ($PSCmdlet.ShouldProcess("Build script $ScriptFile", "Update version to $Version")) {
             $newContent | Set-Content -Path $ScriptFile -NoNewline
             Write-Host "Updated version in $ScriptFile to $Version" -ForegroundColor Green
-        } else {
-            Write-Host "[DRY RUN] Would update version in $ScriptFile to $Version" -ForegroundColor Yellow
         }
         return $true
     } catch {
