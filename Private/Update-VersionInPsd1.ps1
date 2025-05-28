@@ -18,13 +18,17 @@
         [string]$ManifestFile,
 
         [Parameter(Mandatory = $true)]
-        [string]$Version
+        [string]$Version,
+
+        [System.Collections.IDictionary] $CurrentVersionHash
     )
 
     if (!(Test-Path -Path $ManifestFile)) {
         Write-Warning "Module manifest file not found: $ManifestFile"
         return $false
     }
+
+    $CurrentFileVersion = $CurrentVersionHash[$ManifestFile]
 
     try {
         # Read the content first to avoid Update-ModuleManifest mangling the format
@@ -36,9 +40,9 @@
             Write-Verbose "No version change needed for $ManifestFile"
             return $true
         }
-        Write-Verbose -Message "Updating version in $ManifestFile to $Version"
+        Write-Verbose -Message "Updating version in $ManifestFile from '$CurrentFileVersion' to '$Version'"
 
-        if ($PSCmdlet.ShouldProcess("Module manifest $ManifestFile", "Update version to $Version")) {
+        if ($PSCmdlet.ShouldProcess("Module manifest $ManifestFile", "Update version from '$CurrentFileVersion' to '$Version'")) {
             $newContent | Set-Content -Path $ManifestFile -NoNewline
             Write-Host "Updated version in $ManifestFile to $Version" -ForegroundColor Green
         }
