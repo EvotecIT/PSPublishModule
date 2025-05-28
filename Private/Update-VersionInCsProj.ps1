@@ -18,13 +18,17 @@
         [string]$ProjectFile,
 
         [Parameter(Mandatory = $true)]
-        [string]$Version
+        [string]$Version,
+
+        [System.Collections.IDictionary] $CurrentVersionHash
     )
 
     if (!(Test-Path -Path $ProjectFile)) {
         Write-Warning "Project file not found: $ProjectFile"
         return $false
     }
+
+    $CurrentFileVersion = $CurrentVersionHash[$ProjectFile]
 
     try {
         $content = Get-Content -Path $ProjectFile -Raw
@@ -34,8 +38,8 @@
             Write-Verbose "No version change needed for $ProjectFile"
             return $true
         }
-        Write-Verbose -Message "Updating version in $ProjectFile to $Version"
-        if ($PSCmdlet.ShouldProcess("Project file $ProjectFile", "Update version to $Version")) {
+        Write-Verbose -Message "Updating version in $ProjectFile from '$CurrentFileVersion' to '$Version'"
+        if ($PSCmdlet.ShouldProcess("Project file $ProjectFile", "Update version from '$CurrentFileVersion' to '$Version'")) {
             $newContent | Set-Content -Path $ProjectFile -NoNewline
             Write-Host "Updated version in $ProjectFile to $Version" -ForegroundColor Green
         }
