@@ -20,6 +20,9 @@ Locale: en-US
 ### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
 {{ Fill in the Description }}
 
+### [Get-ProjectVersion](Get-ProjectVersion.md)
+{{ Fill in the Description }}
+
 ### [Initialize-PortableModule](Initialize-PortableModule.md)
 {{ Fill in the Description }}
 
@@ -81,6 +84,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
+{{ Fill in the Description }}
+
+### [Set-ProjectVersion](Set-ProjectVersion.md)
 {{ Fill in the Description }}
 
 ### [Test-BasicModule](Test-BasicModule.md)
