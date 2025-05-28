@@ -1,7 +1,16 @@
 ﻿# PSPublishModule Changelog
 
-## 2.0.17 - 2024.11.08
+## 2.0.17 - 2025.05.28
 - Make sure to error out on PSM1 file missing
+- Added support for .NET 8.0
+- Added `Set-ProjectVersion` cmdlet to allow for setting version of the project across (csproj/psd1/ps1) files for consistency in multi-file projects
+- Added `Get-ProjectVersion` cmdlet to allow for getting version of the project across (csproj/psd1/ps1) files for consistency in multi-file projects
+
+```powershell
+Get-ProjectVersion -Path "C:\Support\GitHub\DnsClientX" -ExcludeFolders @('C:\Support\GitHub\DnsClientX\Module\Artefacts')
+Set-ProjectVersion -Path "C:\Support\GitHub\DnsClientX" -NewVersion "0.4.0"
+Set-ProjectVersion -Path "C:\Support\GitHub\DnsClientX" -VersionType Build
+```
 
 ## 2.0.16 - 2024.10.27
 - Improve error handling
