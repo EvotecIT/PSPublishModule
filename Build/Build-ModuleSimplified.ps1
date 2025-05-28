@@ -122,7 +122,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         ResolveBinaryConflictsName        = 'PSPublishModule'
         NETProjectName                    = 'PSPublishModule'
         NETConfiguration                  = 'Release'
-        NETFramework                      = 'net6.0', 'net472'
+        NETFramework                      = 'net8.0', 'net472'
         NETHandleAssemblyWithSameName     = $true
         #NETDocumentation                  = $true
         DotSourceLibraries                = $true
