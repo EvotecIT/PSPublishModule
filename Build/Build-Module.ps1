@@ -56,6 +56,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         # ignore functions from PKI module when used during linux/macos build
         #'Import-PfxCertificate'
         'Save-MarkdownHelp'
+        'New-MarkdownHelp'
     )
 
 
