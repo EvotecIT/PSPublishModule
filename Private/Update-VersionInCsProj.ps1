@@ -1,28 +1,24 @@
 ﻿function Update-VersionInCsProj {
     <#
     .SYNOPSIS
-        Updates the version in a .csproj file.
+    Updates the version in a .csproj file.
 
     .DESCRIPTION
-        Modifies the VersionPrefix element in a .csproj file with the new version.
+    Modifies the VersionPrefix element in a .csproj file with the new version.
 
     .PARAMETER ProjectFile
-        Path to the .csproj file.
+    Path to the .csproj file.
 
     .PARAMETER Version
-        The new version string to set.
-
-    .PARAMETER DryRun
-        If specified, shows what would be changed without making actual changes.
+    The new version string to set.
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [Parameter(Mandatory = $true)]
         [string]$ProjectFile,
 
         [Parameter(Mandatory = $true)]
-        [string]$Version,
-
-        [switch]$DryRun
+        [string]$Version
     )
 
     if (!(Test-Path -Path $ProjectFile)) {
@@ -38,12 +34,10 @@
             Write-Verbose "No version change needed for $ProjectFile"
             return $true
         }
-
-        if (-not $DryRun) {
+        Write-Verbose -Message "Updating version in $ProjectFile to $Version"
+        if ($PSCmdlet.ShouldProcess("Project file $ProjectFile", "Update version to $Version")) {
             $newContent | Set-Content -Path $ProjectFile -NoNewline
             Write-Host "Updated version in $ProjectFile to $Version" -ForegroundColor Green
-        } else {
-            Write-Host "[DRY RUN] Would update version in $ProjectFile to $Version" -ForegroundColor Yellow
         }
         return $true
     } catch {
