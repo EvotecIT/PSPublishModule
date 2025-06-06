@@ -1,4 +1,43 @@
 function Set-ProjectVersion {
+    <#
+    .SYNOPSIS
+    Updates version numbers across multiple project files.
+
+    .DESCRIPTION
+    Updates version numbers in C# projects (.csproj), PowerShell modules (.psd1),
+    and PowerShell build scripts that contain 'Invoke-ModuleBuild'. Can increment
+    version components or set a specific version.
+
+    .PARAMETER VersionType
+    The type of version increment: Major, Minor, Build, or Revision.
+
+    .PARAMETER NewVersion
+    Specific version number to set (format: x.x.x or x.x.x.x).
+
+    .PARAMETER ModuleName
+    Optional module name to filter updates to specific projects/modules.
+
+    .PARAMETER Path
+    The root path to search for project files. Defaults to current location.
+
+    .PARAMETER ExcludeFolders
+    Array of folder names to exclude from the search (in addition to default 'obj' and 'bin').
+
+    .PARAMETER PassThru
+    Returns the update results when specified.
+
+    .OUTPUTS
+    PSCustomObject[]
+    When PassThru is specified, returns update results for each modified file.
+
+    .EXAMPLE
+    Set-ProjectVersion -VersionType Minor
+    Increments the minor version in all project files.
+
+    .EXAMPLE
+    Set-ProjectVersion -NewVersion "2.1.0" -ModuleName "MyModule"
+    Sets the version to 2.1.0 for the specific module.
+    #>
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter()]
@@ -32,11 +71,23 @@ function Set-ProjectVersion {
                 $_ -and $_.Trim() -ne '' -and $file.FullName -and $file.FullName.ToLower().Contains($_.ToLower())
             }))
     }
-    $BuildScriptFiles = Get-ChildItem -Path $RepoRoot -Filter "Build-Module.ps1" -Recurse | Where-Object {
+    # Find PowerShell scripts that contain Invoke-ModuleBuild or Build-Module
+    $BuildScriptFiles = Get-ChildItem -Path $RepoRoot -Filter "*.ps1" -Recurse | Where-Object {
         $file = $_
-        ($AllExcludes.Count -eq 0 -or -not ($AllExcludes | Where-Object {
-                $_ -and $_.Trim() -ne '' -and $file.FullName -and $file.FullName.ToLower().Contains($_.ToLower())
-            }))
+        # First apply exclusion filter
+        $isExcluded = ($AllExcludes.Count -gt 0 -and ($AllExcludes | Where-Object {
+                    $_ -and $_.Trim() -ne '' -and $file.FullName -and $file.FullName.ToLower().Contains($_.ToLower())
+                }))
+        if ($isExcluded) {
+            return $false
+        }
+        # Then check if file contains Invoke-ModuleBuild or Build-Module
+        try {
+            $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
+            return $content -match 'Invoke-ModuleBuild|Build-Module'
+        } catch {
+            return $false
+        }
     }
 
     # Filter csproj files by ModuleName if provided
