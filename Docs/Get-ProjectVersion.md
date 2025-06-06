@@ -8,7 +8,7 @@ schema: 2.0.0
 # Get-ProjectVersion
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Retrieves project version information from various project files.
 
 ## SYNTAX
 
@@ -18,51 +18,27 @@ Get-ProjectVersion [[-ModuleName] <String>] [[-Path] <String>] [[-ExcludeFolders
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Scans the specified path for C# projects (.csproj), PowerShell modules (.psd1),
+and PowerShell build scripts that contain 'Invoke-ModuleBuild' to extract version information.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
+```
+Get-ProjectVersion
+Gets version information from all project files in the current directory.
 ```
 
-{{ Add example description here }}
+### EXAMPLE 2
+```
+Get-ProjectVersion -ModuleName "MyModule" -Path "C:\Projects"
+Gets version information for the specific module from the specified path.
+```
 
 ## PARAMETERS
 
-### -ExcludeFolders
-{{ Fill ExcludeFolders Description }}
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -ModuleName
-{{ Fill ModuleName Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Path
-{{ Fill Path Description }}
+Optional module name to filter results to specific projects/modules.
 
 ```yaml
 Type: String
@@ -72,6 +48,37 @@ Aliases:
 Required: False
 Position: 1
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
+The root path to search for project files.
+Defaults to current location.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: (Get-Location).Path
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ExcludeFolders
+Array of folder names to exclude from the search (in addition to default 'obj' and 'bin').
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: @()
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -96,11 +103,10 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
+### PSCustomObject[]
+### Returns objects with Version, Source, and Type properties for each found project file.
 ## NOTES
 
 ## RELATED LINKS

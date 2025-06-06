@@ -8,7 +8,7 @@ schema: 2.0.0
 # Set-ProjectVersion
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Updates version numbers across multiple project files.
 
 ## SYNTAX
 
@@ -19,66 +19,29 @@ Set-ProjectVersion [[-VersionType] <String>] [[-NewVersion] <String>] [[-ModuleN
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Updates version numbers in C# projects (.csproj), PowerShell modules (.psd1),
+and PowerShell build scripts that contain 'Invoke-ModuleBuild'.
+Can increment
+version components or set a specific version.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
+```
+Set-ProjectVersion -VersionType Minor
+Increments the minor version in all project files.
 ```
 
-{{ Add example description here }}
+### EXAMPLE 2
+```
+Set-ProjectVersion -NewVersion "2.1.0" -ModuleName "MyModule"
+Sets the version to 2.1.0 for the specific module.
+```
 
 ## PARAMETERS
 
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ExcludeFolders
-{{ Fill ExcludeFolders Description }}
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 4
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ModuleName
-{{ Fill ModuleName Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NewVersion
-{{ Fill NewVersion Description }}
+### -VersionType
+The type of version increment: Major, Minor, Build, or Revision.
 
 ```yaml
 Type: String
@@ -92,23 +55,23 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -PassThru
-{{ Fill PassThru Description }}
+### -NewVersion
+Specific version number to set (format: x.x.x or x.x.x.x).
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: Named
+Position: 2
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Path
-{{ Fill Path Description }}
+### -ModuleName
+Optional module name to filter updates to specific projects/modules.
 
 ```yaml
 Type: String
@@ -122,18 +85,48 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -VersionType
-{{ Fill VersionType Description }}
+### -Path
+The root path to search for project files.
+Defaults to current location.
 
 ```yaml
 Type: String
 Parameter Sets: (All)
 Aliases:
-Accepted values: Major, Minor, Build, Revision
 
 Required: False
-Position: 0
-Default value: None
+Position: 4
+Default value: (Get-Location).Path
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ExcludeFolders
+Array of folder names to exclude from the search (in addition to default 'obj' and 'bin').
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: @()
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PassThru
+Returns the update results when specified.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -146,6 +139,21 @@ The cmdlet is not run.
 Type: SwitchParameter
 Parameter Sets: (All)
 Aliases: wi
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Confirm
+Prompts you for confirmation before running the cmdlet.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases: cf
 
 Required: False
 Position: Named
@@ -174,11 +182,10 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
+### PSCustomObject[]
+### When PassThru is specified, returns update results for each modified file.
 ## NOTES
 
 ## RELATED LINKS
