@@ -1,5 +1,9 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.18 - 2025.06.06
+### What's new
+- Update to docs and small logic improved for Get-ProjectVersion and Set-ProjectVersion
+
 ## 2.0.17 - 2025.05.28
 - Make sure to error out on PSM1 file missing
 - Added support for .NET 8.0
