@@ -5,29 +5,37 @@ function Convert-FileEncodingSingle {
         [System.Text.Encoding] $SourceEncoding,
         [System.Text.Encoding] $TargetEncoding,
         [switch] $Force,
-        [switch] $RollbackOnMismatch
+        [switch] $NoRollbackOnMismatch
     )
 
-    $detected = (Get-Encoding -Path $FilePath).Encoding
-    if ($detected.WebName -ne $SourceEncoding.WebName) {
-        if (-not $Force) {
+    $bytesBefore = $null
+
+    try {
+        $detected = (Get-Encoding -Path $FilePath).Encoding
+        if ($detected.WebName -ne $SourceEncoding.WebName -and -not $Force) {
             Write-Verbose "Skipping $FilePath because encoding $($detected.WebName) does not match expected $($SourceEncoding.WebName)."
             return
         }
-    }
 
-    $content = [System.IO.File]::ReadAllText($FilePath, $detected)
-    $bytesBefore = [System.IO.File]::ReadAllBytes($FilePath)
-    if ($PSCmdlet.ShouldProcess($FilePath, "Convert from $($detected.WebName) to $($TargetEncoding.WebName)")) {
-        [System.IO.File]::WriteAllText($FilePath, $content, $TargetEncoding)
+        $content = [System.IO.File]::ReadAllText($FilePath, $detected)
+        $bytesBefore = [System.IO.File]::ReadAllBytes($FilePath)
 
-        $converted = [System.IO.File]::ReadAllText($FilePath, $TargetEncoding)
-        if ($converted -ne $content) {
-            Write-Warning "Content changed after converting $FilePath"
-            if ($RollbackOnMismatch) {
-                [System.IO.File]::WriteAllBytes($FilePath, $bytesBefore)
-                Write-Warning "Reverted changes in $FilePath"
+        if ($PSCmdlet.ShouldProcess($FilePath, "Convert from $($detected.WebName) to $($TargetEncoding.WebName)")) {
+            [System.IO.File]::WriteAllText($FilePath, $content, $TargetEncoding)
+
+            $converted = [System.IO.File]::ReadAllText($FilePath, $TargetEncoding)
+            if ($converted -ne $content) {
+                Write-Warning "Content changed after converting $FilePath"
+                if (-not $NoRollbackOnMismatch) {
+                    [System.IO.File]::WriteAllBytes($FilePath, $bytesBefore)
+                    Write-Warning "Reverted changes in $FilePath"
+                }
             }
+        }
+    } catch {
+        Write-Warning "Failed to convert $FilePath: $_"
+        if (-not $NoRollbackOnMismatch -and $bytesBefore) {
+            try { [System.IO.File]::WriteAllBytes($FilePath, $bytesBefore) } catch {}
         }
     }
 }
