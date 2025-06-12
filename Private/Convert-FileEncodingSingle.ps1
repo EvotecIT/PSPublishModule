@@ -1,5 +1,5 @@
 function Convert-FileEncodingSingle {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)][string] $FilePath,
         [System.Text.Encoding] $SourceEncoding,
@@ -16,5 +16,7 @@ function Convert-FileEncodingSingle {
     }
 
     $content = [System.IO.File]::ReadAllText($FilePath, $detected)
-    [System.IO.File]::WriteAllText($FilePath, $content, $TargetEncoding)
+    if ($PSCmdlet.ShouldProcess($FilePath, "Convert from $($detected.WebName) to $($TargetEncoding.WebName)")) {
+        [System.IO.File]::WriteAllText($FilePath, $content, $TargetEncoding)
+    }
 }

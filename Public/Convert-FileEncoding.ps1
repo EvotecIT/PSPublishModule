@@ -7,6 +7,7 @@ function Convert-FileEncoding {
     Reads a single file or all files within a directory and rewrites them using a new encoding.
     Useful for converting files from UTF8 with BOM to UTF8 without BOM or any other supported encoding.
     Files are only converted when their detected encoding matches the provided SourceEncoding unless -Force is used.
+    Supports -WhatIf for previewing changes.
 
     .PARAMETER Path
     Specifies the file or directory to process.
@@ -31,7 +32,7 @@ function Convert-FileEncoding {
 
     Converts all PowerShell scripts under C:\Scripts from UTF8 with BOM to UTF8.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [string] $Path,
@@ -62,6 +63,8 @@ function Convert-FileEncoding {
     }
 
     foreach ($file in $files) {
-        Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force
+        if ($PSCmdlet.ShouldProcess($file.FullName, "Convert from $($source.WebName) to $($target.WebName)")) {
+            Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force -WhatIf:$WhatIfPreference
+        }
     }
 }
