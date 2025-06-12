@@ -150,7 +150,7 @@ function Invoke-ModuleBuild {
                     }
                     'License'          = @{
                         Source      = [io.path]::Combine($PathToData, "Example-LicenseMIT.txt")
-                        Destination = [io.path]::Combine($FullProjectPath, "License")
+                        Destination = [io.path]::Combine($FullProjectPath, "LICENSE")
                     }
                     'Build-Module.ps1' = @{
                         Source      = [io.path]::Combine($PathToData, "Example-ModuleBuilder.txt")
