@@ -42,26 +42,51 @@ function Publish-GitHubReleaseAsset {
         [string]$GitHubAccessToken,
         [switch]$IsPreRelease
     )
+    $result = [ordered]@{
+        Success   = $false
+        TagName   = $null
+        ZipPath   = $null
+        ReleaseUrl = $null
+        ErrorMessage = $null
+    }
+
     if (-not (Test-Path -LiteralPath $ProjectPath)) {
-        Write-Error "Publish-GitHubReleaseAsset - Project path '$ProjectPath' not found."
-        return
+        $result.ErrorMessage = "Project path '$ProjectPath' not found."
+        return [PSCustomObject]$result
     }
     $csproj = Get-ChildItem -Path $ProjectPath -Filter '*.csproj' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $csproj) {
-        Write-Error "Publish-GitHubReleaseAsset - No csproj found in $ProjectPath"
-        return
+        $result.ErrorMessage = "No csproj found in $ProjectPath"
+        return [PSCustomObject]$result
     }
-    [xml]$xml = Get-Content -LiteralPath $csproj.FullName -Raw
+    try {
+        [xml]$xml = Get-Content -LiteralPath $csproj.FullName -Raw -ErrorAction Stop
+    } catch {
+        $result.ErrorMessage = "Failed to read '$($csproj.FullName)' as XML: $_"
+        return [PSCustomObject]$result
+    }
     $version = $xml.Project.PropertyGroup.VersionPrefix
+    if (-not $version) {
+        $result.ErrorMessage = "VersionPrefix not found in '$($csproj.FullName)'"
+        return [PSCustomObject]$result
+    }
     $zipPath = Join-Path -Path $csproj.Directory.FullName -ChildPath ("bin/Release/{0}.{1}.zip" -f $csproj.BaseName, $version)
     if (-not (Test-Path -LiteralPath $zipPath)) {
-        Write-Error "Publish-GitHubReleaseAsset - Zip file '$zipPath' not found."
-        return
+        $result.ErrorMessage = "Zip file '$zipPath' not found."
+        return [PSCustomObject]$result
     }
     $tagName = "v$version"
+    $result.TagName = $tagName
+    $result.ZipPath = $zipPath
     try {
-        Send-GitHubRelease -GitHubUsername $GitHubUsername -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $tagName -AssetFilePaths $zipPath -IsPreRelease:$IsPreRelease.IsPresent
+        $statusGithub = Send-GitHubRelease -GitHubUsername $GitHubUsername -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $tagName -AssetFilePaths $zipPath -IsPreRelease:$IsPreRelease.IsPresent
+        $result.Success = $statusGithub.Succeeded
+        $result.ReleaseUrl = $statusGithub.ReleaseUrl
+        if (-not $statusGithub.Succeeded) {
+            $result.ErrorMessage = $statusGithub.ErrorMessage
+        }
     } catch {
-        Write-Error "Publish-GitHubReleaseAsset - Failed to publish release: $_"
+        $result.ErrorMessage = $_.Exception.Message
     }
+    return [PSCustomObject]$result
 }

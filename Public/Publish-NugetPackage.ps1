@@ -30,19 +30,32 @@ function Publish-NugetPackage {
         [string]$ApiKey,
         [string]$Source = 'https://api.nuget.org/v3/index.json'
     )
+    $result = [ordered]@{
+        Success = $true
+        Pushed  = @()
+        Failed  = @()
+        ErrorMessage = $null
+    }
+
     if (-not (Test-Path -LiteralPath $Path)) {
-        Write-Error "Publish-NugetPackage - Path '$Path' not found."
-        return
+        $result.Success = $false
+        $result.ErrorMessage = "Path '$Path' not found."
+        return [PSCustomObject]$result
     }
     $packages = Get-ChildItem -Path $Path -Recurse -Filter '*.nupkg' -ErrorAction SilentlyContinue
     if (-not $packages) {
-        Write-Warning "Publish-NugetPackage - No packages found in $Path"
-        return
+        $result.Success = $false
+        $result.ErrorMessage = "No packages found in $Path"
+        return [PSCustomObject]$result
     }
     foreach ($pkg in $packages) {
         dotnet nuget push $pkg.FullName --api-key $ApiKey --source $Source
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Publish-NugetPackage - Failed to push $($pkg.FullName)"
+        if ($LASTEXITCODE -eq 0) {
+            $result.Pushed += $pkg.FullName
+        } else {
+            $result.Failed += $pkg.FullName
+            $result.Success = $false
         }
     }
+    return [PSCustomObject]$result
 }

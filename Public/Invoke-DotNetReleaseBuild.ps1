@@ -41,21 +41,39 @@ function Invoke-DotNetReleaseBuild {
         [string]$LocalStore = 'CurrentUser',
         [string]$TimeStampServer = 'http://timestamp.digicert.com'
     )
+    $result = [ordered]@{
+        Success     = $false
+        Version     = $null
+        ReleasePath = $null
+        ZipPath     = $null
+        Packages    = @()
+        ErrorMessage = $null
+    }
+
     if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-        Write-Error 'Invoke-DotNetReleaseBuild - dotnet CLI is not available.'
-        return
+        $result.ErrorMessage = 'dotnet CLI is not available.'
+        return [PSCustomObject]$result
     }
     if (-not (Test-Path -LiteralPath $ProjectPath)) {
-        Write-Error "Invoke-DotNetReleaseBuild - Project path '$ProjectPath' not found."
-        return
+        $result.ErrorMessage = "Project path '$ProjectPath' not found."
+        return [PSCustomObject]$result
     }
     $csproj = Get-ChildItem -Path $ProjectPath -Filter '*.csproj' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $csproj) {
-        Write-Error "Invoke-DotNetReleaseBuild - No csproj found in $ProjectPath"
-        return
+        $result.ErrorMessage = "No csproj found in $ProjectPath"
+        return [PSCustomObject]$result
     }
-    [xml]$xml = Get-Content -LiteralPath $csproj.FullName -Raw
+    try {
+        [xml]$xml = Get-Content -LiteralPath $csproj.FullName -Raw -ErrorAction Stop
+    } catch {
+        $result.ErrorMessage = "Failed to read '$($csproj.FullName)' as XML: $_"
+        return [PSCustomObject]$result
+    }
     $version = $xml.Project.PropertyGroup.VersionPrefix
+    if (-not $version) {
+        $result.ErrorMessage = "VersionPrefix not found in '$($csproj.FullName)'"
+        return [PSCustomObject]$result
+    }
     $releasePath = Join-Path -Path $csproj.Directory.FullName -ChildPath 'bin/Release'
     if (Test-Path -LiteralPath $releasePath) {
         try {
@@ -63,8 +81,8 @@ function Invoke-DotNetReleaseBuild {
             Get-ChildItem -Path $releasePath -Recurse -Filter '*.nupkg' | Remove-Item -Force
             Get-ChildItem -Path $releasePath -Directory | Remove-Item -Force -Recurse
         } catch {
-            Write-Warning "Invoke-DotNetReleaseBuild - Failed to clean $releasePath: $_"
-            return
+            $result.ErrorMessage = "Failed to clean $releasePath: $_"
+            return [PSCustomObject]$result
         }
     } else {
         $null = New-Item -ItemType Directory -Path $releasePath -Force
@@ -72,8 +90,8 @@ function Invoke-DotNetReleaseBuild {
 
     dotnet build $csproj.FullName --configuration Release
     if ($LASTEXITCODE -ne 0) {
-        Write-Error 'Invoke-DotNetReleaseBuild - dotnet build failed.'
-        return
+        $result.ErrorMessage = 'dotnet build failed.'
+        return [PSCustomObject]$result
     }
     if ($CertificateThumbprint) {
         Register-Certificate -Path $releasePath -LocalStore $LocalStore -Include @('*.dll') -TimeStampServer $TimeStampServer -Thumbprint $CertificateThumbprint
@@ -83,11 +101,11 @@ function Invoke-DotNetReleaseBuild {
 
     dotnet pack $csproj.FullName --configuration Release --no-restore --no-build
     if ($LASTEXITCODE -ne 0) {
-        Write-Error 'Invoke-DotNetReleaseBuild - dotnet pack failed.'
-        return
+        $result.ErrorMessage = 'dotnet pack failed.'
+        return [PSCustomObject]$result
     }
-    if ($CertificateThumbprint) {
-        $nupkgs = Get-ChildItem -Path $releasePath -Recurse -Filter '*.nupkg' -ErrorAction SilentlyContinue
+    $nupkgs = Get-ChildItem -Path $releasePath -Recurse -Filter '*.nupkg' -ErrorAction SilentlyContinue
+    if ($CertificateThumbprint -and $nupkgs) {
         foreach ($pkg in $nupkgs) {
             dotnet nuget sign $pkg.FullName --certificate-fingerprint $CertificateThumbprint --timestamper $TimeStampServer --overwrite
             if ($LASTEXITCODE -ne 0) {
@@ -95,9 +113,10 @@ function Invoke-DotNetReleaseBuild {
             }
         }
     }
-    [PSCustomObject]@{
-        Version     = $version
-        ReleasePath = $releasePath
-        ZipPath     = $zipPath
-    }
+    $result.Success = $true
+    $result.Version = $version
+    $result.ReleasePath = $releasePath
+    $result.ZipPath = $zipPath
+    $result.Packages = $nupkgs.FullName
+    return [PSCustomObject]$result
 }
