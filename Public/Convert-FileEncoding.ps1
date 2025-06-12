@@ -6,6 +6,7 @@ function Convert-FileEncoding {
     .DESCRIPTION
     Reads a single file or all files within a directory and rewrites them using a new encoding.
     Useful for converting files from UTF8 with BOM to UTF8 without BOM or any other supported encoding.
+    Files are only converted when their detected encoding matches the provided SourceEncoding unless -Force is used.
 
     .PARAMETER Path
     Specifies the file or directory to process.
@@ -21,6 +22,9 @@ function Convert-FileEncoding {
 
     .PARAMETER Recurse
     When Path is a directory, process files in all subdirectories as well.
+
+    .PARAMETER Force
+    Convert files even when their detected encoding does not match SourceEncoding.
 
     .EXAMPLE
     Convert-FileEncoding -Path 'C:\Scripts' -Filter '*.ps1' -SourceEncoding UTF8BOM -TargetEncoding UTF8
@@ -40,7 +44,8 @@ function Convert-FileEncoding {
         [ValidateSet('Ascii','BigEndianUnicode','Unicode','UTF7','UTF8','UTF8BOM','UTF32','Default','OEM')]
         [string] $TargetEncoding = 'UTF8',
 
-        [switch] $Recurse
+        [switch] $Recurse,
+        [switch] $Force
     )
 
     $source = [System.Text.Encoding]::$SourceEncoding
@@ -57,6 +62,6 @@ function Convert-FileEncoding {
     }
 
     foreach ($file in $files) {
-        Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target
+        Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force
     }
 }
