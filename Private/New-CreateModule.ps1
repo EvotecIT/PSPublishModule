@@ -16,7 +16,7 @@ function New-CreateModule {
     $Destination = [io.path]::Combine($FullProjectPath, '.gitignore')
     Copy-Item -Path $Source -Destination $Destination -ErrorAction Stop
     $Source = [io.path]::Combine($PSScriptRoot, "..", 'Data', 'Example-LicenseMIT.txt')
-    $Destination = [io.path]::Combine($FullProjectPath, 'License')
+    $Destination = [io.path]::Combine($FullProjectPath, 'LICENSE')
     Copy-Item -Path $Source -Destination $Destination -ErrorAction Stop
     $Source = [io.path]::Combine($PSScriptRoot, "..", 'Data', 'Example-ModuleStarter.txt')
     $Destination = [io.path]::Combine($FullProjectPath, "$ProjectName.psm1")
