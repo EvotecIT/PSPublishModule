@@ -58,7 +58,7 @@
         $Exists = Test-Path -Path $FullModulePath
         $Exists | Should -BeTrue
 
-        #Get-ChildItem -Path $FullModulePath -Force | Format-Table -AutoSize | Out-String | Write-Host
+        Get-ChildItem -Path $FullModulePath -Force | Format-Table -AutoSize | Out-String | Write-Host
 
         # lets find if all files are copied
         $FilesRelative = "$ModuleName.psd1", "$ModuleName.psm1", "CHANGELOG.MD", ".gitignore", "LICENSE", "README.MD"
