@@ -57,6 +57,9 @@ Build-Module -ModuleName 'PSPublishModule' {
         #'Import-PfxCertificate'
         'Save-MarkdownHelp'
         'New-MarkdownHelp'
+        'Update-MarkdownHelpModule'
+        # seems to be windows only
+        'New-FileCatalog'
     )
 
     $ConfigurationFormat = [ordered] @{
