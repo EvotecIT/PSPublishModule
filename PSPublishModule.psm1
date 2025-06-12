@@ -1,18 +1,18 @@
 ﻿#Get public and private function definition files.
-$Public = @( Get-ChildItem -Path $PSScriptRoot\Public\*.ps1 -ErrorAction SilentlyContinue -Recurse )
-$Private = @( Get-ChildItem -Path $PSScriptRoot\Private\*.ps1 -ErrorAction SilentlyContinue -Recurse )
-$Classes = @( Get-ChildItem -Path $PSScriptRoot\Classes\*.ps1 -ErrorAction SilentlyContinue -Recurse )
-$Enums = @( Get-ChildItem -Path $PSScriptRoot\Enums\*.ps1 -ErrorAction SilentlyContinue -Recurse )
+$Public = @( Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse )
+$Private = @( Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse )
+$Classes = @( Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse )
+$Enums = @( Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse )
 
-$AssemblyFolders = Get-ChildItem -Path $PSScriptRoot\Lib -Directory -ErrorAction SilentlyContinue
+$AssemblyFolders = Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Lib')) -Directory -ErrorAction SilentlyContinue
 $Assembly = @(
     if ($AssemblyFolders.BaseName -contains 'Standard') {
-        @( Get-ChildItem -Path $PSScriptRoot\Lib\Standard\*.dll -ErrorAction SilentlyContinue -Recurse)
+        @( Get-ChildItem -Path ([IO.Path]::Combine($LibPath, 'Standard', '*.dll')) -ErrorAction SilentlyContinue -Recurse)
     }
     if ($PSEdition -eq 'Core') {
-        @( Get-ChildItem -Path $PSScriptRoot\Lib\Core\*.dll -ErrorAction SilentlyContinue -Recurse )
+        @( Get-ChildItem -Path ([IO.Path]::Combine($LibPath, 'Core', '*.dll')) -ErrorAction SilentlyContinue -Recurse )
     } else {
-        @( Get-ChildItem -Path $PSScriptRoot\Lib\Default\*.dll -ErrorAction SilentlyContinue -Recurse )
+        @( Get-ChildItem -Path ([IO.Path]::Combine($LibPath, 'Default', '*.dll')) -ErrorAction SilentlyContinue -Recurse )
     }
 )
 $FoundErrors = @(
@@ -49,7 +49,7 @@ $FoundErrors = @(
 )
 
 if ($FoundErrors.Count -gt 0) {
-    $ModuleName = (Get-ChildItem $PSScriptRoot\*.psd1).BaseName
+    $ModuleName = (Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, '*.psd1'))).BaseName
     Write-Warning "Importing module $ModuleName failed. Fix errors before continuing."
     break
 }
