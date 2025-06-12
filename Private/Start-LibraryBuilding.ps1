@@ -81,16 +81,21 @@
         if ($PropertyGroup.TargetFrameworks) {
             if ($PropertyGroup.TargetFrameworks -is [array]) {
                 foreach ($Target in $PropertyGroup.TargetFrameworks) {
-                    if ($Target.Condition -like "*$OSVersion*" -and $Target.'#text') {
+                    # Handle OS-specific conditions
+                    if ($Target.Condition -and $Target.Condition -like "*$OSVersion*" -and $Target.'#text') {
+                        $Target.'#text'.Trim() -split ";"
+                    } else {
+                        # Handle frameworks without OS conditions
                         $Target.'#text'.Trim() -split ";"
                     }
                 }
             } else {
+                # Handle simple TargetFrameworks without conditions
                 $PropertyGroup.TargetFrameworks -split ";"
             }
         } elseif ($PropertyGroup.TargetFrameworkVersion) {
             throw "TargetFrameworkVersion is not supported. Please use TargetFrameworks/TargetFramework instead which may require different project profile."
-        } elseIf ($PropertyGroup.TargetFramework) {
+        } elseif ($PropertyGroup.TargetFramework) {
             $PropertyGroup.TargetFramework
         }
     }
@@ -103,7 +108,7 @@
             if ($LASTEXITCODE) {
                 Write-Host # This is to add new line, because the first line was opened up.
                 Write-Text "[-] Building $Framework - failed. Error: $LASTEXITCODE" -Color Red
-                Exit
+                exit
             }
         } else {
             continue
@@ -246,7 +251,7 @@
             }
         }
     }
-    Try {
+    try {
         Pop-Location -ErrorAction Stop
     } catch {
         Write-Text "[-] Couldn't switch back to the root folder. Error: $($_.Exception.Message)" -Color Red
