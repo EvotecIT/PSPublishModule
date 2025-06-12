@@ -1,7 +1,16 @@
 ﻿Describe 'Build-Module' {
+    BeforeAll {
+        # Set up temp directory
+        if ($IsWindows) {
+            $TempDir = $env:TEMP
+        } else {
+            $TempDir = '/tmp'
+        }
+    }
+
     It 'Create New Module' {
         $ModuleName = 'NewTestModule123456'
-        $Path = Join-Path -Path $env:TEMP -ChildPath 'Junk'
+        $Path = Join-Path -Path $TempDir -ChildPath 'Junk'
 
         # lets remove junk first if it exists
         $FullModulePath = Join-Path -Path $Path -ChildPath $ModuleName
