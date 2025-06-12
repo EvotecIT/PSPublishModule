@@ -36,7 +36,6 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
 
-
     # Add external module dependencies, using loop for simplicity
     New-ConfigurationModule -Type ExternalModule -Name @(
         'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security'
@@ -57,6 +56,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         # ignore functions from PKI module when used during linux/macos build
         #'Import-PfxCertificate'
         'Save-MarkdownHelp'
+        'New-MarkdownHelp'
     )
 
     $ConfigurationFormat = [ordered] @{
