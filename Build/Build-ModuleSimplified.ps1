@@ -117,7 +117,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         SkipBuiltinReplacements           = $true
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                    = "$PSScriptRoot\..\Sources\PSPublishModule\PSPublishModule"
+        NETProjectPath                    = "$PSScriptRoot\..\Sources\PSPublishModule"
         ResolveBinaryConflicts            = $true
         ResolveBinaryConflictsName        = 'PSPublishModule'
         NETProjectName                    = 'PSPublishModule'
