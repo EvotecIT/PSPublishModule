@@ -55,8 +55,8 @@ function Convert-FileEncoding {
         [switch] $NoRollbackOnMismatch
     )
 
-    $source = [System.Text.Encoding]::$SourceEncoding
-    $target = [System.Text.Encoding]::$TargetEncoding
+    $source = Resolve-Encoding -Name $SourceEncoding
+    $target = Resolve-Encoding -Name $TargetEncoding
 
     if (Test-Path -LiteralPath $Path -PathType Leaf) {
         $files = Get-Item -LiteralPath $Path
