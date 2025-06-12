@@ -44,14 +44,24 @@
             $Configuration.Information.Manifest = [ordered] @{}
         }
     }
-    # This deals with OneDrive redirection or similar
+    # Handle module paths for different operating systems
     if (-not $Configuration.Information.DirectoryModulesCore) {
-        $PathCore = [io.path]::Combine($([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)), "PowerShell", 'Modules')
+        if ($IsWindows) {
+            $PathCore = [io.path]::Combine($([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)), "PowerShell", 'Modules')
+        } else {
+            # Linux/macOS paths
+            $PathCore = [io.path]::Combine($env:HOME, ".local", "share", "powershell", "Modules")
+        }
         $Configuration.Information.DirectoryModulesCore = $PathCore
     }
-    # This deals with OneDrive redirection or similar
+    # Handle Windows PowerShell module path (Windows only)
     if (-not $Configuration.Information.DirectoryModules) {
-        $PathStandard = [io.path]::Combine($([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)), "WindowsPowerShell", 'Modules')
+        if ($IsWindows) {
+            $PathStandard = [io.path]::Combine($([Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)), "WindowsPowerShell", 'Modules')
+        } else {
+            # On Linux/macOS, use the same path as Core since there's no Windows PowerShell
+            $PathStandard = $Configuration.Information.DirectoryModulesCore
+        }
         $Configuration.Information.DirectoryModules = $PathStandard
     }
     # This is to use within module between different stages
