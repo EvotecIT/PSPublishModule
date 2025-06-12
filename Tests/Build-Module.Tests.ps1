@@ -67,7 +67,7 @@
             $Exists = Test-Path -Path $FilePath
             $Exists | Should -BeTrue
 
-            $Item = Get-Item -Path $FilePath
+            $Item = Get-Item -Path $FilePath -Force
             $Item.Length | Should -BeGreaterThan 0
         }
         $FilesFullPath = [io.path]::Combine($FullModulePath, "Build", "Build-Module.ps1")
