@@ -8,7 +8,7 @@
 # This is only required for PSPublisModule, as it's the only module that is being built by itself
 Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Lib" -Recurse -Force -ErrorAction SilentlyContinue
 
-Import-Module [io.path]::Combine($PSScriptRoot, '..', 'PSPublishModule.psd1') -Force
+Import-Module ([io.path]::Combine($PSScriptRoot, '..', 'PSPublishModule.psd1')) -Force
 
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
@@ -103,7 +103,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
     # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme [io.path]::Combine('Docs', 'Readme.md') -Path 'Docs' -Tool HelpOut
+    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme ([io.path]::Combine('Docs', 'Readme.md')) -Path 'Docs' -Tool HelpOut
 
     New-ConfigurationImportModule -ImportSelf
 
@@ -136,19 +136,19 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     New-ConfigurationBuild @newConfigurationBuildSplat
 
-    New-ConfigurationArtefact -Type Unpacked -Enable -Path [io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Unpacked', '<TagModuleVersionWithPreRelease>') -RequiredModulesPath [io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Unpacked', '<TagModuleVersionWithPreRelease>', 'Modules') -AddRequiredModules -CopyFiles @{
+    New-ConfigurationArtefact -Type Unpacked -Enable -Path ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Unpacked', '<TagModuleVersionWithPreRelease>')) -RequiredModulesPath ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Unpacked', '<TagModuleVersionWithPreRelease>', 'Modules')) -AddRequiredModules -CopyFiles @{
         "Examples/Step01.CreateModuleProject.ps1" = "Examples/Step01.CreateModuleProject.ps1"
         "Examples/Step02.BuildModuleOver.ps1"     = "Examples/Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path [io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'PackedWithModules') -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
+    New-ConfigurationArtefact -Type Packed -Enable -Path ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'PackedWithModules')) -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
         "Examples/Step01.CreateModuleProject.ps1" = "Examples/Step01.CreateModuleProject.ps1"
         "Examples/Step02.BuildModuleOver.ps1"     = "Examples/Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path [io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Packed') -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+    New-ConfigurationArtefact -Type Packed -Enable -Path ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Packed')) -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
-    New-ConfigurationTest -TestsPath [io.path]::Combine($PSScriptRoot, '..', 'Tests') -Enable
+    New-ConfigurationTest -TestsPath ([io.path]::Combine($PSScriptRoot, '..', 'Tests')) -Enable
 
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly
