@@ -105,7 +105,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     # configuration for documentation, at the same time it enables documentation processing
     New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs' -Tool HelpOut
 
-    New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+    New-ConfigurationImportModule -ImportSelf
 
     $newConfigurationBuildSplat = @{
         Enable                            = $true
