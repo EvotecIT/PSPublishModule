@@ -33,7 +33,7 @@ function Convert-FileEncodingSingle {
             }
         }
     } catch {
-        Write-Warning "Failed to convert $FilePath: $_"
+        Write-Warning "Failed to convert ${FilePath}: $_"
         if (-not $NoRollbackOnMismatch -and $bytesBefore) {
             try { [System.IO.File]::WriteAllBytes($FilePath, $bytesBefore) } catch {}
         }
