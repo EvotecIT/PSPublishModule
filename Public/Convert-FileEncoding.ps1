@@ -7,6 +7,8 @@ function Convert-FileEncoding {
     Reads a single file or all files within a directory and rewrites them using a new encoding.
     Useful for converting files from UTF8 with BOM to UTF8 without BOM or any other supported encoding.
     Files are only converted when their detected encoding matches the provided SourceEncoding unless -Force is used.
+    After conversion the content is verified to ensure it matches the original string.
+    If the content differs a warning is issued and the change can optionally be rolled back.
     Supports -WhatIf for previewing changes.
 
     .PARAMETER Path
@@ -27,6 +29,9 @@ function Convert-FileEncoding {
     .PARAMETER Force
     Convert files even when their detected encoding does not match SourceEncoding.
 
+    .PARAMETER RollbackOnMismatch
+    When verification detects that the file content has changed after conversion, revert the change.
+
     .EXAMPLE
     Convert-FileEncoding -Path 'C:\Scripts' -Filter '*.ps1' -SourceEncoding UTF8BOM -TargetEncoding UTF8
 
@@ -46,7 +51,8 @@ function Convert-FileEncoding {
         [string] $TargetEncoding = 'UTF8',
 
         [switch] $Recurse,
-        [switch] $Force
+        [switch] $Force,
+        [switch] $RollbackOnMismatch
     )
 
     $source = [System.Text.Encoding]::$SourceEncoding
@@ -64,7 +70,7 @@ function Convert-FileEncoding {
 
     foreach ($file in $files) {
         if ($PSCmdlet.ShouldProcess($file.FullName, "Convert from $($source.WebName) to $($target.WebName)")) {
-            Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force -WhatIf:$WhatIfPreference
+            Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force -RollbackOnMismatch:$RollbackOnMismatch -WhatIf:$WhatIfPreference
         }
     }
 }
