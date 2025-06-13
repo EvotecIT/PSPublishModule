@@ -42,11 +42,11 @@ function Invoke-DotNetReleaseBuild {
         [string]$TimeStampServer = 'http://timestamp.digicert.com'
     )
     $result = [ordered]@{
-        Success     = $false
-        Version     = $null
-        ReleasePath = $null
-        ZipPath     = $null
-        Packages    = @()
+        Success      = $false
+        Version      = $null
+        ReleasePath  = $null
+        ZipPath      = $null
+        Packages     = @()
         ErrorMessage = $null
     }
 
@@ -81,7 +81,7 @@ function Invoke-DotNetReleaseBuild {
             Get-ChildItem -Path $releasePath -Recurse -Filter '*.nupkg' | Remove-Item -Force
             Get-ChildItem -Path $releasePath -Directory | Remove-Item -Force -Recurse
         } catch {
-            $result.ErrorMessage = "Failed to clean $releasePath: $_"
+            $result.ErrorMessage = "Failed to clean $($releasePath): $_"
             return [PSCustomObject]$result
         }
     } else {
