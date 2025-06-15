@@ -44,4 +44,13 @@ Describe 'Convert-FileEncoding' {
         $afterBytes = [System.IO.File]::ReadAllBytes($File)
         $afterBytes | Should -Be $beforeBytes
     }
+
+    It 'Skips conversion when file already has target encoding' {
+        $File = Join-Path $TempDir 'convert-test4.txt'
+        [System.IO.File]::WriteAllText($File, 'Final Test', [System.Text.UTF8Encoding]::new($false))
+        $beforeBytes = [System.IO.File]::ReadAllBytes($File)
+        Convert-FileEncoding -Path $File -SourceEncoding UTF8 -TargetEncoding UTF8
+        $afterBytes = [System.IO.File]::ReadAllBytes($File)
+        $afterBytes | Should -Be $beforeBytes
+    }
 }

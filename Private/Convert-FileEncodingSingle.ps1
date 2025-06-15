@@ -17,6 +17,11 @@ function Convert-FileEncodingSingle {
             return
         }
 
+        if ($detected.WebName -eq $TargetEncoding.WebName) {
+            Write-Verbose "Skipping $FilePath because encoding already $($TargetEncoding.WebName)."
+            return
+        }
+
         $content = [System.IO.File]::ReadAllText($FilePath, $detected)
         $bytesBefore = [System.IO.File]::ReadAllBytes($FilePath)
 

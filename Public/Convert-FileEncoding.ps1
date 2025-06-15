@@ -7,6 +7,7 @@ function Convert-FileEncoding {
     Reads a single file or all files within a directory and rewrites them using a new encoding.
     Useful for converting files from UTF8 with BOM to UTF8 without BOM or any other supported encoding.
     Files are only converted when their detected encoding matches the provided SourceEncoding unless -Force is used.
+    If a file already uses the target encoding it is skipped.
     After conversion the content is verified to ensure it matches the original string.
     If the content differs the change is rolled back by default unless -NoRollbackOnMismatch is specified.
     Supports -WhatIf for previewing changes.
