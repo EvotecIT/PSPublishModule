@@ -219,7 +219,7 @@
         Write-Text -Text "[i] Preparing copying module files for $ModuleName from $($InitialFolder). Completed!" -Color DarkGray
 
         # Copying XML files if required
-        if ($LibraryConfiguration.NETBinaryModuleDocumenation) {
+        if ($LibraryConfiguration.NETBinaryModuleDocumentation) {
             $Errors = $false
             try {
                 $List = Get-ChildItem -Filter "*.dll-Help.xml" -ErrorAction Stop -Path $PublishDirFolder -File
