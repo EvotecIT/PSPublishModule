@@ -90,7 +90,7 @@
     In here you provide one or more binrary module names that you want to import in the module.
     Just the DLL name with extension without path. Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
 
-    .PARAMETER NETBinaryModuleDocumenation
+    .PARAMETER NETBinaryModuleDocumentation
     Include documentation for binary modules, this is useful if you have a lot of binary modules and you want to include documentation for them (if available in XML format)
 
     .PARAMETER NETBinaryModuleCmdletScanDisabled
@@ -118,6 +118,10 @@
 
     .PARAMETER NETDoNotCopyLibrariesRecursively
     Do not copy libraries recursively. Normally all libraries are copied recursively, but this option disables that functionality so it won't copy subfolders of libraries.
+
+    .PARAMETER NETHandleRuntimes
+    Add special logic to handle runtimes. It's useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
+    For example library that's not NET based and is as dependency for other libraries
 
     .PARAMETER SkipBuiltinReplacements
     Skip builtin replacements option disables builtin replacements that are done by module builder.
@@ -190,9 +194,10 @@
         [alias("MergeLibraryDebugging")][switch] $NETMergeLibraryDebugging,
         [alias("ResolveBinaryConflicts")][switch] $NETResolveBinaryConflicts,
         [alias("ResolveBinaryConflictsName")][string] $NETResolveBinaryConflictsName,
-        [alias("NETDocumentation")][switch] $NETBinaryModuleDocumenation,
+        [alias("NETDocumentation", "NETBinaryModuleDocumenation")][switch] $NETBinaryModuleDocumentation,
         [switch] $NETDoNotCopyLibrariesRecursively,
-        [string] $NETSearchClass
+        [string] $NETSearchClass,
+        [switch] $NETHandleRuntimes
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -481,11 +486,20 @@
         }
     }
 
-    if ($PSBoundParameters.ContainsKey('NETBinaryModuleDocumenation')) {
+    if ($PSBoundParameters.ContainsKey('NETBinaryModuleDocumentation')) {
         [ordered] @{
             Type           = 'BuildLibraries'
             BuildLibraries = [ordered] @{
-                NETBinaryModuleDocumenation = $NETBinaryModuleDocumenation.IsPresent
+                NETBinaryModuleDocumentation = $NETBinaryModuleDocumentation.IsPresent
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('NETHandleRuntimes')) {
+        [ordered] @{
+            Type           = 'BuildLibraries'
+            BuildLibraries = [ordered] @{
+                HandleRuntimes = $NETHandleRuntimes.IsPresent
             }
         }
     }

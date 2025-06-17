@@ -13,6 +13,12 @@
         $Handle = $false
     }
 
+    if ($Configuration.Steps.BuildLibraries.HandleRuntimes) {
+        $HandleRuntimes = $Configuration.Steps.BuildLibraries.HandleRuntimes
+    } else {
+        $HandleRuntimes = $false
+    }
+
     # remove library that's nested in another folder, and not directly in the root
     # this is to prevent loading of libraries that are usually required by other libraries
     # but should not be loaded directly
@@ -41,7 +47,6 @@
         }
         $Library
     }
-
 
     if ($OptimizedLoading) {
         $LibraryContent = @(
@@ -204,6 +209,12 @@
                     }
                 }
             }
+        )
+    }
+    if ($HandleRuntimes) {
+        $LibraryContent = @(
+            New-DLLHandleRuntime -HandleRuntimes $HandleRuntimes
+            $LibraryContent
         )
     }
     $LibraryContent
