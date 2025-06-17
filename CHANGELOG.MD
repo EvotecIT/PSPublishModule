@@ -1,5 +1,12 @@
 ﻿# PSPublishModule Changelog
 
+## 2.0.19 - 2025.06.17
+### What's Changed
+* Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32
+* feat: ✨ Introduce New-DLLHandleRuntime function and integrate runti… by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/33
+
+**Full Changelog**: https://github.com/EvotecIT/PSPublishModule/compare/v2.0.18...v2.0.19
+
 ## 2.0.18 - 2025.06.06
 ### What's new
 - Update to docs and small logic improved for Get-ProjectVersion and Set-ProjectVersion
