@@ -69,7 +69,7 @@ function Invoke-DotNetReleaseBuild {
         $result.ErrorMessage = "Failed to read '$($csproj.FullName)' as XML: $_"
         return [PSCustomObject]$result
     }
-    $version = $xml.Project.PropertyGroup.VersionPrefix
+    $version = ($xml.Project.PropertyGroup | Where-Object { $_.VersionPrefix } | Select-Object -First 1).VersionPrefix
     if (-not $version) {
         $result.ErrorMessage = "VersionPrefix not found in '$($csproj.FullName)'"
         return [PSCustomObject]$result
