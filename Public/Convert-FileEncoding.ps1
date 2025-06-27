@@ -70,8 +70,6 @@ function Convert-FileEncoding {
     }
 
     foreach ($file in $files) {
-        if ($PSCmdlet.ShouldProcess($file.FullName, "Convert from $($source.WebName) to $($target.WebName)")) {
-            Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force -NoRollbackOnMismatch:$NoRollbackOnMismatch -WhatIf:$WhatIfPreference
-        }
+        Convert-FileEncodingSingle -FilePath $file.FullName -SourceEncoding $source -TargetEncoding $target -Force:$Force -NoRollbackOnMismatch:$NoRollbackOnMismatch -WhatIf:$WhatIfPreference
     }
 }

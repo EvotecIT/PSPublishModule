@@ -23,10 +23,10 @@ function Convert-FileEncodingSingle {
             return
         }
 
-        $content = [System.IO.File]::ReadAllText($FilePath, $detected)
-        $bytesBefore = [System.IO.File]::ReadAllBytes($FilePath)
-
         if ($PSCmdlet.ShouldProcess($FilePath, "Convert from $($detected.WebName) to $($TargetEncoding.WebName)")) {
+            $content = [System.IO.File]::ReadAllText($FilePath, $detected)
+            $bytesBefore = [System.IO.File]::ReadAllBytes($FilePath)
+
             [System.IO.File]::WriteAllText($FilePath, $content, $TargetEncoding)
 
             $converted = [System.IO.File]::ReadAllText($FilePath, $TargetEncoding)
