@@ -1,4 +1,18 @@
 function Get-FileEncoding {
+    <#
+    .SYNOPSIS
+    Get the encoding of a file.
+
+    .DESCRIPTION
+    Detects the encoding of a file using its byte order mark or by scanning for non‑ASCII characters.
+    Returns a string with the encoding name or a custom object when -AsObject is used.
+
+    .PARAMETER Path
+    Path to the file to check.
+
+    .EXAMPLE
+    Get-FileEncoding -Path 'C:\temp\test.txt'
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][Alias('FullName')][string] $Path,
@@ -36,22 +50,24 @@ function Get-FileEncoding {
             $fs.Dispose()
         }
 
+        $encName = if ($enc -is [System.Text.UTF8Encoding] -and $enc.GetPreamble().Length -eq 3) { 'UTF8BOM' }
+                   elseif ($enc -is [System.Text.UTF8Encoding]) { 'UTF8' }
+                   elseif ($enc -is [System.Text.UnicodeEncoding]) { 'Unicode' }
+                   elseif ($enc -is [System.Text.UTF7Encoding]) { 'UTF7' }
+                   elseif ($enc -is [System.Text.UTF32Encoding]) { 'UTF32' }
+                   elseif ($enc -is [System.Text.ASCIIEncoding]) { 'Ascii' }
+                   elseif ($enc -is [System.Text.BigEndianUnicodeEncoding]) { 'BigEndianUnicode' }
+                   else { $enc.WebName }
+
         if ($AsObject) {
-            $encName = if ($enc -is [System.Text.UTF8Encoding] -and $enc.GetPreamble().Length -eq 3) { 'UTF8BOM' }
-                       elseif ($enc -is [System.Text.UTF8Encoding]) { 'UTF8' }
-                       elseif ($enc -is [System.Text.UnicodeEncoding]) { 'Unicode' }
-                       elseif ($enc -is [System.Text.UTF7Encoding]) { 'UTF7' }
-                       elseif ($enc -is [System.Text.UTF32Encoding]) { 'UTF32' }
-                       elseif ($enc -is [System.Text.ASCIIEncoding]) { 'Ascii' }
-                       elseif ($enc -is [System.Text.BigEndianUnicodeEncoding]) { 'BigEndianUnicode' }
-                       else { $enc.WebName }
             [PSCustomObject]@{
                 Path         = $Path
                 Encoding     = $enc
                 EncodingName = $encName
             }
         } else {
-            $enc
+            $encName
         }
     }
 }
+

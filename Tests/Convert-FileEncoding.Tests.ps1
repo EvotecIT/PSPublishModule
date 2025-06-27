@@ -13,11 +13,11 @@ Describe 'Convert-FileEncoding' {
         . (Join-Path $ModuleRoot 'Public/Convert-FileEncoding.ps1')
     }
 
-    It 'Returns encoding object by default' {
+    It 'Returns encoding name by default' {
         $f = [System.IO.Path]::GetTempFileName()
         [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
         $enc = Get-FileEncoding -Path $f
-        $enc.GetType().FullName | Should -Be 'System.Text.UTF8Encoding'
+        $enc | Should -Be 'UTF8'
         Remove-Item $f -Force
     }
 
