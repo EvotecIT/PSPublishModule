@@ -5,6 +5,6 @@ function Test-BasicModule {
         [string] $Type
     )
     if ($Type -contains 'Encoding') {
-        Get-ChildItem -LiteralPath $Path -Recurse -Filter '*.ps1' | Get-Encoding
+        Get-ChildItem -LiteralPath $Path -Recurse -Filter '*.ps1' | Get-FileEncoding
     }
 }
