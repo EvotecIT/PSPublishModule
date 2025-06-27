@@ -11,7 +11,7 @@ function Convert-FileEncodingSingle {
     $bytesBefore = $null
 
     try {
-        $detected = (Get-Encoding -Path $FilePath).Encoding
+        $detected = (Get-FileEncoding -Path $FilePath).Encoding
         if ($detected.WebName -ne $SourceEncoding.WebName -and -not $Force) {
             Write-Verbose "Skipping $FilePath because encoding $($detected.WebName) does not match expected $($SourceEncoding.WebName)."
             return

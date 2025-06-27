@@ -7,17 +7,25 @@ Describe 'Convert-FileEncoding' {
         }
 
         $ModuleRoot = Join-Path $PSScriptRoot '..'
-        . (Join-Path $ModuleRoot 'Private/Get-Encoding.ps1')
+        . (Join-Path $ModuleRoot 'Private/Get-FileEncoding.ps1')
         . (Join-Path $ModuleRoot 'Private/Resolve-Encoding.ps1')
         . (Join-Path $ModuleRoot 'Private/Convert-FileEncodingSingle.ps1')
         . (Join-Path $ModuleRoot 'Public/Convert-FileEncoding.ps1')
+    }
+
+    It 'Returns encoding object by default' {
+        $f = [System.IO.Path]::GetTempFileName()
+        [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
+        $enc = Get-FileEncoding -Path $f
+        $enc.GetType().FullName | Should -Be 'System.Text.UTF8Encoding'
+        Remove-Item $f -Force
     }
 
     It 'Converts UTF8BOM to UTF8 without altering content' {
         $File = Join-Path $TempDir 'convert-test1.txt'
         [System.IO.File]::WriteAllText($File, 'Hello World', [System.Text.UTF8Encoding]::new($true))
         Convert-FileEncoding -Path $File -SourceEncoding UTF8BOM -TargetEncoding UTF8
-        $encObj = Get-Encoding -Path $File
+        $encObj = Get-FileEncoding -Path $File -AsObject
         $encObj.Encoding.WebName | Should -Be 'utf-8'
         $encObj.Encoding.GetPreamble().Length | Should -Be 0
         $content = Get-Content -LiteralPath $File -Raw -Encoding UTF8
@@ -29,7 +37,7 @@ Describe 'Convert-FileEncoding' {
         $text = 'Zażółć gęślą jaźń'
         [System.IO.File]::WriteAllText($File, $text, [System.Text.UTF8Encoding]::new($true))
         Convert-FileEncoding -Path $File -SourceEncoding UTF8BOM -TargetEncoding ASCII
-        $encObj = Get-Encoding -Path $File
+        $encObj = Get-FileEncoding -Path $File -AsObject
         $encObj.Encoding.WebName | Should -Be 'utf-8'
         $encObj.Encoding.GetPreamble().Length | Should -Be 3
         $content = Get-Content -LiteralPath $File -Raw -Encoding UTF8

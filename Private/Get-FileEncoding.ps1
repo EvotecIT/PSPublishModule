@@ -1,11 +1,12 @@
-function Get-Encoding {
+function Get-FileEncoding {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][Alias('FullName')][string] $Path
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][Alias('FullName')][string] $Path,
+        [switch] $AsObject
     )
     process {
         if (-not (Test-Path -LiteralPath $Path)) {
-            $msg = "Get-Encoding - File not found: $Path"
+            $msg = "Get-FileEncoding - File not found: $Path"
             if ($ErrorActionPreference -eq 'Stop') { throw $msg }
             Write-Warning $msg
             return
@@ -35,6 +36,22 @@ function Get-Encoding {
             $fs.Dispose()
         }
 
-        [PSCustomObject]@{ Encoding = $enc; Path = $Path }
+        if ($AsObject) {
+            $encName = if ($enc -is [System.Text.UTF8Encoding] -and $enc.GetPreamble().Length -eq 3) { 'UTF8BOM' }
+                       elseif ($enc -is [System.Text.UTF8Encoding]) { 'UTF8' }
+                       elseif ($enc -is [System.Text.UnicodeEncoding]) { 'Unicode' }
+                       elseif ($enc -is [System.Text.UTF7Encoding]) { 'UTF7' }
+                       elseif ($enc -is [System.Text.UTF32Encoding]) { 'UTF32' }
+                       elseif ($enc -is [System.Text.ASCIIEncoding]) { 'Ascii' }
+                       elseif ($enc -is [System.Text.BigEndianUnicodeEncoding]) { 'BigEndianUnicode' }
+                       else { $enc.WebName }
+            [PSCustomObject]@{
+                Path         = $Path
+                Encoding     = $enc
+                EncodingName = $encName
+            }
+        } else {
+            $enc
+        }
     }
 }
