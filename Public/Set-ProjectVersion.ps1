@@ -102,15 +102,40 @@ function Set-ProjectVersion {
         $targetPsdFiles = $PsdFiles | Where-Object { $_.BaseName -eq $ModuleName }
     }
 
-    # Determine current version from the first available file
+    # Determine current version from the first available file that has a version
     $currentVersion = $null
-    if ($targetCsprojFiles.Count -gt 0) {
-        $currentVersion = Get-CurrentVersionFromCsProj -ProjectFile $targetCsprojFiles[0].FullName
-    } elseif ($targetPsdFiles.Count -gt 0) {
-        $currentVersion = Get-CurrentVersionFromPsd1 -ManifestFile $targetPsdFiles[0].FullName
-    } elseif ($BuildScriptFiles.Count -gt 0) {
-        $currentVersion = Get-CurrentVersionFromBuildScript -ScriptFile $BuildScriptFiles[0].FullName
+
+    # Try to get version from csproj files
+    foreach ($csProj in $targetCsprojFiles) {
+        $version = Get-CurrentVersionFromCsProj -ProjectFile $csProj.FullName
+        if ($version) {
+            $currentVersion = $version
+            break
+        }
     }
+
+    # If no version found in csproj files, try psd1 files
+    if (-not $currentVersion) {
+        foreach ($psd1 in $targetPsdFiles) {
+            $version = Get-CurrentVersionFromPsd1 -ManifestFile $psd1.FullName
+            if ($version) {
+                $currentVersion = $version
+                break
+            }
+        }
+    }
+
+    # If no version found in psd1 files, try build script files
+    if (-not $currentVersion) {
+        foreach ($buildScript in $BuildScriptFiles) {
+            $version = Get-CurrentVersionFromBuildScript -ScriptFile $buildScript.FullName
+            if ($version) {
+                $currentVersion = $version
+                break
+            }
+        }
+    }
+
     if (-not $currentVersion) {
         Write-Error "Could not determine current version from any project files."
         return
