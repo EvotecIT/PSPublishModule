@@ -22,9 +22,9 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [[-NETExcludeLibraryFilter] <String[]>]
  [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>] [-NETHandleAssemblyWithSameName]
  [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging]
- [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [-NETBinaryModuleDocumenation]
- [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+ [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [-NETBinaryModuleDocumentation]
+ [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>] [-NETHandleRuntimes]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -549,13 +549,13 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -NETBinaryModuleDocumenation
+### -NETBinaryModuleDocumentation
 Include documentation for binary modules, this is useful if you have a lot of binary modules and you want to include documentation for them (if available in XML format)
 
 ```yaml
 Type: SwitchParameter
 Parameter Sets: (All)
-Aliases: NETDocumentation
+Aliases: NETDocumentation, NETBinaryModuleDocumenation
 
 Required: False
 Position: Named
@@ -592,6 +592,23 @@ Aliases:
 Required: False
 Position: 13
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETHandleRuntimes
+Add special logic to handle runtimes.
+It's useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
+For example library that's not NET based and is as dependency for other libraries
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

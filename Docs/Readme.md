@@ -47,6 +47,9 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
+### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
+{{ Fill in the Description }}
+
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
 {{ Fill in the Description }}
 
@@ -90,6 +93,12 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
+{{ Fill in the Description }}
+
+### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
+{{ Fill in the Description }}
+
+### [Publish-NugetPackage](Publish-NugetPackage.md)
 {{ Fill in the Description }}
 
 ### [Register-Certificate](Register-Certificate.md)
