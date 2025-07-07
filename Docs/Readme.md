@@ -14,10 +14,25 @@ Locale: en-US
 ### [Convert-CommandsToList](Convert-CommandsToList.md)
 {{ Fill in the Description }}
 
+### [Convert-ProjectEncoding](Convert-ProjectEncoding.md)
+{{ Fill in the Description }}
+
+### [Convert-ProjectLineEnding](Convert-ProjectLineEnding.md)
+{{ Fill in the Description }}
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 {{ Fill in the Description }}
 
 ### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
+{{ Fill in the Description }}
+
+### [Get-ProjectConsistency](Get-ProjectConsistency.md)
+{{ Fill in the Description }}
+
+### [Get-ProjectEncoding](Get-ProjectEncoding.md)
+{{ Fill in the Description }}
+
+### [Get-ProjectLineEnding](Get-ProjectLineEnding.md)
 {{ Fill in the Description }}
 
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
