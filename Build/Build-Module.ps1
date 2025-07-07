@@ -2,13 +2,12 @@
 # since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
 # most modules should be run via PSD1 or by it's name (which in the background uses PD1)
 
-# This version is used for GitHub Actions and is used to build the module
-
+# This version is for local building
 # We need to rmeove library before we start, as it may contain old files, which will be in use once PSD1 loads
 # This is only required for PSPublisModule, as it's the only module that is being built by itself
 Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Lib" -Recurse -Force -ErrorAction SilentlyContinue
 
-Import-Module ([io.path]::Combine($PSScriptRoot, '..', 'PSPublishModule.psd1')) -Force
+Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
 Build-Module -ModuleName 'PSPublishModule' {
     # Usual defaults as per standard module
@@ -61,9 +60,9 @@ Build-Module -ModuleName 'PSPublishModule' {
         'New-FileCatalog'
     )
 
-
     $ConfigurationFormat = [ordered] @{
-        RemoveComments                              = $false
+        RemoveComments                              = $true
+        RemoveEmptyLines                            = $true
 
         PlaceOpenBraceEnable                        = $true
         PlaceOpenBraceOnSameLine                    = $true
@@ -71,7 +70,7 @@ Build-Module -ModuleName 'PSPublishModule' {
         PlaceOpenBraceIgnoreOneLineBlock            = $false
 
         PlaceCloseBraceEnable                       = $true
-        PlaceCloseBraceNewLineAfter                 = $false
+        PlaceCloseBraceNewLineAfter                 = $true
         PlaceCloseBraceIgnoreOneLineBlock           = $false
         PlaceCloseBraceNoEmptyLineBefore            = $true
 
@@ -103,30 +102,30 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationFormat -ApplyTo 'DefaultPSD1', 'OnMergePSD1' -PSD1Style 'Minimal'
 
     # configuration for documentation, at the same time it enables documentation processing
-    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme ([io.path]::Combine('Docs', 'Readme.md')) -Path 'Docs' -Tool HelpOut
+    New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
     New-ConfigurationImportModule -ImportSelf
 
     $newConfigurationBuildSplat = @{
         Enable                            = $true
-        # temporary not signing
-        SignModule                        = $false
+        SignModule                        = if ($Env:COMPUTERNAME -eq 'EVOMONSTER') { $true } else { $false }
         DeleteTargetModuleBeforeBuild     = $true
         MergeModuleOnBuild                = $true
-        CertificateThumbprint             = ''
+        CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
         DoNotAttemptToFixRelativePaths    = $false
         SkipBuiltinReplacements           = $true
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                    = [io.path]::Combine($PSScriptRoot, '..', 'Sources', 'PSPublishModule')
+        NETProjectPath                    = "$PSScriptRoot\..\Sources\PSPublishModule"
         ResolveBinaryConflicts            = $true
         ResolveBinaryConflictsName        = 'PSPublishModule'
         NETProjectName                    = 'PSPublishModule'
         NETConfiguration                  = 'Release'
         NETFramework                      = 'net8.0', 'net472'
         NETHandleAssemblyWithSameName     = $true
+        #NETDocumentation                  = $true
         DotSourceLibraries                = $true
         DotSourceClasses                  = $true
 
@@ -136,22 +135,54 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     New-ConfigurationBuild @newConfigurationBuildSplat
 
-    New-ConfigurationArtefact -Type Unpacked -Enable -Path ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Unpacked', '<TagModuleVersionWithPreRelease>')) -RequiredModulesPath ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Unpacked', '<TagModuleVersionWithPreRelease>', 'Modules')) -AddRequiredModules -CopyFiles @{
-        "Examples/Step01.CreateModuleProject.ps1" = "Examples/Step01.CreateModuleProject.ps1"
-        "Examples/Step02.BuildModuleOver.ps1"     = "Examples/Step02.BuildModuleOver.ps1"
+    New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked\<TagModuleVersionWithPreRelease>" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\<TagModuleVersionWithPreRelease>\Modules" -AddRequiredModules -CopyFiles @{
+        "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
+        "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'PackedWithModules')) -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
-        "Examples/Step01.CreateModuleProject.ps1" = "Examples/Step01.CreateModuleProject.ps1"
-        "Examples/Step02.BuildModuleOver.ps1"     = "Examples/Step02.BuildModuleOver.ps1"
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\PackedWithModules" -IncludeTagName -ID 'ToGitHub' -AddRequiredModules -CopyFiles @{
+        "Examples\Step01.CreateModuleProject.ps1" = "Examples\Step01.CreateModuleProject.ps1"
+        "Examples\Step02.BuildModuleOver.ps1"     = "Examples\Step02.BuildModuleOver.ps1"
     } -CopyFilesRelative -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>-FullPackage.zip"
 
-    New-ConfigurationArtefact -Type Packed -Enable -Path ([io.path]::Combine($PSScriptRoot, '..', 'Artefacts', 'Packed')) -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
+    New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
-    New-ConfigurationTest -TestsPath ([io.path]::Combine($PSScriptRoot, '..', 'Tests')) -Enable
+    New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
 
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly
     #New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
     #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub' -OverwriteTagName '<TagModuleVersionWithPreRelease>'
+
+
+    ### FOR TESTING PURPOSES ONLY ###
+    ### SHOWING HOW THINGS WORK HERE ###
+
+    #New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed2" -IncludeTagName -ID 'Packed2'
+    #New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed1" -IncludeTagName
+
+    # those 2 are only useful for testing purposes
+    # New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName {
+    #     # Lets test this, this will be added in the bottom of the script
+    #     Invoke-ModuleBuilder
+    # } -ID 'ToGitHubAsScript'
+    # New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip" {
+    #     Invoke-ModuleBuilder
+    # } -PreScriptMerge {
+    #     # Lets test this
+    #     param (
+    #         [int]$Mode
+    #     )
+    # } -ScriptName 'Invoke-ModuleBuilder.ps1'
+    # New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" {
+    #     Invoke-ModuleBuilder
+    # } -PreScriptMerge {
+    #     # Lets test this
+    #     param (
+    #         [int]$Mode
+    #     )
+    # } -ScriptName 'Invoke-ModuleBuilder.ps1'
+
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubWithoutModules' -OverwriteTagName 'v1.8.0-Preview1'
+    #New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHubAsScript'
 } -ExitCode
