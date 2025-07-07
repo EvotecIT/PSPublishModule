@@ -146,7 +146,7 @@
             $lineEndingType = $lineEndingInfo.LineEnding
             $hasFinalNewline = $lineEndingInfo.HasFinalNewline
             $extension = $file.Extension.ToLower()
-            $relativePath = [System.IO.Path]::GetRelativePath($Path, $file.FullName)
+            $relativePath = Get-RelativePath -From $Path -To $file.FullName
 
             $fileDetail = [PSCustomObject]@{
                 RelativePath    = $relativePath
