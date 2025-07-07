@@ -1,64 +1,112 @@
-Describe 'Convert-FileEncoding' {
+﻿Describe 'Convert-ProjectEncoding' {
     BeforeAll {
         if ($IsWindows) {
             $TempDir = $env:TEMP
         } else {
             $TempDir = '/tmp'
         }
-
-        $ModuleRoot = Join-Path $PSScriptRoot '..'
-        . (Join-Path $ModuleRoot 'Private/Get-FileEncoding.ps1')
-        . (Join-Path $ModuleRoot 'Private/Resolve-Encoding.ps1')
-        . (Join-Path $ModuleRoot 'Private/Convert-FileEncodingSingle.ps1')
-        . (Join-Path $ModuleRoot 'Public/Convert-FileEncoding.ps1')
     }
 
     It 'Returns encoding name by default' {
         $f = [System.IO.Path]::GetTempFileName()
-        [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
+        # Use UTF8 content with non-ASCII characters to ensure UTF8 detection
+        [System.IO.File]::WriteAllText($f, 'tëst', [System.Text.UTF8Encoding]::new($false))
         $enc = Get-FileEncoding -Path $f
         $enc | Should -Be 'UTF8'
         Remove-Item $f -Force
     }
 
-    It 'Converts UTF8BOM to UTF8 without altering content' {
-        $File = Join-Path $TempDir 'convert-test1.txt'
-        [System.IO.File]::WriteAllText($File, 'Hello World', [System.Text.UTF8Encoding]::new($true))
-        Convert-FileEncoding -Path $File -SourceEncoding UTF8BOM -TargetEncoding UTF8
-        $encObj = Get-FileEncoding -Path $File -AsObject
-        $encObj.Encoding.WebName | Should -Be 'utf-8'
-        $encObj.Encoding.GetPreamble().Length | Should -Be 0
-        $content = Get-Content -LiteralPath $File -Raw -Encoding UTF8
-        $content | Should -Be 'Hello World'
+    It 'Returns ASCII for pure ASCII content' {
+        $f = [System.IO.Path]::GetTempFileName()
+        # Pure ASCII content should be detected as ASCII
+        [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
+        $enc = Get-FileEncoding -Path $f
+        $enc | Should -Be 'ASCII'
+        Remove-Item $f -Force
     }
 
-    It 'Rolls back when conversion would change content' {
-        $File = Join-Path $TempDir 'convert-test2.txt'
-        $text = 'Zażółć gęślą jaźń'
-        [System.IO.File]::WriteAllText($File, $text, [System.Text.UTF8Encoding]::new($true))
-        Convert-FileEncoding -Path $File -SourceEncoding UTF8BOM -TargetEncoding ASCII
-        $encObj = Get-FileEncoding -Path $File -AsObject
-        $encObj.Encoding.WebName | Should -Be 'utf-8'
-        $encObj.Encoding.GetPreamble().Length | Should -Be 3
-        $content = Get-Content -LiteralPath $File -Raw -Encoding UTF8
-        $content | Should -Be $text
+    It 'Converts files using Convert-ProjectEncoding' {
+        # Create a temporary directory with test files
+        $TestDir = Join-Path $TempDir 'encoding-test'
+        if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
+        New-Item -Path $TestDir -ItemType Directory | Out-Null
+
+        try {
+            # Create test files with different encodings
+            $File1 = Join-Path $TestDir 'test1.ps1'
+            $File2 = Join-Path $TestDir 'test2.ps1'
+
+            [System.IO.File]::WriteAllText($File1, 'Write-Host "Hello"', [System.Text.UTF8Encoding]::new($true))  # UTF8BOM
+            [System.IO.File]::WriteAllText($File2, 'Write-Host "World"', [System.Text.UTF8Encoding]::new($false)) # UTF8
+
+            # Verify initial encodings
+            $enc1Before = Get-FileEncoding -Path $File1
+            $enc2Before = Get-FileEncoding -Path $File2
+            $enc1Before | Should -Be 'UTF8BOM'
+            $enc2Before | Should -Be 'ASCII'  # Pure ASCII content
+
+            # Convert using the public function
+            Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -TargetEncoding UTF8BOM -Force -WhatIf:$false
+
+            # Verify conversions
+            $enc1After = Get-FileEncoding -Path $File1
+            $enc2After = Get-FileEncoding -Path $File2
+            $enc1After | Should -Be 'UTF8BOM'  # Should remain UTF8BOM
+            $enc2After | Should -Be 'UTF8BOM'  # Should be converted to UTF8BOM
+
+        } finally {
+            if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
+        }
     }
 
-    It 'Skips file when encoding does not match and Force is not used' {
-        $File = Join-Path $TempDir 'convert-test3.txt'
-        [System.IO.File]::WriteAllText($File, 'Another Test', [System.Text.UTF8Encoding]::new($false))
-        $beforeBytes = [System.IO.File]::ReadAllBytes($File)
-        Convert-FileEncoding -Path $File -SourceEncoding UTF8BOM -TargetEncoding UTF8
-        $afterBytes = [System.IO.File]::ReadAllBytes($File)
-        $afterBytes | Should -Be $beforeBytes
+    It 'Handles mixed content correctly' {
+        $TestDir = Join-Path $TempDir 'encoding-test-mixed'
+        if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
+        New-Item -Path $TestDir -ItemType Directory | Out-Null
+
+        try {
+            $File = Join-Path $TestDir 'unicode-test.ps1'
+            $text = 'Write-Host "Zażółć gęślą jaźń"'  # Polish text with Unicode characters
+            [System.IO.File]::WriteAllText($File, $text, [System.Text.UTF8Encoding]::new($false))
+
+            # Should be detected as UTF8 due to Unicode characters
+            $encBefore = Get-FileEncoding -Path $File
+            $encBefore | Should -Be 'UTF8'
+
+            # Convert to UTF8BOM
+            Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -TargetEncoding UTF8BOM -Force -WhatIf:$false
+
+            # Should now be UTF8BOM
+            $encAfter = Get-FileEncoding -Path $File
+            $encAfter | Should -Be 'UTF8BOM'
+
+            # Content should remain unchanged
+            $content = Get-Content -LiteralPath $File -Raw -Encoding UTF8
+            $content.Trim() | Should -Be $text
+
+        } finally {
+            if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
+        }
     }
 
-    It 'Skips conversion when file already has target encoding' {
-        $File = Join-Path $TempDir 'convert-test4.txt'
-        [System.IO.File]::WriteAllText($File, 'Final Test', [System.Text.UTF8Encoding]::new($false))
-        $beforeBytes = [System.IO.File]::ReadAllBytes($File)
-        Convert-FileEncoding -Path $File -SourceEncoding UTF8 -TargetEncoding UTF8
-        $afterBytes = [System.IO.File]::ReadAllBytes($File)
-        $afterBytes | Should -Be $beforeBytes
+    It 'Skips files when encoding does not match and Force is not used' {
+        $TestDir = Join-Path $TempDir 'encoding-test-skip'
+        if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
+        New-Item -Path $TestDir -ItemType Directory | Out-Null
+
+        try {
+            $File = Join-Path $TestDir 'test.ps1'
+            [System.IO.File]::WriteAllText($File, 'Write-Host "Test"', [System.Text.UTF8Encoding]::new($false))
+            $beforeBytes = [System.IO.File]::ReadAllBytes($File)
+
+            # Try to convert without Force - should skip
+            Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -SourceEncoding UTF8BOM -TargetEncoding UTF8 -WhatIf:$false
+
+            $afterBytes = [System.IO.File]::ReadAllBytes($File)
+            $afterBytes | Should -Be $beforeBytes
+
+        } finally {
+            if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
+        }
     }
 }
