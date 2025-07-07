@@ -165,7 +165,7 @@
             $currentInfo = Get-CurrentLineEnding -FilePath $file.FullName
             $currentLineEnding = $currentInfo.LineEnding
             $hasFinalNewline = $currentInfo.HasFinalNewline
-            $relativePath = [System.IO.Path]::GetRelativePath($Path, $file.FullName)
+            $relativePath = Get-RelativePath -From $Path -To $file.FullName
 
             # Determine if file should be processed
             $shouldProcess = $false
