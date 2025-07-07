@@ -110,7 +110,7 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     $newConfigurationBuildSplat = @{
         Enable                            = $true
-        SignModule                        = $true
+        SignModule                        = if ($Env:COMPUTERNAME -eq 'EVOMONSTER') { $true } else { $false }
         DeleteTargetModuleBeforeBuild     = $true
         MergeModuleOnBuild                = $true
         CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
