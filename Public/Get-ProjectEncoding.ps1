@@ -133,7 +133,7 @@
         try {
             $encodingInfo = Get-FileEncoding -Path $file.FullName -AsObject
             $extension = $file.Extension.ToLower()
-            $relativePath = [System.IO.Path]::GetRelativePath($Path, $file.FullName)
+            $relativePath = Get-RelativePath -From $Path -To $file.FullName
 
             $fileDetail = [PSCustomObject]@{
                 RelativePath = $relativePath
@@ -198,7 +198,15 @@
     Write-Host "`nEncoding Analysis Summary:" -ForegroundColor Cyan
     Write-Host "  Total files analyzed: $totalFiles" -ForegroundColor White
     Write-Host "  Unique encodings found: $($uniqueEncodings.Count)" -ForegroundColor White
-    Write-Host "  Most common encoding: $mostCommonEncoding ($($encodingStats[$mostCommonEncoding]) files)" -ForegroundColor Green
+
+    if ($totalFiles -gt 0 -and $mostCommonEncoding) {
+        Write-Host "  Most common encoding: $mostCommonEncoding ($($encodingStats[$mostCommonEncoding]) files)" -ForegroundColor Green
+    } elseif ($totalFiles -eq 0) {
+        Write-Host "  No files found for analysis" -ForegroundColor Yellow
+        return $result
+    } else {
+        Write-Host "  No encoding information available" -ForegroundColor Yellow
+    }
 
     if ($inconsistentExtensions.Count -gt 0) {
         Write-Host "  ⚠️  Extensions with mixed encodings: $($inconsistentExtensions -join ', ')" -ForegroundColor Yellow
