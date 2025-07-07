@@ -1,6 +1,4 @@
-﻿Clear-Host
-
-# please notice I may be using PSM1 here (not always), as the module may not be built or PSD1 may be broken
+﻿# please notice I may be using PSM1 here (not always), as the module may not be built or PSD1 may be broken
 # since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
 # most modules should be run via PSD1 or by it's name (which in the background uses PD1)
 
