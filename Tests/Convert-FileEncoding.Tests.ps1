@@ -5,13 +5,19 @@
         } else {
             $TempDir = '/tmp'
         }
+
+        # Import the module to ensure functions are available
+        Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
     }
 
     It 'Returns encoding name by default' {
         $f = [System.IO.Path]::GetTempFileName()
         # Use UTF8 content with non-ASCII characters to ensure UTF8 detection
         [System.IO.File]::WriteAllText($f, 'tëst', [System.Text.UTF8Encoding]::new($false))
-        $enc = Get-FileEncoding -Path $f
+
+        # Import module with PassThru to access private functions
+        $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+        $enc = & $Module Get-FileEncoding -Path $f
         $enc | Should -Be 'UTF8'
         Remove-Item $f -Force
     }
@@ -20,7 +26,10 @@
         $f = [System.IO.Path]::GetTempFileName()
         # Pure ASCII content should be detected as ASCII
         [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
-        $enc = Get-FileEncoding -Path $f
+
+        # Import module with PassThru to access private functions
+        $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+        $enc = & $Module Get-FileEncoding -Path $f
         $enc | Should -Be 'ASCII'
         Remove-Item $f -Force
     }
@@ -39,9 +48,12 @@
             [System.IO.File]::WriteAllText($File1, 'Write-Host "Hello"', [System.Text.UTF8Encoding]::new($true))  # UTF8BOM
             [System.IO.File]::WriteAllText($File2, 'Write-Host "World"', [System.Text.UTF8Encoding]::new($false)) # UTF8
 
+            # Import module with PassThru to access private functions for verification
+            $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+
             # Verify initial encodings
-            $enc1Before = Get-FileEncoding -Path $File1
-            $enc2Before = Get-FileEncoding -Path $File2
+            $enc1Before = & $Module Get-FileEncoding -Path $File1
+            $enc2Before = & $Module Get-FileEncoding -Path $File2
             $enc1Before | Should -Be 'UTF8BOM'
             $enc2Before | Should -Be 'ASCII'  # Pure ASCII content
 
@@ -49,8 +61,8 @@
             Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -TargetEncoding UTF8BOM -Force -WhatIf:$false
 
             # Verify conversions
-            $enc1After = Get-FileEncoding -Path $File1
-            $enc2After = Get-FileEncoding -Path $File2
+            $enc1After = & $Module Get-FileEncoding -Path $File1
+            $enc2After = & $Module Get-FileEncoding -Path $File2
             $enc1After | Should -Be 'UTF8BOM'  # Should remain UTF8BOM
             $enc2After | Should -Be 'UTF8BOM'  # Should be converted to UTF8BOM
 
@@ -69,15 +81,18 @@
             $text = 'Write-Host "Zażółć gęślą jaźń"'  # Polish text with Unicode characters
             [System.IO.File]::WriteAllText($File, $text, [System.Text.UTF8Encoding]::new($false))
 
+            # Import module with PassThru to access private functions for verification
+            $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+
             # Should be detected as UTF8 due to Unicode characters
-            $encBefore = Get-FileEncoding -Path $File
+            $encBefore = & $Module Get-FileEncoding -Path $File
             $encBefore | Should -Be 'UTF8'
 
             # Convert to UTF8BOM
             Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -TargetEncoding UTF8BOM -Force -WhatIf:$false
 
             # Should now be UTF8BOM
-            $encAfter = Get-FileEncoding -Path $File
+            $encAfter = & $Module Get-FileEncoding -Path $File
             $encAfter | Should -Be 'UTF8BOM'
 
             # Content should remain unchanged
