@@ -20,7 +20,8 @@
     Example: @('*.ps1', '*.psm1', '*.cs', '*.vb')
 
     .PARAMETER SourceEncoding
-    Expected source encoding of files. Default is 'UTF8BOM'.
+    Expected source encoding of files. When specified, only files with this encoding will be converted.
+    When not specified (or set to 'Any'), files with any encoding except the target encoding will be converted.
 
     .PARAMETER TargetEncoding
     Target encoding for conversion.
@@ -46,15 +47,19 @@
 
     .EXAMPLE
     Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell -WhatIf
-    Preview encoding conversion for a PowerShell project (will use UTF8BOM by default).
+    Preview encoding conversion for a PowerShell project (will convert from ANY encoding to UTF8BOM by default).
+
+    .EXAMPLE
+    Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell -TargetEncoding UTF8BOM
+    Convert ALL files in a PowerShell project to UTF8BOM regardless of their current encoding.
 
     .EXAMPLE
     Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -SourceEncoding ASCII -TargetEncoding UTF8BOM -CreateBackups
-    Convert a mixed project from ASCII to UTF8BOM with backups (PowerShell-safe encoding).
+    Convert ONLY ASCII files in a mixed project to UTF8BOM with backups.
 
     .EXAMPLE
     Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType CSharp -TargetEncoding UTF8 -PassThru
-    Convert a C# project to UTF8 without BOM and return detailed results.
+    Convert ALL files in a C# project to UTF8 without BOM and return detailed results.
 
     .NOTES
     File type mappings:
@@ -81,8 +86,8 @@
         [Parameter(ParameterSetName = 'Custom', Mandatory)]
         [string[]] $CustomExtensions,
 
-        [ValidateSet('Ascii', 'BigEndianUnicode', 'Unicode', 'UTF7', 'UTF8', 'UTF8BOM', 'UTF32', 'Default', 'OEM')]
-        [string] $SourceEncoding = 'UTF8BOM',
+        [ValidateSet('Ascii', 'BigEndianUnicode', 'Unicode', 'UTF7', 'UTF8', 'UTF8BOM', 'UTF32', 'Default', 'OEM', 'Any')]
+        [string] $SourceEncoding = 'Any',
 
         [ValidateSet('Ascii', 'BigEndianUnicode', 'Unicode', 'UTF7', 'UTF8', 'UTF8BOM', 'UTF32', 'Default', 'OEM')]
         [string] $TargetEncoding,
@@ -139,8 +144,10 @@
     }
 
     # Resolve encodings
-    $source = Resolve-Encoding -Name $SourceEncoding
     $target = Resolve-Encoding -Name $TargetEncoding
+
+    # For 'Any' source encoding, we'll handle it differently in the processing loop
+    $source = if ($SourceEncoding -eq 'Any') { $null } else { Resolve-Encoding -Name $SourceEncoding }
 
     # Collect all files to process
     $allFiles = @()
@@ -188,13 +195,54 @@
 
     foreach ($file in $uniqueFiles) {
         try {
-            $convertParams = @{
-                FilePath             = $file.FullName
-                SourceEncoding       = $source
-                TargetEncoding       = $target
-                Force                = $Force
-                NoRollbackOnMismatch = $NoRollbackOnMismatch
-                WhatIf               = $WhatIfPreference
+            # For 'Any' source encoding, handle differently
+            if ($SourceEncoding -eq 'Any') {
+                # Get the current file encoding
+                $currentEncodingObj = Get-FileEncoding -Path $file.FullName -AsObject
+                $currentEncodingName = $currentEncodingObj.EncodingName
+
+                # Get target encoding name for comparison
+                $targetName = if ($target -is [System.Text.UTF8Encoding] -and $target.GetPreamble().Length -eq 3) { 'UTF8BOM' }
+                             elseif ($target -is [System.Text.UTF8Encoding]) { 'UTF8' }
+                             elseif ($target -is [System.Text.UnicodeEncoding]) { 'Unicode' }
+                             elseif ($target -is [System.Text.UTF7Encoding]) { 'UTF7' }
+                             elseif ($target -is [System.Text.UTF32Encoding]) { 'UTF32' }
+                             elseif ($target -is [System.Text.ASCIIEncoding]) { 'ASCII' }
+                             elseif ($target -is [System.Text.BigEndianUnicodeEncoding]) { 'BigEndianUnicode' }
+                             else { $target.WebName }
+
+                # Skip if already target encoding
+                if ($currentEncodingName -eq $targetName) {
+                    Write-Verbose "Skipping $($file.FullName) because encoding is already '$targetName'."
+                    $results += @{
+                        FilePath = $file.FullName
+                        Status = 'Skipped'
+                        Reason = "Already target encoding '$targetName'"
+                        DetectedEncoding = $currentEncodingName
+                    }
+                    $skipped++
+                    continue
+                }
+
+                # Use the detected encoding as source for conversion
+                $convertParams = @{
+                    FilePath             = $file.FullName
+                    SourceEncoding       = $currentEncodingObj.Encoding
+                    TargetEncoding       = $target
+                    Force                = $true  # Always force when using 'Any'
+                    NoRollbackOnMismatch = $NoRollbackOnMismatch
+                    WhatIf               = $WhatIfPreference
+                }
+            } else {
+                # Original logic for specific source encoding
+                $convertParams = @{
+                    FilePath             = $file.FullName
+                    SourceEncoding       = $source
+                    TargetEncoding       = $target
+                    Force                = $Force
+                    NoRollbackOnMismatch = $NoRollbackOnMismatch
+                    WhatIf               = $WhatIfPreference
+                }
             }
 
             if ($CreateBackups) {
@@ -215,7 +263,7 @@
 
                 # Move backup to specified directory if requested
                 if ($CreateBackups -and $BackupDirectory -and $result.BackupPath -and (Test-Path $result.BackupPath)) {
-                    $relativePath = [System.IO.Path]::GetRelativePath($Path, $file.FullName)
+                    $relativePath = Get-RelativePath -From $Path -To $file.FullName
                     $backupTargetPath = Join-Path $BackupDirectory $relativePath
                     $backupTargetDir = Split-Path $backupTargetPath -Parent
 
