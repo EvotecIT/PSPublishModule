@@ -39,19 +39,25 @@ Designed specifically for development projects with intelligent file type detect
 ### EXAMPLE 1
 ```
 Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell -WhatIf
-Preview encoding conversion for a PowerShell project (will use UTF8BOM by default).
+Preview encoding conversion for a PowerShell project (will convert from ANY encoding to UTF8BOM by default).
 ```
 
 ### EXAMPLE 2
 ```
-Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -SourceEncoding ASCII -TargetEncoding UTF8BOM -CreateBackups
-Convert a mixed project from ASCII to UTF8BOM with backups (PowerShell-safe encoding).
+Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell -TargetEncoding UTF8BOM
+Convert ALL files in a PowerShell project to UTF8BOM regardless of their current encoding.
 ```
 
 ### EXAMPLE 3
 ```
+Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -SourceEncoding ASCII -TargetEncoding UTF8BOM -CreateBackups
+Convert ONLY ASCII files in a mixed project to UTF8BOM with backups.
+```
+
+### EXAMPLE 4
+```
 Convert-ProjectEncoding -Path 'C:\MyProject' -ProjectType CSharp -TargetEncoding UTF8 -PassThru
-Convert a C# project to UTF8 without BOM and return detailed results.
+Convert ALL files in a C# project to UTF8 without BOM and return detailed results.
 ```
 
 ## PARAMETERS
@@ -106,7 +112,8 @@ Accept wildcard characters: False
 
 ### -SourceEncoding
 Expected source encoding of files.
-Default is 'UTF8BOM'.
+When specified, only files with this encoding will be converted.
+When not specified (or set to 'Any'), files with any encoding except the target encoding will be converted.
 
 ```yaml
 Type: String
@@ -115,7 +122,7 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: UTF8BOM
+Default value: Any
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

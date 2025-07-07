@@ -5,9 +5,11 @@
         } else {
             $TempDir = '/tmp'
         }
-
-        # Import the module to ensure functions are available
-        Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
+        if (-not (Get-Module -ListAvailable -Name 'PSPublishModule')) {
+            $ModuleToLoad = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'PSPublishModule.psd1'
+        } else {
+            $ModuleToLoad = 'PSPublishModule'
+        }
     }
 
     It 'Returns encoding name by default' {
@@ -16,7 +18,7 @@
         [System.IO.File]::WriteAllText($f, 'tëst', [System.Text.UTF8Encoding]::new($false))
 
         # Import module with PassThru to access private functions
-        $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+        $Module = Import-Module $ModuleToLoad -Force -PassThru
         $enc = & $Module Get-FileEncoding -Path $f
         $enc | Should -Be 'UTF8'
         Remove-Item $f -Force
@@ -28,7 +30,7 @@
         [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
 
         # Import module with PassThru to access private functions
-        $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+        $Module = Import-Module $ModuleToLoad -Force -PassThru
         $enc = & $Module Get-FileEncoding -Path $f
         $enc | Should -Be 'ASCII'
         Remove-Item $f -Force
@@ -49,7 +51,7 @@
             [System.IO.File]::WriteAllText($File2, 'Write-Host "World"', [System.Text.UTF8Encoding]::new($false)) # UTF8
 
             # Import module with PassThru to access private functions for verification
-            $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+            $Module = Import-Module $ModuleToLoad -Force -PassThru
 
             # Verify initial encodings
             $enc1Before = & $Module Get-FileEncoding -Path $File1
@@ -82,7 +84,7 @@
             [System.IO.File]::WriteAllText($File, $text, [System.Text.UTF8Encoding]::new($false))
 
             # Import module with PassThru to access private functions for verification
-            $Module = Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force -PassThru
+            $Module = Import-Module $ModuleToLoad -Force -PassThru
 
             # Should be detected as UTF8 due to Unicode characters
             $encBefore = & $Module Get-FileEncoding -Path $File
