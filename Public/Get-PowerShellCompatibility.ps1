@@ -1,4 +1,4 @@
-function Get-PowerShellCompatibility {
+﻿function Get-PowerShellCompatibility {
     <#
     .SYNOPSIS
     Analyzes PowerShell files and folders to determine compatibility with PowerShell 5.1 and PowerShell 7.
@@ -215,7 +215,8 @@ function Get-PowerShellCompatibility {
         Write-Host "PowerShell 5.1 compatible: $ps51Compatible" -ForegroundColor White
         Write-Host "PowerShell 7 compatible: $ps7Compatible" -ForegroundColor White
         Write-Host "Cross-compatible: $crossCompatible ($($crossCompatibilityPercentage)%)" -ForegroundColor White
-        Write-Host "Files with issues: $filesWithIssues" -ForegroundColor $(if ($filesWithIssues -gt 0) { 'Yellow' } else { 'Green' })
+        $ColorToUse = $(if ($filesWithIssues -gt 0) { 'Yellow' } else { 'Green' })
+        Write-Host "Files with issues: $filesWithIssues" -ForegroundColor $ColorToUse
 
         if ($summary.Recommendations.Count -gt 0) {
             Write-Host "`n💡 Recommendations:" -ForegroundColor Cyan

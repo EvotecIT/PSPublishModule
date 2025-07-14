@@ -15,7 +15,7 @@ Analyzes line ending consistency across all files in a project directory.
 ```
 Get-ProjectLineEnding [-Path] <String> [[-ProjectType] <String>] [[-CustomExtensions] <String[]>]
  [[-ExcludeDirectories] <String[]>] [-GroupByLineEnding] [-ShowFiles] [-CheckMixed] [[-ExportPath] <String>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-Internal] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -164,6 +164,21 @@ Aliases:
 Required: False
 Position: 5
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Internal
+{{ Fill Internal Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

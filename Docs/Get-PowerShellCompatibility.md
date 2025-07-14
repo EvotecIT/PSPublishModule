@@ -14,7 +14,7 @@ Analyzes PowerShell files and folders to determine compatibility with PowerShell
 
 ```
 Get-PowerShellCompatibility [-Path] <String> [-Recurse] [[-ExcludeDirectories] <String[]>] [-ShowDetails]
- [[-ExportPath] <String>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [[-ExportPath] <String>] [-Internal] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -125,6 +125,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -Internal
+{{ Fill Internal Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -ProgressAction
 {{ Fill ProgressAction Description }}
 
@@ -167,7 +182,3 @@ PowerShell 7 supports:
 - Enhanced language features and performance
 
 ## RELATED LINKS
-
-[Get-ProjectConsistency](Get-ProjectConsistency.md)
-[Get-ProjectEncoding](Get-ProjectEncoding.md)
-[Convert-ProjectEncoding](Convert-ProjectEncoding.md)
