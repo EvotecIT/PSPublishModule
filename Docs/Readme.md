@@ -125,12 +125,3 @@ Locale: en-US
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 {{ Fill in the Description }}
 
-### [Test-BasicModule](Test-BasicModule.md)
-{{ Fill in the Description }}
-
-### [Test-ScriptFile](Test-ScriptFile.md)
-{{ Fill in the Description }}
-
-### [Test-ScriptModule](Test-ScriptModule.md)
-{{ Fill in the Description }}
-
