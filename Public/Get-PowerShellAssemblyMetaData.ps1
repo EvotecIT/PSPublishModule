@@ -27,37 +27,48 @@
         [Parameter(Mandatory)][string] $Path
     )
     Write-Text -Text "   [+] Loading assembly $Path" -Color Cyan
-    try {
-        # Get the path to System.Management.Automation assembly
-        $smaAssembly = [System.Management.Automation.PSObject].Assembly
-        $smaAssemblyPath = $smaAssembly.Location
+    # Get the path to System.Management.Automation assembly
+    $smaAssembly = [System.Management.Automation.PSObject].Assembly
+    $smaAssemblyPath = $smaAssembly.Location
 
-        if (-not $smaAssemblyPath) {
-            $smaAssemblyPath = $smaAssembly.CodeBase
-            if ($smaAssemblyPath -like 'file://*') {
-                $smaAssemblyPath = $smaAssemblyPath -replace 'file:///', ''
-                $smaAssemblyPath = [System.Uri]::UnescapeDataString($smaAssemblyPath)
-            } else {
-                Write-Text -Text "[-] Could not determine the path to System.Management.Automation assembly." -Color Red
-                return $false
-            }
+    if (-not $smaAssemblyPath) {
+        $smaAssemblyPath = $smaAssembly.CodeBase
+        if ($smaAssemblyPath -like 'file://*') {
+            $smaAssemblyPath = $smaAssemblyPath -replace 'file:///', ''
+            $smaAssemblyPath = [System.Uri]::UnescapeDataString($smaAssemblyPath)
+        } else {
+            Write-Text -Text "[-] Could not determine the path to System.Management.Automation assembly." -Color Red
+            return $false
         }
+    }
 
-        $assemblyDirectory = Split-Path -Path $Path
-        $runtimeAssemblies = Get-ChildItem -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -Filter "*.dll"
-        $assemblyFiles = Get-ChildItem -Path $assemblyDirectory -Filter "*.dll" -Recurse
+    $assemblyDirectory = Split-Path -Path $Path
+    $runtimeAssemblies = Get-ChildItem -Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) -Filter "*.dll"
+    $assemblyFiles = Get-ChildItem -Path $assemblyDirectory -Filter "*.dll" -Recurse
 
-        $resolverPaths = [string[]] @(
-            $runtimeAssemblies.FullName
-            $assemblyFiles.FullName
-            $smaAssemblyPath  # Include System.Management.Automation
-        )
+    $resolverCandidates = @(
+        $assemblyFiles.FullName
+        $runtimeAssemblies.FullName
+        $smaAssemblyPath
+    )
 
-        $resolver = [System.Reflection.PathAssemblyResolver]::new($resolverPaths)
+    $uniquePaths = [System.Collections.Generic.Dictionary[string,string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($candidate in $resolverCandidates) {
+        if (-not $candidate) { continue }
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($candidate)
+        if (-not $uniquePaths.ContainsKey($name)) {
+            $uniquePaths[$name] = $candidate
+        }
+    }
+
+    try {
+        $resolver = [System.Reflection.PathAssemblyResolver]::new($uniquePaths.Values)
     } catch {
         Write-Text -Text "   [-] Can't create PathAssemblyResolver. Please ensure all dependencies are present. Error: $($_.Exception.Message)" -Color Red
         return $false
     }
+
+    $context = $null
     try {
         $context = [System.Reflection.MetadataLoadContext]::new($resolver)
 
@@ -75,9 +86,7 @@
         $aliasesToExport = [System.Collections.Generic.List[string]]::new()
         $Types = $assembly.GetTypes()
 
-        $Types | Where-Object {
-            $_.IsSubclassOf($cmdletType)
-        } | ForEach-Object -Process {
+        $Types | Where-Object { $_.IsSubclassOf($cmdletType) } | ForEach-Object {
             $cmdletInfo = $_.CustomAttributes | Where-Object { $_.AttributeType -eq $cmdletAttribute }
             if (-not $cmdletInfo) { return }
 
@@ -94,10 +103,19 @@
             AliasesToExport = $aliasesToExport
         }
     } catch {
-        Write-Text -Text "   [-] Can't load assembly $Path. Error: $($_.Exception.Message)" -Color Red
-        $context.Dispose()
-        return $false
+        if ($_.Exception.Message -like '*has already been loaded into this MetadataLoadContext*') {
+            Write-Text -Text "   [-] Can't load assembly $Path. Error: $($_.Exception.Message)" -Color Yellow
+            [PSCustomObject]@{
+                CmdletsToExport = @()
+                AliasesToExport = @()
+            }
+        } else {
+            Write-Text -Text "   [-] Can't load assembly $Path. Error: $($_.Exception.Message)" -Color Red
+            $false
+        }
     } finally {
-        $context.Dispose()
+        if ($null -ne $context) {
+            $context.Dispose()
+        }
     }
 }
