@@ -57,6 +57,9 @@
     .PARAMETER CmdletsToExport
     Defines cmdlets to export in the module manifest. By default, cmdlets are auto-detected, but this allows you to override that.
 
+    .PARAMETER FormatsToProcess
+    Specifies formatting files (.ps1xml) that run when the module is imported.
+
     .EXAMPLE
     New-ConfigurationManifest -ModuleVersion '1.0.0' -GUID '12345678-1234-1234-1234-1234567890ab' -Author 'John Doe' -CompanyName 'Example Corp' -Description 'This is an example module.'
 
@@ -81,7 +84,8 @@
         [alias('PrereleaseTag')][string] $Prerelease,
         [string[]] $FunctionsToExport,
         [string[]] $CmdletsToExport,
-        [string[]] $AliasesToExport
+        [string[]] $AliasesToExport,
+        [string[]] $FormatsToProcess
     )
 
     $Manifest = [ordered] @{
@@ -102,6 +106,7 @@
         FunctionsToExport      = $FunctionsToExport
         CmdletsToExport        = $CmdletsToExport
         AliasesToExport        = $AliasesToExport
+        FormatsToProcess       = $FormatsToProcess
     }
     Remove-EmptyValue -Hashtable $Manifest
 

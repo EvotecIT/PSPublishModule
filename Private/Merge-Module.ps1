@@ -371,6 +371,31 @@ function Merge-Module {
     }
 
     New-PersonalManifest @newPersonalManifestSplat
+
+    # Copy FormatsToProcess files if they exist in the manifest
+    if ($Configuration.Information.Manifest.FormatsToProcess) {
+        foreach ($FormatFile in $Configuration.Information.Manifest.FormatsToProcess) {
+            if ($FormatFile) {
+                # Try source path first (from temporary directory)
+                $SourceFormatPath = [System.IO.Path]::Combine($ModulePathSource, $FormatFile)
+                $TargetFormatPath = [System.IO.Path]::Combine($ModulePathTarget, $FormatFile)
+
+                # If not found in temporary directory, try original project path
+                if (-not (Test-Path -Path $SourceFormatPath)) {
+                    $OriginalProjectPath = $Configuration.Information.DirectoryProjects
+                    $SourceFormatPath = [System.IO.Path]::Combine($OriginalProjectPath, $FormatFile)
+                }
+
+                if (Test-Path -Path $SourceFormatPath) {
+                    Write-Text "[+] Copying format file: $FormatFile" -Color DarkGray
+                    Copy-Item -Path $SourceFormatPath -Destination $TargetFormatPath -Force
+                } else {
+                    Write-Text "[-] Format file not found: $SourceFormatPath" -Color Red
+                }
+            }
+        }
+    }
+
     # Format PSD1 file
     $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
     if ($Success -eq $false) {
