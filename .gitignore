@@ -385,3 +385,5 @@ FodyWeavers.xsd
 .vscode/*
 
 /.idea/
+CLAUDE.md
+.claude/*
