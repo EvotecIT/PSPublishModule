@@ -217,7 +217,7 @@
     Write-Host "`nEncoding Distribution:" -ForegroundColor Cyan
     foreach ($encoding in ($encodingStats.GetEnumerator() | Sort-Object Value -Descending)) {
         $percentage = [math]::Round(($encoding.Value / $totalFiles) * 100, 1)
-        Write-Host "  $($encoding.Key): $($encoding.Value) files ($percentage%)" -ForegroundColor White
+        Write-Host "  $($encoding.Key): $($encoding.Value) files ($($percentage)%)" -ForegroundColor White
     }
 
     if ($inconsistentExtensions.Count -gt 0) {

@@ -390,7 +390,7 @@
         Write-Host "📈 Encoding Distribution:" -ForegroundColor Blue
         $this.EncodingDistribution.GetEnumerator() | Sort-Object Value -Descending | ForEach-Object {
             $percentage = [math]::Round(($_.Value / $this.Summary.TotalFiles) * 100, 1)
-            Write-Host "  $($_.Key): $($_.Value) files ($percentage%)" -ForegroundColor White
+            Write-Host "  $($_.Key): $($_.Value) files ($($percentage)%)" -ForegroundColor White
         }
 
         if ($this.Recommendations -and $this.Recommendations.Count -gt 0) {

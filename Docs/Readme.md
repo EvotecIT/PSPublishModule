@@ -26,6 +26,9 @@ Locale: en-US
 ### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
 {{ Fill in the Description }}
 
+### [Get-PowerShellCompatibility](Get-PowerShellCompatibility.md)
+{{ Fill in the Description }}
+
 ### [Get-ProjectConsistency](Get-ProjectConsistency.md)
 {{ Fill in the Description }}
 
@@ -62,10 +65,16 @@ Locale: en-US
 ### [New-ConfigurationCommand](New-ConfigurationCommand.md)
 {{ Fill in the Description }}
 
+### [New-ConfigurationCompatibility](New-ConfigurationCompatibility.md)
+{{ Fill in the Description }}
+
 ### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)
 {{ Fill in the Description }}
 
 ### [New-ConfigurationExecute](New-ConfigurationExecute.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationFileConsistency](New-ConfigurationFileConsistency.md)
 {{ Fill in the Description }}
 
 ### [New-ConfigurationFormat](New-ConfigurationFormat.md)
@@ -105,6 +114,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [Remove-Comments](Remove-Comments.md)
+{{ Fill in the Description }}
+
+### [Remove-ProjectFiles](Remove-ProjectFiles.md)
 {{ Fill in the Description }}
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)

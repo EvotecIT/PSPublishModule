@@ -69,7 +69,8 @@
         [switch] $GroupByLineEnding,
         [switch] $ShowFiles,
         [switch] $CheckMixed,
-        [string] $ExportPath
+        [string] $ExportPath,
+        [switch] $Internal
     )
 
     # Validate path
@@ -92,8 +93,13 @@
         $filePatterns = $extensionMappings[$ProjectType]
     }
 
-    Write-Host "Analyzing project line endings..." -ForegroundColor Cyan
-    Write-Verbose "Project type: $ProjectType with patterns: $($filePatterns -join ', ')"    # Helper function to detect line endings and final newline
+    if ($Internal) {
+        Write-Verbose "Analyzing project line endings for: $Path"
+        Write-Verbose "Project type: $ProjectType with patterns: $($filePatterns -join ', ')"
+    } else {
+        Write-Host "Analyzing project line endings..." -ForegroundColor Cyan
+        Write-Verbose "Project type: $ProjectType with patterns: $($filePatterns -join ', ')"
+    }    # Helper function to detect line endings and final newline
 
     # Collect all files to analyze
     $allFiles = @()
@@ -127,11 +133,19 @@
     $uniqueFiles = $allFiles | Sort-Object FullName | Get-Unique -AsString
 
     if ($uniqueFiles.Count -eq 0) {
-        Write-Warning "No files found matching the specified criteria"
+        if ($Internal) {
+            Write-Verbose "No files found matching the specified criteria"
+        } else {
+            Write-Warning "No files found matching the specified criteria"
+        }
         return
     }
 
-    Write-Host "Analyzing $($uniqueFiles.Count) files..." -ForegroundColor Green
+    if ($Internal) {
+        Write-Verbose "Analyzing $($uniqueFiles.Count) files..."
+    } else {
+        Write-Host "Analyzing $($uniqueFiles.Count) files..." -ForegroundColor Green
+    }
 
     # Analyze each file
     $fileDetails = @()
@@ -187,7 +201,11 @@
             $extensionStats[$extension][$lineEndingType]++
 
         } catch {
-            Write-Warning "Failed to analyze $($file.FullName): $_"
+            if ($Internal) {
+                Write-Verbose "Failed to analyze $($file.FullName): $_"
+            } else {
+                Write-Warning "Failed to analyze $($file.FullName): $_"
+            }
         }
     }
 
@@ -204,8 +222,19 @@
         }
     }
 
+    # Determine overall status
+    $hasProblems = $problemFiles.Count -gt 0 -or $filesWithoutFinalNewline.Count -gt 0 -or $inconsistentExtensions.Count -gt 0
+    $status = if (-not $hasProblems) {
+        'Pass'
+    } elseif ($problemFiles.Count -eq 0 -and $inconsistentExtensions.Count -le 2) {
+        'Warning'
+    } else {
+        'Fail'
+    }
+
     # Create summary report
     $summary = [PSCustomObject]@{
+        Status                   = $status
         ProjectPath              = $Path
         ProjectType              = $ProjectType
         TotalFiles               = $totalFiles
@@ -218,66 +247,102 @@
         LineEndingDistribution   = $lineEndingStats
         ExtensionLineEndingMap   = $extensionStats
         AnalysisDate             = Get-Date
+        Message                  = switch ($status) {
+            'Pass' { "All $totalFiles files have consistent line endings" }
+            'Warning' { "Minor line ending issues found: $($problemFiles.Count) mixed files, $($filesWithoutFinalNewline.Count) missing newlines" }
+            'Fail' { "Significant line ending issues: $($problemFiles.Count) mixed files, $($inconsistentExtensions.Count) inconsistent extensions" }
+        }
+        Recommendations          = if ($hasProblems) {
+            $recs = @()
+            if ($problemFiles.Count -gt 0) { $recs += "Fix files with mixed line endings" }
+            if ($filesWithoutFinalNewline.Count -gt 0) { $recs += "Add missing final newlines" }
+            if ($inconsistentExtensions.Count -gt 0) { $recs += "Standardize line endings by file extension" }
+            $recs += "Use Convert-ProjectLineEnding to fix issues"
+            $recs
+        } else { @() }
     }
 
     # Display summary
-    Write-Host "`nLine Ending Analysis Summary:" -ForegroundColor Cyan
-    Write-Host "  Total files analyzed: $totalFiles" -ForegroundColor White
-    Write-Host "  Unique line endings found: $($uniqueLineEndings.Count)" -ForegroundColor White
-    Write-Host "  Most common line ending: $mostCommonLineEnding ($($lineEndingStats[$mostCommonLineEnding]) files)" -ForegroundColor Green
-
-    if ($problemFiles.Count -gt 0) {
-        Write-Host "  ⚠️  Files with mixed line endings: $($problemFiles.Count)" -ForegroundColor Red
-    }
-
-    if ($filesWithoutFinalNewline.Count -gt 0) {
-        Write-Host "  ⚠️  Files without final newline: $($filesWithoutFinalNewline.Count)" -ForegroundColor Yellow
+    if ($Internal) {
+        Write-Verbose "Line Ending Analysis: $($summary.Status) - $($summary.Message)"
+        if ($summary.Status -ne 'Pass') {
+            Write-Verbose "Recommendations: $($summary.Recommendations -join '; ')"
+        }
     } else {
-        Write-Host "  ✅ All files end with proper newlines" -ForegroundColor Green
-    }
+        Write-Host "`nLine Ending Analysis Summary:" -ForegroundColor Cyan
+        Write-Host "Status: $($summary.Status)" -ForegroundColor $(
+            switch ($summary.Status) {
+                'Pass' { 'Green' }
+                'Warning' { 'Yellow' }
+                'Fail' { 'Red' }
+            }
+        )
+        Write-Host "  Total files analyzed: $totalFiles" -ForegroundColor White
+        Write-Host "  Unique line endings found: $($uniqueLineEndings.Count)" -ForegroundColor White
+        Write-Host "  Most common line ending: $mostCommonLineEnding ($($lineEndingStats[$mostCommonLineEnding]) files)" -ForegroundColor Green
 
-    if ($inconsistentExtensions.Count -gt 0) {
-        Write-Host "  ⚠️  Extensions with mixed line endings: $($inconsistentExtensions -join ', ')" -ForegroundColor Yellow
-    } else {
-        Write-Host "  ✅ All file extensions have consistent line endings" -ForegroundColor Green
-    }
+        if ($problemFiles.Count -gt 0) {
+            Write-Host "  ⚠️  Files with mixed line endings: $($problemFiles.Count)" -ForegroundColor Red
+        }
 
-    Write-Host "`nLine Ending Distribution:" -ForegroundColor Cyan
-    foreach ($lineEnding in ($lineEndingStats.GetEnumerator() | Sort-Object Value -Descending)) {
-        $percentage = [math]::Round(($lineEnding.Value / $totalFiles) * 100, 1)
-        $color = switch ($lineEnding.Key) {
-            'CRLF' { 'Green' }
-            'LF' { 'Green' }
-            'Mixed' { 'Red' }
-            'CR' { 'Yellow' }
-            'None' { 'Gray' }
-            'Error' { 'Red' }
-            default { 'White' }
+        if ($filesWithoutFinalNewline.Count -gt 0) {
+            Write-Host "  ⚠️  Files without final newline: $($filesWithoutFinalNewline.Count)" -ForegroundColor Yellow
+        } else {
+            Write-Host "  ✅ All files end with proper newlines" -ForegroundColor Green
         }
-        Write-Host "  $($lineEnding.Key): $($lineEnding.Value) files ($percentage%)" -ForegroundColor $color
-    }
 
-    if ($problemFiles.Count -gt 0) {
-        Write-Host "`nFiles with Mixed Line Endings:" -ForegroundColor Red
-        foreach ($problemFile in $problemFiles | Select-Object -First 10) {
-            Write-Host "  $($problemFile.RelativePath)" -ForegroundColor Yellow
+        if ($inconsistentExtensions.Count -gt 0) {
+            Write-Host "  ⚠️  Extensions with mixed line endings: $($inconsistentExtensions -join ', ')" -ForegroundColor Yellow
+        } else {
+            Write-Host "  ✅ All file extensions have consistent line endings" -ForegroundColor Green
         }
-        if ($problemFiles.Count -gt 10) {
-            Write-Host "  ... and $($problemFiles.Count - 10) more files" -ForegroundColor Yellow
-        }
-    }
 
-    if ($filesWithoutFinalNewline.Count -gt 0) {
-        Write-Host "`nFiles Missing Final Newline:" -ForegroundColor Yellow
-        foreach ($missingFile in $filesWithoutFinalNewline | Select-Object -First 10) {
-            Write-Host "  $($missingFile.RelativePath)" -ForegroundColor Yellow
-        }
-        if ($filesWithoutFinalNewline.Count -gt 10) {
-            Write-Host "  ... and $($filesWithoutFinalNewline.Count - 10) more files" -ForegroundColor Yellow
+        if ($summary.Recommendations.Count -gt 0) {
+            Write-Host "`n💡 Recommendations:" -ForegroundColor Cyan
+            foreach ($recommendation in $summary.Recommendations) {
+                Write-Host "  • $recommendation" -ForegroundColor Yellow
+            }
         }
     }
 
-    if ($inconsistentExtensions.Count -gt 0) {
+    if (-not $Internal) {
+        Write-Host "`nLine Ending Distribution:" -ForegroundColor Cyan
+        foreach ($lineEnding in ($lineEndingStats.GetEnumerator() | Sort-Object Value -Descending)) {
+            $percentage = [math]::Round(($lineEnding.Value / $totalFiles) * 100, 1)
+            $color = switch ($lineEnding.Key) {
+                'CRLF' { 'Green' }
+                'LF' { 'Green' }
+                'Mixed' { 'Red' }
+                'CR' { 'Yellow' }
+                'None' { 'Gray' }
+                'Error' { 'Red' }
+                default { 'White' }
+            }
+            Write-Host "  $($lineEnding.Key): $($lineEnding.Value) files ($($percentage)%)" -ForegroundColor $color
+        }
+
+        if ($problemFiles.Count -gt 0) {
+            Write-Host "`nFiles with Mixed Line Endings:" -ForegroundColor Red
+            foreach ($problemFile in $problemFiles | Select-Object -First 10) {
+                Write-Host "  $($problemFile.RelativePath)" -ForegroundColor Yellow
+            }
+            if ($problemFiles.Count -gt 10) {
+                Write-Host "  ... and $($problemFiles.Count - 10) more files" -ForegroundColor Yellow
+            }
+        }
+
+        if ($filesWithoutFinalNewline.Count -gt 0) {
+            Write-Host "`nFiles Missing Final Newline:" -ForegroundColor Yellow
+            foreach ($missingFile in $filesWithoutFinalNewline | Select-Object -First 10) {
+                Write-Host "  $($missingFile.RelativePath)" -ForegroundColor Yellow
+            }
+            if ($filesWithoutFinalNewline.Count -gt 10) {
+                Write-Host "  ... and $($filesWithoutFinalNewline.Count - 10) more files" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    if (-not $Internal -and $inconsistentExtensions.Count -gt 0) {
         Write-Host "`nExtensions with Mixed Line Endings:" -ForegroundColor Yellow
         foreach ($ext in $inconsistentExtensions) {
             Write-Host "  ${ext}:" -ForegroundColor Yellow
@@ -305,9 +370,17 @@
     if ($ExportPath) {
         try {
             $fileDetails | Export-Csv -Path $ExportPath -NoTypeInformation -Encoding UTF8
-            Write-Host "`nDetailed report exported to: $ExportPath" -ForegroundColor Green
+            if ($Internal) {
+                Write-Verbose "Detailed report exported to: $ExportPath"
+            } else {
+                Write-Host "`nDetailed report exported to: $ExportPath" -ForegroundColor Green
+            }
         } catch {
-            Write-Warning "Failed to export report to $ExportPath`: $_"
+            if ($Internal) {
+                Write-Verbose "Failed to export report to $ExportPath`: $_"
+            } else {
+                Write-Warning "Failed to export report to $ExportPath`: $_"
+            }
         }
     }
 

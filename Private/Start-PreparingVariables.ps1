@@ -122,6 +122,14 @@
                     }
                 }
             }
+            # Add FormatsToProcess files if they exist in the manifest
+            if ($Configuration.Information.Manifest.FormatsToProcess) {
+                foreach ($FormatFile in $Configuration.Information.Manifest.FormatsToProcess) {
+                    if ($FormatFile -and (Test-Path -Path (Join-Path $FullProjectPath $FormatFile))) {
+                        $FormatFile
+                    }
+                }
+            }
         )
         # Link only files from subfolers
         $LinkPrivatePublicFiles = @(

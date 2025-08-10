@@ -18,7 +18,7 @@ New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <St
  [[-PowerShellVersion] <String>] [[-Tags] <String[]>] [[-IconUri] <String>] [[-ProjectUri] <String>]
  [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [[-Prerelease] <String>]
  [[-FunctionsToExport] <String[]>] [[-CmdletsToExport] <String[]>] [[-AliasesToExport] <String[]>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [[-FormatsToProcess] <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -292,6 +292,21 @@ Aliases:
 
 Required: False
 Position: 17
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -FormatsToProcess
+Specifies formatting files (.ps1xml) that run when the module is imported.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 18
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
