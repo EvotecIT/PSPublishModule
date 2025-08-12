@@ -1,0 +1,21 @@
+# Module Test Template
+# Copy this file to your module project as "RunTests.ps1" or similar
+
+# Ensure PSPublishModule is installed
+if (-not (Get-Module -ListAvailable -Name PSPublishModule)) {
+    Write-Host "Installing PSPublishModule..." -ForegroundColor Yellow
+    Install-Module -Name PSPublishModule -Force -SkipPublisherCheck
+}
+
+# Import the module
+Import-Module PSPublishModule -Force
+
+# Run the complete test suite
+Invoke-ModuleTestSuite -ProjectPath $PSScriptRoot -AdditionalModules @('Pester', 'PSWriteColor') -EnableCodeCoverage -OutputFormat Detailed
+
+# That's it! The function will:
+# - Find your module manifest (.psd1)
+# - Install any missing dependencies
+# - Import your module
+# - Run all Pester tests in the Tests folder
+# - Display comprehensive results
