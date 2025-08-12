@@ -26,7 +26,7 @@ function Publish-GitHubReleaseAsset {
     Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\MyProject' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyRepo' -GitHubAccessToken $Token
     Uploads the current project zip to the specified GitHub repository.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -78,15 +78,22 @@ function Publish-GitHubReleaseAsset {
     $tagName = "v$version"
     $result.TagName = $tagName
     $result.ZipPath = $zipPath
-    try {
-        $statusGithub = Send-GitHubRelease -GitHubUsername $GitHubUsername -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $tagName -AssetFilePaths $zipPath -IsPreRelease:$IsPreRelease.IsPresent
-        $result.Success = $statusGithub.Succeeded
-        $result.ReleaseUrl = $statusGithub.ReleaseUrl
-        if (-not $statusGithub.Succeeded) {
-            $result.ErrorMessage = $statusGithub.ErrorMessage
+
+    if ($PSCmdlet.ShouldProcess("$GitHubUsername/$GitHubRepositoryName", "Publish release $tagName to GitHub")) {
+        try {
+            $statusGithub = Send-GitHubRelease -GitHubUsername $GitHubUsername -GitHubRepositoryName $GitHubRepositoryName -GitHubAccessToken $GitHubAccessToken -TagName $tagName -AssetFilePaths $zipPath -IsPreRelease:$IsPreRelease.IsPresent
+            $result.Success = $statusGithub.Succeeded
+            $result.ReleaseUrl = $statusGithub.ReleaseUrl
+            if (-not $statusGithub.Succeeded) {
+                $result.ErrorMessage = $statusGithub.ErrorMessage
+            }
+        } catch {
+            $result.ErrorMessage = $_.Exception.Message
         }
-    } catch {
-        $result.ErrorMessage = $_.Exception.Message
+    } else {
+        # WhatIf mode
+        $result.Success = $true
+        $result.ReleaseUrl = "https://github.com/$GitHubUsername/$GitHubRepositoryName/releases/tag/$tagName"
     }
     return [PSCustomObject]$result
 }
