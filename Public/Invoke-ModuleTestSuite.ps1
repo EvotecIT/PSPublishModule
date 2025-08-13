@@ -197,7 +197,15 @@ function Invoke-ModuleTestSuite {
             $testParams.TestPath = $TestPath
         }
 
-        $testResults = Invoke-ModuleTests @testParams
+        # Call the private function using the module scope
+        $module = Get-Module -Name 'PSPublishModule'
+        if (-not $module) {
+            throw "PSPublishModule module is not loaded. Cannot access internal functions."
+        }
+        $testResults = & $module { 
+            param($params)
+            Invoke-ModuleTests @params 
+        } -params $testParams
 
         Write-Host
         if ($CICD.IsPresent) {

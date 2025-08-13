@@ -23,6 +23,9 @@ Locale: en-US
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 {{ Fill in the Description }}
 
+### [Get-ModuleInformation](Get-ModuleInformation.md)
+{{ Fill in the Description }}
+
 ### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
 {{ Fill in the Description }}
 
@@ -54,6 +57,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
+{{ Fill in the Description }}
+
+### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 {{ Fill in the Description }}
 
 ### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
