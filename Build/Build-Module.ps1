@@ -147,7 +147,9 @@ Build-Module -ModuleName 'PSPublishModule' {
 
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
-    New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
+    # Disabled because PSPublishModule testing itself after build causes multiple module instances
+    # which breaks InModuleScope tests. The module is tested separately via PSPublishModule.Tests.ps1
+    #New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable
 
     # global options for publishing to github/psgallery
     # you can use FilePath where APIKey are saved in clear text or use APIKey directly

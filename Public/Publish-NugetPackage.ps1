@@ -20,7 +20,7 @@ function Publish-NugetPackage {
     Publish-NugetPackage -Path 'C:\Git\Project\bin\Release' -ApiKey $MyKey
     Uploads all packages in the Release folder to NuGet.org.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -48,13 +48,19 @@ function Publish-NugetPackage {
         $result.ErrorMessage = "No packages found in $Path"
         return [PSCustomObject]$result
     }
+
     foreach ($pkg in $packages) {
-        dotnet nuget push $pkg.FullName --api-key $ApiKey --source $Source
-        if ($LASTEXITCODE -eq 0) {
-            $result.Pushed += $pkg.FullName
+        if ($PSCmdlet.ShouldProcess($pkg.FullName, "Publish NuGet package to $Source")) {
+            dotnet nuget push $pkg.FullName --api-key $ApiKey --source $Source
+            if ($LASTEXITCODE -eq 0) {
+                $result.Pushed += $pkg.FullName
+            } else {
+                $result.Failed += $pkg.FullName
+                $result.Success = $false
+            }
         } else {
-            $result.Failed += $pkg.FullName
-            $result.Success = $false
+            # WhatIf mode - simulate success
+            $result.Pushed += $pkg.FullName
         }
     }
     return [PSCustomObject]$result
