@@ -32,6 +32,9 @@
         'net7.0'         = 'Core'
         'net7.0-windows' = 'Core'
         'net8.0'         = 'Core'
+        'net8.0-windows' = 'Core'
+        'net9.0'         = 'Core'
+        'net9.0-windows' = 'Core'
     }
 
     if ($LibraryConfiguration.Configuration) {
