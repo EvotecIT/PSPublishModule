@@ -20,6 +20,9 @@ Locale: en-US
 ### [Convert-ProjectLineEnding](Convert-ProjectLineEnding.md)
 {{ Fill in the Description }}
 
+### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
+{{ Fill in the Description }}
+
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 {{ Fill in the Description }}
 
