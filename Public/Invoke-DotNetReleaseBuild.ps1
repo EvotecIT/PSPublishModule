@@ -14,7 +14,8 @@ function Invoke-DotNetReleaseBuild {
 
     .PARAMETER CertificateThumbprint
     Optional certificate thumbprint used to sign the built assemblies and NuGet
-    packages. When omitted no signing is performed.
+    packages. When omitted no signing is performed. The function will automatically
+    convert this to SHA256 hash for NuGet package signing.
 
     .PARAMETER LocalStore
     Certificate store used when searching for the signing certificate. Defaults
@@ -169,10 +170,35 @@ function Invoke-DotNetReleaseBuild {
 
     # Sign all packages
     if ($CertificateThumbprint -and $allPackages.Count -gt 0) {
+        Write-Verbose "Invoke-DotNetReleaseBuild - Signing $($allPackages.Count) packages"
+
+        # Get SHA256 hash from certificate thumbprint for NuGet signing
+        try {
+            $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('My', $LocalStore)
+            $store.Open('ReadOnly')
+            $cert = $store.Certificates | Where-Object { $_.Thumbprint -eq $CertificateThumbprint }
+            if (-not $cert) {
+                Write-Warning "Invoke-DotNetReleaseBuild - Certificate with thumbprint '$CertificateThumbprint' not found in $LocalStore\My store"
+                $store.Close()
+                $result.ErrorMessage = "Certificate not found for signing"
+                return [PSCustomObject]$result
+            }
+            $certificateSha256 = $cert.GetCertHashString([System.Security.Cryptography.HashAlgorithmName]::SHA256)
+            $store.Close()
+            Write-Verbose "Invoke-DotNetReleaseBuild - Using certificate SHA256: $certificateSha256"
+        } catch {
+            Write-Warning "Invoke-DotNetReleaseBuild - Failed to get certificate SHA256: $_"
+            $result.ErrorMessage = "Failed to retrieve certificate SHA256: $_"
+            return [PSCustomObject]$result
+        }
+
         foreach ($pkgPath in $allPackages) {
-            dotnet nuget sign $pkgPath --certificate-fingerprint $CertificateThumbprint --timestamper $TimeStampServer --overwrite
+            Write-Verbose "Invoke-DotNetReleaseBuild - Signing package: $(Split-Path -Leaf $pkgPath)"
+            dotnet nuget sign $pkgPath --certificate-fingerprint $certificateSha256 --certificate-store-location $LocalStore --certificate-store-name My --timestamper $TimeStampServer --overwrite
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "Invoke-DotNetReleaseBuild - Failed to sign $pkgPath"
+            } else {
+                Write-Verbose "Invoke-DotNetReleaseBuild - Successfully signed $pkgPath"
             }
         }
     }

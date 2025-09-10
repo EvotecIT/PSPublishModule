@@ -44,6 +44,12 @@ function Invoke-ModuleTestSuite {
     .PARAMETER CICD
     Enable CI/CD mode with optimized settings and output
 
+    .PARAMETER ShowFailureSummary
+    Display detailed failure analysis when tests fail
+
+    .PARAMETER FailureSummaryFormat
+    Format for failure summary display (Summary, Detailed)
+
     .EXAMPLE
     # Basic usage - test current module
     Invoke-ModuleTestSuite
@@ -102,7 +108,14 @@ function Invoke-ModuleTestSuite {
         [switch]$PassThru,
 
         [Parameter()]
-        [switch]$CICD
+        [switch]$CICD,
+
+        [Parameter()]
+        [switch]$ShowFailureSummary,
+
+        [Parameter()]
+        [ValidateSet('Summary', 'Detailed')]
+        [string]$FailureSummaryFormat = 'Summary'
     )
 
     try {
@@ -202,9 +215,9 @@ function Invoke-ModuleTestSuite {
         if (-not $module) {
             throw "PSPublishModule module is not loaded. Cannot access internal functions."
         }
-        $testResults = & $module { 
+        $testResults = & $module {
             param($params)
-            Invoke-ModuleTests @params 
+            Invoke-ModuleTests @params
         } -params $testParams
 
         Write-Host
@@ -242,6 +255,17 @@ function Invoke-ModuleTestSuite {
 
         if ($testResults.Time) {
             Write-Host "Duration: $($testResults.Time)" -ForegroundColor Green
+        }
+
+        # Show failure summary if tests failed and requested
+        if ($FailedCount -gt 0 -and ($ShowFailureSummary.IsPresent -or $CICD.IsPresent)) {
+            Write-Host
+            Write-Host "=== Test Failure Analysis ===" -ForegroundColor Yellow
+            try {
+                Get-ModuleTestFailures -TestResults $testResults -OutputFormat $FailureSummaryFormat
+            } catch {
+                Write-Warning "Failed to generate failure summary: $($_.Exception.Message)"
+            }
         }
 
         if ($PassThru.IsPresent) {

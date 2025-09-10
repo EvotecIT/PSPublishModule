@@ -15,8 +15,8 @@ Complete module testing suite that handles dependencies, imports, and test execu
 ```
 Invoke-ModuleTestSuite [[-ProjectPath] <String>] [[-AdditionalModules] <String[]>] [[-SkipModules] <String[]>]
  [[-TestPath] <String>] [[-OutputFormat] <String>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure]
- [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+ [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [[-FailureSummaryFormat] <String>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -236,6 +236,36 @@ Aliases:
 Required: False
 Position: Named
 Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ShowFailureSummary
+Display detailed failure analysis when tests fail
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -FailureSummaryFormat
+Format for failure summary display (Summary, Detailed)
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
+Default value: Summary
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

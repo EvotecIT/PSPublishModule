@@ -7,9 +7,9 @@
     Copyright              = '(c) 2011 - 2025 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
     DotNetFrameworkVersion = '4.5.2'
-    FunctionsToExport      = @('Convert-CommandsToList', 'Convert-ProjectEncoding', 'Convert-ProjectLineEnding', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectEncoding', 'Get-ProjectLineEnding', 'Get-ProjectVersion', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Invoke-DotNetReleaseBuild', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion')
+    FunctionsToExport      = @('Convert-CommandsToList', 'Convert-ProjectEncoding', 'Convert-ProjectLineEnding', 'Export-CertificateForNuGet', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectEncoding', 'Get-ProjectLineEnding', 'Get-ProjectVersion', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Invoke-DotNetReleaseBuild', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion')
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '2.0.24'
+    ModuleVersion          = '2.0.25'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
@@ -22,7 +22,7 @@
     RequiredModules        = @(@{
             Guid          = '1d73a601-4a6c-43c5-ba3f-619b18bbb404'
             ModuleName    = 'powershellget'
-            ModuleVersion = '2.2.5'
+            ModuleVersion = '1.1.0.0'
         }, @{
             Guid          = 'd6245802-193d-4068-a631-8863a4342a18'
             ModuleName    = 'PSScriptAnalyzer'

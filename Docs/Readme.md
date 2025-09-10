@@ -26,6 +26,9 @@ Locale: en-US
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 {{ Fill in the Description }}
 
+### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
+{{ Fill in the Description }}
+
 ### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
 {{ Fill in the Description }}
 
