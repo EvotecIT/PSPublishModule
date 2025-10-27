@@ -72,35 +72,77 @@
     try {
         $context = [System.Reflection.MetadataLoadContext]::new($resolver)
 
-        # Load the System.Management.Automation assembly into the context
-        $smaAssemblyInContext = $context.LoadFromAssemblyPath($smaAssemblyPath)
-        $cmdletType = $smaAssemblyInContext.GetType('System.Management.Automation.Cmdlet')
-        $cmdletAttribute = $smaAssemblyInContext.GetType('System.Management.Automation.CmdletAttribute')
-        $aliasAttribute = $smaAssemblyInContext.GetType('System.Management.Automation.AliasAttribute')
-
+        # Load target assembly first
         $assembly = $context.LoadFromAssemblyPath($Path)
-
         Write-Verbose -Message "Loaded assembly $($assembly.FullName), $($assembly.Location) searching for cmdlets and aliases"
+
+        # Resolve SMA inside the same MetadataLoadContext by name to avoid type identity mismatches
+        $smaRef = ($assembly.GetReferencedAssemblies() | Where-Object { $_.Name -eq 'System.Management.Automation' } | Select-Object -First 1)
+        if ($null -ne $smaRef) {
+            $smaAssemblyInContext = $context.LoadFromAssemblyName($smaRef)
+        } else {
+            # Fallback to host SMA path if not referenced explicitly (unusual)
+            $smaAssemblyInContext = $context.LoadFromAssemblyPath($smaAssemblyPath)
+        }
+
+        $cmdletTypeName = 'System.Management.Automation.Cmdlet'
+        $pscmdletTypeName = 'System.Management.Automation.PSCmdlet'
+        $cmdletAttributeName = 'System.Management.Automation.CmdletAttribute'
+        $aliasAttributeName = 'System.Management.Automation.AliasAttribute'
 
         $cmdletsToExport = [System.Collections.Generic.List[string]]::new()
         $aliasesToExport = [System.Collections.Generic.List[string]]::new()
-        $Types = $assembly.GetTypes()
 
-        $Types | Where-Object { $_.IsSubclassOf($cmdletType) } | ForEach-Object {
-            $cmdletInfo = $_.CustomAttributes | Where-Object { $_.AttributeType -eq $cmdletAttribute }
-            if (-not $cmdletInfo) { return }
+        try {
+            $Types = $assembly.GetTypes()
+        } catch {
+            Write-Verbose -Message "Falling back to GetExportedTypes() due to: $($_.Exception.Message)"
+            $Types = $assembly.GetExportedTypes()
+        }
 
-            $name = "$($cmdletInfo.ConstructorArguments[0].Value)-$($cmdletInfo.ConstructorArguments[1].Value)"
-            $cmdletsToExport.Add($name)
+        foreach ($type in $Types) {
+            # Robust cmdlet detection: prefer attribute FullName match to avoid identity issues
+            $attr = $type.CustomAttributes | Where-Object { $_.AttributeType.FullName -eq $cmdletAttributeName } | Select-Object -First 1
 
-            $aliases = $_.CustomAttributes | Where-Object { $_.AttributeType -eq $aliasAttribute }
-            if (-not $aliases -or -not $aliases.ConstructorArguments.Value) { return }
-            $aliasesToExport.AddRange([string[]]@($aliases.ConstructorArguments.Value.Value))
+            if (-not $attr) {
+                # Fallback: walk base types by FullName to detect Cmdlet/PSCmdlet inheritance
+                $bt = $type.BaseType
+                $isCmdlet = $false
+                while ($bt) {
+                    if ($bt.FullName -eq $cmdletTypeName -or $bt.FullName -eq $pscmdletTypeName) { $isCmdlet = $true; break }
+                    $bt = $bt.BaseType
+                }
+                if (-not $isCmdlet) { continue }
+            }
+
+            # Extract Verb-Noun from attribute where available
+            if ($attr) {
+                $verb = $null; $noun = $null
+                if ($attr.ConstructorArguments.Count -ge 2) {
+                    $verb = [string]$attr.ConstructorArguments[0].Value
+                    $noun = [string]$attr.ConstructorArguments[1].Value
+                }
+                if (-not $verb -or -not $noun) {
+                    $verb = [string]($attr.NamedArguments | Where-Object { $_.MemberName -eq 'VerbName' } | Select-Object -ExpandProperty TypedValue -ErrorAction Ignore).Value
+                    $noun = [string]($attr.NamedArguments | Where-Object { $_.MemberName -eq 'NounName' } | Select-Object -ExpandProperty TypedValue -ErrorAction Ignore).Value
+                }
+                if ($verb -and $noun) {
+                    $cmdletsToExport.Add("$verb-$noun")
+                }
+            }
+
+            # Aliases (if any)
+            $aliasAttrs = $type.CustomAttributes | Where-Object { $_.AttributeType.FullName -eq $aliasAttributeName }
+            foreach ($aa in $aliasAttrs) {
+                if ($aa.ConstructorArguments -and $aa.ConstructorArguments.Value) {
+                    $aliasesToExport.AddRange([string[]]@($aa.ConstructorArguments.Value.Value))
+                }
+            }
         }
 
         [PSCustomObject]@{
-            CmdletsToExport = $cmdletsToExport
-            AliasesToExport = $aliasesToExport
+            CmdletsToExport = ($cmdletsToExport | Select-Object -Unique)
+            AliasesToExport = ($aliasesToExport | Select-Object -Unique)
         }
     } catch {
         if ($_.Exception.Message -like '*has already been loaded into this MetadataLoadContext*') {
