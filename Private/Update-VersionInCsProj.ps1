@@ -4,7 +4,7 @@
     Updates the version in a .csproj file.
 
     .DESCRIPTION
-    Modifies the VersionPrefix element in a .csproj file with the new version.
+    Updates VersionPrefix, AssemblyVersion, and FileVersion elements in a .csproj file with the new version (when present).
 
     .PARAMETER ProjectFile
     Path to the .csproj file.
@@ -32,7 +32,11 @@
 
     try {
         $content = Get-Content -Path $ProjectFile -Raw
-        $newContent = $content -replace '<VersionPrefix>[\d\.]+<\/VersionPrefix>', "<VersionPrefix>$Version</VersionPrefix>"
+        $newContent = $content
+        # Update VersionPrefix, AssemblyVersion and FileVersion if present
+        $newContent = $newContent -replace '<VersionPrefix>[\d\.]+<\/VersionPrefix>', "<VersionPrefix>$Version</VersionPrefix>"
+        $newContent = $newContent -replace '<AssemblyVersion>[\d\.]+<\/AssemblyVersion>', "<AssemblyVersion>$Version</AssemblyVersion>"
+        $newContent = $newContent -replace '<FileVersion>[\d\.]+<\/FileVersion>', "<FileVersion>$Version</FileVersion>"
 
         if ($content -eq $newContent) {
             Write-Verbose "No version change needed for $ProjectFile"
