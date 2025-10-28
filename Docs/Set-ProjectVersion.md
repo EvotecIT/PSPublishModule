@@ -21,7 +21,6 @@ Set-ProjectVersion [[-VersionType] <String>] [[-NewVersion] <String>] [[-ModuleN
 ## DESCRIPTION
 Updates version numbers in C# projects (.csproj), PowerShell modules (.psd1),
 and PowerShell build scripts that contain 'Invoke-ModuleBuild'.
-For .csproj files, it updates Version, VersionPrefix, PackageVersion, AssemblyVersion, FileVersion, and InformationalVersion when present.
 Can increment
 version components or set a specific version.
 

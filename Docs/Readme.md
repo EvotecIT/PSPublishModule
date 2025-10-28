@@ -11,9 +11,6 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ## PSPublishModule Cmdlets
-### [Convert-CommandsToList](Convert-CommandsToList.md)
-{{ Fill in the Description }}
-
 ### [Convert-ProjectEncoding](Convert-ProjectEncoding.md)
 {{ Fill in the Description }}
 
