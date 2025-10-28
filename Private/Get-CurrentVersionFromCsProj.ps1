@@ -12,7 +12,28 @@ function Get-CurrentVersionFromCsProj {
 
     try {
         $content = Get-Content -Path $ProjectFile -Raw
+        # Prefer VersionPrefix if present
         if ($content -match '<VersionPrefix>([\d\.]+)<\/VersionPrefix>') {
+            return $matches[1]
+        }
+        # Then prefer Version (SDK-style projects)
+        if ($content -match '<Version>([\d\.]+)<\/Version>') {
+            return $matches[1]
+        }
+        # PackageVersion is also common when packing
+        if ($content -match '<PackageVersion>([\d\.]+)<\/PackageVersion>') {
+            return $matches[1]
+        }
+        # Fall back to AssemblyVersion
+        if ($content -match '<AssemblyVersion>([\d\.]+)<\/AssemblyVersion>') {
+            return $matches[1]
+        }
+        # Fall back to FileVersion
+        if ($content -match '<FileVersion>([\d\.]+)<\/FileVersion>') {
+            return $matches[1]
+        }
+        # Finally, consider InformationalVersion if it's numeric-only
+        if ($content -match '<InformationalVersion>([\d\.]+)<\/InformationalVersion>') {
             return $matches[1]
         }
         return $null

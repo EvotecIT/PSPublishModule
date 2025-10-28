@@ -14,9 +14,9 @@ Publishes a release asset to GitHub.
 
 ```
 Publish-GitHubReleaseAsset [-ProjectPath] <String> [-GitHubUsername] <String> [-GitHubRepositoryName] <String>
- [-GitHubAccessToken] <String> [-IsPreRelease] [[-Version] <String>] [[-TagName] <String>] [[-TagTemplate] <String>]
- [[-ReleaseName] <String>] [-IncludeProjectNameInTag] [[-ZipPath] <String>] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm]
- [<CommonParameters>]
+ [-GitHubAccessToken] <String> [-IsPreRelease] [[-Version] <String>] [[-TagName] <String>]
+ [[-TagTemplate] <String>] [[-ReleaseName] <String>] [-IncludeProjectNameInTag] [[-ZipPath] <String>]
+ [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -42,18 +42,6 @@ Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\OfficeIMO\OfficeIMO.Markdown' -G
 ```
 # Override version and tag explicitly
 Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\OfficeIMO\OfficeIMO.Excel' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'OfficeIMO' -GitHubAccessToken $Token -Version '1.2.3' -TagName 'OfficeIMO.Excel-v1.2.3'
-```
-
-### EXAMPLE 4
-```
-# Use a custom tag template with placeholders {Project} and {Version}
-Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\OfficeIMO\OfficeIMO.Word' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'OfficeIMO' -GitHubAccessToken $Token -TagTemplate 'officeimo/{Project}/v{Version}'
-```
-
-### EXAMPLE 5
-```
-# Provide a specific path to the asset zip instead of the default
-Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\OfficeIMO\OfficeIMO.Excel' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'OfficeIMO' -GitHubAccessToken $Token -ZipPath 'C:\Git\OfficeIMO\OfficeIMO.Excel\bin\Release\OfficeIMO.Excel.1.2.3.zip'
 ```
 
 ## PARAMETERS
@@ -134,7 +122,7 @@ Accept wildcard characters: False
 ```
 
 ### -Version
-Override the version discovered from the project file (VersionPrefix). Used to locate the zip and for default tag generation.
+{{ Fill Version Description }}
 
 ```yaml
 Type: String
@@ -149,7 +137,7 @@ Accept wildcard characters: False
 ```
 
 ### -TagName
-Explicit tag name to use. If omitted, defaults to `v<Version>`, `<ProjectName>-v<Version>` when `-IncludeProjectNameInTag` is specified, or the value produced by `-TagTemplate`.
+{{ Fill TagName Description }}
 
 ```yaml
 Type: String
@@ -163,8 +151,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ReleaseName
-Optional release display name. Defaults to the tag name when omitted.
+### -TagTemplate
+{{ Fill TagTemplate Description }}
 
 ```yaml
 Type: String
@@ -178,8 +166,23 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -ReleaseName
+{{ Fill ReleaseName Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 8
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -IncludeProjectNameInTag
-When set and `-TagName` is not provided, the tag is generated as `<ProjectName>-v<Version>` to prevent tag collisions across packages in the same repository.
+{{ Fill IncludeProjectNameInTag Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -189,6 +192,21 @@ Aliases:
 Required: False
 Position: Named
 Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ZipPath
+{{ Fill ZipPath Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 9
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -249,36 +267,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## NOTES
 
 ## RELATED LINKS
-### -TagTemplate
-Custom tag pattern with placeholders. Supported tokens:
-- `{Project}` replaced with the project name (csproj BaseName)
-- `{Version}` replaced with the version (from VersionPrefix or `-Version`)
-
-If both `-TagName` and `-TagTemplate` are provided, `-TagName` takes precedence.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ZipPath
-Use a specific zip file path for the release asset, instead of the default `bin/Release/<Project>.<Version>.zip`. The path must exist.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
