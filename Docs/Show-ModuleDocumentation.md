@@ -153,7 +153,7 @@ Accept wildcard characters: False
 ```
 
 ### -License
-{{ Fill License Description }}
+Show LICENSE (prefers root `license.txt`). Falls back to any `LICENSE*` file found in root or Internals.
 
 ```yaml
 Type: SwitchParameter
@@ -168,7 +168,8 @@ Accept wildcard characters: False
 ```
 
 ### -Intro
-{{ Fill Intro Description }}
+Show introduction. Prefers `IntroFile` content from delivery metadata; otherwise prints `IntroText` lines.
+If neither is present, falls back to README.
 
 ```yaml
 Type: SwitchParameter
@@ -183,7 +184,8 @@ Accept wildcard characters: False
 ```
 
 ### -Upgrade
-{{ Fill Upgrade Description }}
+Show upgrade instructions. Prefers `UpgradeFile` content from delivery metadata; otherwise prints `UpgradeText` lines.
+If neither is present, falls back to `UPGRADE*`/`UPGRADING*`/`MIGRATION*` files if found.
 
 ```yaml
 Type: SwitchParameter

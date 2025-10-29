@@ -47,6 +47,9 @@ function Install-ModuleDocumentation {
     .PARAMETER Open
     After a successful copy, open the README in the destination (if present).
 
+    .PARAMETER NoIntro
+    Suppress introductory notes and important links printed after installation.
+
     .EXAMPLE
     Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
 
@@ -110,7 +113,6 @@ function Install-ModuleDocumentation {
         $internalsRel = if ($delivery -and $delivery.InternalsPath) { [string]$delivery.InternalsPath } else { 'Internals' }
         $includeReadme = if ($null -ne $delivery.IncludeRootReadme) { [bool]$delivery.IncludeRootReadme } else { $true }
         $includeChlog = if ($null -ne $delivery.IncludeRootChangelog) { [bool]$delivery.IncludeRootChangelog } else { $true }
-        $includeLicense = if ($null -ne $delivery.IncludeRootLicense) { [bool]$delivery.IncludeRootLicense } else { $true }
         $includeLicense = if ($null -ne $delivery.IncludeRootLicense) { [bool]$delivery.IncludeRootLicense } else { $true }
 
         $internalsPath = Join-Path $Module.ModuleBase $internalsRel
