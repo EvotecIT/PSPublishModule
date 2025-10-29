@@ -20,6 +20,19 @@ function Install-ModuleDocumentation {
     .PARAMETER Path
     Destination directory where the Internals content will be copied.
 
+    .PARAMETER Layout
+    How to lay out the destination path:
+    - Direct: copy into <Path>
+    - Module: copy into <Path>\\<Name>
+    - ModuleAndVersion (default): copy into <Path>\\<Name>\\<Version>
+
+    .PARAMETER OnExists
+    What to do if the destination folder already exists:
+    - Merge (default): merge files/folders; overwrite files only when -Force is used
+    - Overwrite: remove the existing destination, then copy fresh
+    - Skip: do nothing and return the existing destination path
+    - Stop: throw an error
+
     .PARAMETER CreateVersionSubfolder
     When set (default), content is placed under '<Path>\\<Name>\\<Version>'.
     If disabled, content is copied directly into '<Path>'.
@@ -28,10 +41,10 @@ function Install-ModuleDocumentation {
     Overwrite existing files.
 
     .EXAMPLE
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs'
+    Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
 
     .EXAMPLE
-    Get-Module -ListAvailable EFAdminManager | Install-ModuleDocumentation -Path 'D:\EFAM'
+    Get-Module -ListAvailable AdminManager | Install-ModuleDocumentation -Path 'D:\AM'
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName='ByName')]
     param(
@@ -44,7 +57,11 @@ function Install-ModuleDocumentation {
         [version] $RequiredVersion,
         [Parameter(Mandatory)]
         [string] $Path,
-        [switch] $CreateVersionSubfolder = $true,
+        [ValidateSet('Direct','Module','ModuleAndVersion')]
+        [string] $Layout = 'ModuleAndVersion',
+        [ValidateSet('Merge','Overwrite','Skip','Stop')]
+        [string] $OnExists = 'Merge',
+        [switch] $CreateVersionSubfolder, # legacy toggle: if bound and Layout not specified, maps to Direct/ModuleAndVersion
         [switch] $Force
     )
 
@@ -89,17 +106,36 @@ function Install-ModuleDocumentation {
             throw "Internals path '$internalsRel' not found under module base '$($Module.ModuleBase)'."
         }
 
-        $dest = $Path
-        if ($CreateVersionSubfolder) {
-            $dest = Join-Path $dest (Join-Path $Module.Name $Module.Version.ToString())
+        # Back-compat: if legacy CreateVersionSubfolder was provided and Layout not changed, honor it
+        if ($PSBoundParameters.ContainsKey('CreateVersionSubfolder') -and -not $PSBoundParameters.ContainsKey('Layout')) {
+            $Layout = if ($CreateVersionSubfolder) { 'ModuleAndVersion' } else { 'Direct' }
+        }
+
+        switch ($Layout) {
+            'Direct'            { $dest = $Path }
+            'Module'            { $dest = Join-Path $Path $Module.Name }
+            'ModuleAndVersion'  { $dest = Join-Path (Join-Path $Path $Module.Name) $Module.Version.ToString() }
         }
 
         if ($PSCmdlet.ShouldProcess("$internalsPath", "Copy to '$dest'")) {
-            New-Item -ItemType Directory -Path $dest -Force | Out-Null
-
-            # Copy Internals content preserving structure
-            $sourcePattern = Join-Path $internalsPath '*'
-            Copy-Item -Path $sourcePattern -Destination $dest -Recurse -Force:$Force.IsPresent -ErrorAction Stop
+            $exists = Test-Path -LiteralPath $dest
+            if ($exists) {
+                switch ($OnExists) {
+                    'Skip' { $resolvedTargets.Add($dest); return }
+                    'Stop' { throw "Destination '$dest' already exists." }
+                    'Overwrite' {
+                        Remove-Item -LiteralPath $dest -Recurse -Force -ErrorAction SilentlyContinue
+                        New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                        Copy-PSPDirectoryTree -Source $internalsPath -Destination $dest -Overwrite:$true
+                    }
+                    'Merge' {
+                        Copy-PSPDirectoryTree -Source $internalsPath -Destination $dest -Overwrite:$Force.IsPresent
+                    }
+                }
+            } else {
+                New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                Copy-PSPDirectoryTree -Source $internalsPath -Destination $dest -Overwrite:$Force.IsPresent
+            }
 
             # Copy selected root files from module base in a PS5/PS7-safe, readable way
             $rootFiles = @(Get-ChildItem -Path $Module.ModuleBase -File -ErrorAction SilentlyContinue)
@@ -107,14 +143,14 @@ function Install-ModuleDocumentation {
             if ($includeReadme -and $rootFiles.Count -gt 0) {
                 foreach ($file in $rootFiles) {
                     if ($file.Name -like 'README*') {
-                        Copy-Item -LiteralPath $file.FullName -Destination $dest -Force:$Force.IsPresent -ErrorAction SilentlyContinue
+                        try { Copy-Item -LiteralPath $file.FullName -Destination $dest -Force:$Force.IsPresent -ErrorAction Stop } catch { }
                     }
                 }
             }
             if ($includeChlog -and $rootFiles.Count -gt 0) {
                 foreach ($file in $rootFiles) {
                     if ($file.Name -like 'CHANGELOG*') {
-                        Copy-Item -LiteralPath $file.FullName -Destination $dest -Force:$Force.IsPresent -ErrorAction SilentlyContinue
+                        try { Copy-Item -LiteralPath $file.FullName -Destination $dest -Force:$Force.IsPresent -ErrorAction Stop } catch { }
                     }
                 }
             }
