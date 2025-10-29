@@ -19,6 +19,10 @@ internal static class CodeHighlighter
             return HighlightPowerShell(code);
         if (lang is "csharp" or "cs" or "c#")
             return HighlightCSharp(code);
+        if (lang is "json" or "jsonc")
+            return HighlightJson(code);
+        if (lang is "yaml" or "yml")
+            return HighlightYaml(code);
         // default: just escape
         return Markup.Escape(code);
     }
@@ -103,7 +107,6 @@ internal static class CodeHighlighter
             if (sl >= 0)
             {
                 spans.Add(new SpanToken(sl, line.Length - sl, "grey50 italic"));
-                line = line; // keep
             }
 
             // block comment start
@@ -137,6 +140,55 @@ internal static class CodeHighlighter
             // PascalCase types
             AddRegexSpans(spans, line, @"\b[A-Z][A-Za-z0-9_]*\b", "turquoise2");
 
+            sb.Append(BuildMarkup(line, spans));
+        }
+        return sb.ToString();
+    }
+
+    private static string HighlightJson(string code)
+    {
+        var sb = new StringBuilder();
+        var lines = code.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) sb.Append('\n');
+            var line = lines[i];
+            var spans = new List<SpanToken>();
+            // strings
+            AddRegexSpans(spans, line, "\\\"([^\\\"\\n]|\\\\.)*\\\"", "orange1");
+            // numbers
+            AddRegexSpans(spans, line, "-?\\b(0x[0-9A-Fa-f]+|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b", "orchid");
+            // booleans/null
+            AddWordSpans(spans, line, new[]{"true","false","null"}, "deepskyblue2");
+            // keys (string before colon)
+            AddRegexSpans(spans, line, "\\\"([^\\\"\\n]|\\\\.)*\\\"(?=\\s*:)" , "turquoise2");
+            sb.Append(BuildMarkup(line, spans));
+        }
+        return sb.ToString();
+    }
+
+    private static string HighlightYaml(string code)
+    {
+        var sb = new StringBuilder();
+        var lines = code.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) sb.Append('\n');
+            var line = lines[i];
+            var spans = new List<SpanToken>();
+            // comments
+            var m = Regex.Match(line, "(?<!`)#.*");
+            if (m.Success) spans.Add(new SpanToken(m.Index, line.Length - m.Index, "grey50 italic"));
+            // keys (start of line up to colon)
+            AddRegexSpans(spans, line, "^\\s*[A-Za-z0-9_.-]+(?=\\s*:)", "turquoise2");
+            // strings
+            AddRegexSpans(spans, line, "\\\"([^\\\"\\n]|\\\\.)*\\\"", "orange1");
+            AddRegexSpans(spans, line, "'(?:\\\\.|[^'\\\\])'", "orange1");
+            // numbers & booleans
+            AddRegexSpans(spans, line, "-?\\b\\d+(?:\\.\\d+)?\\b", "orchid");
+            AddWordSpans(spans, line, new[]{"true","false","null","on","off","yes","no"}, "deepskyblue2");
+            // list indicators '- '
+            AddRegexSpans(spans, line, "^\\s*-\\s+", "grey70");
             sb.Append(BuildMarkup(line, spans));
         }
         return sb.ToString();

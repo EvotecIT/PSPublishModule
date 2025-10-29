@@ -161,12 +161,20 @@ internal sealed class Renderer
     private static string RenderInlineCell(string cell)
     {
         if (string.IsNullOrEmpty(cell)) return string.Empty;
-        // very light inline handling: treat backticks as code segments and escape rest
-        // We could call MarkdownReader.ParseInlineText, but we’ll keep it simple for performance.
-        return Markup.Escape(cell);
+        try
+        {
+            var inline = MarkdownReader.ParseInlineText(cell);
+            // reuse RenderInlines logic by creating a new Renderer temporarily
+            var r = new Renderer();
+            return r.RenderInlines(inline);
+        }
+        catch
+        {
+            return Markup.Escape(cell);
+        }
     }
 
-    private string RenderInlines(InlineSequence inlines)
+    public string RenderInlines(InlineSequence inlines)
     {
         var parts = inlines.Items.Select(RenderInline).Where(s => s != null).ToArray();
         return string.Join(" ", parts);
