@@ -40,6 +40,13 @@ function Install-ModuleDocumentation {
     .PARAMETER Force
     Overwrite existing files.
 
+    .PARAMETER ListOnly
+    Show what would be copied and where, without copying any files. Returns the
+    computed destination path(s). Use -Verbose for details.
+
+    .PARAMETER Open
+    After a successful copy, open the README in the destination (if present).
+
     .EXAMPLE
     Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
 
@@ -62,7 +69,9 @@ function Install-ModuleDocumentation {
         [ValidateSet('Merge','Overwrite','Skip','Stop')]
         [string] $OnExists = 'Merge',
         [switch] $CreateVersionSubfolder, # legacy toggle: if bound and Layout not specified, maps to Direct/ModuleAndVersion
-        [switch] $Force
+        [switch] $Force,
+        [switch] $ListOnly,
+        [switch] $Open
     )
 
     begin {
@@ -117,6 +126,13 @@ function Install-ModuleDocumentation {
             'ModuleAndVersion'  { $dest = Join-Path (Join-Path $Path $Module.Name) $Module.Version.ToString() }
         }
 
+        # If listing only, do not copy — just output the planned destination
+        if ($ListOnly) {
+            Write-Verbose "Would copy Internals from '$internalsPath' to '$dest' using Layout=$Layout, OnExists=$OnExists."
+            $resolvedTargets.Add($dest)
+            return
+        }
+
         if ($PSCmdlet.ShouldProcess("$internalsPath", "Copy to '$dest'")) {
             $exists = Test-Path -LiteralPath $dest
             if ($exists) {
@@ -156,6 +172,22 @@ function Install-ModuleDocumentation {
             }
 
             $resolvedTargets.Add($dest)
+
+            # Optionally open README in destination
+            if ($Open) {
+                try {
+                    $readme = Get-ChildItem -LiteralPath $dest -Filter 'README*' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                    if ($readme) {
+                        if ($IsWindows) { Start-Process -FilePath $readme.FullName | Out-Null }
+                        else { Start-Process -FilePath $readme.FullName | Out-Null }
+                    } else {
+                        # If README not found, open the destination folder
+                        if ($IsWindows) { Start-Process -FilePath $dest | Out-Null }
+                    }
+                } catch {
+                    Write-Verbose "Open failed: $($_.Exception.Message)"
+                }
+            }
         }
     }
     end {

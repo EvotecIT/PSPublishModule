@@ -140,3 +140,6 @@ Locale: en-US
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 {{ Fill in the Description }}
 
+### [Show-ModuleDocumentation](Show-ModuleDocumentation.md)
+{{ Fill in the Description }}
+

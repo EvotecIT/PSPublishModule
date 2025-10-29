@@ -5,48 +5,60 @@ online version:
 schema: 2.0.0
 ---
 
-# Install-ModuleDocumentation
+# Show-ModuleDocumentation
 
 ## SYNOPSIS
-Installs bundled module documentation/examples (Internals) to a chosen path.
+Shows README/CHANGELOG or a chosen document for a module, with a simple console view.
 
 ## SYNTAX
 
 ### ByName (Default)
 ```
-Install-ModuleDocumentation [[-Name] <String>] [-RequiredVersion <Version>] -Path <String> [-Layout <String>]
- [-OnExists <String>] [-CreateVersionSubfolder] [-Force] [-ListOnly] [-Open]
- [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Show-ModuleDocumentation [[-Name] <String>] [-RequiredVersion <Version>] [-Readme] [-Changelog]
+ [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ### ByModule
 ```
-Install-ModuleDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version>] -Path <String>
- [-Layout <String>] [-OnExists <String>] [-CreateVersionSubfolder] [-Force] [-ListOnly] [-Open]
- [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Show-ModuleDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version>] [-Readme] [-Changelog]
+ [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
+```
+
+### ByPath
+```
+Show-ModuleDocumentation [-RequiredVersion <Version>] [-DocsPath <String>] [-Readme] [-Changelog]
+ [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open] [-ProgressAction <ActionPreference>]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Copies the contents of a module's Internals folder (or the path defined in
-PrivateData.PSData.PSPublishModuleDelivery) to a destination outside of
-$env:PSModulePath, optionally including README/CHANGELOG from module root.
+Finds a module (by name or PSModuleInfo) and renders README/CHANGELOG from the module root
+or from its Internals folder (as defined in PrivateData.PSData.PSPublishModuleDelivery).
+You can also point directly to a docs folder via -DocsPath (e.g., output of Install-ModuleDocumentation).
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```
-Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
+Show-ModuleDocumentation -Name EFAdminManager -Readme
 ```
 
 ### EXAMPLE 2
 ```
-Get-Module -ListAvailable AdminManager | Install-ModuleDocumentation -Path 'D:\AM'
+Get-Module -ListAvailable EFAdminManager | Show-ModuleDocumentation -Changelog
+```
+
+### EXAMPLE 3
+```
+Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
 ```
 
 ## PARAMETERS
 
 ### -Name
-Module name to install documentation for.
+Module name to show documentation for.
 Accepts pipeline by value.
 
 ```yaml
@@ -92,61 +104,25 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Path
-Destination directory where the Internals content will be copied.
+### -DocsPath
+A folder that contains documentation to display (e.g., the destination created by Install-ModuleDocumentation).
+When provided, the cmdlet does not look up the module and shows docs from this folder.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
+Parameter Sets: ByPath
 Aliases:
 
-Required: True
+Required: False
 Position: Named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Layout
-How to lay out the destination path:
-- Direct: copy into \<Path\>
-- Module: copy into \<Path\>\\\\\<Name\>
-- ModuleAndVersion (default): copy into \<Path\>\\\\\<Name\>\\\\\<Version\>
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: ModuleAndVersion
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -OnExists
-What to do if the destination folder already exists:
-- Merge (default): merge files/folders; overwrite files only when -Force is used
-- Overwrite: remove the existing destination, then copy fresh
-- Skip: do nothing and return the existing destination path
-- Stop: throw an error
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: Merge
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CreateVersionSubfolder
-When set (default), content is placed under '\<Path\>\\\\\<Name\>\\\\\<Version\>'.
-If disabled, content is copied directly into '\<Path\>'.
+### -Readme
+Show README*.
+If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
 
 ```yaml
 Type: SwitchParameter
@@ -160,8 +136,9 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Force
-Overwrite existing files.
+### -Changelog
+Show CHANGELOG*.
+If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
 
 ```yaml
 Type: SwitchParameter
@@ -175,11 +152,54 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ListOnly
-Show what would be copied and where, without copying any files.
-Returns the
-computed destination path(s).
-Use -Verbose for details.
+### -File
+Relative path to a specific file to display (relative to module root or Internals).
+If rooted, used as-is.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PreferInternals
+Prefer the Internals copy of README/CHANGELOG when both exist.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -List
+List available README/CHANGELOG files found (root and Internals) instead of displaying content.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Raw
+Output the raw file content (no styling).
 
 ```yaml
 Type: SwitchParameter
@@ -194,7 +214,7 @@ Accept wildcard characters: False
 ```
 
 ### -Open
-After a successful copy, open the README in the destination (if present).
+Open the resolved file in the system default viewer instead of rendering in the console.
 
 ```yaml
 Type: SwitchParameter
@@ -204,37 +224,6 @@ Aliases:
 Required: False
 Position: Named
 Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -WhatIf
-Shows what would happen if the cmdlet runs.
-The cmdlet is not run.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: wi
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
-
-Required: False
-Position: Named
-Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
