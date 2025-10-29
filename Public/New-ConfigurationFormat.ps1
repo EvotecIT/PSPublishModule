@@ -1,4 +1,114 @@
 ﻿function New-ConfigurationFormat {
+    <#
+    .SYNOPSIS
+    Builds formatting options for code and manifest generation during the build.
+
+    .DESCRIPTION
+    Produces a configuration object that controls how script and manifest files are formatted
+    during merge and in the default (non-merged) module. You can toggle specific PSScriptAnalyzer
+    rules, whitespace/indentation behavior, comment removal, and choose PSD1 output style.
+
+    .PARAMETER ApplyTo
+    One or more targets to apply formatting to: OnMergePSM1, OnMergePSD1, DefaultPSM1, DefaultPSD1.
+
+    .PARAMETER EnableFormatting
+    When set, enables formatting for the chosen ApplyTo targets even if no specific rule switches are provided.
+
+    .PARAMETER Sort
+    Optional ordering hint for internal processing. Accepts None, Asc, or Desc.
+
+    .PARAMETER RemoveComments
+    Remove comments in the formatted output.
+
+    .PARAMETER RemoveEmptyLines
+    Remove empty lines while preserving readability.
+
+    .PARAMETER RemoveAllEmptyLines
+    Remove all empty lines (more aggressive than RemoveEmptyLines).
+
+    .PARAMETER RemoveCommentsInParamBlock
+    Remove comments within the param() block.
+
+    .PARAMETER RemoveCommentsBeforeParamBlock
+    Remove comments that appear immediately before the param() block.
+
+    .PARAMETER PlaceOpenBraceEnable
+    Enable PSPlaceOpenBrace rule and configure its behavior.
+
+    .PARAMETER PlaceOpenBraceOnSameLine
+    For PSPlaceOpenBrace: place opening brace on the same line.
+
+    .PARAMETER PlaceOpenBraceNewLineAfter
+    For PSPlaceOpenBrace: enforce a new line after the opening brace.
+
+    .PARAMETER PlaceOpenBraceIgnoreOneLineBlock
+    For PSPlaceOpenBrace: ignore single-line blocks.
+
+    .PARAMETER PlaceCloseBraceEnable
+    Enable PSPlaceCloseBrace rule and configure its behavior.
+
+    .PARAMETER PlaceCloseBraceNewLineAfter
+    For PSPlaceCloseBrace: enforce a new line after the closing brace.
+
+    .PARAMETER PlaceCloseBraceIgnoreOneLineBlock
+    For PSPlaceCloseBrace: ignore single-line blocks.
+
+    .PARAMETER PlaceCloseBraceNoEmptyLineBefore
+    For PSPlaceCloseBrace: do not allow an empty line before a closing brace.
+
+    .PARAMETER UseConsistentIndentationEnable
+    Enable PSUseConsistentIndentation rule and configure its behavior.
+
+    .PARAMETER UseConsistentIndentationKind
+    Indentation style: 'space' or 'tab'.
+
+    .PARAMETER UseConsistentIndentationPipelineIndentation
+    Pipeline indentation mode: IncreaseIndentationAfterEveryPipeline or NoIndentation.
+
+    .PARAMETER UseConsistentIndentationIndentationSize
+    Number of spaces for indentation when Kind is 'space'.
+
+    .PARAMETER UseConsistentWhitespaceEnable
+    Enable PSUseConsistentWhitespace rule and configure which elements to check.
+
+    .PARAMETER UseConsistentWhitespaceCheckInnerBrace
+    For PSUseConsistentWhitespace: check inner brace spacing.
+
+    .PARAMETER UseConsistentWhitespaceCheckOpenBrace
+    For PSUseConsistentWhitespace: check open brace spacing.
+
+    .PARAMETER UseConsistentWhitespaceCheckOpenParen
+    For PSUseConsistentWhitespace: check open parenthesis spacing.
+
+    .PARAMETER UseConsistentWhitespaceCheckOperator
+    For PSUseConsistentWhitespace: check operator spacing.
+
+    .PARAMETER UseConsistentWhitespaceCheckPipe
+    For PSUseConsistentWhitespace: check pipeline operator spacing.
+
+    .PARAMETER UseConsistentWhitespaceCheckSeparator
+    For PSUseConsistentWhitespace: check separator (comma) spacing.
+
+    .PARAMETER AlignAssignmentStatementEnable
+    Enable PSAlignAssignmentStatement rule and optionally check hashtable alignment.
+
+    .PARAMETER AlignAssignmentStatementCheckHashtable
+    For PSAlignAssignmentStatement: align hashtable assignments.
+
+    .PARAMETER UseCorrectCasingEnable
+    Enable PSUseCorrectCasing rule.
+
+    .PARAMETER PSD1Style
+    Style for generated manifests (PSD1) for the selected ApplyTo targets. 'Minimal' or 'Native'.
+
+    .EXAMPLE
+    New-ConfigurationFormat -ApplyTo 'OnMergePSD1','DefaultPSD1' -PSD1Style 'Minimal'
+    Minimizes PSD1 output during merge and default builds.
+
+    .EXAMPLE
+    New-ConfigurationFormat -ApplyTo 'OnMergePSM1' -EnableFormatting -UseConsistentIndentationEnable -UseConsistentIndentationKind space -UseConsistentIndentationIndentationSize 4
+    Enables indentation and whitespace rules for merged PSM1.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
