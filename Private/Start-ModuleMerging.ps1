@@ -29,6 +29,10 @@
         }
 
         $LinkDirectoriesWithSupportFiles = $LinkDirectories | Where-Object { $_ -notin $CompareWorkaround }
+        # Additional guard: do not stage merge directories or their subpaths (Private/Public/Classes/Enums)
+        $LinkDirectoriesWithSupportFiles = $LinkDirectoriesWithSupportFiles | Where-Object {
+            $_ -notlike 'Private*' -and $_ -notlike 'Public*' -and $_ -notlike 'Classes*' -and $_ -notlike 'Enums*'
+        }
         foreach ($Directory in $LinkDirectoriesWithSupportFiles) {
             $Dir = [System.IO.Path]::Combine($FullModuleTemporaryPath, "$Directory")
             Add-Directory -Directory $Dir
@@ -42,6 +46,26 @@
         # Workaround to link files that are not ps1/psd1
         $FilesToLink = $LinkPrivatePublicFiles | Where-Object { $_ -notlike '*.ps1' -and $_ -notlike '*.psd1' }
         Copy-InternalFiles -LinkFiles $FilesToLink -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
+
+        # Copy non-merge PS1 files (e.g., Internals\Scripts\*.ps1) into the final module
+        foreach ($supportDir in $LinkDirectoriesWithSupportFiles) {
+            $dirTrim = $supportDir.TrimEnd([char]'/',[char]'\')
+            if ($dirTrim -notlike 'Internals*') { continue }
+            $glob = [System.IO.Path]::Combine($FullProjectPath, $dirTrim, '*.ps1')
+            $files = if ($PSEdition -eq 'Core') {
+                Get-ChildItem -Path $glob -ErrorAction SilentlyContinue -Recurse -FollowSymlink
+            } else {
+                Get-ChildItem -Path $glob -ErrorAction SilentlyContinue -Recurse
+            }
+            foreach ($file in $files) {
+                $rel = (Resolve-Path -LiteralPath $file.FullName -Relative)
+                if ($null -eq $IsWindows -or $IsWindows -eq $true) { $rel = $rel.Replace('.\\','') } else { $rel = $rel.Replace('./','') }
+                $relDir = [System.IO.Path]::GetDirectoryName($rel)
+                if ($relDir) { Add-Directory -Directory ([System.IO.Path]::Combine($FullModuleTemporaryPath, $relDir)) }
+                Copy-InternalFiles -LinkFiles @($rel) -FullModulePath $FullModuleTemporaryPath -FullProjectPath $FullProjectPath
+            }
+        }
+
 
         if ($Configuration.Information.LibrariesStandard) {
             # User provided option, we don't care
@@ -157,6 +181,46 @@
 
         if ($Success -eq $false) {
             return $false
+        }
+
+        # If Delivery metadata is enabled, stage root README/CHANGELOG to requested destinations
+        if ($Configuration.Options -and $Configuration.Options.Delivery -and $Configuration.Options.Delivery.Enable) {
+            $internalsRel = if ($Configuration.Options.Delivery.InternalsPath) { [string]$Configuration.Options.Delivery.InternalsPath } else { 'Internals' }
+            if ($null -eq $IsWindows -or $IsWindows -eq $true) {
+                $internalsRel = $internalsRel.Replace('/', '\')
+            } else {
+                $internalsRel = $internalsRel.Replace('\\', '/')
+            }
+            $destInternals = [System.IO.Path]::Combine($FullModuleTemporaryPath, $internalsRel)
+            Add-Directory -Directory $destInternals
+
+            $rootFiles = Get-ChildItem -Path $FullProjectPath -File -ErrorAction SilentlyContinue
+            $readmeDest = if ($Configuration.Options.Delivery.ReadmeDestination) { $Configuration.Options.Delivery.ReadmeDestination } else { 'Internals' }
+            $chlogDest  = if ($Configuration.Options.Delivery.ChangelogDestination) { $Configuration.Options.Delivery.ChangelogDestination } else { 'Internals' }
+
+            if ($rootFiles) {
+                foreach ($rf in $rootFiles) {
+                    if ($rf.Name -like 'README*') {
+                        switch ($readmeDest) {
+                            'Internals' { Copy-Item -LiteralPath $rf.FullName -Destination $destInternals -Force -ErrorAction SilentlyContinue }
+                            'Root'      { Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath $rf.Name) -Force -ErrorAction SilentlyContinue }
+                            'Both'      {
+                                Copy-Item -LiteralPath $rf.FullName -Destination $destInternals -Force -ErrorAction SilentlyContinue
+                                Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath $rf.Name) -Force -ErrorAction SilentlyContinue
+                            }
+                        }
+                    } elseif ($rf.Name -like 'CHANGELOG*') {
+                        switch ($chlogDest) {
+                            'Internals' { Copy-Item -LiteralPath $rf.FullName -Destination $destInternals -Force -ErrorAction SilentlyContinue }
+                            'Root'      { Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath $rf.Name) -Force -ErrorAction SilentlyContinue }
+                            'Both'      {
+                                Copy-Item -LiteralPath $rf.FullName -Destination $destInternals -Force -ErrorAction SilentlyContinue
+                                Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath $rf.Name) -Force -ErrorAction SilentlyContinue
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if ($Configuration.Steps.BuildModule.CreateFileCatalog) {

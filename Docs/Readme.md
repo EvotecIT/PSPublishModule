@@ -56,6 +56,9 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
+### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
+{{ Fill in the Description }}
+
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
 {{ Fill in the Description }}
 
@@ -75,6 +78,9 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [New-ConfigurationCompatibility](New-ConfigurationCompatibility.md)
+{{ Fill in the Description }}
+
+### [New-ConfigurationDelivery](New-ConfigurationDelivery.md)
 {{ Fill in the Description }}
 
 ### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)

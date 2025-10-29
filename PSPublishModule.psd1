@@ -7,9 +7,9 @@
     Copyright              = '(c) 2011 - 2025 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
     DotNetFrameworkVersion = '4.5.2'
-    FunctionsToExport      = @('Convert-ProjectEncoding', 'Convert-ProjectLineEnding', 'Export-CertificateForNuGet', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectEncoding', 'Get-ProjectLineEnding', 'Get-ProjectVersion', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Invoke-DotNetReleaseBuild', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion')
+    FunctionsToExport      = @('Convert-ProjectEncoding', 'Convert-ProjectLineEnding', 'Export-CertificateForNuGet', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectEncoding', 'Get-ProjectLineEnding', 'Get-ProjectVersion', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Install-ModuleDocumentation', 'Invoke-DotNetReleaseBuild', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDelivery', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion')
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '2.0.25'
+    ModuleVersion          = '2.0.26'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
@@ -31,6 +31,10 @@
             Guid          = 'a699dea5-2c73-4616-a270-1f7abb777e71'
             ModuleName    = 'Pester'
             ModuleVersion = '5.7.1'
+        }, @{
+            Guid          = 'e4e0bda1-0703-44a5-b70d-8fe704cd0643'
+            ModuleName    = 'Microsoft.PowerShell.PSResourceGet'
+            ModuleVersion = '1.1.1'
         }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
 }
