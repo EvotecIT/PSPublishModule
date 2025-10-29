@@ -5,8 +5,9 @@ using System.Management.Automation;
 
 namespace PowerGuardian;
 
-[Cmdlet(VerbsLifecycle.Install, "PGModuleDocumentation", DefaultParameterSetName = "ByName", SupportsShouldProcess = true)]
-public sealed class InstallPGModuleDocumentationCommand : PSCmdlet
+[Cmdlet(VerbsLifecycle.Install, "ModuleDocumentation", DefaultParameterSetName = "ByName", SupportsShouldProcess = true)]
+[Alias("Install-Documentation")]
+public sealed class InstallModuleDocumentationCommand : PSCmdlet
 {
     [Parameter(ParameterSetName = "ByName", Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]

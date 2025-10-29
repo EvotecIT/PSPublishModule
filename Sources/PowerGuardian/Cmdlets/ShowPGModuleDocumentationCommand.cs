@@ -7,8 +7,9 @@ using System.Management.Automation;
 
 namespace PowerGuardian;
 
-[Cmdlet(VerbsCommon.Show, "PGModuleDocumentation", DefaultParameterSetName = "ByName")]
-public sealed class ShowPGModuleDocumentationCommand : PSCmdlet
+[Cmdlet(VerbsCommon.Show, "ModuleDocumentation", DefaultParameterSetName = "ByName")]
+[Alias("Show-Documentation")]
+public sealed class ShowModuleDocumentationCommand : PSCmdlet
 {
     [Parameter(ParameterSetName = "ByName", Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
@@ -45,6 +46,7 @@ public sealed class ShowPGModuleDocumentationCommand : PSCmdlet
         string internalsBase;
         string titleName = null;
         string titleVersion = null;
+        PSObject delivery = null;
 
         if (ParameterSetName == "ByPath")
         {
@@ -69,8 +71,8 @@ public sealed class ShowPGModuleDocumentationCommand : PSCmdlet
                 {
                     titleName = (pso.Properties["Name"]?.Value ?? pso.Properties["ModuleName"]?.Value)?.ToString();
                     titleVersion = pso.Properties["Version"]?.Value?.ToString();
-                    var del = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestCandidates[0]).FirstOrDefault() as PSObject;
-                    var internalsRel = del?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                    delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestCandidates[0]).FirstOrDefault() as PSObject;
+                    var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
                     var cand = Path.Combine(rootBase, internalsRel);
                     internalsBase = Directory.Exists(cand) ? cand : null;
                 }
@@ -111,8 +113,8 @@ public sealed class ShowPGModuleDocumentationCommand : PSCmdlet
             var manifestPath = Directory.GetFiles(rootBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
             if (!string.IsNullOrEmpty(manifestPath))
             {
-                var del = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestPath).FirstOrDefault() as PSObject;
-                var internalsRel = del?.Properties["InternalsPath"]?.Value as string ?? "Internals";
+                delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestPath).FirstOrDefault() as PSObject;
+                var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
                 var cand = Path.Combine(rootBase, internalsRel);
                 internalsBase = Directory.Exists(cand) ? cand : null;
             }
@@ -140,53 +142,98 @@ public sealed class ShowPGModuleDocumentationCommand : PSCmdlet
             return;
         }
 
-        string? target = null;
+        // Build additive items list
+        var items = new System.Collections.Generic.List<(string Kind,string Path)>();
         if (!string.IsNullOrEmpty(File))
         {
-            if (Path.IsPathRooted(File))
-            {
-                if (!System.IO.File.Exists(File)) throw new FileNotFoundException($"File '{File}' not found.");
-                target = File;
-            }
-            else
-            {
+            string resolved = null;
+            if (Path.IsPathRooted(File)) { if (!System.IO.File.Exists(File)) throw new FileNotFoundException($"File '{File}' not found."); resolved = File; }
+            else {
                 var t1 = Path.Combine(rootBase, File);
                 var t2 = internalsBase != null ? Path.Combine(internalsBase, File) : null;
-                if (System.IO.File.Exists(t1)) target = t1;
-                else if (t2 != null && System.IO.File.Exists(t2)) target = t2;
+                if (System.IO.File.Exists(t1)) resolved = t1;
+                else if (t2 != null && System.IO.File.Exists(t2)) resolved = t2;
                 else throw new FileNotFoundException($"File '{File}' not found under root or Internals.");
             }
+            items.Add(("FILE", resolved));
         }
-        else if (Readme)
+        if (Intro) items.Add(("INTRO", null));
+        if (Readme)
         {
             var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Readme, PreferInternals);
-            if (f != null) target = f.FullName; else throw new FileNotFoundException("README not found.");
+            if (f != null) items.Add(("FILE", f.FullName));
         }
-        else if (Changelog)
+        if (Changelog)
         {
             var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Changelog, PreferInternals);
-            if (f != null) target = f.FullName; else throw new FileNotFoundException("CHANGELOG not found.");
+            if (f != null) items.Add(("FILE", f.FullName));
         }
-        else if (License)
+        if (License)
         {
             var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.License, PreferInternals);
-            if (f != null) target = f.FullName; else throw new FileNotFoundException("LICENSE not found.");
+            if (f != null) items.Add(("FILE", f.FullName));
         }
-        else
+        if (Upgrade) items.Add(("UPGRADE", null));
+
+        if (items.Count == 0)
         {
-            // default: README else CHANGELOG
-            var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Readme, PreferInternals);
-            if (f == null) f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Changelog, PreferInternals);
-            if (f != null) target = f.FullName; else throw new FileNotFoundException("No README or CHANGELOG found.");
+            var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Readme, PreferInternals)
+                    ?? finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Changelog, PreferInternals);
+            if (f != null) items.Add(("FILE", f.FullName)); else throw new FileNotFoundException("No README or CHANGELOG found.");
         }
 
         if (Open)
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target!) { UseShellExecute = true });
+            var first = items.FirstOrDefault(i => i.Kind == "FILE");
+            if (!string.IsNullOrEmpty(first.Path))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(first.Path) { UseShellExecute = true });
+                return;
+            }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(rootBase) { UseShellExecute = true });
             return;
         }
 
-        var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion} — {System.IO.Path.GetFileName(target)}" : System.IO.Path.GetFileName(target);
-        renderer.ShowFile(title, target!, Raw);
+        foreach (var it in items)
+        {
+            if (it.Kind == "FILE")
+            {
+                var name = System.IO.Path.GetFileName(it.Path);
+                var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion} — {name}" : name;
+                renderer.ShowFile(title, it.Path, Raw);
+                continue;
+            }
+            if (it.Kind == "INTRO")
+            {
+                var lines = delivery?.Properties["IntroText"]?.Value as System.Collections.IEnumerable;
+                if (lines != null)
+                {
+                    var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion} — Introduction" : "Introduction";
+                    renderer.WriteHeading(title);
+                    foreach (var l in lines) Spectre.Console.AnsiConsole.MarkupLine(Spectre.Console.Markup.Escape(l?.ToString() ?? string.Empty));
+                }
+                continue;
+            }
+            if (it.Kind == "UPGRADE")
+            {
+                var lines = delivery?.Properties["UpgradeText"]?.Value as System.Collections.IEnumerable;
+                if (lines != null)
+                {
+                    var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion} — Upgrade" : "Upgrade";
+                    renderer.WriteHeading(title);
+                    foreach (var l in lines) Spectre.Console.AnsiConsole.MarkupLine(Spectre.Console.Markup.Escape(l?.ToString() ?? string.Empty));
+                }
+                else
+                {
+                    var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Upgrade, PreferInternals);
+                    if (f != null)
+                    {
+                        var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion} — {f.Name}" : f.Name;
+                        renderer.ShowFile(title, f.FullName, Raw);
+                    }
+                }
+                continue;
+            }
+        }
     }
 }

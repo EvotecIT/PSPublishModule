@@ -1,4 +1,4 @@
-function Install-ModuleDocumentation {
+function Install-ProjectDocumentation {
     <#
     .SYNOPSIS
     Installs bundled module documentation/examples (Internals) to a chosen path.
@@ -284,4 +284,30 @@ function Install-ModuleDocumentation {
     end {
         if ($resolvedTargets.Count -gt 0) { $resolvedTargets | Select-Object -Unique }
     }
+}
+
+function Install-ModuleDocumentation {
+    [CmdletBinding(DefaultParameterSetName='ByName', SupportsShouldProcess)]
+    param(
+        [Parameter(ParameterSetName='ByName', Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+        [Alias('ModuleName')]
+        [string] $Name,
+        [Parameter(ParameterSetName='ByModule', ValueFromPipeline = $true)]
+        [Alias('InputObject','ModuleInfo')]
+        [System.Management.Automation.PSModuleInfo] $Module,
+        [version] $RequiredVersion,
+        [Parameter(Mandatory)]
+        [string] $Path,
+        [ValidateSet('Direct','Module','ModuleAndVersion')]
+        [string] $Layout = 'ModuleAndVersion',
+        [ValidateSet('Merge','Overwrite','Skip','Stop')]
+        [string] $OnExists = 'Merge',
+        [switch] $CreateVersionSubfolder,
+        [switch] $Force,
+        [switch] $ListOnly,
+        [switch] $Open,
+        [switch] $NoIntro
+    )
+    Write-Verbose 'Install-ModuleDocumentation is deprecated; use Install-ProjectDocumentation.'
+    Install-ProjectDocumentation @PSBoundParameters
 }

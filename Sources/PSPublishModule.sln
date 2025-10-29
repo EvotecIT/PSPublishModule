@@ -5,6 +5,8 @@ VisualStudioVersion = 17.10.35027.167
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSPublishModule", "PSPublishModule\PSPublishModule.csproj", "{319706C7-84F2-48FE-98A8-F89CABAD50FA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerGuardian", "PowerGuardian\PowerGuardian.csproj", "{A2C16E2F-0D0C-49C8-8C27-7F2FB47CF53E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{319706C7-84F2-48FE-98A8-F89CABAD50FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{319706C7-84F2-48FE-98A8-F89CABAD50FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{319706C7-84F2-48FE-98A8-F89CABAD50FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A2C16E2F-0D0C-49C8-8C27-7F2FB47CF53E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A2C16E2F-0D0C-49C8-8C27-7F2FB47CF53E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A2C16E2F-0D0C-49C8-8C27-7F2FB47CF53E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A2C16E2F-0D0C-49C8-8C27-7F2FB47CF53E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

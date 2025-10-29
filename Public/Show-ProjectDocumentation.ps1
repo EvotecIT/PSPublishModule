@@ -1,4 +1,4 @@
-function Show-ModuleDocumentation {
+function Show-ProjectDocumentation {
     <#
     .SYNOPSIS
     Shows README/CHANGELOG or a chosen document for a module, with a simple console view.
@@ -158,71 +158,120 @@ function Show-ModuleDocumentation {
             if ($rows.Count -eq 0) { Write-Warning 'No README/CHANGELOG found.' } else { $rows }
             return
         }
-
-        $target = $null
+        # Build an additive list of targets to display in order
+        $targets = New-Object System.Collections.ArrayList
         if ($File) {
+            $resolved = $null
             if ([System.IO.Path]::IsPathRooted($File)) {
                 if (-not (Test-Path -LiteralPath $File)) { throw "File '$File' not found." }
-                $target = (Get-Item -LiteralPath $File).FullName
+                $resolved = (Get-Item -LiteralPath $File).FullName
             } else {
                 $try1 = if ($rootBase) { Join-Path $rootBase $File }
                 $try2 = if ($internalsBase) { Join-Path $internalsBase $File }
-                if ($try1 -and (Test-Path -LiteralPath $try1)) { $target = (Get-Item -LiteralPath $try1).FullName }
-                elseif ($try2 -and (Test-Path -LiteralPath $try2)) { $target = (Get-Item -LiteralPath $try2).FullName }
+                if ($try1 -and (Test-Path -LiteralPath $try1)) { $resolved = (Get-Item -LiteralPath $try1).FullName }
+                elseif ($try2 -and (Test-Path -LiteralPath $try2)) { $resolved = (Get-Item -LiteralPath $try2).FullName }
                 else { throw "File '$File' not found under root or Internals." }
             }
-        } elseif ($Readme) {
+            [void]$targets.Add(@{ Kind='File'; Path=$resolved })
+        }
+        if ($Intro) { [void]$targets.Add(@{ Kind='Intro' }) }
+        if ($Readme) {
             $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
-            if ($f) { $target = $f.FullName } else { throw 'README not found.' }
-        } elseif ($Changelog) {
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'README not found.' }
+        }
+        if ($Changelog) {
             $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
-            if ($f) { $target = $f.FullName } else { throw 'CHANGELOG not found.' }
-        } elseif ($License) {
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'CHANGELOG not found.' }
+        }
+        if ($License) {
             $f = Resolve-DocFile -Kind 'LICENSE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
-            if ($f) { $target = $f.FullName } else { throw 'LICENSE not found.' }
-        } elseif ($Intro) {
-            if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) {
-                $title = if ($moduleName) { "$moduleName $moduleVersion — Introduction" } else { 'Introduction' }
-                Write-Heading -Text $title
-                foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) { Write-Host $line }
-                return
-            } else {
-                $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
-                if ($f) { $target = $f.FullName } else { throw 'Introduction not defined; README not found.' }
-            }
-        } elseif ($Upgrade) {
-            if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) {
-                $title = if ($moduleName) { "$moduleName $moduleVersion — Upgrade" } else { 'Upgrade' }
-                Write-Heading -Text $title
-                foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) { Write-Host $line }
-                return
-            } else {
-                $f = Resolve-DocFile -Kind 'UPGRADE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
-                if ($f) { $target = $f.FullName } else { throw 'Upgrade instructions not defined and no UPGRADE file found.' }
-            }
-        } else {
-            # Default: README else CHANGELOG
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'LICENSE not found.' }
+        }
+        if ($Upgrade) { [void]$targets.Add(@{ Kind='Upgrade' }) }
+
+        if ($targets.Count -eq 0) {
+            # Default when nothing specified: README else CHANGELOG
             $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
             if (-not $f) { $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals }
-            if ($f) { $target = $f.FullName } else { throw 'No README or CHANGELOG found.' }
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { throw 'No README or CHANGELOG found.' }
         }
 
+        # Handle -Open: only meaningful for single file target; otherwise open first file
         if ($Open) {
-            Start-Process -FilePath $target | Out-Null
-            return
+            $firstFile = ($targets | Where-Object { $_.Kind -eq 'File' } | Select-Object -First 1)
+            if ($firstFile) { Start-Process -FilePath $firstFile.Path | Out-Null; return } else { Start-Process -FilePath $rootBase | Out-Null; return }
         }
 
-        if ($Raw) {
-            Get-Content -LiteralPath $target -Raw -ErrorAction Stop
-        } else {
-            $title = if ($moduleName) { "$moduleName $moduleVersion — $([IO.Path]::GetFileName($target))" } else { [IO.Path]::GetFileName($target) }
-            Write-Heading -Text $title
-            try {
-                $content = Get-Content -LiteralPath $target -Raw -ErrorAction Stop
-                Write-Host $content
-            } catch {
-                Write-Warning "Failed to read '$target': $($_.Exception.Message)"
+        foreach ($t in $targets) {
+            if ($t.Kind -eq 'Intro') {
+                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) {
+                    $title = if ($moduleName) { "$moduleName $moduleVersion — Introduction" } else { 'Introduction' }
+                    Write-Heading -Text $title
+                    foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) { Write-Host $line }
+                } else {
+                    Write-Warning 'Introduction text not defined in delivery metadata.'
+                }
+                continue
             }
+            if ($t.Kind -eq 'Upgrade') {
+                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) {
+                    $title = if ($moduleName) { "$moduleName $moduleVersion — Upgrade" } else { 'Upgrade' }
+                    Write-Heading -Text $title
+                    foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) { Write-Host $line }
+                } else {
+                    $f = Resolve-DocFile -Kind 'UPGRADE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+                    if ($f) {
+                        $title = if ($moduleName) { "$moduleName $moduleVersion — $($f.Name)" } else { $f.Name }
+                        Write-Heading -Text $title
+                        try { $content = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop; Write-Host $content } catch { Write-Warning "Failed to read '$($f.FullName)': $($_.Exception.Message)" }
+                    } else {
+                        Write-Warning 'Upgrade instructions not defined and no UPGRADE file found.'
+                    }
+                }
+                continue
+            }
+            # Kind = File
+            $target = $t.Path
+            if ($Raw) {
+                Get-Content -LiteralPath $target -Raw -ErrorAction Stop
+            } else {
+                $title = if ($moduleName) { "$moduleName $moduleVersion — $([IO.Path]::GetFileName($target))" } else { [IO.Path]::GetFileName($target) }
+                Write-Heading -Text $title
+                try {
+                    $content = Get-Content -LiteralPath $target -Raw -ErrorAction Stop
+                    Write-Host $content
+                } catch {
+                    Write-Warning "Failed to read '$target': $($_.Exception.Message)"
+                }
+            }
+            Write-Host
         }
     }
+}
+
+function Show-ModuleDocumentation {
+    [CmdletBinding(DefaultParameterSetName='ByName')]
+    param(
+        [Parameter(ParameterSetName='ByName', Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Alias('ModuleName')]
+        [string] $Name,
+        [Parameter(ParameterSetName='ByModule', ValueFromPipeline=$true)]
+        [Alias('InputObject','ModuleInfo')]
+        [System.Management.Automation.PSModuleInfo] $Module,
+        [version] $RequiredVersion,
+        [Parameter(ParameterSetName='ByPath')]
+        [string] $DocsPath,
+        [switch] $Readme,
+        [switch] $Changelog,
+        [switch] $License,
+        [switch] $Intro,
+        [switch] $Upgrade,
+        [string] $File,
+        [switch] $PreferInternals,
+        [switch] $List,
+        [switch] $Raw,
+        [switch] $Open
+    )
+    Write-Verbose 'Show-ModuleDocumentation is deprecated; use Show-ProjectDocumentation.'
+    Show-ProjectDocumentation @PSBoundParameters
 }
