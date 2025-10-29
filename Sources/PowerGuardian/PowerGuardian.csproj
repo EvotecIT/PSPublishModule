@@ -23,7 +23,7 @@
 
     <!-- Use inbox System.Text.Json on net8.0; add NuGet only for net472 -->
     <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
-        <PackageReference Include="System.Text.Json" Version="8.0.6" />
+        <PackageReference Include="System.Text.Json" Version="9.0.9" />
     </ItemGroup>
 
     <PropertyGroup>
@@ -55,6 +55,8 @@
     <ItemGroup>
         <ProjectReference
             Include="../../Module-PowerGuardian/Ignore/OfficeIMO/OfficeIMO.Markdown/OfficeIMO.Markdown.csproj" />
+        <ProjectReference
+            Include="../../Module-PowerGuardian/Ignore/HtmlForgeX/HtmlForgeX/HtmlForgeX.csproj" />
     </ItemGroup>
 
 </Project>
