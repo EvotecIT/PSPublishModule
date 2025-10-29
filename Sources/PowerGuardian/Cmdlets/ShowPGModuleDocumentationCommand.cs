@@ -72,14 +72,8 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
             case "none":       defLang = "";           break; // keep empty
             default:            defLang = null;          break; // auto
         }
-        var hr = HeadingRuleMode.H1AndH2;
-        switch ((HeadingRules ?? "H1AndH2").ToLowerInvariant())
-        {
-            case "none": hr = HeadingRuleMode.None; break;
-            case "h1": hr = HeadingRuleMode.H1; break;
-            default: hr = HeadingRuleMode.H1AndH2; break;
-        }
-        var renderer = new Renderer(pref, defLang, hr) { DisableTokenizer = DisableTokenizer.IsPresent };
+        // Renderer currently supports JsonRenderer + Default language only
+        var renderer = new Renderer(pref, defLang);
         var finder   = new DocumentationFinder(this);
         string rootBase;
         string internalsBase;

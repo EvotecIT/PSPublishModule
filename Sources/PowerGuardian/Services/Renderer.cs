@@ -55,24 +55,31 @@ internal sealed class Renderer
                     break;
                 case ParagraphBlock p:
                     AnsiConsole.MarkupLine(RenderInlines(p.Inlines));
+                    AnsiConsole.WriteLine();
                     break;
                 case CodeBlock c:
                     RenderCodeBlock(c);
+                    AnsiConsole.WriteLine();
                     break;
                 case QuoteBlock q:
                     RenderQuote(q);
+                    AnsiConsole.WriteLine();
                     break;
                 case UnorderedListBlock ul:
                     RenderUnorderedList(ul);
+                    AnsiConsole.WriteLine();
                     break;
                 case OrderedListBlock ol:
                     RenderOrderedList(ol);
+                    AnsiConsole.WriteLine();
                     break;
                 case TableBlock tb:
                     RenderTable(tb);
+                    AnsiConsole.WriteLine();
                     break;
                 case HorizontalRuleBlock:
                     AnsiConsole.Write(new Rule());
+                    AnsiConsole.WriteLine();
                     break;
                 default:
                     // Fallback to markdown text for unknown block types
@@ -104,38 +111,30 @@ internal sealed class Renderer
         var lang = (c.Language ?? string.Empty).Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(lang) && !string.IsNullOrEmpty(_defaultLanguage))
             lang = _defaultLanguage;
-        var header = string.IsNullOrWhiteSpace(lang) ? "code" : lang;
-        if ((lang == "json" || lang == "jsonc") && _jsonPreference != JsonRendererPreference.System)
+        var content = c.Content ?? string.Empty;
+        if (lang == "json" || lang == "jsonc")
         {
             try
             {
-                var jt = new JsonText(c.Content);
-                var panel = new Panel(jt)
-                {
-                    Border = BoxBorder.Rounded,
-                    Header = new PanelHeader(header, Justify.Left)
-                };
-                AnsiConsole.Write(panel);
+                var jt = new JsonText(content);
+                AnsiConsole.Write(jt);
             }
             catch
             {
-                // Fallback to tokenizer pipeline if JSON parse fails
-                var codeMarkup = new HighlighterPipeline().Highlight(c.Content, lang);
-                var p = new Panel(new Markup(codeMarkup)) { Border = BoxBorder.Rounded, Header = new PanelHeader(header, Justify.Left) };
-                AnsiConsole.Write(p);
+                // fallback to generic highlight
+                var codeMarkup = new HighlighterPipeline().Highlight(content, lang);
+                AnsiConsole.MarkupLine(codeMarkup);
             }
+            return;
         }
-        else
+        if (lang == "powershell" || lang == "ps" || lang == "ps1" || lang == "pwsh" || lang == "pscore")
         {
-            // Tokenizer pipeline (System/Text.Json-based highlighter or generic)
-            var codeMarkup = new HighlighterPipeline().Highlight(c.Content, lang);
-            var panel = new Panel(new Markup(codeMarkup))
-            {
-                Border = BoxBorder.Rounded,
-                Header = new PanelHeader(header, Justify.Left)
-            };
-            AnsiConsole.Write(panel);
+            var codeMarkup = new HighlighterPipeline().Highlight(content, lang);
+            AnsiConsole.MarkupLine(codeMarkup);
+            return;
         }
+        // Default: borderless literal
+        Console.WriteLine(content);
         if (!string.IsNullOrWhiteSpace(c.Caption))
         {
             AnsiConsole.MarkupLine($"[dim]{Markup.Escape(c.Caption)}[/]");
@@ -213,8 +212,12 @@ internal sealed class Renderer
 
     public string RenderInlines(InlineSequence inlines)
     {
-        var parts = inlines.Items.Select(RenderInline).Where(s => s != null).ToArray();
-        return string.Join(" ", parts);
+        var sb = new System.Text.StringBuilder();
+        foreach (var part in inlines.Items.Select(RenderInline))
+        {
+            if (part != null) sb.Append(part);
+        }
+        return sb.ToString();
     }
 
     private string RenderInline(object node)

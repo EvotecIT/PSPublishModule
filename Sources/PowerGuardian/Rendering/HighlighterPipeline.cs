@@ -12,9 +12,10 @@ internal sealed class HighlighterPipeline
     {
         _highlighters = new List<IHighlighter>
         {
-            // Order matters: specific tokenizers first, then generic fallback
+            // Specific tokenizers first
             new PowerShellHighlighter(),
             new Highlighters.JsonHighlighter(),
+            // Fallback
             new GenericHighlighter()
         };
     }

@@ -47,25 +47,26 @@ internal sealed class PowerShellHighlighter : IHighlighter
                 var typeObj = pType?.GetValue(t);
                 var typeName = typeObj?.ToString() ?? string.Empty;
                 int start = 0; int length = 0;
-                var pStart = tType.GetProperty("Start");
-                var pLength = tType.GetProperty("Length");
-                if (pStart != null && pLength != null)
+                // Prefer Extent offsets for multi-line accuracy
+                var extent = tType.GetProperty("Extent")?.GetValue(t);
+                if (extent != null)
                 {
-                    start = (int)pStart.GetValue(t);
-                    length = (int)pLength.GetValue(t);
-                }
-                else
-                {
-                    var extent = tType.GetProperty("Extent")?.GetValue(t);
-                    if (extent != null)
+                    var extType = extent.GetType();
+                    var startOffset = extType.GetProperty("StartOffset")?.GetValue(extent);
+                    var endOffset = extType.GetProperty("EndOffset")?.GetValue(extent);
+                    if (startOffset != null && endOffset != null)
                     {
-                        var extType = extent.GetType();
-                        var startOffset = extType.GetProperty("StartOffset")?.GetValue(extent);
-                        var endOffset = extType.GetProperty("EndOffset")?.GetValue(extent);
-                        if (startOffset != null && endOffset != null)
-                        {
-                            start = (int)startOffset; length = (int)endOffset - start;
-                        }
+                        start = (int)startOffset; length = (int)endOffset - start;
+                    }
+                }
+                if (length == 0)
+                {
+                    var pStart = tType.GetProperty("Start");
+                    var pLength = tType.GetProperty("Length");
+                    if (pStart != null && pLength != null)
+                    {
+                        start = (int)pStart.GetValue(t);
+                        length = (int)pLength.GetValue(t);
                     }
                 }
                 tokenList.Add((start,length,typeName,content));
