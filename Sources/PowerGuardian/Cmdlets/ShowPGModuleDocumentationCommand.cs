@@ -45,6 +45,15 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
     [Parameter]
     [ValidateSet("Auto","PowerShell","Json","None")]
     public string DefaultCodeLanguage { get; set; } = "Auto";
+    [Parameter]
+    [ValidateSet("None","H1","H1AndH2")]
+    public string HeadingRules { get; set; } = "H1AndH2";
+    [Parameter]
+    public string ExportHtmlPath { get; set; }
+    [Parameter]
+    public SwitchParameter OpenHtml { get; set; }
+    [Parameter]
+    public SwitchParameter DisableTokenizer { get; set; }
 
     protected override void ProcessRecord()
     {
@@ -63,7 +72,14 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
             case "none":       defLang = "";           break; // keep empty
             default:            defLang = null;          break; // auto
         }
-        var renderer = new Renderer(pref, defLang);
+        var hr = HeadingRuleMode.H1AndH2;
+        switch ((HeadingRules ?? "H1AndH2").ToLowerInvariant())
+        {
+            case "none": hr = HeadingRuleMode.None; break;
+            case "h1": hr = HeadingRuleMode.H1; break;
+            default: hr = HeadingRuleMode.H1AndH2; break;
+        }
+        var renderer = new Renderer(pref, defLang, hr) { DisableTokenizer = DisableTokenizer.IsPresent };
         var finder   = new DocumentationFinder(this);
         string rootBase;
         string internalsBase;
@@ -267,6 +283,82 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
                     }
                 }
                 continue;
+            }
+        }
+        // Optional HTML export
+        if (!string.IsNullOrEmpty(ExportHtmlPath) || OpenHtml.IsPresent)
+        {
+            var exportItems = new System.Collections.Generic.List<DocumentItem>();
+            foreach (var it in items)
+            {
+                if (it.Kind == "FILE")
+                {
+                    var title = System.IO.Path.GetFileName(it.Path);
+                    string md;
+                    try { md = System.IO.File.ReadAllText(it.Path); }
+                    catch { md = $"# {title}\n\n(Unable to read file.)"; }
+                    exportItems.Add(new DocumentItem { Title = title, Kind = "FILE", Content = md });
+                }
+                else if (it.Kind == "INTRO")
+                {
+                    var lines = delivery?.Properties["IntroText"]?.Value as System.Collections.IEnumerable;
+                    if (lines != null)
+                    {
+                        var md = string.Join("\n", System.Linq.Enumerable.Select(lines.Cast<object>(), o => o?.ToString() ?? string.Empty));
+                        exportItems.Add(new DocumentItem { Title = "Introduction", Kind = "INTRO", Content = md });
+                    }
+                }
+                else if (it.Kind == "UPGRADE")
+                {
+                    var lines = delivery?.Properties["UpgradeText"]?.Value as System.Collections.IEnumerable;
+                    if (lines != null)
+                    {
+                        var md = string.Join("\n", System.Linq.Enumerable.Select(lines.Cast<object>(), o => o?.ToString() ?? string.Empty));
+                        exportItems.Add(new DocumentItem { Title = "Upgrade", Kind = "UPGRADE", Content = md });
+                    }
+                    else
+                    {
+                        var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Upgrade, PreferInternals);
+                        if (f != null)
+                        {
+                            string md;
+                            try { md = System.IO.File.ReadAllText(f.FullName); }
+                            catch { md = "(Unable to read upgrade file)"; }
+                            exportItems.Add(new DocumentItem { Title = f.Name, Kind = "UPGRADE", Content = md });
+                        }
+                    }
+                }
+            }
+            if (Links)
+            {
+                var list = delivery?.Properties["ImportantLinks"]?.Value as System.Collections.IEnumerable;
+                if (list != null)
+                {
+                    var lines = new System.Text.StringBuilder();
+                    lines.AppendLine("# Links");
+                    foreach (var l in list)
+                    {
+                        var p = l as System.Management.Automation.PSObject;
+                        var title = p?.Properties["Title"]?.Value?.ToString() ?? p?.Properties["Name"]?.Value?.ToString();
+                        var url = p?.Properties["Url"]?.Value?.ToString();
+                        if (!string.IsNullOrEmpty(url))
+                        {
+                            lines.Append("- ");
+                            if (!string.IsNullOrEmpty(title)) lines.Append('[').Append(title).Append("](").Append(url).Append(")");
+                            else lines.Append(url);
+                            lines.AppendLine();
+                        }
+                    }
+                    exportItems.Add(new DocumentItem { Title = "Links", Kind = "LINKS", Content = lines.ToString() });
+                }
+            }
+            if (exportItems.Count > 0)
+            {
+                var html = new HtmlExporter();
+                var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion}" : (Name ?? Module?.Name ?? "Module");
+                var path = html.Export(title, exportItems, ExportHtmlPath, OpenHtml);
+                WriteVerbose($"HTML exported to {path}");
+                WriteObject(path);
             }
         }
         if (Links)
