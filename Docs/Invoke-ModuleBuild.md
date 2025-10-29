@@ -207,7 +207,10 @@ Accept wildcard characters: False
 ```
 
 ### -IncludeCustomCode
-Parameter description
+Optional scriptblock executed during staging that can add custom files/folders
+to the build.
+Use helper functions like Add-Directory/Copy-Item to place extra
+content into the temporary module structure before merge/packaging.
 
 ```yaml
 Type: ScriptBlock
@@ -222,7 +225,11 @@ Accept wildcard characters: False
 ```
 
 ### -IncludeToArray
-Parameter description
+Advanced hashtable form for includes.
+Supports keys matching IncludeRoot,
+IncludePS1, IncludeAll etc.
+Prefer the dedicated parameters unless you need
+to pass a single structured object.
 
 ```yaml
 Type: IDictionary
@@ -237,7 +244,8 @@ Accept wildcard characters: False
 ```
 
 ### -LibrariesCore
-Parameter description
+Alternate relative path for .NET Core-targeted libraries folder.
+Default: 'Lib/Core'.
 
 ```yaml
 Type: String
@@ -252,7 +260,8 @@ Accept wildcard characters: False
 ```
 
 ### -LibrariesDefault
-Parameter description
+Alternate relative path for classic .NET Framework-targeted libraries folder.
+Default: 'Lib/Default'.
 
 ```yaml
 Type: String
@@ -267,7 +276,8 @@ Accept wildcard characters: False
 ```
 
 ### -LibrariesStandard
-Parameter description
+Alternate relative path for .NET Standard-targeted libraries folder.
+Default: 'Lib/Standard'.
 
 ```yaml
 Type: String

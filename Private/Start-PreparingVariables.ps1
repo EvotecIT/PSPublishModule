@@ -58,27 +58,27 @@
         }
 
         $Path = [io.path]::Combine($FullProjectPath, '*')
-        if ($PSEdition -eq 'core') {
-            $Directories = @(
-                $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude -FollowSymlink
-                @(
-                    $TempDirectories
-                    $TempDirectories | Get-ChildItem -Directory -Recurse -FollowSymlink
-                )
-            )
-            $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude -FollowSymlink | Get-ChildItem -File -Recurse -FollowSymlink
-            $FilesRoot = Get-ChildItem -Path $Path -Include $IncludeFilesRoot -File -FollowSymlink
-        } else {
-            $Directories = @(
-                $TempDirectories = Get-ChildItem -Path $FullProjectPath -Directory -Exclude $Exclude
-                @(
-                    $TempDirectories
-                    $TempDirectories | Get-ChildItem -Directory -Recurse
-                )
-            )
-            $Files = Get-ChildItem -Path $FullProjectPath -Exclude $Exclude | Get-ChildItem -File -Recurse
-            $FilesRoot = Get-ChildItem -Path $Path -Include $IncludeFilesRoot -File
+        # Scan only relevant directories (PS1, Classes, user arrays, IncludeAll) with pruning
+        $ScanDirs = @(
+            $DirectoriesWithPS1
+            $DirectoriesWithClasses
+            $DirectoriesWithArrays
+            $DirectoriesWithAll
+        )
+        $ScanDirs = $ScanDirs | Where-Object { $_ -and -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+        $PruneNames = @('.git', 'obj', 'bin', '.vs', 'node_modules', 'dist', 'out', 'Ignore')
+        foreach ($ex in $Exclude) {
+            if ($ex -is [string]) {
+                $n = [IO.Path]::GetFileName($ex)
+                if ($n -and $PruneNames -notcontains $n) { $PruneNames += $n }
+            }
         }
+
+        $FollowSymlink = $false
+        $Directories = Get-PSPDirectoriesPruned -BasePath $FullProjectPath -ScanRelativeDirs $ScanDirs -ExcludeNames $Exclude -PruneNames $PruneNames -FollowSymlink:$FollowSymlink
+        $Files = Get-PSPFilesPruned -Directories $Directories -FollowSymlink:$FollowSymlink
+        $FilesRoot = Get-ChildItem -Path $Path -Include $IncludeFilesRoot -File -ErrorAction SilentlyContinue
         $LinkDirectories = @(
             foreach ($Directory in $Directories) {
                 if ($null -eq $IsWindows -or $IsWindows -eq $true) {

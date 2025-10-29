@@ -74,7 +74,7 @@
         NETFramework                      = 'net472', 'net8.0'
         DotSourceLibraries                = $true
         NETSearchClass                    = 'PowerGuardian.InstallPGModuleDocumentationCommand'
-        RefreshPSD1Only                   = $false
+        RefreshPSD1Only                   = $true
         NETBinaryModuleDocumentation      = $true
     }
 

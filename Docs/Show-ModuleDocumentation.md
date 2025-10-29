@@ -8,7 +8,7 @@ schema: 2.0.0
 # Show-ModuleDocumentation
 
 ## SYNOPSIS
-Shows README/CHANGELOG or a chosen document for a module, with a simple console view.
+{{ Fill in the Synopsis }}
 
 ## SYNTAX
 
@@ -34,66 +34,24 @@ Show-ModuleDocumentation [-RequiredVersion <Version>] [-DocsPath <String>] [-Rea
 ```
 
 ## DESCRIPTION
-Finds a module (by name or PSModuleInfo) and renders README/CHANGELOG from the module root
-or from its Internals folder (as defined in PrivateData.PSData.PSPublishModuleDelivery).
-You can also point directly to a docs folder via -DocsPath (e.g., output of Install-ModuleDocumentation).
+{{ Fill in the Description }}
 
 ## EXAMPLES
 
-### EXAMPLE 1
-```
-Show-ModuleDocumentation -Name EFAdminManager -Readme
-```
-
-### EXAMPLE 2
-```
-Get-Module -ListAvailable EFAdminManager | Show-ModuleDocumentation -Changelog
+### Example 1
+```powershell
+PS C:\> {{ Add example code here }}
 ```
 
-### EXAMPLE 3
-```
-Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
-```
+{{ Add example description here }}
 
 ## PARAMETERS
 
-### -Name
-Module name to show documentation for.
-Accepts pipeline by value.
+### -Changelog
+{{ Fill Changelog Description }}
 
 ```yaml
-Type: String
-Parameter Sets: ByName
-Aliases: ModuleName
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: True (ByPropertyName, ByValue)
-Accept wildcard characters: False
-```
-
-### -Module
-A PSModuleInfo object (e.g., from Get-Module -ListAvailable) to operate on directly.
-
-```yaml
-Type: PSModuleInfo
-Parameter Sets: ByModule
-Aliases: InputObject, ModuleInfo
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: True (ByValue)
-Accept wildcard characters: False
-```
-
-### -RequiredVersion
-Specific version of the module to target.
-If omitted, selects the highest available.
-
-```yaml
-Type: Version
+Type: SwitchParameter
 Parameter Sets: (All)
 Aliases:
 
@@ -105,8 +63,7 @@ Accept wildcard characters: False
 ```
 
 ### -DocsPath
-A folder that contains documentation to display (e.g., the destination created by Install-ModuleDocumentation).
-When provided, the cmdlet does not look up the module and shows docs from this folder.
+{{ Fill DocsPath Description }}
 
 ```yaml
 Type: String
@@ -120,88 +77,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Readme
-Show README*.
-If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Changelog
-Show CHANGELOG*.
-If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -License
-Show LICENSE (prefers root `license.txt`). Falls back to any `LICENSE*` file found in root or Internals.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Intro
-Show introduction. Prefers `IntroFile` content from delivery metadata; otherwise prints `IntroText` lines.
-If neither is present, falls back to README.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Upgrade
-Show upgrade instructions. Prefers `UpgradeFile` content from delivery metadata; otherwise prints `UpgradeText` lines.
-If neither is present, falls back to `UPGRADE*`/`UPGRADING*`/`MIGRATION*` files if found.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -File
-Relative path to a specific file to display (relative to module root or Internals).
-If rooted, used as-is.
+{{ Fill File Description }}
 
 ```yaml
 Type: String
@@ -215,8 +92,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -PreferInternals
-Prefer the Internals copy of README/CHANGELOG when both exist.
+### -Intro
+{{ Fill Intro Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -225,13 +102,28 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: False
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -License
+{{ Fill License Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -List
-List available README/CHANGELOG files found (root and Internals) instead of displaying content.
+{{ Fill List Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -240,13 +132,73 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: False
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Module
+{{ Fill Module Description }}
+
+```yaml
+Type: PSModuleInfo
+Parameter Sets: ByModule
+Aliases: InputObject, ModuleInfo
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: False
+```
+
+### -Name
+{{ Fill Name Description }}
+
+```yaml
+Type: String
+Parameter Sets: ByName
+Aliases: ModuleName
+
+Required: False
+Position: 0
+Default value: None
+Accept pipeline input: True (ByPropertyName, ByValue)
+Accept wildcard characters: False
+```
+
+### -Open
+{{ Fill Open Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -PreferInternals
+{{ Fill PreferInternals Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -Raw
-Output the raw file content (no styling).
+{{ Fill Raw Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -255,13 +207,13 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: False
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Open
-Open the resolved file in the system default viewer instead of rendering in the console.
+### -Readme
+{{ Fill Readme Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -270,7 +222,37 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: False
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredVersion
+{{ Fill RequiredVersion Description }}
+
+```yaml
+Type: Version
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Upgrade
+{{ Fill Upgrade Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -295,8 +277,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+### System.String
+
+### System.Management.Automation.PSModuleInfo
+
 ## OUTPUTS
 
+### System.Object
 ## NOTES
 
 ## RELATED LINKS

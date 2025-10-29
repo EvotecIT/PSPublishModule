@@ -1,5 +1,5 @@
 ﻿@{
-    AliasesToExport      = @('Install-Documentation','Show-Documentation')
+    AliasesToExport      = @('Install-Documentation', 'Show-Documentation')
     Author               = 'Przemyslaw Klys'
     CmdletsToExport      = @('Install-ModuleDocumentation', 'Show-ModuleDocumentation')
     CompanyName          = 'Evotec'
@@ -12,7 +12,8 @@
     PowerShellVersion    = '5.1'
     PrivateData          = @{
         PSData = @{
-            Tags = @('Windows', 'MacOS', 'Linux')
+            RequireLicenseAcceptance = $false
+            Tags                     = @('Windows', 'MacOS', 'Linux')
         }
     }
     RootModule           = 'PowerGuardian.psm1'

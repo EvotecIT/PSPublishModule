@@ -8,7 +8,7 @@ schema: 2.0.0
 # Install-ModuleDocumentation
 
 ## SYNOPSIS
-Installs bundled module documentation/examples (Internals) to a chosen path.
+{{ Fill in the Synopsis }}
 
 ## SYNTAX
 
@@ -27,42 +27,97 @@ Install-ModuleDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version>
 ```
 
 ## DESCRIPTION
-Copies the contents of a module's Internals folder (or the path defined in
-PrivateData.PSData.PSPublishModuleDelivery) to a destination outside of
-$env:PSModulePath, optionally including README/CHANGELOG from module root.
+{{ Fill in the Description }}
 
 ## EXAMPLES
 
-### EXAMPLE 1
-```
-Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
+### Example 1
+```powershell
+PS C:\> {{ Add example code here }}
 ```
 
-### EXAMPLE 2
-```
-Get-Module -ListAvailable AdminManager | Install-ModuleDocumentation -Path 'D:\AM'
-```
+{{ Add example description here }}
 
 ## PARAMETERS
 
-### -Name
-Module name to install documentation for.
-Accepts pipeline by value.
+### -Confirm
+Prompts you for confirmation before running the cmdlet.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases: cf
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CreateVersionSubfolder
+{{ Fill CreateVersionSubfolder Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Force
+{{ Fill Force Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Layout
+{{ Fill Layout Description }}
 
 ```yaml
 Type: String
-Parameter Sets: ByName
-Aliases: ModuleName
+Parameter Sets: (All)
+Aliases:
+Accepted values: Direct, Module, ModuleAndVersion
 
 Required: False
-Position: 1
+Position: Named
 Default value: None
-Accept pipeline input: True (ByPropertyName, ByValue)
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ListOnly
+{{ Fill ListOnly Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -Module
-A PSModuleInfo object (e.g., from Get-Module -ListAvailable) to operate on directly.
+{{ Fill Module Description }}
 
 ```yaml
 Type: PSModuleInfo
@@ -76,135 +131,18 @@ Accept pipeline input: True (ByValue)
 Accept wildcard characters: False
 ```
 
-### -RequiredVersion
-Specific version of the module to target.
-If omitted, selects the highest available.
+### -Name
+{{ Fill Name Description }}
 
 ```yaml
-Type: Version
-Parameter Sets: (All)
-Aliases:
+Type: String
+Parameter Sets: ByName
+Aliases: ModuleName
 
 Required: False
-Position: Named
+Position: 0
 Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Path
-Destination directory where the Internals content will be copied.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Layout
-How to lay out the destination path:
-- Direct: copy into \<Path\>
-- Module: copy into \<Path\>\\\\\<Name\>
-- ModuleAndVersion (default): copy into \<Path\>\\\\\<Name\>\\\\\<Version\>
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: ModuleAndVersion
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -OnExists
-What to do if the destination folder already exists:
-- Merge (default): merge files/folders; overwrite files only when -Force is used
-- Overwrite: remove the existing destination, then copy fresh
-- Skip: do nothing and return the existing destination path
-- Stop: throw an error
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: Merge
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CreateVersionSubfolder
-When set (default), content is placed under '\<Path\>\\\\\<Name\>\\\\\<Version\>'.
-If disabled, content is copied directly into '\<Path\>'.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Force
-Overwrite existing files.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ListOnly
-Show what would be copied and where, without copying any files.
-Returns the
-computed destination path(s).
-Use -Verbose for details.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Open
-After a successful copy, open the README in the destination (if present).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
+Accept pipeline input: True (ByPropertyName, ByValue)
 Accept wildcard characters: False
 ```
 
@@ -218,7 +156,68 @@ Aliases:
 
 Required: False
 Position: Named
-Default value: False
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OnExists
+{{ Fill OnExists Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+Accepted values: Merge, Overwrite, Skip, Stop
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Open
+{{ Fill Open Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Path
+{{ Fill Path Description }}
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredVersion
+{{ Fill RequiredVersion Description }}
+
+```yaml
+Type: Version
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -231,21 +230,6 @@ The cmdlet is not run.
 Type: SwitchParameter
 Parameter Sets: (All)
 Aliases: wi
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
 
 Required: False
 Position: Named
@@ -274,8 +258,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+### System.String
+
+### System.Management.Automation.PSModuleInfo
+
 ## OUTPUTS
 
+### System.Object
 ## NOTES
 
 ## RELATED LINKS

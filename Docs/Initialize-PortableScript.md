@@ -8,7 +8,7 @@ schema: 2.0.0
 # Initialize-PortableScript
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Produces a self-contained script by inlining missing helper function definitions.
 
 ## SYNTAX
 
@@ -18,24 +18,41 @@ Initialize-PortableScript [[-FilePath] <String>] [[-OutputPath] <String>] [[-App
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Analyzes the input script for function calls not present in the script itself, pulls helper
+definitions from approved modules, and writes a combined output file that begins with those
+helper definitions followed by the original script content.
+Useful for portable delivery.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+Initialize-PortableScript -FilePath .\Scripts\Do-Work.ps1 -OutputPath .\Artefacts\Do-Work.Portable.ps1 -ApprovedModules PSSharedGoods
+Generates a portable script with helper functions inlined at the top.
+```
 
 ## PARAMETERS
 
-### -ApprovedModules
-{{ Fill ApprovedModules Description }}
+### -FilePath
+Path to the source script to analyze and convert.
 
 ```yaml
-Type: Array
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OutputPath
+Destination path for the generated self-contained script.
+
+```yaml
+Type: String
 Parameter Sets: (All)
 Aliases:
 
@@ -46,31 +63,16 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -FilePath
-{{ Fill FilePath Description }}
+### -ApprovedModules
+Module names that are permitted sources for inlined helper functions.
 
 ```yaml
-Type: String
+Type: Array
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -OutputPath
-{{ Fill OutputPath Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
+Position: 3
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -96,11 +98,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
+Output encoding is UTF8BOM on PS 7+, UTF8 on PS 5.1 for compatibility.
 
 ## RELATED LINKS

@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationInformation
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Describes what to include/exclude in the module build and how libraries are organized.
 
 ## SYNTAX
 
@@ -21,21 +21,20 @@ New-ConfigurationInformation [[-FunctionsToExportFolder] <String>] [[-AliasesToE
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Emits a configuration block with folder-level include/exclude rules and optional library
+locations that the builder uses to stage content prior to merge/packaging.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+New-ConfigurationInformation -IncludeAll 'Internals\' -IncludePS1 'Private','Public' -ExcludeFromPackage 'Ignore','Docs'
+```
 
 ## PARAMETERS
 
-### -AliasesToExportFolder
-{{ Fill AliasesToExportFolder Description }}
+### -FunctionsToExportFolder
+Folder name containing public functions to export (e.g., 'Public').
 
 ```yaml
 Type: String
@@ -49,11 +48,11 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ExcludeFromPackage
-{{ Fill ExcludeFromPackage Description }}
+### -AliasesToExportFolder
+Folder name containing public aliases to export (e.g., 'Public').
 
 ```yaml
-Type: String[]
+Type: String
 Parameter Sets: (All)
 Aliases:
 
@@ -64,68 +63,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -FunctionsToExportFolder
-{{ Fill FunctionsToExportFolder Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeAll
-{{ Fill IncludeAll Description }}
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 5
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeCustomCode
-{{ Fill IncludeCustomCode Description }}
-
-```yaml
-Type: ScriptBlock
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 6
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludePS1
-{{ Fill IncludePS1 Description }}
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 4
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeRoot
-{{ Fill IncludeRoot Description }}
+### -ExcludeFromPackage
+Paths or patterns to exclude from artefacts (e.g., 'Ignore','Docs','Examples').
 
 ```yaml
 Type: String[]
@@ -139,11 +78,56 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -IncludeToArray
-{{ Fill IncludeToArray Description }}
+### -IncludeRoot
+File patterns from the root to include (e.g., '*.psm1','*.psd1','License*').
 
 ```yaml
-Type: IDictionary
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludePS1
+Folder names where PS1 files should be included (e.g., 'Private','Public','Enums','Classes').
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeAll
+Folder names to include entirely (e.g., 'Images','Resources','Templates','Bin','Lib','Data').
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IncludeCustomCode
+Scriptblock executed during staging to add custom files/folders.
+
+```yaml
+Type: ScriptBlock
 Parameter Sets: (All)
 Aliases:
 
@@ -154,11 +138,11 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -LibrariesCore
-{{ Fill LibrariesCore Description }}
+### -IncludeToArray
+Advanced form to pass IncludeRoot/IncludePS1/IncludeAll as a single hashtable.
 
 ```yaml
-Type: String
+Type: IDictionary
 Parameter Sets: (All)
 Aliases:
 
@@ -169,8 +153,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -LibrariesDefault
-{{ Fill LibrariesDefault Description }}
+### -LibrariesCore
+Relative path to libraries compiled for Core (default 'Lib/Core').
 
 ```yaml
 Type: String
@@ -184,8 +168,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -LibrariesStandard
-{{ Fill LibrariesStandard Description }}
+### -LibrariesDefault
+Relative path to libraries for classic .NET (default 'Lib/Default').
 
 ```yaml
 Type: String
@@ -194,6 +178,21 @@ Aliases:
 
 Required: False
 Position: 10
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -LibrariesStandard
+Relative path to libraries for .NET Standard (default 'Lib/Standard').
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -219,11 +218,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
 
 ## RELATED LINKS

@@ -59,6 +59,9 @@ Locale: en-US
 ### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
 {{ Fill in the Description }}
 
+### [Install-ProjectDocumentation](Install-ProjectDocumentation.md)
+{{ Fill in the Description }}
+
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
 {{ Fill in the Description }}
 
@@ -141,5 +144,8 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [Show-ModuleDocumentation](Show-ModuleDocumentation.md)
+{{ Fill in the Description }}
+
+### [Show-ProjectDocumentation](Show-ProjectDocumentation.md)
 {{ Fill in the Description }}
 

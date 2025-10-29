@@ -8,7 +8,7 @@ schema: 2.0.0
 # Get-MissingFunctions
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Analyzes a script or scriptblock and reports functions it calls that are not present.
 
 ## SYNTAX
 
@@ -19,24 +19,66 @@ Get-MissingFunctions [[-FilePath] <String>] [[-Code] <ScriptBlock>] [[-Functions
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Scans the provided file path or scriptblock, detects referenced commands, filters them down to
+function calls, and returns a summary or the raw helper function definitions that can be inlined.
+When -ApprovedModules is specified, helper definitions are only taken from those modules; otherwise
+only the list is returned.
+Use this to build self-contained scripts by discovering dependencies.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
+```
+Get-MissingFunctions -FilePath .\Build\Manage-Module.ps1 -Summary
+Returns a list of functions used by the script.
 ```
 
-{{ Add example description here }}
+### EXAMPLE 2
+```
+$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }
+Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'
+Returns a hashtable with a summary and inlineable helper definitions sourced from approved modules.
+```
 
 ## PARAMETERS
 
-### -ApprovedModules
-{{ Fill ApprovedModules Description }}
+### -FilePath
+Path to a script file to analyze for missing function dependencies.
+Alias: Path.
 
 ```yaml
-Type: Array
+Type: String
+Parameter Sets: (All)
+Aliases: Path
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Code
+ScriptBlock to analyze instead of a file.
+Alias: ScriptBlock.
+
+```yaml
+Type: ScriptBlock
+Parameter Sets: (All)
+Aliases: ScriptBlock
+
+Required: False
+Position: 2
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Functions
+Known function names to treat as already available (exclude from missing list).
+
+```yaml
+Type: String[]
 Parameter Sets: (All)
 Aliases:
 
@@ -47,53 +89,38 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Code
-{{ Fill Code Description }}
+### -Summary
+Return only a flattened summary list of functions used (objects with Name/Source), not inlined definitions.
 
 ```yaml
-Type: ScriptBlock
-Parameter Sets: (All)
-Aliases: ScriptBlock
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -FilePath
-{{ Fill FilePath Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases: Path
-
-Required: False
-Position: 0
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Functions
-{{ Fill Functions Description }}
-
-```yaml
-Type: String[]
+Type: SwitchParameter
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 2
-Default value: None
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -IgnoreFunctions
-{{ Fill IgnoreFunctions Description }}
+### -SummaryWithCommands
+Return a hashtable with Summary (names), SummaryFiltered (objects), and Functions (inlineable text).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ApprovedModules
+Module names that are allowed sources for pulling inline helper function definitions.
 
 ```yaml
 Type: Array
@@ -107,31 +134,16 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -Summary
-{{ Fill Summary Description }}
+### -IgnoreFunctions
+Function names to ignore when computing the missing set.
 
 ```yaml
-Type: SwitchParameter
+Type: Array
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SummaryWithCommands
-{{ Fill SummaryWithCommands Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -157,11 +169,9 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
+Use with Initialize-PortableScript to emit a self-contained version of a script.
 
 ## RELATED LINKS

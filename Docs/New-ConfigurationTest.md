@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationTest
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Configures running Pester tests as part of the build.
 
 ## SYNTAX
 
@@ -18,51 +18,23 @@ New-ConfigurationTest [-TestsPath] <String> [-Enable] [-Force] [-ProgressAction 
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Emits test configuration that the builder uses to run tests.
+Currently, tests
+are triggered AfterMerge.
+When -Enable is not provided, nothing is emitted.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
+Configures tests to run after merge from the 'Tests' folder.
+```
 
 ## PARAMETERS
 
-### -Enable
-{{ Fill Enable Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Force
-{{ Fill Force Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -TestsPath
-{{ Fill TestsPath Description }}
+Path to the folder containing Pester tests.
 
 ```yaml
 Type: String
@@ -70,8 +42,38 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
-Position: 0
+Position: 1
 Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Enable
+Enable test execution in the build.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Force
+Force running tests even if they already ran or when caching would skip them.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -96,11 +98,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
 
 ## RELATED LINKS

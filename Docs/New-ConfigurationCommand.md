@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationCommand
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Defines a command import configuration for the build pipeline.
 
 ## SYNTAX
 
@@ -18,24 +18,23 @@ New-ConfigurationCommand [[-ModuleName] <String>] [[-CommandName] <String[]>]
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Creates a configuration object that specifies a module and one or more command names
+to reference during the build process (for discovery, linking, or documentation).
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+New-ConfigurationCommand -ModuleName 'PSSharedGoods' -CommandName 'Write-Text','Remove-EmptyValue'
+```
 
 ## PARAMETERS
 
-### -CommandName
-{{ Fill CommandName Description }}
+### -ModuleName
+Name of the module that contains the commands.
 
 ```yaml
-Type: String[]
+Type: String
 Parameter Sets: (All)
 Aliases:
 
@@ -46,16 +45,16 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -ModuleName
-{{ Fill ModuleName Description }}
+### -CommandName
+One or more command names to reference from the module.
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 0
+Position: 2
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -81,11 +80,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
 
 ## RELATED LINKS

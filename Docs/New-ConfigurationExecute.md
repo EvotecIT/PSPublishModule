@@ -8,7 +8,7 @@ schema: 2.0.0
 # New-ConfigurationExecute
 
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Reserved placeholder for future execution-time configuration.
 
 ## SYNTAX
 
@@ -17,16 +17,17 @@ New-ConfigurationExecute [-ProgressAction <ActionPreference>] [<CommonParameters
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+This cmdlet currently acts as a placeholder to keep backward compatibility with
+older build scripts that may reference it.
+It returns nothing and performs no action.
 
 ## EXAMPLES
 
-### Example 1
-```powershell
-PS C:\> {{ Add example code here }}
+### EXAMPLE 1
 ```
-
-{{ Add example description here }}
+New-ConfigurationExecute
+Does nothing and returns no output.
+```
 
 ## PARAMETERS
 
@@ -50,11 +51,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
-
 ## OUTPUTS
 
-### System.Object
 ## NOTES
 
 ## RELATED LINKS
