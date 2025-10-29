@@ -32,15 +32,38 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
     [Parameter] public SwitchParameter License { get; set; }
     [Parameter] public SwitchParameter Intro { get; set; }
     [Parameter] public SwitchParameter Upgrade { get; set; }
+    [Parameter] public SwitchParameter All { get; set; }
+    [Parameter] public SwitchParameter Links { get; set; }
     [Parameter] public string File { get; set; }
     [Parameter] public SwitchParameter PreferInternals { get; set; }
     [Parameter] public SwitchParameter List { get; set; }
     [Parameter] public SwitchParameter Raw { get; set; }
     [Parameter] public SwitchParameter Open { get; set; }
+    [Parameter]
+    [ValidateSet("Auto","Spectre","System")]
+    public string JsonRenderer { get; set; } = "Auto";
+    [Parameter]
+    [ValidateSet("Auto","PowerShell","Json","None")]
+    public string DefaultCodeLanguage { get; set; } = "Auto";
 
     protected override void ProcessRecord()
     {
-        var renderer = new Renderer();
+        var pref = JsonRendererPreference.Auto;
+        switch ((JsonRenderer ?? "Auto").ToLowerInvariant())
+        {
+            case "spectre": pref = JsonRendererPreference.Spectre; break;
+            case "system":  pref = JsonRendererPreference.System;  break;
+            default:         pref = JsonRendererPreference.Auto;    break;
+        }
+        string? defLang = null;
+        switch ((DefaultCodeLanguage ?? "Auto").ToLowerInvariant())
+        {
+            case "powershell": defLang = "powershell"; break;
+            case "json":       defLang = "json";       break;
+            case "none":       defLang = "";           break; // keep empty
+            default:            defLang = null;          break; // auto
+        }
+        var renderer = new Renderer(pref, defLang);
         var finder   = new DocumentationFinder(this);
         string rootBase;
         string internalsBase;
@@ -158,6 +181,17 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
             items.Add(("FILE", resolved));
         }
         if (Intro) items.Add(("INTRO", null));
+        if (All)
+        {
+            // Add Intro, Readme, Changelog, License in standard order
+            if (!Intro) items.Add(("INTRO", null));
+            var f1 = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Readme, PreferInternals);
+            if (f1 != null && !Readme) items.Add(("FILE", f1.FullName));
+            var f2 = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Changelog, PreferInternals);
+            if (f2 != null && !Changelog) items.Add(("FILE", f2.FullName));
+            var f3 = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.License, PreferInternals);
+            if (f3 != null && !License) items.Add(("FILE", f3.FullName));
+        }
         if (Readme)
         {
             var f = finder.ResolveDocument((rootBase, internalsBase, new DeliveryOptions()), DocumentKind.Readme, PreferInternals);
@@ -234,6 +268,24 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
                 }
                 continue;
             }
+        }
+        if (Links)
+        {
+             var list = delivery?.Properties["ImportantLinks"]?.Value as System.Collections.IEnumerable;
+             if (list != null)
+             {
+                 renderer.WriteHeading(!string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion} — Links" : "Links");
+                 foreach (var l in list)
+                 {
+                     var p = l as System.Management.Automation.PSObject;
+                     var title = p?.Properties["Title"]?.Value?.ToString() ?? p?.Properties["Name"]?.Value?.ToString();
+                     var url = p?.Properties["Url"]?.Value?.ToString();
+                     if (!string.IsNullOrEmpty(url))
+                     {
+                        Spectre.Console.AnsiConsole.MarkupLine($" - [link={Spectre.Console.Markup.Escape(url)}]{Spectre.Console.Markup.Escape(title ?? url)}[/]");
+                     }
+                 }
+             }
         }
     }
 }

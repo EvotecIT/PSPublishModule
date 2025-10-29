@@ -39,6 +39,13 @@ function Show-ProjectDocumentation {
     Show upgrade text defined in PrivateData.PSData.PSPublishModuleDelivery.UpgradeText when available. If not defined,
     looks for an UPGRADE* file; otherwise throws.
 
+    .PARAMETER All
+    Show Introduction, README, CHANGELOG and LICENSE in a standard order. You can still add
+    specific switches (e.g., -Changelog) and they will be included additively without duplication.
+
+    .PARAMETER Links
+    Print ImportantLinks defined in PrivateData.PSData.PSPublishModuleDelivery after the selected documents.
+
     .PARAMETER File
     Relative path to a specific file to display (relative to module root or Internals). If rooted, used as-is.
 
@@ -55,25 +62,29 @@ function Show-ProjectDocumentation {
     Open the resolved file in the system default viewer instead of rendering in the console.
 
     .EXAMPLE
-    Show-ModuleDocumentation -Name EFAdminManager -Readme
+    Show-ProjectDocumentation -Name EFAdminManager -Readme
 
     .EXAMPLE
-    Get-Module -ListAvailable EFAdminManager | Show-ModuleDocumentation -Changelog
+    Get-Module -ListAvailable EFAdminManager | Show-ProjectDocumentation -Changelog
 
     .EXAMPLE
-    Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
+    Show-ProjectDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
 
     .EXAMPLE
-    Show-ModuleDocumentation -Name EFAdminManager -License
+    Show-ProjectDocumentation -Name EFAdminManager -License
 
     .EXAMPLE
-    Show-ModuleDocumentation -Name EFAdminManager -Intro
+    Show-ProjectDocumentation -Name EFAdminManager -Intro
 
     .EXAMPLE
-    Show-ModuleDocumentation -Name EFAdminManager -Upgrade
+    Show-ProjectDocumentation -Name EFAdminManager -Upgrade
 
     .EXAMPLE
-    Show-ModuleDocumentation -Name EFAdminManager -List
+    Show-ProjectDocumentation -Name EFAdminManager -List
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -All -Links
+    Displays Introduction, README, CHANGELOG, LICENSE and prints ImportantLinks.
     #>
     [CmdletBinding(DefaultParameterSetName='ByName')]
     param(
@@ -91,6 +102,8 @@ function Show-ProjectDocumentation {
         [switch] $License,
         [switch] $Intro,
         [switch] $Upgrade,
+        [switch] $All,
+        [switch] $Links,
         [string] $File,
         [switch] $PreferInternals,
         [switch] $List,
@@ -175,6 +188,15 @@ function Show-ProjectDocumentation {
             [void]$targets.Add(@{ Kind='File'; Path=$resolved })
         }
         if ($Intro) { [void]$targets.Add(@{ Kind='Intro' }) }
+        if ($All) {
+            if (-not $Intro) { [void]$targets.Add(@{ Kind='Intro' }) }
+            $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f -and -not $Readme) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) }
+            $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f -and -not $Changelog) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) }
+            $f = Resolve-DocFile -Kind 'LICENSE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f -and -not $License) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) }
+        }
         if ($Readme) {
             $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
             if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'README not found.' }
@@ -246,32 +268,16 @@ function Show-ProjectDocumentation {
             }
             Write-Host
         }
+        if ($Links) {
+            $links = $manifest.PrivateData.PSData.PSPublishModuleDelivery.ImportantLinks
+            if ($links) {
+                Write-Heading -Text ((if ($moduleName) { "$moduleName $moduleVersion — Links" } else { 'Links' }))
+                foreach ($l in $links) {
+                    $title = if ($l.Title) { $l.Title } elseif ($l.Name) { $l.Name } else { $null }
+                    $url = $l.Url
+                    if ($url) { Write-Host (" - " + ($title ? "$title: $url" : $url)) }
+                }
+            }
+        }
     }
-}
-
-function Show-ModuleDocumentation {
-    [CmdletBinding(DefaultParameterSetName='ByName')]
-    param(
-        [Parameter(ParameterSetName='ByName', Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
-        [Alias('ModuleName')]
-        [string] $Name,
-        [Parameter(ParameterSetName='ByModule', ValueFromPipeline=$true)]
-        [Alias('InputObject','ModuleInfo')]
-        [System.Management.Automation.PSModuleInfo] $Module,
-        [version] $RequiredVersion,
-        [Parameter(ParameterSetName='ByPath')]
-        [string] $DocsPath,
-        [switch] $Readme,
-        [switch] $Changelog,
-        [switch] $License,
-        [switch] $Intro,
-        [switch] $Upgrade,
-        [string] $File,
-        [switch] $PreferInternals,
-        [switch] $List,
-        [switch] $Raw,
-        [switch] $Open
-    )
-    Write-Verbose 'Show-ModuleDocumentation is deprecated; use Show-ProjectDocumentation.'
-    Show-ProjectDocumentation @PSBoundParameters
 }

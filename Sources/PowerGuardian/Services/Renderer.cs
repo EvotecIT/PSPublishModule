@@ -1,13 +1,23 @@
 using System;
 using System.IO;
 using Spectre.Console;
+using Spectre.Console.Json;
 using OfficeIMO.Markdown;
+using PowerGuardian.Rendering;
 using System.Linq;
 
 namespace PowerGuardian;
 
 internal sealed class Renderer
 {
+    private readonly JsonRendererPreference _jsonPreference;
+    private readonly string? _defaultLanguage;
+
+    public Renderer(JsonRendererPreference jsonPreference = JsonRendererPreference.Auto, string? defaultLanguage = null)
+    {
+        _jsonPreference = jsonPreference;
+        _defaultLanguage = string.IsNullOrWhiteSpace(defaultLanguage) ? null : defaultLanguage.Trim().ToLowerInvariant();
+    }
     public void WriteHeading(string title)
     {
         var rule = new Rule(Markup.Escape(title)) { Justification = Justify.Left };
@@ -91,14 +101,41 @@ internal sealed class Renderer
 
     private void RenderCodeBlock(CodeBlock c)
     {
-        var header = string.IsNullOrWhiteSpace(c.Language) ? "code" : c.Language;
-        var codeMarkup = CodeHighlighter.Highlight(c.Content, c.Language);
-        var panel = new Panel(new Markup(codeMarkup))
+        var lang = (c.Language ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(lang) && !string.IsNullOrEmpty(_defaultLanguage))
+            lang = _defaultLanguage;
+        var header = string.IsNullOrWhiteSpace(lang) ? "code" : lang;
+        if ((lang == "json" || lang == "jsonc") && _jsonPreference != JsonRendererPreference.System)
         {
-            Border = BoxBorder.Rounded,
-            Header = new PanelHeader(header, Justify.Left)
-        };
-        AnsiConsole.Write(panel);
+            try
+            {
+                var jt = new JsonText(c.Content);
+                var panel = new Panel(jt)
+                {
+                    Border = BoxBorder.Rounded,
+                    Header = new PanelHeader(header, Justify.Left)
+                };
+                AnsiConsole.Write(panel);
+            }
+            catch
+            {
+                // Fallback to tokenizer pipeline if JSON parse fails
+                var codeMarkup = new HighlighterPipeline().Highlight(c.Content, lang);
+                var p = new Panel(new Markup(codeMarkup)) { Border = BoxBorder.Rounded, Header = new PanelHeader(header, Justify.Left) };
+                AnsiConsole.Write(p);
+            }
+        }
+        else
+        {
+            // Tokenizer pipeline (System/Text.Json-based highlighter or generic)
+            var codeMarkup = new HighlighterPipeline().Highlight(c.Content, lang);
+            var panel = new Panel(new Markup(codeMarkup))
+            {
+                Border = BoxBorder.Rounded,
+                Header = new PanelHeader(header, Justify.Left)
+            };
+            AnsiConsole.Write(panel);
+        }
         if (!string.IsNullOrWhiteSpace(c.Caption))
         {
             AnsiConsole.MarkupLine($"[dim]{Markup.Escape(c.Caption)}[/]");

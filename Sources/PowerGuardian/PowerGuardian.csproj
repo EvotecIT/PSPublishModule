@@ -18,6 +18,12 @@
     <ItemGroup>
         <PackageReference Include="PowerShellStandard.Library" Version="5.1.1" PrivateAssets="all" />
         <PackageReference Include="Spectre.Console" Version="0.48.0" />
+        <PackageReference Include="Spectre.Console.Json" Version="0.48.0" />
+    </ItemGroup>
+
+    <!-- Use inbox System.Text.Json on net8.0; add NuGet only for net472 -->
+    <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+        <PackageReference Include="System.Text.Json" Version="8.0.6" />
     </ItemGroup>
 
     <PropertyGroup>
