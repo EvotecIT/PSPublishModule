@@ -45,6 +45,11 @@
     .PARAMETER LicenseUri
     Specifies the URI for the module's license.
 
+    .PARAMETER RequireLicenseAcceptance
+    When set, indicates the module requires explicit user license acceptance (PowerShellGet).
+    If enabled, ensure a license file exists at the module root; the builder will
+    normalize any LICENSE/License.md to 'license.txt' in the final package.
+
     .PARAMETER Prerelease
     Specifies the prerelease tag for the module.
 
@@ -81,6 +86,7 @@
         [string] $ProjectUri,
         [string] $DotNetFrameworkVersion,
         [string] $LicenseUri,
+        [switch] $RequireLicenseAcceptance,
         [alias('PrereleaseTag')][string] $Prerelease,
         [string[]] $FunctionsToExport,
         [string[]] $CmdletsToExport,
@@ -102,6 +108,7 @@
         ProjectUri             = $ProjectUri
         DotNetFrameworkVersion = $DotNetFrameworkVersion
         LicenseUri             = $LicenseUri
+        RequireLicenseAcceptance = $RequireLicenseAcceptance.IsPresent
         Prerelease             = $Prerelease
         FunctionsToExport      = $FunctionsToExport
         CmdletsToExport        = $CmdletsToExport

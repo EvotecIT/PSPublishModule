@@ -15,14 +15,14 @@ Installs bundled module documentation/examples (Internals) to a chosen path.
 ### ByName (Default)
 ```
 Install-ModuleDocumentation [[-Name] <String>] [-RequiredVersion <Version>] -Path <String> [-Layout <String>]
- [-OnExists <String>] [-CreateVersionSubfolder] [-Force] [-ListOnly] [-Open]
+ [-OnExists <String>] [-CreateVersionSubfolder] [-Force] [-ListOnly] [-Open] [-NoIntro]
  [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### ByModule
 ```
 Install-ModuleDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version>] -Path <String>
- [-Layout <String>] [-OnExists <String>] [-CreateVersionSubfolder] [-Force] [-ListOnly] [-Open]
+ [-Layout <String>] [-OnExists <String>] [-CreateVersionSubfolder] [-Force] [-ListOnly] [-Open] [-NoIntro]
  [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
@@ -195,6 +195,21 @@ Accept wildcard characters: False
 
 ### -Open
 After a successful copy, open the README in the destination (if present).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NoIntro
+{{ Fill NoIntro Description }}
 
 ```yaml
 Type: SwitchParameter

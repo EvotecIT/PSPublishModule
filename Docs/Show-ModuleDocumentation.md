@@ -14,23 +14,23 @@ Shows README/CHANGELOG or a chosen document for a module, with a simple console 
 
 ### ByName (Default)
 ```
-Show-ModuleDocumentation [[-Name] <String>] [-RequiredVersion <Version>] [-Readme] [-Changelog]
- [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+Show-ModuleDocumentation [[-Name] <String>] [-RequiredVersion <Version>] [-Readme] [-Changelog] [-License]
+ [-Intro] [-Upgrade] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ByModule
 ```
 Show-ModuleDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version>] [-Readme] [-Changelog]
- [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+ [-License] [-Intro] [-Upgrade] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ByPath
 ```
-Show-ModuleDocumentation [-RequiredVersion <Version>] [-DocsPath <String>] [-Readme] [-Changelog]
- [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+Show-ModuleDocumentation [-RequiredVersion <Version>] [-DocsPath <String>] [-Readme] [-Changelog] [-License]
+ [-Intro] [-Upgrade] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -139,6 +139,51 @@ Accept wildcard characters: False
 ### -Changelog
 Show CHANGELOG*.
 If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -License
+{{ Fill License Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Intro
+{{ Fill Intro Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Upgrade
+{{ Fill Upgrade Description }}
 
 ```yaml
 Type: SwitchParameter

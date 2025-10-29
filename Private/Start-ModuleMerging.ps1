@@ -197,6 +197,7 @@
             $rootFiles = Get-ChildItem -Path $FullProjectPath -File -ErrorAction SilentlyContinue
             $readmeDest = if ($Configuration.Options.Delivery.ReadmeDestination) { $Configuration.Options.Delivery.ReadmeDestination } else { 'Internals' }
             $chlogDest  = if ($Configuration.Options.Delivery.ChangelogDestination) { $Configuration.Options.Delivery.ChangelogDestination } else { 'Internals' }
+            $licDest    = if ($Configuration.Options.Delivery.LicenseDestination) { $Configuration.Options.Delivery.LicenseDestination } else { 'Internals' }
 
             if ($rootFiles) {
                 foreach ($rf in $rootFiles) {
@@ -217,6 +218,36 @@
                                 Copy-Item -LiteralPath $rf.FullName -Destination $destInternals -Force -ErrorAction SilentlyContinue
                                 Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath $rf.Name) -Force -ErrorAction SilentlyContinue
                             }
+                        }
+                    } elseif ($rf.Name -like 'LICENSE*') {
+                        switch ($licDest) {
+                            'Internals' {
+                                Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $destInternals 'license.txt') -Force -ErrorAction SilentlyContinue
+                            }
+                            'Root' {
+                                Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath 'license.txt') -Force -ErrorAction SilentlyContinue
+                            }
+                            'Both' {
+                                Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $destInternals 'license.txt') -Force -ErrorAction SilentlyContinue
+                                Copy-Item -LiteralPath $rf.FullName -Destination (Join-Path $FullModuleTemporaryPath 'license.txt') -Force -ErrorAction SilentlyContinue
+                            }
+                        }
+                    }
+                }
+                # Enforce root license.txt when RequireLicenseAcceptance is true
+                $requireAccept = $false
+                if ($Configuration.Information.Manifest.RequireLicenseAcceptance) { $requireAccept = $true }
+                if ($requireAccept) {
+                    # If no license.txt present at root, but license exists under rootFiles or Internals, ensure root license.txt
+                    $existingRootLicense = Join-Path $FullModuleTemporaryPath 'license.txt'
+                    if (-not (Test-Path -LiteralPath $existingRootLicense)) {
+                        $sourceLic = ($rootFiles | Where-Object { $_.Name -like 'LICENSE*' } | Select-Object -First 1)
+                        if (-not $sourceLic -and (Test-Path -LiteralPath $destInternals)) {
+                            $cand = Get-ChildItem -LiteralPath $destInternals -Filter 'LICENSE*' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                            if ($cand) { $sourceLic = $cand }
+                        }
+                        if ($sourceLic) {
+                            Copy-Item -LiteralPath $sourceLic.FullName -Destination $existingRootLicense -Force -ErrorAction SilentlyContinue
                         }
                     }
                 }

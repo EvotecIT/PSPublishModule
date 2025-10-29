@@ -14,8 +14,10 @@ Configures delivery metadata for bundling and installing internal docs/examples.
 
 ```
 New-ConfigurationDelivery [-Enable] [[-InternalsPath] <String>] [-IncludeRootReadme] [-IncludeRootChangelog]
- [[-ReadmeDestination] <String>] [[-ChangelogDestination] <String>] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+ [-IncludeRootLicense] [[-ReadmeDestination] <String>] [[-ChangelogDestination] <String>]
+ [[-LicenseDestination] <String>] [[-ImportantLinks] <IDictionary[]>] [[-IntroText] <String[]>]
+ [[-UpgradeText] <String[]>] [[-IntroFile] <String>] [[-UpgradeFile] <String>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -109,6 +111,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -IncludeRootLicense
+Include module root LICENSE.* during installation (if present).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -ReadmeDestination
 Where to bundle README.* within the built module.
 One of: Internals, Root, Both, None.
@@ -139,6 +156,104 @@ Aliases:
 Required: False
 Position: 3
 Default value: Internals
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -LicenseDestination
+Where to bundle LICENSE.* within the built module.
+One of: Internals, Root, Both, None.
+Default: Internals.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: Internals
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ImportantLinks
+One or more key/value pairs that represent important links to display to the user,
+for example @{ Title = 'Docs'; Url = 'https://...' }.
+
+```yaml
+Type: IDictionary[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IntroText
+Text lines shown to users after Install-ModuleDocumentation completes.
+Accepts a string array.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UpgradeText
+Text lines with upgrade instructions shown when requested via Show-ModuleDocumentation -Upgrade.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 7
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -IntroFile
+Relative path (within the module root) to a Markdown/text file to use as the Intro content.
+If provided, it is preferred over IntroText for display and is also copied by
+Install-ModuleDocumentation.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 8
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UpgradeFile
+Relative path (within the module root) to a Markdown/text file to use for Upgrade instructions.
+If provided, it is preferred over UpgradeText for display and is also copied by
+Install-ModuleDocumentation.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 9
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

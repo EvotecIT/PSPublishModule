@@ -26,11 +26,37 @@ function New-ConfigurationDelivery {
     .PARAMETER IncludeRootChangelog
     Include module root CHANGELOG.* during installation (if present).
 
+    .PARAMETER IncludeRootLicense
+    Include module root LICENSE.* during installation (if present).
+
     .PARAMETER ReadmeDestination
     Where to bundle README.* within the built module. One of: Internals, Root, Both, None. Default: Internals.
 
     .PARAMETER ChangelogDestination
     Where to bundle CHANGELOG.* within the built module. One of: Internals, Root, Both, None. Default: Internals.
+
+    .PARAMETER LicenseDestination
+    Where to bundle LICENSE.* within the built module. One of: Internals, Root, Both, None. Default: Internals.
+
+    .PARAMETER ImportantLinks
+    One or more key/value pairs that represent important links to display to the user,
+    for example @{ Title = 'Docs'; Url = 'https://...' }.
+
+    .PARAMETER IntroText
+    Text lines shown to users after Install-ModuleDocumentation completes. Accepts a string array.
+
+    .PARAMETER UpgradeText
+    Text lines with upgrade instructions shown when requested via Show-ModuleDocumentation -Upgrade.
+
+    .PARAMETER IntroFile
+    Relative path (within the module root) to a Markdown/text file to use as the Intro content.
+    If provided, it is preferred over IntroText for display and is also copied by
+    Install-ModuleDocumentation.
+
+    .PARAMETER UpgradeFile
+    Relative path (within the module root) to a Markdown/text file to use for Upgrade instructions.
+    If provided, it is preferred over UpgradeText for display and is also copied by
+    Install-ModuleDocumentation.
 
     .EXAMPLE
     PS> New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog
@@ -51,10 +77,18 @@ function New-ConfigurationDelivery {
         [string] $InternalsPath = 'Internals',
         [switch] $IncludeRootReadme,
         [switch] $IncludeRootChangelog,
+        [switch] $IncludeRootLicense,
         [ValidateSet('Internals','Root','Both','None')]
         [string] $ReadmeDestination = 'Internals',
         [ValidateSet('Internals','Root','Both','None')]
-        [string] $ChangelogDestination = 'Internals'
+        [string] $ChangelogDestination = 'Internals',
+        [ValidateSet('Internals','Root','Both','None')]
+        [string] $LicenseDestination = 'Internals',
+        [System.Collections.IDictionary[]] $ImportantLinks,
+        [string[]] $IntroText,
+        [string[]] $UpgradeText,
+        [string] $IntroFile,
+        [string] $UpgradeFile
     )
 
     if (-not $Enable) { return }
@@ -66,7 +100,14 @@ function New-ConfigurationDelivery {
         IncludeRootChangelog = $IncludeRootChangelog.IsPresent
         ReadmeDestination    = $ReadmeDestination
         ChangelogDestination = $ChangelogDestination
-        Schema               = '1.1'
+        LicenseDestination   = $LicenseDestination
+        IncludeRootLicense   = $IncludeRootLicense.IsPresent
+        ImportantLinks       = $ImportantLinks
+        IntroText            = $IntroText
+        UpgradeText          = $UpgradeText
+        IntroFile            = $IntroFile
+        UpgradeFile          = $UpgradeFile
+        Schema               = '1.2'
     }
 
     [ordered] @{

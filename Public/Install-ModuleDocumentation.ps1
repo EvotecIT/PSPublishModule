@@ -71,7 +71,8 @@ function Install-ModuleDocumentation {
         [switch] $CreateVersionSubfolder, # legacy toggle: if bound and Layout not specified, maps to Direct/ModuleAndVersion
         [switch] $Force,
         [switch] $ListOnly,
-        [switch] $Open
+        [switch] $Open,
+        [switch] $NoIntro
     )
 
     begin {
@@ -109,6 +110,8 @@ function Install-ModuleDocumentation {
         $internalsRel = if ($delivery -and $delivery.InternalsPath) { [string]$delivery.InternalsPath } else { 'Internals' }
         $includeReadme = if ($null -ne $delivery.IncludeRootReadme) { [bool]$delivery.IncludeRootReadme } else { $true }
         $includeChlog = if ($null -ne $delivery.IncludeRootChangelog) { [bool]$delivery.IncludeRootChangelog } else { $true }
+        $includeLicense = if ($null -ne $delivery.IncludeRootLicense) { [bool]$delivery.IncludeRootLicense } else { $true }
+        $includeLicense = if ($null -ne $delivery.IncludeRootLicense) { [bool]$delivery.IncludeRootLicense } else { $true }
 
         $internalsPath = Join-Path $Module.ModuleBase $internalsRel
         if (-not (Test-Path -LiteralPath $internalsPath)) {
@@ -170,8 +173,78 @@ function Install-ModuleDocumentation {
                     }
                 }
             }
+            if ($includeLicense -and $rootFiles.Count -gt 0) {
+                foreach ($file in $rootFiles) {
+                    if ($file.Name -like 'LICENSE*') {
+                        try { Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $dest 'license.txt') -Force:$Force.IsPresent -ErrorAction Stop } catch { }
+                    }
+                }
+            }
+
+            # Copy Intro/Upgrade files if explicitly provided in delivery metadata
+            if ($delivery) {
+                if ($delivery.IntroFile) {
+                    $introSrc = Join-Path $Module.ModuleBase ([string]$delivery.IntroFile)
+                    if (Test-Path -LiteralPath $introSrc) {
+                        try { Copy-Item -LiteralPath $introSrc -Destination $dest -Force:$Force.IsPresent -ErrorAction Stop } catch { }
+                    }
+                }
+                if ($delivery.UpgradeFile) {
+                    $upgradeSrc = Join-Path $Module.ModuleBase ([string]$delivery.UpgradeFile)
+                    if (Test-Path -LiteralPath $upgradeSrc) {
+                        try { Copy-Item -LiteralPath $upgradeSrc -Destination $dest -Force:$Force.IsPresent -ErrorAction Stop } catch { }
+                    }
+                }
+            }
+            if ($includeLicense -and $rootFiles.Count -gt 0) {
+                foreach ($file in $rootFiles) {
+                    if ($file.Name -like 'LICENSE*') {
+                        try { Copy-Item -LiteralPath $file.FullName -Destination $dest -Force:$Force.IsPresent -ErrorAction Stop } catch { }
+                    }
+                }
+            }
 
             $resolvedTargets.Add($dest)
+
+            # Intro and links (unless suppressed)
+            if (-not $NoIntro) {
+                $hasIntro = $false
+                if ($delivery) {
+                    if ($delivery.IntroText) {
+                        $hasIntro = $true
+                        Write-Host ''
+                        Write-Host 'Introduction:' -ForegroundColor Cyan
+                        foreach ($line in [string[]]$delivery.IntroText) { Write-Host "  $line" }
+                    }
+                    if ($delivery.IntroFile) {
+                        $introDest = Join-Path $dest ([IO.Path]::GetFileName([string]$delivery.IntroFile))
+                        if (Test-Path -LiteralPath $introDest) {
+                            $hasIntro = $true
+                            Write-Host ''
+                            Write-Host "Introduction (from $([IO.Path]::GetFileName($introDest))):" -ForegroundColor Cyan
+                            try { Write-Host (Get-Content -LiteralPath $introDest -Raw -ErrorAction Stop) } catch {}
+                        }
+                    }
+                    if ($delivery.ImportantLinks) {
+                        Write-Host ''
+                        Write-Host 'Links:' -ForegroundColor Cyan
+                        foreach ($l in $delivery.ImportantLinks) {
+                            try {
+                                $title = if ($l.Title) { $l.Title } elseif ($l.Name) { $l.Name } else { '' }
+                                $url = $l.Url
+                                if ($title -and $url) {
+                                    Write-Host "  - $title"
+                                    Write-Host "    $url"
+                                } elseif ($url) {
+                                    Write-Host "  - $url"
+                                } elseif ($title) {
+                                    Write-Host "  - $title"
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+            }
 
             # Optionally open README in destination
             if ($Open) {

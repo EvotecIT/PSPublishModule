@@ -64,6 +64,9 @@ function Show-ModuleDocumentation {
         [string] $DocsPath,
         [switch] $Readme,
         [switch] $Changelog,
+        [switch] $License,
+        [switch] $Intro,
+        [switch] $Upgrade,
         [string] $File,
         [switch] $PreferInternals,
         [switch] $List,
@@ -121,10 +124,12 @@ function Show-ModuleDocumentation {
             if ($rootBase) {
                 $rows += Get-ChildItem -LiteralPath $rootBase -Filter 'README*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Root' } }
                 $rows += Get-ChildItem -LiteralPath $rootBase -Filter 'CHANGELOG*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Root' } }
+                $rows += Get-ChildItem -LiteralPath $rootBase -Filter 'LICENSE*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Root' } }
             }
             if ($internalsBase) {
                 $rows += Get-ChildItem -LiteralPath $internalsBase -Filter 'README*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Internals' } }
                 $rows += Get-ChildItem -LiteralPath $internalsBase -Filter 'CHANGELOG*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Internals' } }
+                $rows += Get-ChildItem -LiteralPath $internalsBase -Filter 'LICENSE*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Internals' } }
             }
             if ($rows.Count -eq 0) { Write-Warning 'No README/CHANGELOG found.' } else { $rows }
             return
@@ -148,6 +153,29 @@ function Show-ModuleDocumentation {
         } elseif ($Changelog) {
             $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
             if ($f) { $target = $f.FullName } else { throw 'CHANGELOG not found.' }
+        } elseif ($License) {
+            $f = Resolve-DocFile -Kind 'LICENSE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f) { $target = $f.FullName } else { throw 'LICENSE not found.' }
+        } elseif ($Intro) {
+            if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) {
+                $title = if ($moduleName) { "$moduleName $moduleVersion — Introduction" } else { 'Introduction' }
+                Write-Heading -Text $title
+                foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) { Write-Host $line }
+                return
+            } else {
+                $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+                if ($f) { $target = $f.FullName } else { throw 'Introduction not defined; README not found.' }
+            }
+        } elseif ($Upgrade) {
+            if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) {
+                $title = if ($moduleName) { "$moduleName $moduleVersion — Upgrade" } else { 'Upgrade' }
+                Write-Heading -Text $title
+                foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) { Write-Host $line }
+                return
+            } else {
+                $f = Resolve-DocFile -Kind 'UPGRADE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+                if ($f) { $target = $f.FullName } else { throw 'Upgrade instructions not defined and no UPGRADE file found.' }
+            }
         } else {
             # Default: README else CHANGELOG
             $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
