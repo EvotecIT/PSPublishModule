@@ -38,11 +38,10 @@ internal sealed class PowerShellHighlighter : IHighlighter
             var tokens = tokenize.Invoke(null, args) as System.Collections.IEnumerable;
 
             // Build markup preserving original spacing via Start/Length
-            var tokenList = new List<(int Start,int Length,string Type,string Text)>();
+            var tokenList = new List<(int Start,int Length,string Type)>();
             foreach (var t in tokens)
             {
                 var tType = t.GetType();
-                var content = (string)tType.GetProperty("Content").GetValue(t);
                 var pType = tType.GetProperty("Type") ?? tType.GetProperty("TokenType");
                 var typeObj = pType?.GetValue(t);
                 var typeName = typeObj?.ToString() ?? string.Empty;
@@ -69,7 +68,7 @@ internal sealed class PowerShellHighlighter : IHighlighter
                         length = (int)pLength.GetValue(t);
                     }
                 }
-                tokenList.Add((start,length,typeName,content));
+                tokenList.Add((start,length,typeName));
             }
             tokenList = tokenList.OrderBy(x => x.Start).ToList();
 
@@ -79,9 +78,10 @@ internal sealed class PowerShellHighlighter : IHighlighter
             {
                 if (tk.Start > pos)
                     sb.Append(Markup.Escape(code.Substring(pos, tk.Start - pos)));
+                var segment = (tk.Length > 0 && tk.Start >= 0 && tk.Start + tk.Length <= code.Length) ? code.Substring(tk.Start, tk.Length) : string.Empty;
                 var style = StyleForPsToken(tk.Type);
-                if (style == null) sb.Append(Markup.Escape(tk.Text));
-                else sb.Append("[").Append(style).Append("]").Append(Markup.Escape(tk.Text)).Append("[/]");
+                if (style == null) sb.Append(Markup.Escape(segment));
+                else sb.Append("[").Append(style).Append("]").Append(Markup.Escape(segment)).Append("[/]");
                 pos = tk.Start + tk.Length;
             }
             if (pos < code.Length) sb.Append(Markup.Escape(code.Substring(pos)));
