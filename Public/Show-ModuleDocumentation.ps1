@@ -27,6 +27,18 @@ function Show-ModuleDocumentation {
     .PARAMETER Changelog
     Show CHANGELOG*. If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
 
+    .PARAMETER License
+    Show LICENSE. If multiple variants exist (LICENSE.md, LICENSE.txt), the resolver prefers a normalized 'license.txt' in
+    the chosen area (root vs Internals).
+
+    .PARAMETER Intro
+    Show introduction text defined in PrivateData.PSData.PSPublishModuleDelivery.IntroText when available. If not defined,
+    falls back to README resolution (root vs Internals honoring -PreferInternals).
+
+    .PARAMETER Upgrade
+    Show upgrade text defined in PrivateData.PSData.PSPublishModuleDelivery.UpgradeText when available. If not defined,
+    looks for an UPGRADE* file; otherwise throws.
+
     .PARAMETER File
     Relative path to a specific file to display (relative to module root or Internals). If rooted, used as-is.
 
@@ -50,6 +62,18 @@ function Show-ModuleDocumentation {
 
     .EXAMPLE
     Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
+
+    .EXAMPLE
+    Show-ModuleDocumentation -Name EFAdminManager -License
+
+    .EXAMPLE
+    Show-ModuleDocumentation -Name EFAdminManager -Intro
+
+    .EXAMPLE
+    Show-ModuleDocumentation -Name EFAdminManager -Upgrade
+
+    .EXAMPLE
+    Show-ModuleDocumentation -Name EFAdminManager -List
     #>
     [CmdletBinding(DefaultParameterSetName='ByName')]
     param(

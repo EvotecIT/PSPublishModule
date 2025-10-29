@@ -54,7 +54,24 @@ function Install-ModuleDocumentation {
     Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
 
     .EXAMPLE
-    Get-Module -ListAvailable AdminManager | Install-ModuleDocumentation -Path 'D:\AM'
+    Get-Module -ListAvailable AdminManager | Install-ModuleDocumentation -Path 'D:\\AM'
+    Installs the highest available version of AdminManager to D:\AM\AdminManager\<Version>
+
+    .EXAMPLE
+    # Copy into Path\Name only, merge on re-run without overwriting existing files
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -Layout Module
+
+    .EXAMPLE
+    # Overwrite destination on re-run
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -OnExists Overwrite
+
+    .EXAMPLE
+    # Dry-run: show what would be copied and where
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -ListOnly -Verbose
+
+    .EXAMPLE
+    # Copy, suppress intro/links printing, and open README afterwards
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -NoIntro -Open
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName='ByName')]
     param(
@@ -253,11 +270,10 @@ function Install-ModuleDocumentation {
                 try {
                     $readme = Get-ChildItem -LiteralPath $dest -Filter 'README*' -File -ErrorAction SilentlyContinue | Select-Object -First 1
                     if ($readme) {
-                        if ($IsWindows) { Start-Process -FilePath $readme.FullName | Out-Null }
-                        else { Start-Process -FilePath $readme.FullName | Out-Null }
+                        Start-Process -FilePath $readme.FullName | Out-Null
                     } else {
                         # If README not found, open the destination folder
-                        if ($IsWindows) { Start-Process -FilePath $dest | Out-Null }
+                        Start-Process -FilePath $dest | Out-Null
                     }
                 } catch {
                     Write-Verbose "Open failed: $($_.Exception.Message)"
