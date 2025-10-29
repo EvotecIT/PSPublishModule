@@ -1,4 +1,37 @@
 ﻿function Initialize-PortableModule {
+    <#
+    .SYNOPSIS
+    Downloads and/or imports a module and its dependencies as a portable set.
+
+    .DESCRIPTION
+    Assists in preparing a portable environment for a module by either downloading it (plus dependencies)
+    to a specified path, importing those modules from disk, or both. Generates a convenience script that
+    imports all discovered module manifests when -Download is used.
+
+    .PARAMETER Name
+    Name of the module to download/import. Alias: ModuleName.
+
+    .PARAMETER Path
+    Filesystem path where modules are saved or imported from. Defaults to the current script root.
+
+    .PARAMETER Download
+    Save the module and its dependencies to the specified path.
+
+    .PARAMETER Import
+    Import the module and its dependencies from the specified path.
+
+    .EXAMPLE
+    Initialize-PortableModule -Name 'EFAdminManager' -Path 'C:\Portable' -Download
+    Saves the module and its dependencies into C:\Portable.
+
+    .EXAMPLE
+    Initialize-PortableModule -Name 'EFAdminManager' -Path 'C:\Portable' -Import
+    Imports the module and its dependencies from C:\Portable.
+
+    .EXAMPLE
+    Initialize-PortableModule -Name 'EFAdminManager' -Path 'C:\Portable' -Download -Import
+    Saves and then imports the module and dependencies, and creates a helper script.
+    #>
     [CmdletBinding()]
     param(
         [alias('ModuleName')][string] $Name,

@@ -33,6 +33,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
+    New-ConfigurationModule -Type RequiredModule -Name 'Microsoft.PowerShell.PSResourceGet' -Guid 'Auto' -Version 'Latest'
 
     # Add external module dependencies, using loop for simplicity
     New-ConfigurationModule -Type ExternalModule -Name @(

@@ -36,8 +36,8 @@
         return
     }
 
-    $ModuleName                     = $Configuration.Information.ModuleName
-    $ModuleVersion                  = $Configuration.Information.Manifest.ModuleVersion
+    $ModuleName = $Configuration.Information.ModuleName
+    $ModuleVersion = $Configuration.Information.Manifest.ModuleVersion
 
     # Lets replace variables user may have used in paths
     $FullProjectPath = Initialize-ReplacePath -ReplacementPath $FullProjectPath -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
@@ -59,6 +59,7 @@
                 # default values
                 $FolderPathReleases = [System.IO.Path]::Combine($FullProjectPath, $Type)
             }
+            # Destination for the main module should be the artefact Path (not the modules path)
             if ($Artefact.RequiredModules.ModulesPath) {
                 $DirectPathForPrimaryModule = $Artefact.RequiredModules.ModulesPath
             } elseif ($Artefact.RequiredModules.Path) {
@@ -68,6 +69,7 @@
             } else {
                 $DirectPathForPrimaryModule = $FolderPathReleases
             }
+            # Destination for required modules is taken from RequiredModules.* or falls back to artefact Path
             if ($Artefact.RequiredModules.Path) {
                 $DirectPathForRequiredModules = $Artefact.RequiredModules.Path
             } elseif ($Artefact.RequiredModules.ModulesPath) {

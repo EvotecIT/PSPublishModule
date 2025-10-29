@@ -99,7 +99,7 @@ function New-PersonalManifest {
         if ($Data.Path) {
             $Data.Remove('Path')
         }
-        $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies')
+        $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies', 'PSPublishModuleDelivery')
         foreach ($Entry in [string[]] $Data.Keys) {
             if ($Entry -in $ValidateEntriesPrivateData) {
                 $Data.PrivateData.PSData.$Entry = $Data.$Entry
@@ -123,6 +123,10 @@ function New-PersonalManifest {
         # Old way of setting prerelease
         if ($Configuration.Steps.PublishModule.Prerelease) {
             $Data.PrivateData.PSData.Prerelease = $Configuration.Steps.PublishModule.Prerelease
+        }
+        # Emit delivery metadata when provided
+        if ($Configuration.Options.Delivery -and $Configuration.Options.Delivery.Enable) {
+            $Data.PrivateData.PSData.PSPublishModuleDelivery = $Configuration.Options.Delivery
         }
         if ($TemporaryManifest.ExternalModuleDependencies) {
             # Add External Module Dependencies

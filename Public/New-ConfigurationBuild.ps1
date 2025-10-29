@@ -13,31 +13,54 @@
     Delete target module before build
 
     .PARAMETER MergeModuleOnBuild
-    Parameter description
+    Merge module on build. Combines Private/Public/Classes/Enums into a single PSM1 and prepares PSD1 accordingly.
 
     .PARAMETER MergeFunctionsFromApprovedModules
-    Parameter description
+    When merging, also include functions from ApprovedModules referenced by the module.
 
     .PARAMETER SignModule
-    Parameter description
+    Enables code-signing for the built module output. When enabled alone, only merged
+    scripts are signed (psm1/psd1/ps1) and Internals are excluded. Use the SignInclude*
+    switches to opt-in to additional content.
+
+    .PARAMETER SignIncludeInternals
+    When signing is enabled, also sign scripts that reside under the Internals folder.
+    Default: disabled (Internals are skipped).
+
+    .PARAMETER SignIncludeBinaries
+    When signing is enabled, include binary files (e.g., .dll, .cat) in signing.
+    Default: disabled.
+
+    .PARAMETER SignIncludeExe
+    When signing is enabled, include .exe files. Default: disabled.
+
+    .PARAMETER SignCustomInclude
+    Overrides the include patterns passed to the signer. If provided, this replaces
+    the defaults entirely. Example: '*.psm1','*.psd1','*.ps1','*.dll'. Use with
+    caution; it disables the default safe set.
+
+    .PARAMETER SignExcludePaths
+    Additional path substrings to exclude from signing (relative matches). Example:
+    'Examples','SomeFolder'. Internals are excluded by default unless
+    -SignIncludeInternals is specified.
 
     .PARAMETER DotSourceClasses
-    Parameter description
+    Keep classes in a separate dot-sourced file instead of merging them into the main PSM1.
 
     .PARAMETER DotSourceLibraries
-    Parameter description
+    Keep library-loading code in a separate dot-sourced file.
 
     .PARAMETER SeparateFileLibraries
-    Parameter description
+    Write library-loading code into a distinct file and reference it via ScriptsToProcess/DotSource.
 
     .PARAMETER RefreshPSD1Only
-    Parameter description
+    Only regenerate the manifest (PSD1) without rebuilding/merging other artifacts.
 
     .PARAMETER UseWildcardForFunctions
-    Parameter description
+    Export all functions/aliases via wildcard in PSD1. Useful for debugging non-merged builds.
 
     .PARAMETER LocalVersioning
-    Parameter description
+    Use local versioning (bump PSD1 version on each build without querying PSGallery).
 
     .PARAMETER DoNotAttemptToFixRelativePaths
     Configures module builder to not replace $PSScriptRoot\..\ with $PSScriptRoot\
@@ -47,22 +70,22 @@
     Best practice is to use $MyInvocation.MyCommand.Module.ModuleBase or similar instead of relative paths.
 
     .PARAMETER CertificateThumbprint
-    Parameter description
+    Thumbprint of a code-signing certificate from the local cert store to sign module files.
 
     .PARAMETER CertificatePFXPath
-    Parameter description
+    Path to a PFX containing a code-signing certificate used for signing.
 
     .PARAMETER CertificatePFXBase64
-    Parameter description
+    Base64 string of a PFX (e.g., provided via CI secrets) used for signing.
 
     .PARAMETER CertificatePFXPassword
-    Parameter description
+    Password for the PFX provided via -CertificatePFXPath or -CertificatePFXBase64.
 
     .PARAMETER NETConfiguration
-    Parameter description
+    Build configuration for .NET projects ('Release' or 'Debug').
 
     .PARAMETER NETFramework
-    Parameter description
+    Target frameworks for .NET build (e.g., 'netstandard2.0','net6.0').
 
     .PARAMETER NETProjectPath
     Path to the project that you want to build. This is useful if it's not in Sources folder directly within module directory
@@ -165,6 +188,11 @@
         [switch] $MergeModuleOnBuild,
         [switch] $MergeFunctionsFromApprovedModules,
         [switch] $SignModule,
+        [switch] $SignIncludeInternals,
+        [switch] $SignIncludeBinaries,
+        [switch] $SignIncludeExe,
+        [string[]] $SignCustomInclude,
+        [string[]] $SignExcludePaths,
         [switch] $DotSourceClasses,
         [switch] $DotSourceLibraries,
         [switch] $SeparateFileLibraries,
@@ -237,6 +265,20 @@
             Type        = 'Build'
             BuildModule = [ordered] @{
                 SignMerged = $SignModule.IsPresent
+            }
+        }
+    }
+    if ($PSBoundParameters.ContainsKey('SignIncludeInternals') -or $PSBoundParameters.ContainsKey('SignIncludeBinaries') -or $PSBoundParameters.ContainsKey('SignIncludeExe') -or $PSBoundParameters.ContainsKey('SignCustomInclude') -or $PSBoundParameters.ContainsKey('SignExcludePaths')) {
+        [ordered] @{
+            Type    = 'Options'
+            Options = [ordered] @{
+                Signing = [ordered] @{
+                    IncludeInternals = $SignIncludeInternals.IsPresent
+                    IncludeBinaries  = $SignIncludeBinaries.IsPresent
+                    IncludeExe       = $SignIncludeExe.IsPresent
+                    Include          = $SignCustomInclude
+                    ExcludePaths     = $SignExcludePaths
+                }
             }
         }
     }

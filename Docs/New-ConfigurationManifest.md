@@ -16,7 +16,7 @@ Creates a new configuration manifest for a PowerShell module.
 New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <String[]>] [-GUID] <String>
  [-Author] <String> [[-CompanyName] <String>] [[-Copyright] <String>] [[-Description] <String>]
  [[-PowerShellVersion] <String>] [[-Tags] <String[]>] [[-IconUri] <String>] [[-ProjectUri] <String>]
- [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [[-Prerelease] <String>]
+ [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [[-Prerelease] <String>] [-RequireLicenseAcceptance]
  [[-FunctionsToExport] <String[]>] [[-CmdletsToExport] <String[]>] [[-AliasesToExport] <String[]>]
  [[-FormatsToProcess] <String[]>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
@@ -338,3 +338,19 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 This function helps in creating a standardized module manifest for PowerShell modules.
 
 ## RELATED LINKS
+### -RequireLicenseAcceptance
+Indicates the module requires explicit user acceptance of the license (PowerShellGet).
+When enabled, ensure the module package contains a root `license.txt`. The builder
+normalizes any `LICENSE`/`LICENSE.md` found into `license.txt` at the module root.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```

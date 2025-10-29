@@ -14,17 +14,18 @@ Allows to configure build process for the module
 
 ```
 New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild]
- [-MergeFunctionsFromApprovedModules] [-SignModule] [-DotSourceClasses] [-DotSourceLibraries]
- [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning]
- [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [[-CertificateThumbprint] <String>]
- [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>]
- [[-NETProjectPath] <String>] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>]
- [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [[-NETExcludeLibraryFilter] <String[]>]
- [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>] [-NETHandleAssemblyWithSameName]
- [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging]
- [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [-NETBinaryModuleDocumentation]
- [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>] [-NETHandleRuntimes]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries]
+ [-SignIncludeExe] [[-SignCustomInclude] <String[]>] [[-SignExcludePaths] <String[]>] [-DotSourceClasses]
+ [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions]
+ [-LocalVersioning] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths]
+ [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>]
+ [[-CertificatePFXPassword] <String>] [[-NETProjectPath] <String>] [[-NETConfiguration] <String>]
+ [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary]
+ [[-NETExcludeLibraryFilter] <String[]>] [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>]
+ [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled]
+ [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>]
+ [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>]
+ [-NETHandleRuntimes] [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -86,7 +87,8 @@ Accept wildcard characters: False
 ```
 
 ### -MergeModuleOnBuild
-Parameter description
+Merge module on build.
+Combines Private/Public/Classes/Enums into a single PSM1 and prepares PSD1 accordingly.
 
 ```yaml
 Type: SwitchParameter
@@ -101,7 +103,7 @@ Accept wildcard characters: False
 ```
 
 ### -MergeFunctionsFromApprovedModules
-Parameter description
+When merging, also include functions from ApprovedModules referenced by the module.
 
 ```yaml
 Type: SwitchParameter
@@ -116,7 +118,11 @@ Accept wildcard characters: False
 ```
 
 ### -SignModule
-Parameter description
+Enables code-signing for the built module output.
+When enabled alone, only merged
+scripts are signed (psm1/psd1/ps1) and Internals are excluded.
+Use the SignInclude*
+switches to opt-in to additional content.
 
 ```yaml
 Type: SwitchParameter
@@ -130,8 +136,95 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -SignIncludeInternals
+When signing is enabled, also sign scripts that reside under the Internals folder.
+Default: disabled (Internals are skipped).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SignIncludeBinaries
+When signing is enabled, include binary files (e.g., .dll, .cat) in signing.
+Default: disabled.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SignIncludeExe
+When signing is enabled, include .exe files.
+Default: disabled.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SignCustomInclude
+Overrides the include patterns passed to the signer.
+If provided, this replaces
+the defaults entirely.
+Example: '*.psm1','*.psd1','*.ps1','*.dll'.
+Use with
+caution; it disables the default safe set.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SignExcludePaths
+Additional path substrings to exclude from signing (relative matches).
+Example:
+'Examples','SomeFolder'.
+Internals are excluded by default unless
+-SignIncludeInternals is specified.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -DotSourceClasses
-Parameter description
+Keep classes in a separate dot-sourced file instead of merging them into the main PSM1.
 
 ```yaml
 Type: SwitchParameter
@@ -146,7 +239,7 @@ Accept wildcard characters: False
 ```
 
 ### -DotSourceLibraries
-Parameter description
+Keep library-loading code in a separate dot-sourced file.
 
 ```yaml
 Type: SwitchParameter
@@ -161,7 +254,7 @@ Accept wildcard characters: False
 ```
 
 ### -SeparateFileLibraries
-Parameter description
+Write library-loading code into a distinct file and reference it via ScriptsToProcess/DotSource.
 
 ```yaml
 Type: SwitchParameter
@@ -176,7 +269,7 @@ Accept wildcard characters: False
 ```
 
 ### -RefreshPSD1Only
-Parameter description
+Only regenerate the manifest (PSD1) without rebuilding/merging other artifacts.
 
 ```yaml
 Type: SwitchParameter
@@ -191,7 +284,8 @@ Accept wildcard characters: False
 ```
 
 ### -UseWildcardForFunctions
-Parameter description
+Export all functions/aliases via wildcard in PSD1.
+Useful for debugging non-merged builds.
 
 ```yaml
 Type: SwitchParameter
@@ -206,7 +300,7 @@ Accept wildcard characters: False
 ```
 
 ### -LocalVersioning
-Parameter description
+Use local versioning (bump PSD1 version on each build without querying PSGallery).
 
 ```yaml
 Type: SwitchParameter
@@ -266,37 +360,7 @@ Accept wildcard characters: False
 ```
 
 ### -CertificateThumbprint
-Parameter description
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXPath
-Parameter description
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXBase64
-Parameter description
+Thumbprint of a code-signing certificate from the local cert store to sign module files.
 
 ```yaml
 Type: String
@@ -310,8 +374,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -CertificatePFXPassword
-Parameter description
+### -CertificatePFXPath
+Path to a PFX containing a code-signing certificate used for signing.
 
 ```yaml
 Type: String
@@ -320,6 +384,36 @@ Aliases:
 
 Required: False
 Position: 4
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CertificatePFXBase64
+Base64 string of a PFX (e.g., provided via CI secrets) used for signing.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CertificatePFXPassword
+Password for the PFX provided via -CertificatePFXPath or -CertificatePFXBase64.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -335,14 +429,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 5
+Position: 7
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -NETConfiguration
-Parameter description
+Build configuration for .NET projects ('Release' or 'Debug').
 
 ```yaml
 Type: String
@@ -350,14 +444,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -NETFramework
-Parameter description
+Target frameworks for .NET build (e.g., 'netstandard2.0','net6.0').
 
 ```yaml
 Type: String[]
@@ -365,7 +459,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 7
+Position: 9
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -381,7 +475,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 8
+Position: 10
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -413,7 +507,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 9
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -430,7 +524,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 10
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -449,7 +543,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 11
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -543,7 +637,7 @@ Parameter Sets: (All)
 Aliases: ResolveBinaryConflictsName
 
 Required: False
-Position: 12
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -590,7 +684,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 13
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

@@ -47,19 +47,23 @@ function Invoke-ModuleBuild {
     Include all files in the Artefacts from given folders. Default are 'Images', 'Resources', 'Templates', 'Bin', 'Lib', 'Data' folders.
 
     .PARAMETER IncludeCustomCode
-    Parameter description
+    Optional scriptblock executed during staging that can add custom files/folders
+    to the build. Use helper functions like Add-Directory/Copy-Item to place extra
+    content into the temporary module structure before merge/packaging.
 
     .PARAMETER IncludeToArray
-    Parameter description
+    Advanced hashtable form for includes. Supports keys matching IncludeRoot,
+    IncludePS1, IncludeAll etc. Prefer the dedicated parameters unless you need
+    to pass a single structured object.
 
     .PARAMETER LibrariesCore
-    Parameter description
+    Alternate relative path for .NET Core-targeted libraries folder. Default: 'Lib/Core'.
 
     .PARAMETER LibrariesDefault
-    Parameter description
+    Alternate relative path for classic .NET Framework-targeted libraries folder. Default: 'Lib/Default'.
 
     .PARAMETER LibrariesStandard
-    Parameter description
+    Alternate relative path for .NET Standard-targeted libraries folder. Default: 'Lib/Standard'.
 
     .PARAMETER ExitCode
     Exit code to be returned to the caller. If not provided, it will not exit the script, but finish gracefully.

@@ -11,7 +11,7 @@
                 WarningVariable = 'Warnings'
                 LocalStore      = 'CurrentUser'
                 Path            = $FullModuleTemporaryPath
-                Include         = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat')
+                # Include list will be determined below
                 TimeStampServer = 'http://timestamp.digicert.com'
             }
 
@@ -37,6 +37,32 @@
                         $registerCertificateSplat.Thumbprint = $Configuration.Options.Signing.CertificateThumbprint
                     }
                 }
+                # Build include patterns with safe defaults (scripts only)
+                if ($Configuration.Options.Signing -and $Configuration.Options.Signing.Include) {
+                    $registerCertificateSplat.Include = @($Configuration.Options.Signing.Include)
+                } else {
+                    $include = @('*.ps1','*.psm1','*.psd1')
+                    if ($Configuration.Options.Signing -and $Configuration.Options.Signing.IncludeBinaries) {
+                        $include += @('*.dll','*.cat')
+                    }
+                    if ($Configuration.Options.Signing -and $Configuration.Options.Signing.IncludeExe) {
+                        $include += @('*.exe')
+                    }
+                    $registerCertificateSplat.Include = $include
+                }
+
+                # Exclude Internals unless explicitly enabled
+                $excludePaths = @()
+                if (-not ($Configuration.Options.Signing -and $Configuration.Options.Signing.IncludeInternals)) {
+                    $excludePaths += 'Internals'
+                }
+                if ($Configuration.Options.Signing -and $Configuration.Options.Signing.ExcludePaths) {
+                    $excludePaths += @($Configuration.Options.Signing.ExcludePaths)
+                }
+                if ($excludePaths.Count -gt 0) {
+                    $registerCertificateSplat.ExcludePath = $excludePaths
+                }
+
                 [Array] $SignedFiles = Register-Certificate @registerCertificateSplat
                 if ($Warnings) {
                     foreach ($W in $Warnings) {

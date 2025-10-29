@@ -1,4 +1,41 @@
 ﻿function Register-Certificate {
+    <#
+    .SYNOPSIS
+    Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
+
+    .DESCRIPTION
+    Locates a code-signing certificate (by thumbprint from the Windows cert store or from a PFX)
+    and applies Authenticode signatures to matching files under -Path.
+    On Windows, uses Set-AuthenticodeSignature; on non-Windows, uses OpenAuthenticode module if available.
+
+    .PARAMETER CertificatePFX
+    A PFX file to use for signing. Mutually exclusive with -LocalStore/-Thumbprint.
+
+    .PARAMETER LocalStore
+    Certificate store to search ('LocalMachine' or 'CurrentUser') when using a certificate from the store.
+
+    .PARAMETER Thumbprint
+    Certificate thumbprint to select a single certificate from the chosen -LocalStore.
+
+    .PARAMETER Path
+    Root directory containing files to sign.
+
+    .PARAMETER TimeStampServer
+    RFC3161 timestamp server URL. Default: http://timestamp.digicert.com
+
+    .PARAMETER IncludeChain
+    Which portion of the chain to include in the signature: All, NotRoot, or Signer. Default: All.
+
+    .PARAMETER Include
+    File patterns to include during signing. Defaults to scripts only: '*.ps1','*.psd1','*.psm1'.
+    You may pass additional patterns if needed (e.g., '*.dll').
+
+    .PARAMETER ExcludePath
+    One or more path substrings to exclude from signing. Useful for skipping folders like 'Internals' unless opted-in.
+
+    .PARAMETER HashAlgorithm
+    Hash algorithm for the signature. Default: SHA256.
+    #>
     [cmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory, ParameterSetName = 'PFX')][string] $CertificatePFX,
@@ -7,7 +44,8 @@
         [Parameter(Mandatory)][string] $Path,
         [string] $TimeStampServer = 'http://timestamp.digicert.com',
         [ValidateSet('All', 'NotRoot', 'Signer')] [string] $IncludeChain = 'All',
-        [string[]] $Include = @('*.ps1', '*.psd1', '*.psm1', '*.dll', '*.cat'),
+        [string[]] $Include = @('*.ps1', '*.psd1', '*.psm1'),
+        [string[]] $ExcludePath,
         [ValidateSet('SHA1', 'SHA256', 'SHA384', 'SHA512')][string] $HashAlgorithm = 'SHA256'
     )
     if ($PSBoundParameters.Keys -contains 'LocalStore') {
@@ -65,9 +103,16 @@
                 } else {
                     $IncludeOption = 'None'
                 }
-                Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue | Where-Object {
-                        ($_ | Get-OpenAuthenticodeSignature).Status -eq 'NotSigned'
-                } | Set-OpenAuthenticodeSignature -Certificate $Certificate -TimeStampServer $TimeStampServer -IncludeChain $IncludeOption -HashAlgorithm $HashAlgorithm
+                $items = Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue
+                if ($ExcludePath) {
+                    $items = $items | Where-Object {
+                        $full = $_.FullName
+                        ($full -notlike '*\Internals\*' -and $full -notlike '*/Internals/*') -and (
+                            ($ExcludePath | ForEach-Object { $full -like ("*" + $_ + "*") }) -notcontains $true)
+                    }
+                }
+                $items | Where-Object { ($_ | Get-OpenAuthenticodeSignature).Status -eq 'NotSigned' } |
+                    Set-OpenAuthenticodeSignature -Certificate $Certificate -TimeStampServer $TimeStampServer -IncludeChain $IncludeOption -HashAlgorithm $HashAlgorithm
 
             } else {
                 # This is for Windows, we need to use PKI module, it's usually installed by default
@@ -76,9 +121,16 @@
                     Write-Warning -Message "Register-Certificate - Code signing commands not found. Skipping signing."
                     return
                 }
-                Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue | Where-Object {
-                ($_ | Get-AuthenticodeSignature).Status -eq 'NotSigned'
-                } | Set-AuthenticodeSignature -Certificate $Certificate -TimestampServer $TimeStampServer -IncludeChain $IncludeChain -HashAlgorithm $HashAlgorithm
+                $items = Get-ChildItem -Path $Path -Filter * -Include $Include -Recurse -ErrorAction SilentlyContinue
+                if ($ExcludePath) {
+                    $items = $items | Where-Object {
+                        $full = $_.FullName
+                        ($full -notlike '*\Internals\*' -and $full -notlike '*/Internals/*') -and (
+                            ($ExcludePath | ForEach-Object { $full -like ("*" + $_ + "*") }) -notcontains $true)
+                    }
+                }
+                $items | Where-Object { ($_ | Get-AuthenticodeSignature).Status -eq 'NotSigned' } |
+                    Set-AuthenticodeSignature -Certificate $Certificate -TimestampServer $TimeStampServer -IncludeChain $IncludeChain -HashAlgorithm $HashAlgorithm
             }
         }
     }
