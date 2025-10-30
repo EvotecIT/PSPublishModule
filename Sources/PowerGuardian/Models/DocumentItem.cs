@@ -11,4 +11,6 @@ internal sealed class DocumentItem
     public string Kind { get; set; } = "FILE"; // FILE, INTRO, UPGRADE, LINKS
     /// <summary>Markdown content.</summary>
     public string Content { get; set; } = string.Empty; // markdown content
+    /// <summary>Optional local file path when the item represents a file on disk.</summary>
+    public string? Path { get; set; }
 }

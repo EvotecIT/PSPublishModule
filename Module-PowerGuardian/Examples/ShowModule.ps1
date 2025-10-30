@@ -6,4 +6,4 @@
 
 
 
-Show-ModuleDocumentation -Name 'PSPublishModule' -OpenHtml -PreferRepository
+Show-ModuleDocumentation -Name 'PSPublishModule' -OpenHtml #-PreferRepository

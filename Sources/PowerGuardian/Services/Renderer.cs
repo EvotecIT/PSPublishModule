@@ -19,7 +19,7 @@ internal sealed class Renderer
     public Renderer(JsonRendererPreference jsonPreference = JsonRendererPreference.Auto, string? defaultLanguage = null)
     {
         _jsonPreference = jsonPreference;
-        _defaultLanguage = string.IsNullOrWhiteSpace(defaultLanguage) ? null : defaultLanguage.Trim().ToLowerInvariant();
+        _defaultLanguage = string.IsNullOrWhiteSpace(defaultLanguage) ? null : defaultLanguage!.Trim().ToLowerInvariant();
     }
     public void WriteHeading(string title)
     {
@@ -159,14 +159,14 @@ internal sealed class Renderer
         Console.WriteLine(content);
         if (!string.IsNullOrWhiteSpace(c.Caption))
         {
-            AnsiConsole.MarkupLine($"[dim]{Markup.Escape(c.Caption)}[/]");
+            AnsiConsole.MarkupLine($"[dim]{Markup.Escape(c.Caption!)}[/]");
         }
     }
 
     private void RenderQuote(QuoteBlock q)
     {
         // Quote may have multiple lines; render as dim indented panel
-        var text = string.Join("\n", q.Lines.Select(l => Markup.Escape(l)));
+        var text = string.Join("\n", q.Lines.Select(l => Markup.Escape(l ?? string.Empty)));
         var panel = new Panel(new Markup(text))
         {
             Border = BoxBorder.Rounded,

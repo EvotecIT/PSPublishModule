@@ -14,7 +14,7 @@ namespace PowerGuardian;
 /// <summary>
 /// Minimal GitHub client for fetching repository files via the Contents API.
 /// </summary>
-internal sealed class GitHubRepository
+internal sealed class GitHubRepository : IRepoClient
 {
     private readonly string _owner;
     private readonly string _repo;
@@ -45,7 +45,7 @@ internal sealed class GitHubRepository
             var s = c.GetStringAsync(url).GetAwaiter().GetResult();
             using var doc = JsonDocument.Parse(s);
             var root = doc.RootElement;
-            if (root.TryGetProperty("default_branch", out var db)) return db.GetString();
+            if (root.TryGetProperty("default_branch", out var db)) return db.GetString() ?? "main";
         }
         catch { }
         return "main"; // fallback
@@ -102,7 +102,7 @@ internal sealed class GitHubRepository
                     var name = item.TryGetProperty("name", out var nEl) ? nEl.GetString() : null;
                     var p = item.TryGetProperty("path", out var pEl) ? pEl.GetString() : null;
                     if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(p)) continue;
-                    result.Add((name, p));
+                    result.Add((name!, p!));
                 }
             }
         }

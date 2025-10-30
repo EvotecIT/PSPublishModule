@@ -28,7 +28,7 @@ internal sealed class HighlighterPipeline
             if (h.CanHandle(lang))
             {
                 var s = h.Highlight(code, lang);
-                if (!string.IsNullOrEmpty(s)) return s;
+                if (!string.IsNullOrEmpty(s)) return s!;
             }
         }
         // Fallback (should not reach due to GenericHighlighter)

@@ -37,7 +37,8 @@ internal sealed class PowerShellHighlighter : IHighlighter
             }
             if (tokenize == null) return null;
 
-            object[] args = new object[] { code, null };
+            object? errors = null;
+            object?[] args = new object?[] { code, errors };
             var tokens = tokenize.Invoke(null, args) as System.Collections.IEnumerable;
             if (tokens == null) return null;
 

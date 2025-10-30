@@ -10,7 +10,7 @@ namespace PowerGuardian;
 /// <summary>
 /// Minimal Azure DevOps client for fetching repository files via the Git REST API.
 /// </summary>
-internal sealed class AzureDevOpsRepository
+internal sealed class AzureDevOpsRepository : IRepoClient
 {
     private readonly string _organization;
     private readonly string _project;
@@ -47,9 +47,9 @@ internal sealed class AzureDevOpsRepository
             if (root.TryGetProperty("defaultBranch", out var db))
             {
                 var v = db.GetString();
-                if (!string.IsNullOrEmpty(v) && v.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase))
+                if (v != null && v.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase))
                     return v.Substring("refs/heads/".Length);
-                return v;
+                return v ?? "main";
             }
         }
         catch { }
@@ -99,9 +99,10 @@ internal sealed class AzureDevOpsRepository
                     if (!item.TryGetProperty("path", out var pEl)) continue;
                     var name = pEl.GetString();
                     if (string.IsNullOrEmpty(name)) continue;
-                    var idx = name.LastIndexOf('/');
-                    var n = idx >= 0 ? name.Substring(idx + 1) : name;
-                    result.Add((n, name.TrimStart('/')));
+                    var nn = name!;
+                    var idx = nn.LastIndexOf('/');
+                    var n = idx >= 0 ? nn.Substring(idx + 1) : nn;
+                    result.Add((n, nn.TrimStart('/')));
                 }
             }
         }

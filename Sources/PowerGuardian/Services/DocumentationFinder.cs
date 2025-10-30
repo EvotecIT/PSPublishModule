@@ -75,11 +75,11 @@ internal sealed class DocumentationFinder
         var rootPick = first(new DirectoryInfo(root));
         var internalsPick = internals != null ? first(new DirectoryInfo(internals)) : null;
 
-        if (preferInternals && internalsPick != null) return internalsPick;
-        return rootPick ?? internalsPick;
+        if (preferInternals && internalsPick != null) return (FileInfo?)internalsPick;
+        return (FileInfo?)(rootPick ?? internalsPick);
     }
 
-    private static object Get(object obj, string name)
+    private static object? Get(object obj, string name)
     {
         if (obj is PSObject pso)
         {
