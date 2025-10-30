@@ -4,4 +4,4 @@
 
 #Show-ModuleDocumentation -Name 'EFAdminManager'
 
-Show-ModuleDocumentation -Name 'PSPublishModule'
+Show-ModuleDocumentation -Name 'PSPublishModule' -Verbose

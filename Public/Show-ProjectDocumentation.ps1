@@ -243,7 +243,7 @@ function Show-ProjectDocumentation {
                 } else {
                     $f = Resolve-DocFile -Kind 'UPGRADE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
                     if ($f) {
-                        $title = if ($moduleName) { "$moduleName $moduleVersion — $($f.Name)" } else { $f.Name }
+                        $title = if ($moduleName) { "$moduleName $moduleVersion - $($f.Name)" } else { $f.Name }
                         Write-Heading -Text $title
                         try { $content = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop; Write-Host $content } catch { Write-Warning "Failed to read '$($f.FullName)': $($_.Exception.Message)" }
                     } else {
@@ -271,11 +271,11 @@ function Show-ProjectDocumentation {
         if ($Links) {
             $links = $manifest.PrivateData.PSData.PSPublishModuleDelivery.ImportantLinks
             if ($links) {
-                Write-Heading -Text ((if ($moduleName) { "$moduleName $moduleVersion — Links" } else { 'Links' }))
+                Write-Heading -Text ((if ($moduleName) { "$moduleName $moduleVersion - Links" } else { 'Links' }))
                 foreach ($l in $links) {
                     $title = if ($l.Title) { $l.Title } elseif ($l.Name) { $l.Name } else { $null }
                     $url = $l.Url
-                    if ($url) { Write-Host (" - " + ($title ? "$title: $url" : $url)) }
+                    if ($url) { Write-Host (" - " + ($title ? "$($title): $url" : $url)) }
                 }
             }
         }

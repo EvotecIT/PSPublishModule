@@ -82,6 +82,20 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter]
     public DocumentationSelection Type { get; set; } = DocumentationSelection.All;
 
+    // Performance/scope controls
+    /// <summary>Skip fetching remote docs even when local files are missing.</summary>
+    [Parameter] public SwitchParameter SkipRemote { get; set; }
+    /// <summary>Skip building the dependency list and graph.</summary>
+    [Parameter] public SwitchParameter SkipDependencies { get; set; }
+    /// <summary>Skip building the Commands tab (fast export).</summary>
+    [Parameter] public SwitchParameter SkipCommands { get; set; }
+    /// <summary>Convenience switch equal to -SkipRemote -SkipDependencies -SkipCommands.</summary>
+    [Parameter] public SwitchParameter Fast { get; set; }
+    /// <summary>Limit the number of commands rendered in the Commands tab. Default 100.</summary>
+    [Parameter] public int MaxCommands { get; set; } = 100;
+    /// <summary>Per-command Get-Help timeout in seconds. Default 3.</summary>
+    [Parameter] public int HelpTimeoutSeconds { get; set; } = 3;
+
     // Remote repository support
     /// <summary>
     /// Pull documentation directly from the module repository (GitHub/Azure DevOps) based on <c>PrivateData.PSData.ProjectUri</c>.
