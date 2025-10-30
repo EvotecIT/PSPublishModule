@@ -4,6 +4,4 @@
 
 #Show-ModuleDocumentation -Name 'EFAdminManager'
 
-
-
-Show-ModuleDocumentation -Name 'PSPublishModule' -OpenHtml #-PreferRepository
+Show-ModuleDocumentation -Name 'PSPublishModule'

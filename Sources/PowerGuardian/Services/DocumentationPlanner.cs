@@ -156,7 +156,7 @@ internal sealed class DocumentationPlanner
             {
                 var fileName = System.IO.Path.GetFileName(it.Path);
                 var title = BuildTitle(req, fileName);
-                res.Items.Add(new DocumentItem { Title = title, Kind = "FILE", Path = it.Path });
+                res.Items.Add(new DocumentItem { Title = title, Kind = "FILE", Path = it.Path, FileName = fileName });
                 continue;
             }
             if (it.Kind == "INTRO")
@@ -196,6 +196,91 @@ internal sealed class DocumentationPlanner
                 }
             }
         }
+
+        // Fill missing standard docs from repository if available
+        try
+        {
+            bool wantRemoteBackfill = !string.IsNullOrWhiteSpace(req.ProjectUri);
+            if (wantRemoteBackfill)
+            {
+                bool hasReadme = res.Items.Any(i => i.Kind == "FILE" && ((i.FileName ?? i.Title).StartsWith("README", StringComparison.OrdinalIgnoreCase)));
+                bool hasChlog  = res.Items.Any(i => i.Kind == "FILE" && ((i.FileName ?? i.Title).StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)));
+                bool hasLic    = res.Items.Any(i => i.Kind == "FILE" && ((i.FileName ?? i.Title).StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)));
+
+                if (!(hasReadme && hasChlog && hasLic))
+                {
+                    var info = RepoUrlParser.Parse(req.ProjectUri!);
+                    var token = ResolveToken(req.RepositoryToken);
+                    var client = RepoClientFactory.Create(info, token);
+                    if (client != null)
+                    {
+                        string branch = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client.GetDefaultBranch() : req.RepositoryBranch!;
+                        if (!hasReadme)
+                        {
+                            var readme = TryFetchFirst(client, branch, new[] { "README.md", "README.MD", "Readme.md" });
+                            if (!string.IsNullOrEmpty(readme)) res.Items.Add(MakeContentItem(req, "README (remote)", readme!));
+                        }
+                        if (!hasChlog)
+                        {
+                            var ch = TryFetchFirst(client, branch, new[] { "CHANGELOG.md", "CHANGELOG.MD", "Changelog.md" });
+                            if (!string.IsNullOrEmpty(ch)) res.Items.Add(MakeContentItem(req, "CHANGELOG (remote)", ch!));
+                        }
+                        if (!hasLic)
+                        {
+                            var lc = TryFetchFirst(client, branch, new[] { "LICENSE", "LICENSE.md", "LICENSE.txt" });
+                            if (!string.IsNullOrEmpty(lc)) res.Items.Add(MakeContentItem(req, "LICENSE (remote)", lc!));
+                        }
+                    }
+                }
+            }
+        }
+        catch { /* ignore remote backfill errors */ }
+
+        // Extra: scripts tab (Internals/Scripts and standalone ps1 under Internals)
+        try
+        {
+            if (!string.IsNullOrEmpty(req.InternalsBase) && Directory.Exists(req.InternalsBase))
+            {
+                var scriptRoots = new [] {
+                    Path.Combine(req.InternalsBase!, "Scripts"),
+                    req.InternalsBase!
+                };
+                foreach (var root in scriptRoots.Distinct())
+                {
+                    if (!Directory.Exists(root)) continue;
+                    foreach (var f in Directory.GetFiles(root, "*.ps1", SearchOption.TopDirectoryOnly))
+                    {
+                        var name = Path.GetFileName(f);
+                        string code;
+                        try { code = File.ReadAllText(f); } catch { continue; }
+                        // wrap as fenced code for HTML renderer
+                        var md = $"```powershell\n{code}\n```";
+                        res.Items.Add(new DocumentItem { Title = name, Kind = "SCRIPT", Content = md, FileName = name, Path = f });
+                    }
+                }
+            }
+        }
+        catch { /* ignore scripts discovery errors */ }
+
+        // Extra: docs tab (Internals/Docs/*.md)
+        try
+        {
+            if (!string.IsNullOrEmpty(req.InternalsBase))
+            {
+                var docsRoot = Path.Combine(req.InternalsBase!, "Docs");
+                if (Directory.Exists(docsRoot))
+                {
+                    var mdFiles = Directory.GetFiles(docsRoot, "*.md", SearchOption.TopDirectoryOnly)
+                                            .Concat(Directory.GetFiles(docsRoot, "*.markdown", SearchOption.TopDirectoryOnly));
+                    foreach (var f in mdFiles)
+                    {
+                        string content; try { content = File.ReadAllText(f); } catch { continue; }
+                        res.Items.Add(new DocumentItem { Title = Path.GetFileName(f), Kind = "DOC", Content = content, FileName = Path.GetFileName(f), Path = f });
+                    }
+                }
+            }
+        }
+        catch { /* ignore docs discovery errors */ }
 
         // Links
         var links = req.Delivery?.Properties["ImportantLinks"]?.Value as System.Collections.IEnumerable;

@@ -64,15 +64,23 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter]
     [ValidateSet("None","H1","H1AndH2")]
     public string HeadingRules { get; set; } = "H1AndH2";
-    /// <summary>Export rendered content to HTML file (tabbed). When omitted, no export is produced.</summary>
+    /// <summary>Output location for the generated HTML. Accepts a file path or an existing directory. Defaults to temp when omitted.</summary>
     [Parameter]
-    public string? ExportHtmlPath { get; set; }
-    /// <summary>Open the exported HTML after rendering (requires -ExportHtmlPath or writes to a temp file).</summary>
+    [Alias("Path","ExportHtmlPath")]
+    public string? OutputPath { get; set; }
+    /// <summary>Do not open the generated HTML (default is to open after export).</summary>
     [Parameter]
-    public SwitchParameter OpenHtml { get; set; }
+    public SwitchParameter DoNotShow { get; set; }
     /// <summary>Disable code tokenizers and render code fences as plain text.</summary>
     [Parameter]
     public SwitchParameter DisableTokenizer { get; set; }
+
+    /// <summary>
+    /// High-level selection of which documents to show. Overrides granular switches when specified.
+    /// Default is <see cref="DocumentationSelection.Default"/> which includes README, CHANGELOG, LICENSE (and Intro/Upgrade when present).
+    /// </summary>
+    [Parameter]
+    public DocumentationSelection Type { get; set; } = DocumentationSelection.All;
 
     // Remote repository support
     /// <summary>
@@ -104,4 +112,3 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter]
     public string[]? RepositoryPaths { get; set; }
 }
-

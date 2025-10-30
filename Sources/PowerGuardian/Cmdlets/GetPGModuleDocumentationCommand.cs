@@ -8,24 +8,20 @@ using System.Management.Automation;
 namespace PowerGuardian;
 
 /// <summary>
-/// <para type="synopsis">Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.</para>
+/// <para type="synopsis">Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.</para>
 /// <para type="description">Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by <c>PrivateData.PSData.ProjectUri</c> (GitHub or Azure DevOps), optionally using a Personal Access Token.</para>
 /// <example>
-///   <code>Show-ModuleDocumentation -Name EFAdminManager -Readme -Changelog</code>
+///   <code>Get-ModuleDocumentation -Name PSPublishModule</code>
 /// </example>
 /// <example>
-///   <code>Show-ModuleDocumentation -Name EFAdminManager -FromRepository -RepositoryPaths docs -RepositoryBranch main</code>
+///   <code>Get-ModuleDocumentation -Name PSPublishModule -Type All</code>
 /// </example>
 /// </summary>
-[Cmdlet(VerbsCommon.Show, "ModuleDocumentation", DefaultParameterSetName = "ByName")]
-[Alias("Show-Documentation")]
-public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
+[Cmdlet(VerbsCommon.Get, "ModuleDocumentation", DefaultParameterSetName = "ByName")]
+public sealed partial class GetModuleDocumentationCommand : PSCmdlet
 {
-
-    // Remote repository support (legacy duplicates removed)
-
     /// <summary>
-    /// Executes the cmdlet processing logic and renders requested documents.
+    /// Executes the cmdlet and writes formatted documentation to the console.
     /// </summary>
     protected override void ProcessRecord()
     {
@@ -37,14 +33,13 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             default:         pref = JsonRendererPreference.Auto;    break;
         }
         string? defLang = null;
-            switch ((DefaultCodeLanguage ?? "Auto").ToLowerInvariant())
-            {
+        switch ((DefaultCodeLanguage ?? "Auto").ToLowerInvariant())
+        {
             case "powershell": defLang = "powershell"; break;
             case "json":       defLang = "json";       break;
-            case "none":       defLang = "";           break; // keep empty
-            default:            defLang = null;          break; // auto
+            case "none":       defLang = "";           break;
+            default:            defLang = null;          break;
         }
-        // Renderer currently supports JsonRenderer + Default language only
         var renderer = new Renderer(pref, defLang);
         var finder   = new DocumentationFinder(this);
         string rootBase;
@@ -67,7 +62,6 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             if (string.IsNullOrWhiteSpace(ModuleBase) || !Directory.Exists(ModuleBase))
                 throw new DirectoryNotFoundException($"ModuleBase '{ModuleBase}' not found.");
             rootBase = ModuleBase!;
-            // Try to read manifest to get InternalsPath and title
             var manifestCandidates = Directory.GetFiles(ModuleBase!, "*.psd1", SearchOption.TopDirectoryOnly);
             if (manifestCandidates.Length > 0)
             {
@@ -116,7 +110,6 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                 titleName = pso.Properties["Name"]?.Value?.ToString();
                 titleVersion = pso.Properties["Version"]?.Value?.ToString();
             }
-            // Derive Internals path from manifest
             var manifestPath = Directory.GetFiles(rootBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
             if (!string.IsNullOrEmpty(manifestPath))
             {
@@ -150,7 +143,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             return;
         }
 
-        // Map -Type high-level selection into fine-grained flags when specified
+        // Map -Type into fine-grained flags
         if (Type != DocumentationSelection.Default)
         {
             Readme = false; Changelog = false; License = false; Intro = false; Upgrade = false; All = false;
@@ -162,12 +155,10 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                 case DocumentationSelection.License: License = true; break;
                 case DocumentationSelection.Intro: Intro = true; break;
                 case DocumentationSelection.Upgrade: Upgrade = true; break;
-                case DocumentationSelection.Links: /* handled later when rendering */ break;
-                default: /* Default no-op */ break;
+                default: break;
             }
         }
 
-        // Centralized plan: HTML/Word only (no console rendering)
         var planner = new DocumentationPlanner(finder);
         var reqObj = new DocumentationPlanner.Request
         {
@@ -193,23 +184,13 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         };
         var plan = planner.Execute(reqObj);
 
-        var finalExportItems = new System.Collections.Generic.List<DocumentItem>();
         foreach (var di in plan.Items)
         {
-            if (string.Equals(di.Kind, "FILE", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(di.Path))
-            {
-                try { if (string.IsNullOrEmpty(di.Content)) di.Content = System.IO.File.ReadAllText(di.Path!); } catch { }
-            }
-            finalExportItems.Add(di);
+            if (di.Kind == "FILE" && !string.IsNullOrEmpty(di.Path))
+                renderer.ShowFile(di.Title, di.Path!, Raw);
+            else
+                renderer.ShowContent(di.Title, di.Content, Raw);
         }
-
-        // Always export HTML (Word can be added later). If no path provided, write to temp.
-        var html = new HtmlExporter();
-        var title = !string.IsNullOrEmpty(titleName) ? $"{titleName} {titleVersion}" : (Name ?? Module?.Name ?? "Module");
-        var open = !DoNotShow.IsPresent; // default is to open
-        var path = html.Export(title!, finalExportItems, OutputPath, open);
-        WriteVerbose($"HTML exported to {path}");
-        WriteObject(path);
-        return;
     }
 }
+

@@ -13,4 +13,6 @@ internal sealed class DocumentItem
     public string Content { get; set; } = string.Empty; // markdown content
     /// <summary>Optional local file path when the item represents a file on disk.</summary>
     public string? Path { get; set; }
+    /// <summary>Optional original filename (used for grouping e.g. Scripts/Docs).</summary>
+    public string? FileName { get; set; }
 }

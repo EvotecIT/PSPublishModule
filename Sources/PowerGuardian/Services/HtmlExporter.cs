@@ -22,10 +22,12 @@ internal sealed class HtmlExporter
         var tabs = new TablerTabs();
         doc.Body.Add(tabs);
 
-        foreach (var it in list)
+        // Standard docs (everything except SCRIPT/DOC kinds)
+        foreach (var it in list.Where(x => !string.Equals(x.Kind, "SCRIPT", System.StringComparison.OrdinalIgnoreCase)
+                                        && !string.Equals(x.Kind, "DOC", System.StringComparison.OrdinalIgnoreCase)))
         {
             var title = string.IsNullOrWhiteSpace(it.Title) ? it.Kind : it.Title;
-            tabs.AddTab(title, panel =>
+            tabs.AddTab(title ?? string.Empty, panel =>
             {
                 var md = it.Content ?? string.Empty;
                 var options = new MarkdownOptions
@@ -38,6 +40,48 @@ internal sealed class HtmlExporter
                     AllowRelativeLinks = true,
                 };
                 panel.Markdown(md, options);
+            });
+        }
+
+        // Scripts group (nested tabs)
+        var scripts = list.Where(x => string.Equals(x.Kind, "SCRIPT", System.StringComparison.OrdinalIgnoreCase)).ToList();
+        if (scripts.Count > 0)
+        {
+            tabs.AddTab("Scripts", panel =>
+            {
+                var inner = new TablerTabs();
+                panel.Add(inner);
+                foreach (var s in scripts)
+                {
+                    var name = string.IsNullOrWhiteSpace(s.FileName) ? s.Title : s.FileName;
+                    inner.AddTab(name ?? string.Empty, p =>
+                    {
+                        var md = s.Content ?? string.Empty; // already fenced with powershell
+                        var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true };
+                        p.Markdown(md, options);
+                    });
+                }
+            });
+        }
+
+        // Docs group (nested tabs)
+        var docs = list.Where(x => string.Equals(x.Kind, "DOC", System.StringComparison.OrdinalIgnoreCase)).ToList();
+        if (docs.Count > 0)
+        {
+            tabs.AddTab("Docs", panel =>
+            {
+                var inner = new TablerTabs();
+                panel.Add(inner);
+                foreach (var d in docs)
+                {
+                    var name = string.IsNullOrWhiteSpace(d.FileName) ? d.Title : d.FileName;
+                    inner.AddTab(name ?? string.Empty, p =>
+                    {
+                        var md = d.Content ?? string.Empty;
+                        var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true };
+                        p.Markdown(md, options);
+                    });
+                }
             });
         }
         var html = doc.ToString();
