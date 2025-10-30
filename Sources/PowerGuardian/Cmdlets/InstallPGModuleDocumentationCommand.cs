@@ -1,5 +1,5 @@
 // ReSharper disable All
-#nullable disable
+#nullable enable
 using System;
 using System.Management.Automation;
 
@@ -23,15 +23,15 @@ public sealed class InstallModuleDocumentationCommand : PSCmdlet
     /// <summary>Module name to install documentation for.</summary>
     [Parameter(ParameterSetName = "ByName", Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
-    public string Name { get; set; }
+    public string? Name { get; set; }
 
     /// <summary>Module object to install documentation for. Alternative to <c>-Name</c>.</summary>
     [Parameter(ParameterSetName = "ByModule", ValueFromPipeline = true)]
     [Alias("InputObject", "ModuleInfo")]
-    public PSModuleInfo Module { get; set; }
+    public PSModuleInfo? Module { get; set; }
 
     /// <summary>Exact version to select when multiple module versions are installed.</summary>
-    public Version RequiredVersion { get; set; }
+    public Version? RequiredVersion { get; set; }
 
     /// <summary>Destination folder where documentation will be written.</summary>
     [Parameter(Mandatory = true)]
@@ -54,6 +54,9 @@ public sealed class InstallModuleDocumentationCommand : PSCmdlet
     /// <summary>Suppress IntroText display during installation.</summary>
     [Parameter] public SwitchParameter NoIntro { get; set; }
 
+    /// <summary>
+    /// Executes the copy operation according to parameters and writes the destination path.
+    /// </summary>
     protected override void ProcessRecord()
     {
         var resolver = new ModuleResolver(this);

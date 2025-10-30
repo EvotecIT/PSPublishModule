@@ -1,5 +1,5 @@
 // ReSharper disable All
-#nullable disable
+#nullable enable
 using System;
 using System.IO;
 using System.Linq;
@@ -24,23 +24,23 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
     /// <summary>Module name to display documentation for.</summary>
     [Parameter(ParameterSetName = "ByName", Position = 0, ValueFromPipeline = true, ValueFromPipelineByPropertyName = true)]
     [Alias("ModuleName")]
-    public string Name { get; set; }
+    public string? Name { get; set; }
 
     /// <summary>Module object to display documentation for. Alternative to <c>-Name</c>.</summary>
     [Parameter(ParameterSetName = "ByModule", ValueFromPipeline = true)]
     [Alias("InputObject", "ModuleInfo")]
-    public PSModuleInfo Module { get; set; }
+    public PSModuleInfo? Module { get; set; }
 
     /// <summary>Exact version to select when multiple module versions are installed.</summary>
-    public Version RequiredVersion { get; set; }
+    public Version? RequiredVersion { get; set; }
 
     /// <summary>Direct path to a documentation folder containing README/CHANGELOG/etc.</summary>
     [Parameter(ParameterSetName = "ByPath")]
-    public string DocsPath { get; set; }
+    public string? DocsPath { get; set; }
 
     /// <summary>Path to a module root (folder that contains the module manifest). Useful for unpacked builds.</summary>
     [Parameter(ParameterSetName = "ByBase")]
-    public string ModuleBase { get; set; }
+    public string? ModuleBase { get; set; }
 
     /// <summary>Show README.*.</summary>
     [Parameter] public SwitchParameter Readme { get; set; }
@@ -57,7 +57,7 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
     /// <summary>Display ImportantLinks defined in Delivery metadata at the end.</summary>
     [Parameter] public SwitchParameter Links { get; set; }
     /// <summary>Show a specific file by name (relative to module root or Internals) or full path.</summary>
-    [Parameter] public string File { get; set; }
+    [Parameter] public string? File { get; set; }
     /// <summary>Prefer Internals folder over module root when both contain the same file kind.</summary>
     [Parameter] public SwitchParameter PreferInternals { get; set; }
     /// <summary>List discovered documentation files (without rendering).</summary>
@@ -80,7 +80,7 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
     public string HeadingRules { get; set; } = "H1AndH2";
     /// <summary>Export rendered content to HTML file (tabbed). When omitted, no export is produced.</summary>
     [Parameter]
-    public string ExportHtmlPath { get; set; }
+    public string? ExportHtmlPath { get; set; }
     /// <summary>Open the exported HTML after rendering (requires -ExportHtmlPath or writes to a temp file).</summary>
     [Parameter]
     public SwitchParameter OpenHtml { get; set; }
@@ -104,22 +104,25 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
     /// Branch name to use when fetching remote docs. If omitted, the provider default branch is used.
     /// </summary>
     [Parameter]
-    public string RepositoryBranch { get; set; }
+    public string? RepositoryBranch { get; set; }
     /// <summary>
     /// Personal Access Token for private repositories. Alternatively set environment variables:
     /// GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVOPS_EXT_PAT.
     /// </summary>
     [Parameter]
-    public string RepositoryToken { get; set; }
+    public string? RepositoryToken { get; set; }
     /// <summary>
     /// Repository-relative folders to enumerate and display (e.g., 'docs', 'articles').
     /// Only .md/.markdown/.txt files are rendered.
     /// </summary>
     [Parameter]
-    public string[] RepositoryPaths { get; set; }
+    public string[]? RepositoryPaths { get; set; }
 
     // Remote repository support (legacy duplicates removed)
 
+    /// <summary>
+    /// Executes the cmdlet processing logic and renders requested documents.
+    /// </summary>
     protected override void ProcessRecord()
     {
         var pref = JsonRendererPreference.Auto;
@@ -130,8 +133,8 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
             default:         pref = JsonRendererPreference.Auto;    break;
         }
         string? defLang = null;
-        switch ((DefaultCodeLanguage ?? "Auto").ToLowerInvariant())
-        {
+            switch ((DefaultCodeLanguage ?? "Auto").ToLowerInvariant())
+            {
             case "powershell": defLang = "powershell"; break;
             case "json":       defLang = "json";       break;
             case "none":       defLang = "";           break; // keep empty
@@ -141,11 +144,11 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
         var renderer = new Renderer(pref, defLang);
         var finder   = new DocumentationFinder(this);
         string rootBase;
-        string internalsBase;
-        string titleName = null;
-        string titleVersion = null;
-        PSObject delivery = null;
-        string projectUri = null;
+        string? internalsBase;
+        string? titleName = null;
+        string? titleVersion = null;
+        PSObject? delivery = null;
+        string? projectUri = null;
 
         if (ParameterSetName == "ByPath")
         {
@@ -317,9 +320,9 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
                 return null;
             }
 
-            string readme = Readme.IsPresent || All.IsPresent ? FetchFirst(candidatesReadme) : null;
-            string changelog = Changelog.IsPresent || All.IsPresent ? FetchFirst(candidatesChangelog) : null;
-            string license = License.IsPresent || All.IsPresent ? FetchFirst(candidatesLicense) : null;
+            string? readme = Readme.IsPresent || All.IsPresent ? FetchFirst(candidatesReadme) : null;
+            string? changelog = Changelog.IsPresent || All.IsPresent ? FetchFirst(candidatesChangelog) : null;
+            string? license = License.IsPresent || All.IsPresent ? FetchFirst(candidatesLicense) : null;
 
             if (items.Count == 0)
             {
@@ -499,17 +502,19 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
         }
     }
 
-    private static string FetchFile(RepoInfo info, string repoRelativePath, string branch, string token, ref string resolvedBranch)
+    private static string? FetchFile(RepoInfo info, string repoRelativePath, string? branch, string? token, ref string? resolvedBranch)
     {
         try
         {
             switch (info.Host)
             {
                 case RepoHost.GitHub:
+                    if (string.IsNullOrEmpty(info.Owner) || string.IsNullOrEmpty(info.Repo)) return null;
                     var gh = new GitHubRepository(info.Owner, info.Repo, token);
                     if (string.IsNullOrWhiteSpace(resolvedBranch)) resolvedBranch = gh.GetDefaultBranch();
                     return gh.GetFileContent(repoRelativePath, resolvedBranch);
                 case RepoHost.AzureDevOps:
+                    if (string.IsNullOrEmpty(info.Organization) || string.IsNullOrEmpty(info.Project) || string.IsNullOrEmpty(info.Repository)) return null;
                     var az = new AzureDevOpsRepository(info.Organization, info.Project, info.Repository, token);
                     if (string.IsNullOrWhiteSpace(resolvedBranch)) resolvedBranch = az.GetDefaultBranch();
                     return az.GetFileContent(repoRelativePath, resolvedBranch);
@@ -520,17 +525,19 @@ public sealed class ShowModuleDocumentationCommand : PSCmdlet
         catch { return null; }
     }
 
-    private static System.Collections.Generic.List<(string Name,string Path)> ListFiles(RepoInfo info, string repoPath, string branch, string token, ref string resolvedBranch)
+    private static System.Collections.Generic.List<(string Name,string Path)> ListFiles(RepoInfo info, string repoPath, string? branch, string? token, ref string? resolvedBranch)
     {
         try
         {
             switch (info.Host)
             {
                 case RepoHost.GitHub:
+                    if (string.IsNullOrEmpty(info.Owner) || string.IsNullOrEmpty(info.Repo)) return new System.Collections.Generic.List<(string,string)>();
                     var gh = new GitHubRepository(info.Owner, info.Repo, token);
                     if (string.IsNullOrWhiteSpace(resolvedBranch)) resolvedBranch = gh.GetDefaultBranch();
                     return gh.ListFiles(repoPath, resolvedBranch);
                 case RepoHost.AzureDevOps:
+                    if (string.IsNullOrEmpty(info.Organization) || string.IsNullOrEmpty(info.Project) || string.IsNullOrEmpty(info.Repository)) return new System.Collections.Generic.List<(string,string)>();
                     var az = new AzureDevOpsRepository(info.Organization, info.Project, info.Repository, token);
                     if (string.IsNullOrWhiteSpace(resolvedBranch)) resolvedBranch = az.GetDefaultBranch();
                     return az.ListFiles(repoPath, resolvedBranch);

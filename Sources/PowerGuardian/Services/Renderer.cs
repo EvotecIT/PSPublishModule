@@ -8,6 +8,9 @@ using System.Linq;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Renders Markdown documents and inline elements to the console using Spectre.Console.
+/// </summary>
 internal sealed class Renderer
 {
     private readonly JsonRendererPreference _jsonPreference;
@@ -20,7 +23,7 @@ internal sealed class Renderer
     }
     public void WriteHeading(string title)
     {
-        var rule = new Rule(Markup.Escape(title)) { Justification = Justify.Left };
+        var rule = new Rule(Markup.Escape(title ?? string.Empty)) { Justification = Justify.Left };
         AnsiConsole.Write(rule);
     }
 
@@ -239,7 +242,7 @@ internal sealed class Renderer
         return sb.ToString();
     }
 
-    private string RenderInline(object node)
+    private string? RenderInline(object node)
     {
         switch (node)
         {
@@ -259,12 +262,12 @@ internal sealed class Renderer
                 return $"[grey]{Markup.Escape(cs.Text)}[/]";
             case LinkInline l:
                 var text = string.IsNullOrEmpty(l.Text) ? l.Url : l.Text;
-                return $"[link={Markup.Escape(l.Url)}]{Markup.Escape(text)}[/]";
+                return $"[link={Markup.Escape(l.Url ?? string.Empty)}]{Markup.Escape(text ?? string.Empty)}[/]";
             case ImageInline im:
                 return $"[dim]{Markup.Escape(im.Alt ?? "image")}[/]";
             case ImageLinkInline il:
                 var alt = string.IsNullOrEmpty(il.Alt) ? il.ImageUrl : il.Alt;
-                return $"[link={Markup.Escape(il.LinkUrl)}]{Markup.Escape(alt)}[/]";
+                return $"[link={Markup.Escape(il.LinkUrl ?? string.Empty)}]{Markup.Escape(alt ?? string.Empty)}[/]";
             case HardBreakInline:
                 return "\n";
             case FootnoteRefInline fn:

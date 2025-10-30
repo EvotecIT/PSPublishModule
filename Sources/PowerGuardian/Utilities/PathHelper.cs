@@ -3,6 +3,9 @@ using System.IO;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Path utilities used by installers and renderers.
+/// </summary>
 internal static class PathHelper
 {
     public static string Combine(string a, string b) => Path.Combine(a, b);
@@ -17,4 +20,3 @@ internal static class PathHelper
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
     }
 }
-

@@ -5,12 +5,15 @@ using Spectre.Console;
 
 namespace PowerGuardian.Rendering.Highlighters;
 
+/// <summary>
+/// JSON highlighter using System.Text.Json to colorize tokens without regex.
+/// </summary>
 internal sealed class JsonHighlighter : IHighlighter
 {
     private static readonly string[] _langs = new[] { "json", "jsonc" };
     public bool CanHandle(string language) => Array.IndexOf(_langs, (language ?? string.Empty).ToLowerInvariant()) >= 0;
 
-    public string Highlight(string code, string language)
+    public string? Highlight(string code, string language)
     {
         try
         {
@@ -20,11 +23,7 @@ internal sealed class JsonHighlighter : IHighlighter
             WriteElement(doc.RootElement, sb, 0);
             return sb.ToString();
         }
-        catch
-        {
-            // Let pipeline fall back to a generic highlighter
-            return null;
-        }
+        catch { return null; }
     }
 
     private static void WriteElement(JsonElement el, StringBuilder sb, int indent)
@@ -96,4 +95,3 @@ internal sealed class JsonHighlighter : IHighlighter
         sb.Append(' ', indent * 2);
     }
 }
-

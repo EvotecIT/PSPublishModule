@@ -22,7 +22,6 @@ internal sealed class HtmlExporter
         var tabs = new TablerTabs();
         doc.Body.Add(tabs);
 
-        int idx = 0;
         foreach (var it in list)
         {
             var title = string.IsNullOrWhiteSpace(it.Title) ? it.Kind : it.Title;

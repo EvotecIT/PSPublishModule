@@ -3,6 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Parses repository URLs (GitHub/Azure DevOps) into <see cref="RepoInfo"/>.
+/// </summary>
 internal static class RepoUrlParser
 {
     public static RepoInfo Parse(string projectUri)
@@ -65,4 +68,3 @@ internal static class RepoUrlParser
         return new RepoInfo { Host = RepoHost.Unknown, ProjectUri = uri };
     }
 }
-

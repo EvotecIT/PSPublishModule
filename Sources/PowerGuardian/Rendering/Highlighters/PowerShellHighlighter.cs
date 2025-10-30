@@ -7,12 +7,15 @@ using Spectre.Console;
 
 namespace PowerGuardian.Rendering.Highlighters;
 
+/// <summary>
+/// PowerShell highlighter using PSParser via reflection to preserve exact code spans.
+/// </summary>
 internal sealed class PowerShellHighlighter : IHighlighter
 {
     private static readonly string[] _langs = new[]{"powershell","ps","ps1","pwsh","pscore"};
     public bool CanHandle(string language) => _langs.Contains((language ?? string.Empty).ToLowerInvariant());
 
-    public string Highlight(string code, string language)
+    public string? Highlight(string code, string language)
     {
         try
         {
@@ -22,7 +25,7 @@ internal sealed class PowerShellHighlighter : IHighlighter
             if (psParser == null) return null; // let pipeline fallback
 
             // Resolve Tokenize(string, out errors) overload robustly
-            MethodInfo tokenize = null;
+            MethodInfo? tokenize = null;
             foreach (var m in psParser.GetMethods(BindingFlags.Public | BindingFlags.Static))
             {
                 if (m.Name != "Tokenize") continue;
@@ -36,6 +39,7 @@ internal sealed class PowerShellHighlighter : IHighlighter
 
             object[] args = new object[] { code, null };
             var tokens = tokenize.Invoke(null, args) as System.Collections.IEnumerable;
+            if (tokens == null) return null;
 
             // Build markup preserving original spacing via Start/Length
             var tokenList = new List<(int Start,int Length,string Type)>();
@@ -55,7 +59,7 @@ internal sealed class PowerShellHighlighter : IHighlighter
                     var endOffset = extType.GetProperty("EndOffset")?.GetValue(extent);
                     if (startOffset != null && endOffset != null)
                     {
-                        start = (int)startOffset; length = (int)endOffset - start;
+                        start = Convert.ToInt32(startOffset); length = Convert.ToInt32(endOffset) - start;
                     }
                 }
                 if (length == 0)
@@ -64,8 +68,13 @@ internal sealed class PowerShellHighlighter : IHighlighter
                     var pLength = tType.GetProperty("Length");
                     if (pStart != null && pLength != null)
                     {
-                        start = (int)pStart.GetValue(t);
-                        length = (int)pLength.GetValue(t);
+                        var sv = pStart.GetValue(t);
+                        var lv = pLength.GetValue(t);
+                        if (sv != null && lv != null)
+                        {
+                            start = Convert.ToInt32(sv);
+                            length = Convert.ToInt32(lv);
+                        }
                     }
                 }
                 tokenList.Add((start,length,typeName));
@@ -93,7 +102,7 @@ internal sealed class PowerShellHighlighter : IHighlighter
         }
     }
 
-    private static string StyleForPsToken(string type)
+    private static string? StyleForPsToken(string type)
     {
         switch ((type ?? string.Empty))
         {

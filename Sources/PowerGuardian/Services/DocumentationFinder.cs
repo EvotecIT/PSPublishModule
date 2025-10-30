@@ -1,5 +1,5 @@
 // ReSharper disable All
-#nullable disable
+#nullable enable
 using System;
 using System.Collections;
 using System.IO;
@@ -13,10 +13,13 @@ internal sealed class DocumentationFinder
     private readonly PSCmdlet _cmdlet;
     public DocumentationFinder(PSCmdlet cmdlet) => _cmdlet = cmdlet;
 
-    public (string RootBase, string InternalsBase, DeliveryOptions Options) ResolveBases(PSModuleInfo module)
+    /// <summary>
+    /// Resolves module root and Internals locations along with delivery options from the manifest.
+    /// </summary>
+    public (string RootBase, string? InternalsBase, DeliveryOptions Options) ResolveBases(PSModuleInfo module)
     {
         var root = module.ModuleBase;
-        string internals = null;
+        string? internals = null;
         var opts = new DeliveryOptions();
 
         var manifestPath = Path.Combine(root, module.Name + ".psd1");
@@ -47,7 +50,10 @@ internal sealed class DocumentationFinder
         return (root, internals, opts);
     }
 
-    public FileInfo ResolveDocument((string RootBase, string InternalsBase, DeliveryOptions Options) bases, DocumentKind kind, bool preferInternals)
+    /// <summary>
+    /// Resolves a file by <see cref="DocumentKind"/> from root or Internals depending on preference.
+    /// </summary>
+    public FileInfo? ResolveDocument((string RootBase, string? InternalsBase, DeliveryOptions Options) bases, DocumentKind kind, bool preferInternals)
     {
         string pattern = kind switch
         {

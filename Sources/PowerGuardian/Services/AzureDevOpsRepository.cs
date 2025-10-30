@@ -7,6 +7,9 @@ using System.Text.Json;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Minimal Azure DevOps client for fetching repository files via the Git REST API.
+/// </summary>
 internal sealed class AzureDevOpsRepository
 {
     private readonly string _organization;
@@ -31,6 +34,7 @@ internal sealed class AzureDevOpsRepository
         return c;
     }
 
+    /// <summary>Gets the repository default branch name.</summary>
     public string GetDefaultBranch()
     {
         try
@@ -52,7 +56,10 @@ internal sealed class AzureDevOpsRepository
         return "main";
     }
 
-    public string GetFileContent(string path, string branch)
+    /// <summary>
+    /// Gets file content at the specified path and branch. Returns null when not found.
+    /// </summary>
+    public string? GetFileContent(string path, string branch)
     {
         try
         {
@@ -69,6 +76,9 @@ internal sealed class AzureDevOpsRepository
         return null;
     }
 
+    /// <summary>
+    /// Lists files in a path at the specified branch. Returns only files (no folders).
+    /// </summary>
     public List<(string Name, string Path)> ListFiles(string path, string branch)
     {
         var result = new List<(string,string)>();
@@ -86,9 +96,11 @@ internal sealed class AzureDevOpsRepository
                 {
                     var isFolder = item.TryGetProperty("isFolder", out var f) && f.GetBoolean();
                     if (isFolder) continue;
-                    var name = item.GetProperty("path").GetString();
+                    if (!item.TryGetProperty("path", out var pEl)) continue;
+                    var name = pEl.GetString();
                     if (string.IsNullOrEmpty(name)) continue;
-                    var n = name.Substring(name.LastIndexOf('/') + 1);
+                    var idx = name.LastIndexOf('/');
+                    var n = idx >= 0 ? name.Substring(idx + 1) : name;
                     result.Add((n, name.TrimStart('/')));
                 }
             }

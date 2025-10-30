@@ -8,6 +8,12 @@ using System.Threading.Tasks;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Minimal GitHub client for fetching repository files via the Contents API.
+/// </summary>
+/// <summary>
+/// Minimal GitHub client for fetching repository files via the Contents API.
+/// </summary>
 internal sealed class GitHubRepository
 {
     private readonly string _owner;
@@ -29,6 +35,7 @@ internal sealed class GitHubRepository
         return c;
     }
 
+    /// <summary>Gets the repository default branch name.</summary>
     public string GetDefaultBranch()
     {
         try
@@ -44,7 +51,10 @@ internal sealed class GitHubRepository
         return "main"; // fallback
     }
 
-    public string GetFileContent(string path, string branch)
+    /// <summary>
+    /// Gets file content at the specified path and branch. Returns null when not found.
+    /// </summary>
+    public string? GetFileContent(string path, string branch)
     {
         // Try Contents API (works for private/public; returns base64 content)
         try
@@ -68,6 +78,9 @@ internal sealed class GitHubRepository
         return null;
     }
 
+    /// <summary>
+    /// Lists files in a path at the specified branch. Returns only files (no folders).
+    /// </summary>
     public List<(string Name, string Path)> ListFiles(string path, string branch)
     {
         var result = new List<(string,string)>();
@@ -83,10 +96,12 @@ internal sealed class GitHubRepository
             {
                 foreach (var item in doc.RootElement.EnumerateArray())
                 {
-                    var type = item.GetProperty("type").GetString();
+                    if (!item.TryGetProperty("type", out var typeEl)) continue;
+                    var type = typeEl.GetString();
                     if (!string.Equals(type, "file", StringComparison.OrdinalIgnoreCase)) continue;
-                    var name = item.GetProperty("name").GetString();
-                    var p = item.GetProperty("path").GetString();
+                    var name = item.TryGetProperty("name", out var nEl) ? nEl.GetString() : null;
+                    var p = item.TryGetProperty("path", out var pEl) ? pEl.GetString() : null;
+                    if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(p)) continue;
                     result.Add((name, p));
                 }
             }

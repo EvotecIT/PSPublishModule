@@ -5,6 +5,9 @@ using System.Management.Automation;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Installs (copies) module documentation to a destination according to layout and overwrite options.
+/// </summary>
 internal sealed class DocumentationInstaller
 {
     private readonly PSCmdlet _cmdlet;
@@ -16,6 +19,9 @@ internal sealed class DocumentationInstaller
         _finder  = new DocumentationFinder(cmdlet);
     }
 
+    /// <summary>
+    /// Computes the destination path for the given module and layout.
+    /// </summary>
     public string PlanDestination(string moduleName, string moduleVersion, string path, DocumentationLayout layout)
     {
         return layout switch
@@ -27,11 +33,14 @@ internal sealed class DocumentationInstaller
         };
     }
 
+    /// <summary>
+    /// Copies Internals and selected root files to the destination. Returns the destination path.
+    /// </summary>
     public string Install(string moduleBase, string moduleName, string moduleVersion, string dest, OnExistsOption onExists, bool force, bool open, bool noIntro)
     {
         var root = moduleBase;
         // Resolve Internals path via manifest when available
-        string internals = null;
+        string? internals = null;
         var options = new DeliveryOptions();
         var manifestPath = Directory.GetFiles(moduleBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
         if (!string.IsNullOrEmpty(manifestPath))
