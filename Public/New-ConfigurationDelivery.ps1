@@ -58,6 +58,16 @@ function New-ConfigurationDelivery {
     If provided, it is preferred over UpgradeText for display and is also copied by
     Install-ModuleDocumentation.
 
+    .PARAMETER RepositoryPaths
+    One or more repository-relative paths (folders) from which to display remote documentation files
+    directly from the git hosting provider (GitHub/Azure DevOps). This enables tools such as
+    PowerGuardian to fetch and present docs straight from the repository when local copies are not
+    present or when explicitly requested. Requires PrivateData.PSData.ProjectUri to be set in the manifest.
+
+    .PARAMETER RepositoryBranch
+    Optional branch name to use when fetching remote documentation. If omitted, providers fall back to
+    the repository default branch (e.g., main/master).
+
     .EXAMPLE
     PS> New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog
     Emits Options.Delivery and causes PrivateData.PSData.PSPublishModuleDelivery to be written in the manifest.
@@ -88,7 +98,9 @@ function New-ConfigurationDelivery {
         [string[]] $IntroText,
         [string[]] $UpgradeText,
         [string] $IntroFile,
-        [string] $UpgradeFile
+        [string] $UpgradeFile,
+        [string[]] $RepositoryPaths,
+        [string] $RepositoryBranch
     )
 
     if (-not $Enable) { return }
@@ -107,7 +119,9 @@ function New-ConfigurationDelivery {
         UpgradeText          = $UpgradeText
         IntroFile            = $IntroFile
         UpgradeFile          = $UpgradeFile
-        Schema               = '1.2'
+        RepositoryPaths      = $RepositoryPaths
+        RepositoryBranch     = $RepositoryBranch
+        Schema               = '1.3'
     }
 
     [ordered] @{

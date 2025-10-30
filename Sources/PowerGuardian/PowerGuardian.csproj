@@ -32,6 +32,11 @@
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
+    <!-- Net472 needs explicit System.Net.Http reference in SDK-style projects -->
+    <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+        <Reference Include="System.Net.Http" />
+    </ItemGroup>
+
     <ItemGroup>
         <PackageReference Include="MatejKafka.XmlDoc2CmdletDoc" Version="0.7.0">
             <PrivateAssets>all</PrivateAssets>

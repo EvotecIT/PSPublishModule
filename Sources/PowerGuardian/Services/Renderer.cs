@@ -44,6 +44,25 @@ internal sealed class Renderer
         }
     }
 
+    public void ShowContent(string title, string markdown, bool raw)
+    {
+        if (raw)
+        {
+            Console.WriteLine(markdown ?? string.Empty);
+            return;
+        }
+        WriteHeading(title);
+        try
+        {
+            var doc = MarkdownReader.Parse(markdown ?? string.Empty, new MarkdownReaderOptions { Tables = true, Callouts = true, FrontMatter = true });
+            RenderMarkdownDoc(doc);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine("[red]Failed to render content: {0}[/]", Markup.Escape(ex.Message));
+        }
+    }
+
     private void RenderMarkdownDoc(MarkdownDoc doc)
     {
         foreach (var block in doc.Blocks)
