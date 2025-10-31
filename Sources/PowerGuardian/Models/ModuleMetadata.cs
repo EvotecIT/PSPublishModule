@@ -30,4 +30,5 @@ internal sealed class ModuleInfoModel
     public bool SkipDependencies { get; set; }
     public int MaxCommands { get; set; } = 100;
     public int HelpTimeoutSeconds { get; set; } = 3;
+    public bool HelpAsCode { get; set; }
 }

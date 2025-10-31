@@ -94,7 +94,9 @@ public sealed partial class ShowModuleDocumentationCommand
     /// <summary>Limit the number of commands rendered in the Commands tab. Default 100.</summary>
     [Parameter] public int MaxCommands { get; set; } = 100;
     /// <summary>Per-command Get-Help timeout in seconds. Default 3.</summary>
-    [Parameter] public int HelpTimeoutSeconds { get; set; } = 3;
+    [Parameter] public int HelpTimeoutSeconds { get; set; } = 60;
+    /// <summary>Render command help inside fenced code blocks for uniform monospace formatting.</summary>
+    [Parameter] public SwitchParameter HelpAsCode { get; set; }
 
     // Remote repository support
     /// <summary>

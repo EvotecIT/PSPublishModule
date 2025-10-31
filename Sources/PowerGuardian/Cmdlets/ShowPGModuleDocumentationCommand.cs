@@ -300,6 +300,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         meta.SkipCommands = SkipCommands.IsPresent;
         meta.MaxCommands = MaxCommands;
         meta.HelpTimeoutSeconds = HelpTimeoutSeconds;
+        meta.HelpAsCode = HelpAsCode.IsPresent;
 
         WriteVerbose(meta.SkipDependencies ? "Skipping dependency processing." : $"Dependencies discovered: {meta.Dependencies.Count}");
         WriteVerbose(meta.SkipCommands ? "Skipping Commands tab." : $"Commands will be rendered (max {meta.MaxCommands}, per-help timeout {meta.HelpTimeoutSeconds}s).");

@@ -15,7 +15,7 @@ internal sealed class HtmlExporter
         var list = items?.ToList() ?? new List<DocumentItem>();
 
         // Build document page per HtmlForgeX examples
-        var doc = new Document { ThemeMode = ThemeMode.System };
+        var doc = new Document { ThemeMode = ThemeMode.System, LibraryMode = LibraryMode.Online };
         doc.Body.Page(page => {
             page.Layout = TablerLayout.Fluid;
 
@@ -119,13 +119,17 @@ internal sealed class HtmlExporter
                                         // Direct dependencies table
                                         panel.Card(card2 => {
                                             card2.Header(h => h.Title("Declared Dependencies"));
-                                            var rows = new System.Collections.Generic.List<object>();
-                                            foreach (var d in module.Dependencies)
-                                            {
-                                                var kind = d.Kind == ModuleDependencyKind.External ? "External" : "Required";
-                                                rows.Add(new { Relation = "Direct", Kind = kind, Name = d.Name, Version = d.Version ?? string.Empty, Guid = d.Guid ?? string.Empty });
-                                            }
-                                            card2.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
+                                            var groups = module.Dependencies
+                                                .GroupBy(d => d.Name, System.StringComparer.OrdinalIgnoreCase)
+                                                .Select(g => new {
+                                                    Name = g.Key,
+                                                    Kinds = string.Join(", ", g.Select(x => x.Kind == ModuleDependencyKind.External ? "External" : "Required").Distinct().OrderBy(k => k == "External" ? 0 : 1)),
+                                                    Version = g.Select(x => x.Version).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? string.Empty,
+                                                    Guid = g.Select(x => x.Guid).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? string.Empty
+                                                })
+                                                .OrderBy(x => x.Name)
+                                                .ToList();
+                                            card2.DataTable(groups, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
                                         });
 
                                         // Nested dependencies table (if any)
@@ -143,17 +147,21 @@ internal sealed class HtmlExporter
                                         log?.Invoke("Building VisNetwork dependency graph...");
                                         panel.DiagramNetwork(net => {
                                             net.WithSize("100%", "600px").WithPhysics(true);
+                                            var added = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+                                            void AddNodeSafe(string id, System.Action<VisNetworkNodeOptions> cfg) {
+                                                if (added.Add(id)) net.AddNode(id, cfg);
+                                            }
                                             // center node
-                                            net.AddNode(module.Name, node => node.WithLabel(module.Name).WithShape(VisNetworkNodeShape.Box).WithColor(new RGBColor("#2962FF")).WithFont(f => f.WithColor(new RGBColor("#ffffff"))));
+                                            AddNodeSafe(module.Name, node => node.WithLabel(module.Name).WithShape(VisNetworkNodeShape.Box).WithColor(new RGBColor("#2962FF")).WithFont(f => f.WithColor(new RGBColor("#ffffff"))));
                                             foreach (var d in module.Dependencies)
                                             {
                                                 var depId = d.Name;
-                                                net.AddNode(depId, node => node.WithLabel(depId + (string.IsNullOrEmpty(d.Version) ? string.Empty : $"\n{d.Version}")).WithShape(VisNetworkNodeShape.Ellipse));
+                                                AddNodeSafe(depId, node => node.WithLabel(depId + (string.IsNullOrEmpty(d.Version) ? string.Empty : $"\n{d.Version}")).WithShape(VisNetworkNodeShape.Ellipse));
                                                 net.AddEdge(module.Name, depId, edge => edge.WithArrows(new VisNetworkArrowOptions().WithTo(true)));
                                                 foreach (var c in d.Children)
                                                 {
                                                     var cId = depId + ":" + c.Name;
-                                                    net.AddNode(cId, node => node.WithLabel(c.Name + (string.IsNullOrEmpty(c.Version) ? string.Empty : $"\n{c.Version}")).WithShape(VisNetworkNodeShape.Dot));
+                                                    AddNodeSafe(cId, node => node.WithLabel(c.Name + (string.IsNullOrEmpty(c.Version) ? string.Empty : $"\n{c.Version}")).WithShape(VisNetworkNodeShape.Dot));
                                                     net.AddEdge(depId, cId, edge => edge.WithArrows(new VisNetworkArrowOptions().WithTo(true)).WithDashes(true));
                                                 }
                                             }
@@ -168,28 +176,28 @@ internal sealed class HtmlExporter
                                     if (commands.Count > 0)
                                     {
                                         log?.Invoke($"Adding Commands tab with {commands.Count} commands...");
+                                        // Precompute help so tabs don't duplicate content and we can log line counts
+                                        var helpMap = BuildHelpMap(module.Name, commands, module.HelpTimeoutSeconds, log);
                                         tabs.AddTab("⚙️ Commands", panel =>
                                         {
-                                            panel.SmartTab(smart => {
-                                                smart.AsVertical();
-                                                smart.Settings(s => s
-                                                    .Theme(SmartTabTheme.Blocks)
-                                                    .NavStyle(SmartTabNavStyle.Bordered)
-                                                    .Justified(false)
-                                                    .PersistSelected($"PG-CmdTabs-{Sanitize(module.Name)}")
-                                                );
-
-                                                foreach (var cmd in commands)
-                                                {
-                                                    var label = $"{EmojiForCommand(cmd)} {cmd}".Replace("-", "‑");
-                                                    var thisCmd = cmd; // avoid modified-closure issues
-                                                    smart.AddTab(label, p => {
-                                                        log?.Invoke($"Rendering help for {thisCmd}...");
-                                                        var helpMd = GetHelpMarkdown(module.Name, thisCmd, module.HelpTimeoutSeconds);
-                                                        p.Markdown(helpMd ?? "No help available.", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
-                                                    });
-                                                }
-                                            });
+                                        panel.Tabs(inner => {
+                                            foreach (var entry in helpMap)
+                                            {
+                                                var label = $"{EmojiForCommand(entry.Command)} {entry.Command}".Replace("-", "‑");
+                                                inner.AddTab(label, p => {
+                                                    var content = entry.Help ?? "No help available.";
+                                                    if (module.HelpAsCode)
+                                                    {
+                                                        var fenced = $"```powershell\n{content}\n```";
+                                                        p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                    }
+                                                    else
+                                                    {
+                                                        p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                    }
+                                                });
+                                            }
+                                        });
                                         });
                                     }
                                 }
@@ -200,7 +208,7 @@ internal sealed class HtmlExporter
             });
         });
 
-        
+
         log?.Invoke("Finalizing HTML...");
         var html = doc.ToString();
         var moduleTitle = module?.Name ?? "Module";
@@ -271,6 +279,19 @@ internal sealed class HtmlExporter
         // Naive markdown shaping
         var md = text.Replace("SYNTAX", "# Syntax").Replace("DESCRIPTION", "# Description").Replace("PARAMETERS", "# Parameters").Replace("EXAMPLES", "# Examples");
         return md;
+    }
+
+    private List<(string Command, string? Help, int Lines)> BuildHelpMap(string moduleName, List<string> commands, int timeoutSeconds, Action<string>? log)
+    {
+        var list = new List<(string, string?, int)>();
+        foreach (var cmd in commands)
+        {
+            var helpMd = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
+            var lines = string.IsNullOrEmpty(helpMd) ? 0 : helpMd!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
+            log?.Invoke($"Rendering help for {cmd}... ({lines} lines)");
+            list.Add((cmd, helpMd, lines));
+        }
+        return list;
     }
 
     private static string BuildDependenciesMarkdown(ModuleInfoModel module)
