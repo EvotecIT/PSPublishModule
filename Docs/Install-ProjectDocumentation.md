@@ -29,7 +29,9 @@ Install-ProjectDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version
 ## DESCRIPTION
 Copies the contents of a module's Internals folder (or the path defined in
 PrivateData.PSData.PSPublishModuleDelivery) to a destination outside of
-$env:PSModulePath, optionally including README/CHANGELOG from module root.
+$env:PSModulePath, including subfolders such as Scripts, Docs, Binaries, Config.
+When -IncludeRootReadme/-IncludeRootChangelog/-IncludeRootLicense are enabled in
+New-ConfigurationDelivery, root README/CHANGELOG/LICENSE are also copied.
 
 ## EXAMPLES
 
@@ -66,6 +68,43 @@ Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -ListOnly -Verb
 ```
 # Copy, suppress intro/links printing, and open README afterwards
 Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -NoIntro -Open
+```
+
+### EXAMPLE 7
+```
+# Typical build time configuration
+New-ConfigurationInformation -IncludeAll 'Internals\'
+New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -DocumentationOrder '01-Intro.md','02-HowTo.md' -IncludeRootReadme -IncludeRootChangelog
+```
+
+### EXAMPLE 8
+```
+# Direct layout into target folder (no Module/Version subfolders)
+Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Direct
+```
+
+### EXAMPLE 9
+```
+# Copy into C:\\Docs\\EFAdminManager and merge on rerun (only overwrite when -Force)
+Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Module -OnExists Merge -Force
+```
+
+### EXAMPLE 10
+```
+# Overwrite destination entirely on rerun
+Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Overwrite
+```
+
+### EXAMPLE 11
+```
+# Skip if destination exists
+Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Skip
+```
+
+### EXAMPLE 12
+```
+# Plan only with verbose output
+Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -ListOnly -Verbose
 ```
 
 ## PARAMETERS

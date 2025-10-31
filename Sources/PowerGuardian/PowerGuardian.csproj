@@ -36,9 +36,10 @@
     <!-- Net472 needs explicit System.Net.Http reference in SDK-style projects -->
     <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
         <Reference Include="System.Net.Http" />
+        <Reference Include="System.Security" />
     </ItemGroup>
 
-    <ItemGroup>
+    <ItemGroup Condition=" '$(Configuration)' == 'Release' ">
         <PackageReference Include="MatejKafka.XmlDoc2CmdletDoc" Version="0.7.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

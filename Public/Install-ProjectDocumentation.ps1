@@ -6,7 +6,9 @@ function Install-ProjectDocumentation {
     .DESCRIPTION
     Copies the contents of a module's Internals folder (or the path defined in
     PrivateData.PSData.PSPublishModuleDelivery) to a destination outside of
-    $env:PSModulePath, optionally including README/CHANGELOG from module root.
+    $env:PSModulePath, including subfolders such as Scripts, Docs, Binaries, Config.
+    When -IncludeRootReadme/-IncludeRootChangelog/-IncludeRootLicense are enabled in
+    New-ConfigurationDelivery, root README/CHANGELOG/LICENSE are also copied.
 
     .PARAMETER Name
     Module name to install documentation for. Accepts pipeline by value.
@@ -72,21 +74,46 @@ function Install-ProjectDocumentation {
     .EXAMPLE
     # Copy, suppress intro/links printing, and open README afterwards
     Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -NoIntro -Open
+    
+    .EXAMPLE
+    # Typical build time configuration
+    New-ConfigurationInformation -IncludeAll 'Internals\'
+    New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -DocumentationOrder '01-Intro.md','02-HowTo.md' -IncludeRootReadme -IncludeRootChangelog
+
+    .EXAMPLE
+    # Direct layout into target folder (no Module/Version subfolders)
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Direct
+
+    .EXAMPLE
+    # Copy into C:\\Docs\\EFAdminManager and merge on rerun (only overwrite when -Force)
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Module -OnExists Merge -Force
+
+    .EXAMPLE
+    # Overwrite destination entirely on rerun
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Overwrite
+
+    .EXAMPLE
+    # Skip if destination exists
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Skip
+
+    .EXAMPLE
+    # Plan only with verbose output
+    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -ListOnly -Verbose
     #>
-    [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName='ByName')]
+    [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ByName')]
     param(
-        [Parameter(ParameterSetName='ByName', Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
+        [Parameter(ParameterSetName = 'ByName', Position = 0, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true)]
         [Alias('ModuleName')]
         [string] $Name,
-        [Parameter(ParameterSetName='ByModule', ValueFromPipeline = $true)]
-        [Alias('InputObject','ModuleInfo')]
+        [Parameter(ParameterSetName = 'ByModule', ValueFromPipeline = $true)]
+        [Alias('InputObject', 'ModuleInfo')]
         [System.Management.Automation.PSModuleInfo] $Module,
         [version] $RequiredVersion,
         [Parameter(Mandatory)]
         [string] $Path,
-        [ValidateSet('Direct','Module','ModuleAndVersion')]
+        [ValidateSet('Direct', 'Module', 'ModuleAndVersion')]
         [string] $Layout = 'ModuleAndVersion',
-        [ValidateSet('Merge','Overwrite','Skip','Stop')]
+        [ValidateSet('Merge', 'Overwrite', 'Skip', 'Stop')]
         [string] $OnExists = 'Merge',
         [switch] $CreateVersionSubfolder, # legacy toggle: if bound and Layout not specified, maps to Direct/ModuleAndVersion
         [switch] $Force,
@@ -143,9 +170,9 @@ function Install-ProjectDocumentation {
         }
 
         switch ($Layout) {
-            'Direct'            { $dest = $Path }
-            'Module'            { $dest = Join-Path $Path $Module.Name }
-            'ModuleAndVersion'  { $dest = Join-Path (Join-Path $Path $Module.Name) $Module.Version.ToString() }
+            'Direct' { $dest = $Path }
+            'Module' { $dest = Join-Path $Path $Module.Name }
+            'ModuleAndVersion' { $dest = Join-Path (Join-Path $Path $Module.Name) $Module.Version.ToString() }
         }
 
         # If listing only, do not copy — just output the planned destination
@@ -233,7 +260,9 @@ function Install-ProjectDocumentation {
                         $hasIntro = $true
                         Write-Host ''
                         Write-Host 'Introduction:' -ForegroundColor Cyan
-                        foreach ($line in [string[]]$delivery.IntroText) { Write-Host "  $line" }
+                        foreach ($line in [string[]]$delivery.IntroText) {
+                            Write-Host "  $line"
+                        }
                     }
                     if ($delivery.IntroFile) {
                         $introDest = Join-Path $dest ([IO.Path]::GetFileName([string]$delivery.IntroFile))

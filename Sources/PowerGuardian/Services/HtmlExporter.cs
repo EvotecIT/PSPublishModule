@@ -61,6 +61,8 @@ internal sealed class HtmlExporter
                                             Sanitize = true,
                                             AutolinkBareUrls = true,
                                             AllowRelativeLinks = true,
+                                            AllowRawHtmlInline = true,
+                                            AllowRawHtmlBlocks = true,
                                         };
                                         panel.Markdown(md, options);
                                     });
@@ -80,7 +82,7 @@ internal sealed class HtmlExporter
                                                 inner.AddTab(name ?? string.Empty, p =>
                                                 {
                                                     var md = s.Content ?? string.Empty; // already fenced with powershell
-                                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true };
+                                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
                                                     p.Markdown(md, options);
                                                 });
                                             }
@@ -89,26 +91,68 @@ internal sealed class HtmlExporter
                                 }
 
                                 // Docs group (nested tabs)
-                                var docs = list.Where(x => string.Equals(x.Kind, "DOC", System.StringComparison.OrdinalIgnoreCase)).ToList();
-                                if (docs.Count > 0)
+        var docsAll = list.Where(x => string.Equals(x.Kind, "DOC", System.StringComparison.OrdinalIgnoreCase)).ToList();
+        if (docsAll.Count > 0)
+        {
+            var docsLocal = docsAll.Where(x => string.Equals(x.Source, "Local", StringComparison.OrdinalIgnoreCase)).ToList();
+            var docsRepo  = docsAll.Where(x => string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase)).ToList();
+            log?.Invoke($"Adding Docs tab with {docsAll.Count} items (Local={docsLocal.Count}, Repo={docsRepo.Count})...");
+            tabs.AddTab("📚 Docs", panel =>
+            {
+                // If both present, split into subtabs; otherwise render directly
+                if (docsLocal.Count > 0 && docsRepo.Count > 0)
+                {
+                    panel.Tabs(group => {
+                        group.AddTab("📄 Local", p =>
+                        {
+                            var inner = new TablerTabs();
+                            p.Add(inner);
+                            foreach (var d in docsLocal)
+                            {
+                                var name = string.IsNullOrWhiteSpace(d.FileName) ? MakeShortTabTitle(d) : d.FileName;
+                                inner.AddTab(name ?? string.Empty, pp =>
                                 {
-                                    log?.Invoke($"Adding Docs tab with {docs.Count} items...");
-                                    tabs.AddTab("📚 Docs", panel =>
-                                    {
-                                        panel.Tabs(inner => {
-                                            foreach (var d in docs)
-                                            {
-                                                var name = string.IsNullOrWhiteSpace(d.FileName) ? MakeShortTabTitle(d) : d.FileName;
-                                                inner.AddTab(name ?? string.Empty, p =>
-                                                {
-                                                    var md = d.Content ?? string.Empty;
-                                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true };
-                                                    p.Markdown(md, options);
-                                                });
-                                            }
-                                        });
-                                    });
-                                }
+                                    var md = d.Content ?? string.Empty;
+                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                                    pp.Markdown(md, options);
+                                });
+                            }
+                        });
+                        group.AddTab("🌐 Repository", p =>
+                        {
+                            var inner = new TablerTabs();
+                            p.Add(inner);
+                            foreach (var d in docsRepo)
+                            {
+                                var name = string.IsNullOrWhiteSpace(d.FileName) ? MakeShortTabTitle(d) : d.FileName;
+                                inner.AddTab(name ?? string.Empty, pp =>
+                                {
+                                    var md = d.Content ?? string.Empty;
+                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                                    pp.Markdown(md, options);
+                                });
+                            }
+                        });
+                    });
+                }
+                else
+                {
+                    var render = docsLocal.Count > 0 ? docsLocal : docsRepo;
+                    var inner = new TablerTabs();
+                    panel.Add(inner);
+                    foreach (var d in render)
+                    {
+                        var name = string.IsNullOrWhiteSpace(d.FileName) ? MakeShortTabTitle(d) : d.FileName;
+                        inner.AddTab(name ?? string.Empty, pp =>
+                        {
+                            var md = d.Content ?? string.Empty;
+                            var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                            pp.Markdown(md, options);
+                        });
+                    }
+                }
+            });
+        }
 
                                 // Dependencies tab (if any)
                                 if (!module.SkipDependencies && module.Dependencies.Count > 0)
@@ -188,9 +232,9 @@ internal sealed class HtmlExporter
                                                         net.AddEdge(module.Name, depId);
                                                         foreach (var c in d.Children)
                                                         {
-                                                            var cId = depId + ":" + c.Name;
-                                                            AddNodeSafe(cId, node => node.WithLabel(c.Name + (string.IsNullOrEmpty(c.Version) ? string.Empty : $"\n{c.Version}")).WithLevel(2));
-                                                            net.AddEdge(depId, cId, edge => edge.WithDashes(true));
+                                                            var childId = c.Name;
+                                                            AddNodeSafe(childId, node => node.WithLabel(c.Name + (string.IsNullOrEmpty(c.Version) ? string.Empty : $"\n{c.Version}")).WithLevel(2));
+                                                            net.AddEdge(depId, childId, edge => edge.WithDashes(true));
                                                         }
                                                     }
                                                 });
@@ -225,11 +269,11 @@ internal sealed class HtmlExporter
                                                         if (module.HelpAsCode)
                                                         {
                                                             var fenced = $"```powershell\n{content}\n```";
-                                                            p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                            p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                                                         }
                                                         else
                                                         {
-                                                            p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                            p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                                                         }
                                                     }
                                                 });
@@ -376,7 +420,7 @@ internal sealed class HtmlExporter
                 }
                 var line = (s.Name ?? m.Name) + (parts.Count > 0 ? (" " + string.Join(" ", parts)) : string.Empty);
                 var fenced = $"```powershell\n{line}\n```";
-                panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true });
+                panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             }
             panel.LineBreak();
         }
@@ -435,7 +479,7 @@ internal sealed class HtmlExporter
                 if (!string.IsNullOrWhiteSpace(ex.Code))
                 {
                     var fenced = $"```powershell\n{ex.Code.Trim()}\n```";
-                    panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 4, AutolinkBareUrls = true, Sanitize = true });
+                    panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 4, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                 }
                 if (!string.IsNullOrWhiteSpace(ex.Remarks)) panel.Text(ex.Remarks!.Trim());
                 panel.LineBreak();
@@ -445,13 +489,13 @@ internal sealed class HtmlExporter
         if (!string.IsNullOrWhiteSpace(m.Notes))
         {
             panel.Text("## Notes");
-            panel.Markdown(m.Notes!.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true });
+            panel.Markdown(m.Notes!.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
         }
         if (m.RelatedLinks.Count > 0)
         {
             panel.Text("## Related Links");
             var md = string.Join("\n", m.RelatedLinks.Select(l => !string.IsNullOrEmpty(l.Uri) ? $"- [{l.Title}]({l.Uri})" : $"- {l.Title}"));
-            panel.Markdown(md, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true });
+            panel.Markdown(md, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
         }
     }
 
@@ -515,9 +559,9 @@ internal sealed class HtmlExporter
                 var type = string.IsNullOrWhiteSpace(p.Type) ? "" : p.Type.Replace("|", "\\|");
                 var req = p.Required.HasValue ? (p.Required.Value ? "Yes" : "No") : "";
                 var pos = string.IsNullOrWhiteSpace(p.Position) ? "" : p.Position;
-                var pipe = string.IsNullOrWhiteSpace(p.PipelineInput) ? "" : p.PipelineInput.Replace("|", "\\|");
+                var pipe = ((p.PipelineInput ?? string.Empty)).Replace("|", "\\|");
                 var wc = p.Globbing.HasValue ? (p.Globbing.Value ? "Yes" : "No") : "";
-                var def = string.IsNullOrWhiteSpace(p.DefaultValue) ? "" : p.DefaultValue.Replace("|", "\\|");
+                var def = ((p.DefaultValue ?? string.Empty)).Replace("|", "\\|");
                 var aliases = (p.Aliases == null || p.Aliases.Count == 0) ? "" : string.Join(", ", p.Aliases).Replace("|", "\\|");
                 var desc = string.IsNullOrWhiteSpace(p.Description) ? "" : p.Description!.Replace("\n", " ").Replace("|", "\\|");
                 sb.AppendLine($"| {name} | {type} | {req} | {pos} | {pipe} | {wc} | {def} | {aliases} | {desc} |");

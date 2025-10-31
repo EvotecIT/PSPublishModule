@@ -14,7 +14,25 @@ namespace PowerGuardian;
 ///   <code>Show-ModuleDocumentation -Name EFAdminManager -Readme -Changelog</code>
 /// </example>
 /// <example>
-///   <code>Show-ModuleDocumentation -Name EFAdminManager -FromRepository -RepositoryPaths docs -RepositoryBranch main</code>
+/// <example>
+///   <code>Show-ModuleDocumentation -Name EFAdminManager -Readme -Changelog -PreferInternals</code>
+/// </example>
+///   <code>Show-ModuleDocumentation -Name EFAdminManager -PreferRepository -RepositoryPaths 'docs' -RepositoryBranch 'main'</code>
+/// </example>
+/// <example>
+///   <code>Show-ModuleDocumentation -Name EFAdminManager -PreferRepository -RepositoryToken 'ghp_xxx'</code>
+/// </example>
+/// <example>
+///   <code>Show-ModuleDocumentation -Name EFAdminManager -PreferRepository -RepositoryPaths 'Docs/en-US' -RepositoryBranch 'main'</code>
+/// <example>
+///   <code>Show-ModuleDocumentation -Module (Get-Module -ListAvailable EFAdminManager) -All</code>
+/// </example>
+/// <example>
+///   <code>Show-ModuleDocumentation -ModuleBase 'C:\\Program Files\\WindowsPowerShell\\Modules\\EFAdminManager\\3.0.0' -Readme</code>
+/// </example>
+/// </example>
+/// <example>
+///   <code>Set-ModuleDocumentation -FromEnvironment; Show-ModuleDocumentation -Name EFAdminManager -PreferRepository</code>
 /// </example>
 /// </summary>
 [Cmdlet(VerbsCommon.Show, "ModuleDocumentation", DefaultParameterSetName = "ByName")]
@@ -172,6 +190,8 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
 
         WriteVerbose("Resolving module and manifest...");
 
+        // No persisted settings file – rely on explicit parameters and environment variables
+
         // Build module metadata from manifest
         ModuleInfoModel meta = new ModuleInfoModel();
         var manifestPathMeta = System.IO.Directory.GetFiles(rootBase, "*.psd1", System.IO.SearchOption.TopDirectoryOnly).FirstOrDefault();
@@ -314,6 +334,8 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         WriteObject(path);
         return;
     }
+
+    // (No settings file reader – intentionally omitted)
 
     // Ensure we don't iterate strings as char sequences
     private static System.Collections.Generic.IEnumerable<object?> EnumerateItems(object? value)

@@ -101,6 +101,11 @@ internal sealed class DocumentationPlanner
             {
                 var info = RepoUrlParser.Parse(req.ProjectUri!);
                 var token = ResolveToken(req.RepositoryToken);
+                if (string.IsNullOrEmpty(token))
+                {
+                    // Try persisted token based on host (GitHub/Azure DevOps)
+                    token = TokenStore.GetToken(info.Host) ?? string.Empty;
+                }
                 client = RepoClientFactory.Create(info, token);
             }
             if (client != null)
@@ -211,6 +216,10 @@ internal sealed class DocumentationPlanner
                 {
                     var info = RepoUrlParser.Parse(req.ProjectUri!);
                     var token = ResolveToken(req.RepositoryToken);
+                    if (string.IsNullOrEmpty(token))
+                    {
+                        token = TokenStore.GetToken(info.Host) ?? string.Empty;
+                    }
                     var client = RepoClientFactory.Create(info, token);
                     if (client != null)
                     {
@@ -232,6 +241,68 @@ internal sealed class DocumentationPlanner
                         }
                     }
                 }
+
+                // Include repository Docs/ folder similar to Internals\Docs
+                try
+                {
+                    var info2 = RepoUrlParser.Parse(req.ProjectUri!);
+                    var token2 = ResolveToken(req.RepositoryToken);
+                    if (string.IsNullOrEmpty(token2))
+                    {
+                        token2 = TokenStore.GetToken(info2.Host) ?? string.Empty;
+                    }
+                    var client2 = RepoClientFactory.Create(info2, token2);
+                    if (client2 != null)
+                    {
+                        string branch2 = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client2.GetDefaultBranch() : req.RepositoryBranch!;
+                        var roots = (req.RepositoryPaths != null && req.RepositoryPaths.Length > 0)
+                            ? req.RepositoryPaths
+                            : new [] { "docs", "Docs" };
+
+                        var collected = new List<(string Name, string Path)>();
+                        foreach (var root in roots.Distinct(StringComparer.OrdinalIgnoreCase))
+                        {
+                            foreach (var item in client2.ListFiles(root, branch2))
+                            {
+                                var n = item.Name;
+                                if (n.EndsWith(".md", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".markdown", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    collected.Add(item);
+                                }
+                            }
+                        }
+                        if (collected.Count > 0)
+                        {
+                            // Apply DocumentationOrder if provided
+                            var orderArr = req.Delivery?.Properties["DocumentationOrder"]?.Value as System.Collections.IEnumerable;
+                            var order = new List<string>();
+                            if (orderArr != null)
+                            {
+                                foreach (var o in orderArr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) order.Add(s!); }
+                            }
+                            IEnumerable<(string Name,string Path)> ordered;
+                            if (order.Count > 0)
+                            {
+                                var map = new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+                                for (int i=0;i<order.Count;i++) map[order[i]] = i;
+                                ordered = collected.OrderBy(f => map.ContainsKey(f.Name) ? map[f.Name] : int.MaxValue)
+                                                   .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase);
+                            }
+                            else
+                            {
+                                ordered = collected.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase);
+                            }
+
+                            foreach (var f in ordered)
+                            {
+                                var content = client2.GetFileContent(f.Path, branch2);
+                                if (string.IsNullOrEmpty(content)) continue;
+                                res.Items.Add(new DocumentItem { Title = f.Name, Kind = "DOC", Content = content!, FileName = f.Name, Path = f.Path, Source = "Remote" });
+                            }
+                        }
+                    }
+                }
+                catch { /* ignore repo Docs failures */ }
             }
         }
         catch { /* ignore remote backfill errors */ }
@@ -271,11 +342,32 @@ internal sealed class DocumentationPlanner
                 if (Directory.Exists(docsRoot))
                 {
                     var mdFiles = Directory.GetFiles(docsRoot, "*.md", SearchOption.TopDirectoryOnly)
-                                            .Concat(Directory.GetFiles(docsRoot, "*.markdown", SearchOption.TopDirectoryOnly));
-                    foreach (var f in mdFiles)
+                                            .Concat(Directory.GetFiles(docsRoot, "*.markdown", SearchOption.TopDirectoryOnly))
+                                            .ToList();
+                    // Optional ordering from delivery metadata
+                    var orderArr = req.Delivery?.Properties["DocumentationOrder"]?.Value as System.Collections.IEnumerable;
+                    var order = new List<string>();
+                    if (orderArr != null)
+                    {
+                        foreach (var o in orderArr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) order.Add(s!); }
+                    }
+                    IEnumerable<string> ordered;
+                    if (order.Count > 0)
+                    {
+                        // First explicit order by file name (case-insensitive), then remaining alphabetically
+                        var map = new Dictionary<string,int>(StringComparer.OrdinalIgnoreCase);
+                        for (int i=0;i<order.Count;i++) map[order[i]] = i;
+                        ordered = mdFiles.OrderBy(f => map.ContainsKey(Path.GetFileName(f)) ? map[Path.GetFileName(f)] : int.MaxValue)
+                                         .ThenBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        ordered = mdFiles.OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+                    }
+                    foreach (var f in ordered)
                     {
                         string content; try { content = File.ReadAllText(f); } catch { continue; }
-                        res.Items.Add(new DocumentItem { Title = Path.GetFileName(f), Kind = "DOC", Content = content, FileName = Path.GetFileName(f), Path = f });
+                        res.Items.Add(new DocumentItem { Title = Path.GetFileName(f), Kind = "DOC", Content = content, FileName = Path.GetFileName(f), Path = f, Source = "Local" });
                     }
                 }
             }

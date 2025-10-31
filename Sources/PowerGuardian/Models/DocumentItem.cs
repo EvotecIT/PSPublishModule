@@ -15,4 +15,6 @@ internal sealed class DocumentItem
     public string? Path { get; set; }
     /// <summary>Optional original filename (used for grouping e.g. Scripts/Docs).</summary>
     public string? FileName { get; set; }
+    /// <summary>Optional source of the document: "Local" (Internals) or "Remote" (Repository).</summary>
+    public string? Source { get; set; }
 }

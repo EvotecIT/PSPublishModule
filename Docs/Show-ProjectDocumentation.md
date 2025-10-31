@@ -15,21 +15,21 @@ Shows README/CHANGELOG or a chosen document for a module, with a simple console 
 ### ByName (Default)
 ```
 Show-ProjectDocumentation [[-Name] <String>] [-RequiredVersion <Version>] [-Readme] [-Changelog] [-License]
- [-Intro] [-Upgrade] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
+ [-Intro] [-Upgrade] [-All] [-Links] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
  [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ByModule
 ```
 Show-ProjectDocumentation [-Module <PSModuleInfo>] [-RequiredVersion <Version>] [-Readme] [-Changelog]
- [-License] [-Intro] [-Upgrade] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
+ [-License] [-Intro] [-Upgrade] [-All] [-Links] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
  [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ### ByPath
 ```
 Show-ProjectDocumentation [-RequiredVersion <Version>] [-DocsPath <String>] [-Readme] [-Changelog] [-License]
- [-Intro] [-Upgrade] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
+ [-Intro] [-Upgrade] [-All] [-Links] [-File <String>] [-PreferInternals] [-List] [-Raw] [-Open]
  [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
@@ -42,37 +42,67 @@ You can also point directly to a docs folder via -DocsPath (e.g., output of Inst
 
 ### EXAMPLE 1
 ```
-Show-ModuleDocumentation -Name EFAdminManager -Readme
+Show-ProjectDocumentation -Name EFAdminManager -Readme
 ```
 
 ### EXAMPLE 2
 ```
-Get-Module -ListAvailable EFAdminManager | Show-ModuleDocumentation -Changelog
+Get-Module -ListAvailable EFAdminManager | Show-ProjectDocumentation -Changelog
 ```
 
 ### EXAMPLE 3
 ```
-Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
+Show-ProjectDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
 ```
 
 ### EXAMPLE 4
 ```
-Show-ModuleDocumentation -Name EFAdminManager -License
+Show-ProjectDocumentation -Name EFAdminManager -License
 ```
 
 ### EXAMPLE 5
 ```
-Show-ModuleDocumentation -Name EFAdminManager -Intro
+Show-ProjectDocumentation -Name EFAdminManager -Intro
 ```
 
 ### EXAMPLE 6
 ```
-Show-ModuleDocumentation -Name EFAdminManager -Upgrade
+Show-ProjectDocumentation -Name EFAdminManager -Upgrade
 ```
 
 ### EXAMPLE 7
 ```
-Show-ModuleDocumentation -Name EFAdminManager -List
+Show-ProjectDocumentation -Name EFAdminManager -List
+```
+
+### EXAMPLE 8
+```
+Show-ProjectDocumentation -Name EFAdminManager -All -Links
+Displays Introduction, README, CHANGELOG, LICENSE and prints ImportantLinks.
+```
+
+### EXAMPLE 9
+```
+# Prefer Internals copy of README/CHANGELOG when both root and Internals exist
+Show-ProjectDocumentation -Name EFAdminManager -Readme -Changelog -PreferInternals
+```
+
+### EXAMPLE 10
+```
+# Show a specific file from a copied docs folder
+Show-ProjectDocumentation -DocsPath 'C:\\Docs\\EFAdminManager\\3.0.0' -File 'Internals\\Docs\\HowTo.md'
+```
+
+### EXAMPLE 11
+```
+# Quick list of found README/CHANGELOG/License in root and Internals
+Show-ProjectDocumentation -Name EFAdminManager -List | Format-Table -Auto
+```
+
+### EXAMPLE 12
+```
+# Open the resolved README in the default viewer
+Show-ProjectDocumentation -Name EFAdminManager -Readme -Open
 ```
 
 ## PARAMETERS
@@ -210,6 +240,38 @@ Accept wildcard characters: False
 Show upgrade text defined in PrivateData.PSData.PSPublishModuleDelivery.UpgradeText when available.
 If not defined,
 looks for an UPGRADE* file; otherwise throws.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -All
+Show Introduction, README, CHANGELOG and LICENSE in a standard order.
+You can still add
+specific switches (e.g., -Changelog) and they will be included additively without duplication.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Links
+Print ImportantLinks defined in PrivateData.PSData.PSPublishModuleDelivery after the selected documents.
 
 ```yaml
 Type: SwitchParameter

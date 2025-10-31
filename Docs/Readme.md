@@ -56,9 +56,6 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
-### [Install-ModuleDocumentation](Install-ModuleDocumentation.md)
-{{ Fill in the Description }}
-
 ### [Install-ProjectDocumentation](Install-ProjectDocumentation.md)
 {{ Fill in the Description }}
 
@@ -141,9 +138,6 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
-{{ Fill in the Description }}
-
-### [Show-ModuleDocumentation](Show-ModuleDocumentation.md)
 {{ Fill in the Description }}
 
 ### [Show-ProjectDocumentation](Show-ProjectDocumentation.md)

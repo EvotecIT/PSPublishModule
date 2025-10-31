@@ -30,10 +30,26 @@
         }, $true
     )
 
+    # Language keywords and control tokens that can appear in CommandAsts under some constructs
+    $Reserved = @(
+        'if','elseif','else','switch','for','foreach','while','do','until',
+        'try','catch','finally','throw','trap','break','continue','return',
+        'function','filter','workflow','configuration','class','enum','data',
+        'param','begin','process','end','in','using'
+    )
+
     $List = foreach ($Function in $ListOfFuncionsAst) {
-        $Line = $Function.CommandElements[0]
-        if ($Line.Value) {
-            $Line.Value
+        try {
+            $name = $Function.GetCommandName()
+            if ([string]::IsNullOrWhiteSpace($name)) { continue }
+            if ($name -in $Reserved) { continue }
+            # Exclude common redirection-like tokens that could surface as commands in edge cases
+            if ($name -in '>', '>>', '2>', '2>>', '|') { continue }
+            $name
+        } catch {
+            # Fallback to first element value when safe
+            $Line = $Function.CommandElements[0]
+            if ($Line -and $Line.Value -and ($Line.Value -notin $Reserved)) { $Line.Value }
         }
     }
     $List

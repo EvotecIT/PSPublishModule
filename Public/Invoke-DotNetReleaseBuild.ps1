@@ -120,9 +120,9 @@ function Invoke-DotNetReleaseBuild {
         $null = New-Item -ItemType Directory -Path $releasePath -Force
     }
 
-    dotnet build $csproj.FullName --configuration Release
+    $buildOutput = & dotnet build $csproj.FullName --configuration Release 2>&1
     if ($LASTEXITCODE -ne 0) {
-        $result.ErrorMessage = 'dotnet build failed.'
+        $result.ErrorMessage = "dotnet build failed. ExitCode=$LASTEXITCODE\n" + ($buildOutput | Out-String)
         return [PSCustomObject]$result
     }
     if ($CertificateThumbprint) {
@@ -132,9 +132,9 @@ function Invoke-DotNetReleaseBuild {
     Compress-Archive -Path (Join-Path $releasePath '*') -DestinationPath $zipPath -Force
 
     # Pack the main project
-    dotnet pack $csproj.FullName --configuration Release --no-restore --no-build
+    $packOutput = & dotnet pack $csproj.FullName --configuration Release --no-restore --no-build 2>&1
     if ($LASTEXITCODE -ne 0) {
-        $result.ErrorMessage = 'dotnet pack failed.'
+        $result.ErrorMessage = "dotnet pack failed. ExitCode=$LASTEXITCODE\n" + ($packOutput | Out-String)
         return [PSCustomObject]$result
     }
 
@@ -143,9 +143,10 @@ function Invoke-DotNetReleaseBuild {
         Write-Verbose "Invoke-DotNetReleaseBuild - Packing $($dependencyProjects.Count) dependency projects"
         foreach ($depProj in $dependencyProjects) {
             Write-Verbose "Invoke-DotNetReleaseBuild - Packing dependency: $(Split-Path -Leaf $depProj)"
-            dotnet pack $depProj --configuration Release --no-restore --no-build
+            $depOut = & dotnet pack $depProj --configuration Release --no-restore --no-build 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "Invoke-DotNetReleaseBuild - Failed to pack dependency: $(Split-Path -Leaf $depProj)"
+                if ($depOut) { Write-Verbose ($depOut | Out-String) }
             }
         }
     }

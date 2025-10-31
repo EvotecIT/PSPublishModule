@@ -107,11 +107,20 @@
     foreach ($Framework in $TranslateFrameworks.Keys) {
         if ($SupportedFrameworks.Contains($Framework.ToLower()) -and $LibraryConfiguration.Framework.Contains($Framework.ToLower())) {
             Write-Text "[+] Building $Framework ($Configuration)"
-            $null = dotnet publish --configuration $Configuration --verbosity q -nologo -p:Version=$Version --framework $Framework
+            # Run dotnet publish and capture full stdout/stderr so we can show real errors on failure
+            $buildOutput = & dotnet publish --configuration $Configuration --verbosity minimal -nologo -p:Version=$Version --framework $Framework 2>&1
             if ($LASTEXITCODE) {
-                Write-Host # This is to add new line, because the first line was opened up.
+                Write-Host # newline for readability
                 Write-Text "[-] Building $Framework - failed. Error: $LASTEXITCODE" -Color Red
-                exit
+                if ($buildOutput) {
+                    Write-Text "   [-] dotnet publish output (first 100 lines):" -Color Red
+                    $lines = @($buildOutput | Select-Object -First 100)
+                    foreach ($line in $lines) { Write-Host "      $line" }
+                    if ($buildOutput.Count -gt 100) {
+                        Write-Text "   [...] output truncated (showing 100 of $($buildOutput.Count) lines)" -Color DarkYellow
+                    }
+                }
+                exit $LASTEXITCODE
             }
         } else {
             continue

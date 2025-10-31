@@ -68,6 +68,10 @@ function New-ConfigurationDelivery {
     Optional branch name to use when fetching remote documentation. If omitted, providers fall back to
     the repository default branch (e.g., main/master).
 
+    .PARAMETER DocumentationOrder
+    Optional file-name order for Internals\Docs when rendering documentation. Provide names such as
+    'Intro.md','HowTo.md','FAQ.md'; files not listed are appended alphabetically.
+
     .EXAMPLE
     PS> New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog
     Emits Options.Delivery and causes PrivateData.PSData.PSPublishModuleDelivery to be written in the manifest.
@@ -76,6 +80,43 @@ function New-ConfigurationDelivery {
     PS> New-ConfigurationInformation -IncludeAll 'Internals\'
     PS> New-ConfigurationDelivery -Enable
     Minimal configuration that bundles Internals and exposes it to the installer.
+
+    .EXAMPLE
+    # Include Internals and configure Docs ordering + repo docs
+    New-ConfigurationInformation -IncludeAll 'Internals\'
+    New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -DocumentationOrder '01-Intro.md','02-HowTo.md','99-FAQ.md' -RepositoryPaths 'docs' -RepositoryBranch 'main'
+    # This causes:
+    # - Internals\Docs to be bundled and shown in the UI in the given order (remaining files alphabetically)
+    # - Repository Docs folder to be fetched/displayed when -PreferRepository is used, also respecting DocumentationOrder
+
+    .EXAMPLE
+    # GitHub: configure remote docs
+    # 1) Set token once (Windows): setx PG_GITHUB_TOKEN "ghp_xxx"
+    #    or call Set-ModuleDocumentation -GitHubToken 'ghp_xxx'
+    # 2) In your build script, indicate where docs live in the repo
+    New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch main
+    # Then on the viewing side: Show-ModuleDocumentation -Name EFAdminManager -PreferRepository
+
+    .EXAMPLE
+    # Azure DevOps: configure remote docs
+    # URL form: https://dev.azure.com/{organization}/{project}/_git/{repository}
+    # PAT scope: Code (Read)
+    # 1) Set token once (Windows): setx PG_AZDO_PAT "your_pat"
+    #    or call Set-ModuleDocumentation -AzureDevOpsPat 'your_pat'
+    # 2) In your build script, indicate repo docs path
+    New-ConfigurationDelivery -Enable -RepositoryPaths 'Docs/en-US' -RepositoryBranch main
+    # Then on the viewing side: Show-ModuleDocumentation -Name EFAdminManager -PreferRepository
+
+    .EXAMPLE
+    # Mix Intro/Upgrade from files with ImportantLinks and include LICENSE in both root and Internals
+    New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IntroFile 'Docs\\Intro.md' -UpgradeFile 'Docs\\Upgrade.md' -ImportantLinks @(
+        @{ Title = 'Home'; Url = 'https://contoso.example/docs' },
+        @{ Title = 'Issues'; Url = 'https://contoso.example/issues' }
+    ) -IncludeRootLicense -LicenseDestination Both
+
+    .EXAMPLE
+    # Multiple repository docs roots and custom order
+    New-ConfigurationDelivery -Enable -RepositoryPaths 'docs','guides' -RepositoryBranch main -DocumentationOrder '01-Intro.md','20-FAQ.md'
 
     .NOTES
     This emits a Type 'Options' object under Options.Delivery so it works with the
@@ -100,7 +141,8 @@ function New-ConfigurationDelivery {
         [string] $IntroFile,
         [string] $UpgradeFile,
         [string[]] $RepositoryPaths,
-        [string] $RepositoryBranch
+        [string] $RepositoryBranch,
+        [string[]] $DocumentationOrder
     )
 
     if (-not $Enable) { return }
@@ -121,6 +163,7 @@ function New-ConfigurationDelivery {
         UpgradeFile          = $UpgradeFile
         RepositoryPaths      = $RepositoryPaths
         RepositoryBranch     = $RepositoryBranch
+        DocumentationOrder   = $DocumentationOrder
         Schema               = '1.3'
     }
 

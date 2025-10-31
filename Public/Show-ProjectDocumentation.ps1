@@ -85,6 +85,22 @@ function Show-ProjectDocumentation {
     .EXAMPLE
     Show-ProjectDocumentation -Name EFAdminManager -All -Links
     Displays Introduction, README, CHANGELOG, LICENSE and prints ImportantLinks.
+
+    .EXAMPLE
+    # Prefer Internals copy of README/CHANGELOG when both root and Internals exist
+    Show-ProjectDocumentation -Name EFAdminManager -Readme -Changelog -PreferInternals
+
+    .EXAMPLE
+    # Show a specific file from a copied docs folder
+    Show-ProjectDocumentation -DocsPath 'C:\\Docs\\EFAdminManager\\3.0.0' -File 'Internals\\Docs\\HowTo.md'
+
+    .EXAMPLE
+    # Quick list of found README/CHANGELOG/License in root and Internals
+    Show-ProjectDocumentation -Name EFAdminManager -List | Format-Table -Auto
+
+    .EXAMPLE
+    # Open the resolved README in the default viewer
+    Show-ProjectDocumentation -Name EFAdminManager -Readme -Open
     #>
     [CmdletBinding(DefaultParameterSetName='ByName')]
     param(

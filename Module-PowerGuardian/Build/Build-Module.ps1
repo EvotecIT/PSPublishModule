@@ -11,6 +11,7 @@
         Description          = 'Simple project PowerGuardian'
         PowerShellVersion    = '5.1'
         Tags                 = @('Windows', 'MacOS', 'Linux')
+        ProjectUri           = 'https://github.com/EvotecIT/PowerGuardian'
     }
     New-ConfigurationManifest @Manifest
 

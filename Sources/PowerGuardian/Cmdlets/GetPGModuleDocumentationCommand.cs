@@ -193,4 +193,3 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         }
     }
 }
-

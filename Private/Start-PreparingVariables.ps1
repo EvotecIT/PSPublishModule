@@ -75,6 +75,12 @@
             }
         }
 
+        # Do not globally prune 'Docs' when the build explicitly includes 'Internals\' via IncludeAll.
+        # Otherwise Internals\Docs would be skipped and not bundled.
+        if ($DirectoriesWithAll -and ($DirectoriesWithAll | Where-Object { $_ -match '^(?i)internals[\\/]+$|^(?i)internals[\\/]' })) {
+            $PruneNames = $PruneNames | Where-Object { $_ -ne 'Docs' }
+        }
+
         $FollowSymlink = $false
         $Directories = Get-PSPDirectoriesPruned -BasePath $FullProjectPath -ScanRelativeDirs $ScanDirs -ExcludeNames $Exclude -PruneNames $PruneNames -FollowSymlink:$FollowSymlink
         $Files = Get-PSPFilesPruned -Directories $Directories -FollowSymlink:$FollowSymlink

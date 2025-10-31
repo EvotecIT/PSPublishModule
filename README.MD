@@ -71,6 +71,32 @@ That's it. Whenever there's a new version you simply run the command and you can
 
 **The important thing** is if something works for you on production, keep using it till you test the new version on a test computer. I do changes that may not be big, but big enough that auto-update will break your code. For example, small rename to a parameter and your code stops working! Be responsible!
 
+### Documentation — Local, GitHub, Azure DevOps
+
+PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Config) and root README/CHANGELOG/LICENSE. Use Install-ProjectDocumentation to copy them out for end‑users, and PowerGuardian to view docs with a rich UI (README + CHANGELOG + License + Docs tabs, dependencies graph, commands help).
+
+- Build-time bundling (in your module's Build script):
+  - `New-ConfigurationInformation -IncludeAll 'Internals\'`
+  - `New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -DocumentationOrder '01-Intro.md','02-HowTo.md'`
+  - Optional repository backfill (display docs directly from repo):
+    - GitHub: `New-ConfigurationDelivery -RepositoryPaths 'docs' -RepositoryBranch main`
+    - Azure DevOps: `New-ConfigurationDelivery -RepositoryPaths 'Docs/en-US' -RepositoryBranch main`
+
+- Copy docs for a module already installed:
+  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -Layout ModuleAndVersion`
+  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -Layout Direct`
+  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -OnExists Overwrite`
+  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -Layout Module -OnExists Merge -Force`
+
+- View docs (PowerGuardian):
+  - Local files: `Show-ModuleDocumentation -Name 'EFAdminManager' -Readme -Changelog`
+  - Prefer repository: `Show-ModuleDocumentation -Name 'EFAdminManager' -PreferRepository`
+  - Prefer Internals: `Show-ModuleDocumentation -Name 'EFAdminManager' -Readme -Changelog -PreferInternals`
+  - Specific file from copied docs: `Show-ModuleDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -File 'Internals\Docs\HowTo.md'`
+  - GitHub token (private repos): set once `setx PG_GITHUB_TOKEN "ghp_xxx"` or `Set-ModuleDocumentation -GitHubToken 'ghp_xxx'`
+  - Azure DevOps PAT (Code: Read): set once `setx PG_AZDO_PAT "your_pat"` or `Set-ModuleDocumentation -AzureDevOpsPat 'your_pat'`
+  - Repo URL format for AzDO: `https://dev.azure.com/{organization}/{project}/_git/{repository}`
+
 ### Usage
 
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
