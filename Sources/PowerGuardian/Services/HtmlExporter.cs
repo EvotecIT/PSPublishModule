@@ -53,8 +53,16 @@ internal sealed class HtmlExporter
                                 // annotate local copies with "(local)" for clarity.
                                 try
                                 {
-                                    string BaseLabel(string t)
+                                    string BaseLabel(string t, string? fileName)
                                     {
+                                        // Prefer filename when it clearly indicates kind
+                                        if (!string.IsNullOrEmpty(fileName))
+                                        {
+                                            var fn = fileName.Trim();
+                                            if (fn.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
+                                            if (fn.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)) return "CHANGELOG";
+                                            if (fn.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
+                                        }
                                         if (string.IsNullOrEmpty(t)) return t;
                                         var u = t.Trim();
                                         if (u.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
@@ -62,24 +70,13 @@ internal sealed class HtmlExporter
                                         if (u.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
                                         return u;
                                     }
-                                    var groups = standard.GroupBy(s => BaseLabel(s.Title ?? string.Empty), StringComparer.OrdinalIgnoreCase);
+                                    var groups = standard.GroupBy(s => BaseLabel(s.Title ?? string.Empty, s.FileName), StringComparer.OrdinalIgnoreCase);
                                     foreach (var g in groups)
                                     {
                                         if (g.Key == "README" || g.Key == "CHANGELOG" || g.Key == "LICENSE")
                                         {
                                             bool hasRemote = g.Any(x => string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase));
-                                            if (hasRemote)
-                                            {
-                                                foreach (var x in g)
-                                                {
-                                                    var title = x.Title ?? string.Empty;
-                                                    bool isRemote = string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase);
-                                                    if (!isRemote && title.IndexOf("(local)", StringComparison.OrdinalIgnoreCase) < 0)
-                                                    {
-                                                        x.Title = title + " (local)";
-                                                    }
-                                                }
-                                            }
+                                            // Do not mutate titles; badges indicate source.
                                         }
                                     }
                                 }
@@ -92,23 +89,38 @@ internal sealed class HtmlExporter
                                 foreach (var it in standard)
                                 {
                                     var title = MakeShortTabTitle(it);
-                                    log?.Invoke($"Adding document tab: {title}");
-                                    tabs.AddTab(title, panel =>
+                                    var src = string.IsNullOrEmpty(it.Source) ? "unknown" : it.Source;
+                                    log?.Invoke($"Adding document tab: {title} [source: {src}]");
+                                    var added = tabs.AddTab(title, panel =>
                                     {
                                         var md = it.Content ?? string.Empty;
                                         var options = new MarkdownOptions
                                         {
                                             HeadingsBaseLevel = 2,
-                                            TableMode = MarkdownTableMode.Plain,
+                                            TableMode = MarkdownTableMode.DataTables,
                                             OpenLinksInNewTab = true,
                                             Sanitize = true,
                                             AutolinkBareUrls = true,
                                             AllowRelativeLinks = true,
                                             AllowRawHtmlInline = true,
                                             AllowRawHtmlBlocks = true,
+                                            DataTables = new MarkdownDataTablesOptions {
+                                                Responsive = true,
+                                                // Start in Responsive; ToggleView button lets users switch to ScrollX
+                                                Export = true,
+                                                ExportFormats = new [] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy },
+                                                StateSave = true
+                                            }
                                         };
                                         panel.Markdown(md, options);
                                     });
+                                    // Badge to indicate source
+                                    try
+                                    {
+                                        if (string.Equals(it.Source, "Local", StringComparison.OrdinalIgnoreCase)) added.WithBadge("local", TablerBadgeColor.Blue);
+                                        else if (string.Equals(it.Source, "Remote", StringComparison.OrdinalIgnoreCase)) added.WithBadge("remote", TablerBadgeColor.Teal);
+                                    }
+                                    catch { }
                                 }
 
                                 // Scripts group (nested tabs)
@@ -156,7 +168,7 @@ internal sealed class HtmlExporter
                                 inner.AddTab(name ?? string.Empty, pp =>
                                 {
                                     var md = d.Content ?? string.Empty;
-                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
                                     pp.Markdown(md, options);
                                 });
                             }
@@ -171,7 +183,7 @@ internal sealed class HtmlExporter
                                 inner.AddTab(name ?? string.Empty, pp =>
                                 {
                                     var md = d.Content ?? string.Empty;
-                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                                    var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
                                     pp.Markdown(md, options);
                                 });
                             }
@@ -189,7 +201,7 @@ internal sealed class HtmlExporter
                         inner.AddTab(name ?? string.Empty, pp =>
                         {
                             var md = d.Content ?? string.Empty;
-                            var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true };
+                            var options = new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true, TableMode = MarkdownTableMode.DataTables, DataTables = new MarkdownDataTablesOptions { Responsive = true, Export = true, ExportFormats = new[] { DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy }, StateSave = true } };
                             pp.Markdown(md, options);
                         });
                     }
@@ -247,7 +259,10 @@ internal sealed class HtmlExporter
 
                                                 p.Card(c => {
                                                     c.Header(h => h.Title("Declared Dependencies"));
-                                                    c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
+                                                    c.DataTable(rows, t => t
+                                                        .Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))
+                                                        .Settings(s => s.ToggleViewButton("Switch View", ToggleViewMode.Responsive, persist: true))
+                                                    );
                                                 });
                                             });
 
@@ -521,7 +536,10 @@ internal sealed class HtmlExporter
                 }
                 panel.Card(c => {
                     c.Header(h => h.Title(total > 0 ? $"Parameters — Set {i + 1} of {total}" : "Parameters"));
-                    c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
+                    c.DataTable(rows, t => t
+                        .Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))
+                        .Settings(s => s.ToggleViewButton("Switch View", ToggleViewMode.Responsive, persist: true))
+                    );
                 });
             }
         }
