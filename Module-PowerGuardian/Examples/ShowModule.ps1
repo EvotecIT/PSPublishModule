@@ -2,6 +2,6 @@
 
 #Show-ModuleDocumentation -Name 'Mailozaurr' -Readme -DefaultCodeLanguage PowerShell -Changelog
 
-#Show-ModuleDocumentation -Name 'EFAdminManager'
+Show-ModuleDocumentation -Name 'EFAdminManager' -Verbose
 
 Show-ModuleDocumentation -Name 'PSPublishModule' -Verbose

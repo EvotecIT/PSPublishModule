@@ -116,55 +116,85 @@ internal sealed class HtmlExporter
                                     log?.Invoke($"Adding Dependencies tab with {module.Dependencies.Count} rows...");
                                     tabs.AddTab("🔗 Dependencies", panel =>
                                     {
-                                        // Direct dependencies table
-                                        panel.Card(card2 => {
-                                            card2.Header(h => h.Title("Declared Dependencies"));
-                                            var groups = module.Dependencies
-                                                .GroupBy(d => d.Name, System.StringComparer.OrdinalIgnoreCase)
-                                                .Select(g => new {
-                                                    Name = g.Key,
-                                                    Kinds = string.Join(", ", g.Select(x => x.Kind == ModuleDependencyKind.External ? "External" : "Required").Distinct().OrderBy(k => k == "External" ? 0 : 1)),
-                                                    Version = g.Select(x => x.Version).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? string.Empty,
-                                                    Guid = g.Select(x => x.Guid).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? string.Empty
-                                                })
-                                                .OrderBy(x => x.Name)
-                                                .ToList();
-                                            card2.DataTable(groups, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
-                                        });
+                                        panel.Tabs(depTabs => {
+                                            // Declared (combined) table
+                                            depTabs.AddTab("📋 Declared", p => {
+                                                var rootRow = new [] { new {
+                                                    Relation = "Root",
+                                                    Level = 0,
+                                                    Parent = string.Empty,
+                                                    Name = module.Name,
+                                                    Kinds = "",
+                                                    Version = module.Version ?? string.Empty,
+                                                    Guid = string.Empty
+                                                }};
 
-                                        // Nested dependencies table (if any)
-                                        var nested = module.Dependencies.SelectMany(d => d.Children.Select(c => new { Parent = d.Name, Child = c })).ToList();
-                                        if (nested.Count > 0)
-                                        {
-                                            panel.Card(card3 => {
-                                                card3.Header(h => h.Title("Nested Dependencies (one level)"));
-                                                var rows2 = nested.Select(n => new { Parent = n.Parent, Name = n.Child.Name, Version = n.Child.Version ?? string.Empty, Guid = n.Child.Guid ?? string.Empty }).ToList();
-                                                card3.DataTable(rows2, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
+                                                var direct = module.Dependencies
+                                                    .GroupBy(d => d.Name, System.StringComparer.OrdinalIgnoreCase)
+                                                    .Select(g => new {
+                                                        Relation = "Direct",
+                                                        Level = 1,
+                                                        Parent = module.Name,
+                                                        Name = g.Key,
+                                                        Kinds = string.Join(", ", g.Select(x => x.Kind == ModuleDependencyKind.External ? "External" : "Required").Distinct().OrderBy(k => k == "External" ? 0 : 1)),
+                                                        Version = g.Select(x => x.Version).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? string.Empty,
+                                                        Guid = g.Select(x => x.Guid).FirstOrDefault(v => !string.IsNullOrEmpty(v)) ?? string.Empty
+                                                    });
+
+                                                var nested = module.Dependencies
+                                                    .SelectMany(d => d.Children.Select(c => new {
+                                                        Relation = "Nested",
+                                                        Level = 2,
+                                                        Parent = d.Name,
+                                                        Name = c.Name,
+                                                        Kinds = "Required",
+                                                        Version = c.Version ?? string.Empty,
+                                                        Guid = c.Guid ?? string.Empty
+                                                    }));
+
+                                                var rows = rootRow.Concat(direct).Concat(nested)
+                                                    .OrderBy(r => r.Level)
+                                                    .ThenBy(r => r.Parent)
+                                                    .ThenBy(r => r.Name)
+                                                    .ToList();
+
+                                                p.Card(c => {
+                                                    c.Header(h => h.Title("Declared Dependencies"));
+                                                    c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
+                                                });
                                             });
-                                        }
 
-                                        // Dependency graph
-                                        log?.Invoke("Building VisNetwork dependency graph...");
-                                        panel.DiagramNetwork(net => {
-                                            net.WithSize("100%", "600px").WithPhysics(true);
-                                            var added = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-                                            void AddNodeSafe(string id, System.Action<VisNetworkNodeOptions> cfg) {
-                                                if (added.Add(id)) net.AddNode(id, cfg);
-                                            }
-                                            // center node
-                                            AddNodeSafe(module.Name, node => node.WithLabel(module.Name).WithShape(VisNetworkNodeShape.Box).WithColor(new RGBColor("#2962FF")).WithFont(f => f.WithColor(new RGBColor("#ffffff"))));
-                                            foreach (var d in module.Dependencies)
-                                            {
-                                                var depId = d.Name;
-                                                AddNodeSafe(depId, node => node.WithLabel(depId + (string.IsNullOrEmpty(d.Version) ? string.Empty : $"\n{d.Version}")).WithShape(VisNetworkNodeShape.Ellipse));
-                                                net.AddEdge(module.Name, depId, edge => edge.WithArrows(new VisNetworkArrowOptions().WithTo(true)));
-                                                foreach (var c in d.Children)
-                                                {
-                                                    var cId = depId + ":" + c.Name;
-                                                    AddNodeSafe(cId, node => node.WithLabel(c.Name + (string.IsNullOrEmpty(c.Version) ? string.Empty : $"\n{c.Version}")).WithShape(VisNetworkNodeShape.Dot));
-                                                    net.AddEdge(depId, cId, edge => edge.WithArrows(new VisNetworkArrowOptions().WithTo(true)).WithDashes(true));
-                                                }
-                                            }
+                                            // Diagram
+                                            depTabs.AddTab("🗺️ Diagram", p => {
+                                                log?.Invoke("Building VisNetwork dependency graph...");
+                                                p.DiagramNetwork(net => {
+                                                    net.WithSize("100%", "900px")
+                                                       .WithHierarchicalLayout(VisNetworkLayoutDirection.Ud)
+                                                       .WithPhysics(false)
+                                                       .WithOptions(opt => {
+                                                           opt.WithLayout(layout => layout.WithHierarchical(new VisNetworkHierarchicalOptions().WithLevelSeparation(200)));
+                                                           opt.WithNodes(n => n.WithShape(VisNetworkNodeShape.Box).WithBorderWidth(2));
+                                                           opt.WithEdges(e => e.WithArrows(new VisNetworkArrowOptions().WithTo(true)));
+                                                       });
+
+                                                    var added = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+                                                    void AddNodeSafe(string id, System.Action<VisNetworkNodeOptions> cfg) { if (added.Add(id)) net.AddNode(id, cfg); }
+
+                                                    AddNodeSafe(module.Name, node => node.WithLabel(module.Name).WithLevel(0).WithColor(new RGBColor("#2962FF")).WithFont(f => f.WithColor(new RGBColor("#ffffff"))));
+                                                    foreach (var d in module.Dependencies)
+                                                    {
+                                                        var depId = d.Name;
+                                                        AddNodeSafe(depId, node => node.WithLabel(depId + (string.IsNullOrEmpty(d.Version) ? string.Empty : $"\n{d.Version}")).WithLevel(1));
+                                                        net.AddEdge(module.Name, depId);
+                                                        foreach (var c in d.Children)
+                                                        {
+                                                            var cId = depId + ":" + c.Name;
+                                                            AddNodeSafe(cId, node => node.WithLabel(c.Name + (string.IsNullOrEmpty(c.Version) ? string.Empty : $"\n{c.Version}")).WithLevel(2));
+                                                            net.AddEdge(depId, cId, edge => edge.WithDashes(true));
+                                                        }
+                                                    }
+                                                });
+                                            });
                                         });
                                     });
                                 }
@@ -185,15 +215,22 @@ internal sealed class HtmlExporter
                                             {
                                                 var label = $"{EmojiForCommand(entry.Command)} {entry.Command}".Replace("-", "‑");
                                                 inner.AddTab(label, p => {
-                                                    var content = entry.Help ?? "No help available.";
-                                                    if (module.HelpAsCode)
+                                                    if (entry.Model != null)
                                                     {
-                                                        var fenced = $"```powershell\n{content}\n```";
-                                                        p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                        RenderHelpPanel(p, entry.Model);
                                                     }
                                                     else
                                                     {
-                                                        p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                        var content = entry.Help ?? "No help available.";
+                                                        if (module.HelpAsCode)
+                                                        {
+                                                            var fenced = $"```powershell\n{content}\n```";
+                                                            p.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                        }
+                                                        else
+                                                        {
+                                                            p.Markdown(content, new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true });
+                                                        }
                                                     }
                                                 });
                                             }
@@ -281,17 +318,272 @@ internal sealed class HtmlExporter
         return md;
     }
 
-    private List<(string Command, string? Help, int Lines)> BuildHelpMap(string moduleName, List<string> commands, int timeoutSeconds, Action<string>? log)
+    private List<(string Command, CommandHelpModel? Model, string? Help, int Lines)> BuildHelpMap(string moduleName, List<string> commands, int timeoutSeconds, Action<string>? log)
     {
-        var list = new List<(string, string?, int)>();
+        var list = new List<(string, CommandHelpModel?, string?, int)>();
+        var parser = new GetHelpParser();
         foreach (var cmd in commands)
         {
-            var helpMd = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
-            var lines = string.IsNullOrEmpty(helpMd) ? 0 : helpMd!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
+            string? content = null;
+            // Prefer structured parse
+            var model = parser.Parse(cmd, timeoutSeconds);
+            if (model != null)
+            {
+                content = null; // render with components
+            }
+            else
+            {
+                // Fallback to raw Get-Help text -> markdown
+                content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
+            }
+            var lines = string.IsNullOrEmpty(content) ? 0 : content!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
             log?.Invoke($"Rendering help for {cmd}... ({lines} lines)");
-            list.Add((cmd, helpMd, lines));
+            list.Add((cmd, model, content, lines));
         }
         return list;
+    }
+
+    private static void RenderHelpPanel(TablerTabsPanel panel, CommandHelpModel m)
+    {
+        if (!string.IsNullOrWhiteSpace(m.Synopsis))
+        {
+            panel.Text("## Synopsis");
+            panel.Text(m.Synopsis.Trim());
+            panel.LineBreak();
+        }
+        if (!string.IsNullOrWhiteSpace(m.Description))
+        {
+            panel.Text("## Description");
+            panel.Text(m.Description.Trim());
+            panel.LineBreak();
+        }
+        if (m.Syntax.Count > 0)
+        {
+            panel.Text("## Syntax");
+            var total = m.Syntax.Count;
+            for (int i = 0; i < total; i++)
+            {
+                var s = m.Syntax[i];
+                panel.Text($"_Parameter set {i + 1} of {total}_");
+                var parts = new System.Collections.Generic.List<string>();
+                foreach (var p in s.Parameters)
+                {
+                    var name = p.Name;
+                    var type = string.IsNullOrEmpty(p.Type) ? string.Empty : $" <{p.Type}>";
+                    var token = $"-{name}{type}";
+                    if (!(p.Required ?? false)) token = $"[{token}]";
+                    parts.Add(token);
+                }
+                var line = (s.Name ?? m.Name) + (parts.Count > 0 ? (" " + string.Join(" ", parts)) : string.Empty);
+                var fenced = $"```powershell\n{line}\n```";
+                panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true });
+            }
+            panel.LineBreak();
+        }
+        if (m.Parameters.Count > 0)
+        {
+            var byName = m.Parameters.ToDictionary(x => x.Name, System.StringComparer.OrdinalIgnoreCase);
+            var total = m.Syntax.Count;
+            for (int i = 0; i < System.Math.Max(1, total); i++)
+            {
+                var set = total > 0 ? m.Syntax[i] : null;
+                var rows = new System.Collections.Generic.List<object>();
+                System.Collections.Generic.IEnumerable<ParameterHelp> plist = m.Parameters;
+                if (set != null)
+                {
+                    var names = set.Parameters.Select(p => p.Name).Distinct(System.StringComparer.OrdinalIgnoreCase);
+                    plist = names.Select(n => byName.TryGetValue(n, out var ph) ? ph : new ParameterHelp { Name = n });
+                }
+                foreach (var p in plist)
+                {
+                    rows.Add(new {
+                        Name = p.Name,
+                        Type = p.Type ?? string.Empty,
+                        Required = p.Required.HasValue ? (p.Required.Value ? "Yes" : "No") : string.Empty,
+                        Position = p.Position ?? string.Empty,
+                        Pipeline = p.PipelineInput ?? string.Empty,
+                        Wildcards = p.Globbing.HasValue ? (p.Globbing.Value ? "Yes" : "No") : string.Empty,
+                        Default = p.DefaultValue ?? string.Empty,
+                        Aliases = (p.Aliases == null || p.Aliases.Count == 0) ? string.Empty : string.Join(", ", p.Aliases),
+                        Description = p.Description ?? string.Empty
+                    });
+                }
+                panel.Card(c => {
+                    c.Header(h => h.Title(total > 0 ? $"Parameters — Set {i + 1} of {total}" : "Parameters"));
+                    c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport)));
+                });
+            }
+        }
+        if (m.Inputs.Count > 0)
+        {
+            var rows = m.Inputs.Select(t => new { Type = t.TypeName, Description = t.Description ?? string.Empty }).ToList();
+            panel.Card(c => { c.Header(h => h.Title("Inputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))); });
+        }
+        if (m.Outputs.Count > 0)
+        {
+            var rows = m.Outputs.Select(t => new { Type = t.TypeName, Description = t.Description ?? string.Empty }).ToList();
+            panel.Card(c => { c.Header(h => h.Title("Outputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))); });
+        }
+        if (m.Examples.Count > 0)
+        {
+            panel.Text("## Examples");
+            int idx = 1;
+            foreach (var ex in m.Examples)
+            {
+                var title = NormalizeExampleTitle(ex.Title, idx);
+                panel.Text($"### {title}");
+                if (!string.IsNullOrWhiteSpace(ex.Code))
+                {
+                    var fenced = $"```powershell\n{ex.Code.Trim()}\n```";
+                    panel.Markdown(fenced, new MarkdownOptions { HeadingsBaseLevel = 4, AutolinkBareUrls = true, Sanitize = true });
+                }
+                if (!string.IsNullOrWhiteSpace(ex.Remarks)) panel.Text(ex.Remarks!.Trim());
+                panel.LineBreak();
+                idx++;
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(m.Notes))
+        {
+            panel.Text("## Notes");
+            panel.Markdown(m.Notes!.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true });
+        }
+        if (m.RelatedLinks.Count > 0)
+        {
+            panel.Text("## Related Links");
+            var md = string.Join("\n", m.RelatedLinks.Select(l => !string.IsNullOrEmpty(l.Uri) ? $"- [{l.Title}]({l.Uri})" : $"- {l.Title}"));
+            panel.Markdown(md, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true });
+        }
+    }
+
+    private static string NormalizeExampleTitle(string raw, int index)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return $"Example {index}";
+        var t = raw.Trim();
+        t = t.Trim('-').Trim();
+        if (t.Length == 0) return $"Example {index}";
+        return t;
+    }
+
+    private static string RenderHelpMarkdown(CommandHelpModel m)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (!string.IsNullOrWhiteSpace(m.Synopsis))
+        {
+            sb.AppendLine("## Synopsis");
+            sb.AppendLine(m.Synopsis.Trim());
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(m.Description))
+        {
+            sb.AppendLine("## Description");
+            sb.AppendLine(m.Description.Trim());
+            sb.AppendLine();
+        }
+        if (m.Syntax.Count > 0)
+        {
+            sb.AppendLine("## Syntax");
+            var total = m.Syntax.Count;
+            for (int i = 0; i < total; i++)
+            {
+                var s = m.Syntax[i];
+                // Friendly preface between blocks
+                sb.AppendLine($"_Parameter set {i + 1} of {total}_");
+                var parts = new List<string>();
+                foreach (var p in s.Parameters)
+                {
+                    var name = p.Name;
+                    var type = string.IsNullOrEmpty(p.Type) ? string.Empty : $" <{p.Type}>";
+                    var token = $"-{name}{type}";
+                    if (!(p.Required ?? false)) token = $"[{token}]";
+                    parts.Add(token);
+                }
+                var line = (s.Name ?? m.Name) + (parts.Count > 0 ? (" " + string.Join(" ", parts)) : string.Empty);
+                sb.AppendLine("```powershell");
+                sb.AppendLine(line);
+                sb.AppendLine("```");
+                sb.AppendLine();
+            }
+        }
+        if (m.Parameters.Count > 0)
+        {
+            sb.AppendLine("## Parameters");
+            sb.AppendLine("| Name | Type | Required | Position | Pipeline | Wildcards | Default | Aliases | Description |");
+            sb.AppendLine("|:-----|:-----|:--------:|:--------:|:--------:|:---------:|:--------|:--------|:-----------|");
+            foreach (var p in m.Parameters)
+            {
+                var name = $"-{p.Name}";
+                var type = string.IsNullOrWhiteSpace(p.Type) ? "" : p.Type.Replace("|", "\\|");
+                var req = p.Required.HasValue ? (p.Required.Value ? "Yes" : "No") : "";
+                var pos = string.IsNullOrWhiteSpace(p.Position) ? "" : p.Position;
+                var pipe = string.IsNullOrWhiteSpace(p.PipelineInput) ? "" : p.PipelineInput.Replace("|", "\\|");
+                var wc = p.Globbing.HasValue ? (p.Globbing.Value ? "Yes" : "No") : "";
+                var def = string.IsNullOrWhiteSpace(p.DefaultValue) ? "" : p.DefaultValue.Replace("|", "\\|");
+                var aliases = (p.Aliases == null || p.Aliases.Count == 0) ? "" : string.Join(", ", p.Aliases).Replace("|", "\\|");
+                var desc = string.IsNullOrWhiteSpace(p.Description) ? "" : p.Description!.Replace("\n", " ").Replace("|", "\\|");
+                sb.AppendLine($"| {name} | {type} | {req} | {pos} | {pipe} | {wc} | {def} | {aliases} | {desc} |");
+            }
+            sb.AppendLine();
+        }
+        if (m.Examples.Count > 0)
+        {
+            sb.AppendLine("## Examples");
+            int i = 1;
+            foreach (var ex in m.Examples)
+            {
+                var title = string.IsNullOrWhiteSpace(ex.Title) ? $"Example {i}" : ex.Title.Trim();
+                sb.AppendLine($"### {title}");
+                if (!string.IsNullOrWhiteSpace(ex.Code))
+                {
+                    sb.AppendLine("```powershell");
+                    sb.AppendLine(ex.Code.Trim());
+                    sb.AppendLine("```");
+                }
+                if (!string.IsNullOrWhiteSpace(ex.Remarks)) sb.AppendLine(ex.Remarks!.Trim());
+                sb.AppendLine();
+                i++;
+            }
+        }
+        if (m.Inputs.Count > 0)
+        {
+            sb.AppendLine("## Inputs");
+            sb.AppendLine("| Type | Description |");
+            sb.AppendLine("|:-----|:------------|");
+            foreach (var t in m.Inputs)
+            {
+                var type = (t.TypeName ?? string.Empty).Replace("|", "\\|");
+                var desc = string.IsNullOrWhiteSpace(t.Description) ? "" : t.Description!.Replace("|", "\\|");
+                sb.AppendLine($"| {type} | {desc} |");
+            }
+            sb.AppendLine();
+        }
+        if (m.Outputs.Count > 0)
+        {
+            sb.AppendLine("## Outputs");
+            sb.AppendLine("| Type | Description |");
+            sb.AppendLine("|:-----|:------------|");
+            foreach (var t in m.Outputs)
+            {
+                var type = (t.TypeName ?? string.Empty).Replace("|", "\\|");
+                var desc = string.IsNullOrWhiteSpace(t.Description) ? "" : t.Description!.Replace("|", "\\|");
+                sb.AppendLine($"| {type} | {desc} |");
+            }
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(m.Notes))
+        {
+            sb.AppendLine("## Notes");
+            sb.AppendLine(m.Notes!.Trim());
+            sb.AppendLine();
+        }
+        if (m.RelatedLinks.Count > 0)
+        {
+            sb.AppendLine("## Related Links");
+            foreach (var l in m.RelatedLinks)
+            {
+                if (!string.IsNullOrEmpty(l.Uri)) sb.AppendLine($"- [{l.Title}]({l.Uri})"); else sb.AppendLine($"- {l.Title}");
+            }
+        }
+        return sb.ToString();
     }
 
     private static string BuildDependenciesMarkdown(ModuleInfoModel module)

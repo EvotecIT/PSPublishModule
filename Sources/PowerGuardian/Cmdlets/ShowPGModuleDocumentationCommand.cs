@@ -199,14 +199,14 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                     if (p?.BaseObject is System.Collections.IDictionary dict)
                     {
                         var dep = new ModuleDependency { Kind = ModuleDependencyKind.Required };
-                        if (dict.Contains("ModuleName")) dep.Name = dict["ModuleName"]?.ToString() ?? string.Empty;
+                        if (dict.Contains("ModuleName")) dep.Name = (dict["ModuleName"]?.ToString() ?? string.Empty).Trim();
                         if (dict.Contains("ModuleVersion")) dep.Version = dict["ModuleVersion"]?.ToString();
                         if (dict.Contains("Guid")) dep.Guid = dict["Guid"]?.ToString();
                         if (!string.IsNullOrEmpty(dep.Name)) meta.Dependencies.Add(dep);
                     }
                     else
                     {
-                        var name = item?.ToString(); if (!string.IsNullOrEmpty(name)) meta.Dependencies.Add(new ModuleDependency { Kind = ModuleDependencyKind.Required, Name = name! });
+                        var name = item?.ToString()?.Trim(); if (!string.IsNullOrEmpty(name)) meta.Dependencies.Add(new ModuleDependency { Kind = ModuleDependencyKind.Required, Name = name! });
                     }
                 }
 
@@ -215,7 +215,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                 var extVal = extObj is PSObject pso ? pso.BaseObject : extObj;
                 foreach (var e in EnumerateItems(extVal))
                 {
-                    var name = e?.ToString(); if (!string.IsNullOrEmpty(name)) meta.Dependencies.Add(new ModuleDependency { Kind = ModuleDependencyKind.External, Name = name! });
+                    var name = e?.ToString()?.Trim(); if (!string.IsNullOrEmpty(name)) meta.Dependencies.Add(new ModuleDependency { Kind = ModuleDependencyKind.External, Name = name! });
                 }
 
                 // Enrich direct dependencies with installed manifest info (Version/Guid if missing)
@@ -244,14 +244,14 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                         if (p2?.BaseObject is System.Collections.IDictionary dict2)
                         {
                             var dep2 = new ModuleDependency { Kind = ModuleDependencyKind.Required };
-                            if (dict2.Contains("ModuleName")) dep2.Name = dict2["ModuleName"]?.ToString() ?? string.Empty;
+                            if (dict2.Contains("ModuleName")) dep2.Name = (dict2["ModuleName"]?.ToString() ?? string.Empty).Trim();
                             if (dict2.Contains("ModuleVersion")) dep2.Version = dict2["ModuleVersion"]?.ToString();
                             if (dict2.Contains("Guid")) dep2.Guid = dict2["Guid"]?.ToString();
                             if (!string.IsNullOrEmpty(dep2.Name)) d.Children.Add(dep2);
                         }
                         else
                         {
-                            var name2 = item?.ToString(); if (!string.IsNullOrEmpty(name2)) d.Children.Add(new ModuleDependency { Kind = ModuleDependencyKind.Required, Name = name2! });
+                            var name2 = item?.ToString()?.Trim(); if (!string.IsNullOrEmpty(name2)) d.Children.Add(new ModuleDependency { Kind = ModuleDependencyKind.Required, Name = name2! });
                         }
                     }
                 }
