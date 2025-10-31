@@ -45,8 +45,51 @@ internal sealed class HtmlExporter
                         card.Body(body => {
                             body.Tabs(tabs => {
                                 // Standard docs (everything except SCRIPT/DOC kinds)
-                                foreach (var it in list.Where(x => !string.Equals(x.Kind, "SCRIPT", System.StringComparison.OrdinalIgnoreCase)
-                                                             && !string.Equals(x.Kind, "DOC", System.StringComparison.OrdinalIgnoreCase)))
+                                var standard = list.Where(x => !string.Equals(x.Kind, "SCRIPT", System.StringComparison.OrdinalIgnoreCase)
+                                                           && !string.Equals(x.Kind, "DOC", System.StringComparison.OrdinalIgnoreCase))
+                                                   .ToList();
+
+                                // If both local and remote versions of README/CHANGELOG/LICENSE exist,
+                                // annotate local copies with "(local)" for clarity.
+                                try
+                                {
+                                    string BaseLabel(string t)
+                                    {
+                                        if (string.IsNullOrEmpty(t)) return t;
+                                        var u = t.Trim();
+                                        if (u.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
+                                        if (u.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)) return "CHANGELOG";
+                                        if (u.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
+                                        return u;
+                                    }
+                                    var groups = standard.GroupBy(s => BaseLabel(s.Title ?? string.Empty), StringComparer.OrdinalIgnoreCase);
+                                    foreach (var g in groups)
+                                    {
+                                        if (g.Key == "README" || g.Key == "CHANGELOG" || g.Key == "LICENSE")
+                                        {
+                                            bool hasRemote = g.Any(x => string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase));
+                                            if (hasRemote)
+                                            {
+                                                foreach (var x in g)
+                                                {
+                                                    var title = x.Title ?? string.Empty;
+                                                    bool isRemote = string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase);
+                                                    if (!isRemote && title.IndexOf("(local)", StringComparison.OrdinalIgnoreCase) < 0)
+                                                    {
+                                                        x.Title = title + " (local)";
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (System.Exception ex)
+                                {
+                                    log?.Invoke($"[WARN] Document labelling failed: {ex.Message}");
+                                }
+                                // Do not append (root)/(internals) suffixes; upstream selection ensures a single local copy.
+
+                                foreach (var it in standard)
                                 {
                                     var title = MakeShortTabTitle(it);
                                     log?.Invoke($"Adding document tab: {title}");
@@ -96,8 +139,8 @@ internal sealed class HtmlExporter
         {
             var docsLocal = docsAll.Where(x => string.Equals(x.Source, "Local", StringComparison.OrdinalIgnoreCase)).ToList();
             var docsRepo  = docsAll.Where(x => string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase)).ToList();
-            log?.Invoke($"Adding Docs tab with {docsAll.Count} items (Local={docsLocal.Count}, Repo={docsRepo.Count})...");
-            tabs.AddTab("📚 Docs", panel =>
+            log?.Invoke($"Adding Documentation tab with {docsAll.Count} items (Local={docsLocal.Count}, Repo={docsRepo.Count})...");
+            tabs.AddTab("📚 Documentation", panel =>
             {
                 // If both present, split into subtabs; otherwise render directly
                 if (docsLocal.Count > 0 && docsRepo.Count > 0)
@@ -312,14 +355,28 @@ internal sealed class HtmlExporter
 
     private static string MakeShortTabTitle(DocumentItem it)
     {
-        // Prefer file name cues and prepend emoji for recognizable kinds
-        var name = (it.FileName ?? it.Title ?? it.Kind ?? string.Empty).ToUpperInvariant();
-        if (name.Contains("README")) return "📘 README";
-        if (name.Contains("CHANGELOG")) return "📝 CHANGELOG";
-        if (name.Contains("LICENSE")) return "📄 LICENSE";
-        if (name.Contains("UPGRADE")) return "⬆️ Upgrade";
-        if (name.Contains("INTRO")) return "💡 Introduction";
-        if (name.Contains("LINKS")) return "🔗 Links";
+        // Prefer file name cues and prepend emoji for recognizable kinds.
+        // Preserve (local) suffix when present. Ignore any legacy (remote) suffixes in title.
+        var basis = it.FileName ?? it.Title ?? it.Kind ?? string.Empty;
+        var upper = basis.ToUpperInvariant();
+        string SuffixFromTitle()
+        {
+            var t = (it.Title ?? string.Empty).Trim();
+            var idx = t.IndexOf('(');
+            if (idx >= 0)
+            {
+                var suf = t.Substring(idx);
+                if (suf.IndexOf("(remote)", StringComparison.OrdinalIgnoreCase) >= 0) return string.Empty;
+                return " " + suf; // include leading space
+            }
+            return string.Empty;
+        }
+        if (upper.Contains("README")) return "📘 README" + SuffixFromTitle();
+        if (upper.Contains("CHANGELOG")) return "📝 CHANGELOG" + SuffixFromTitle();
+        if (upper.Contains("LICENSE")) return "📄 LICENSE" + SuffixFromTitle();
+        if (upper.Contains("UPGRADE")) return "⬆️ Upgrade" + SuffixFromTitle();
+        if (upper.Contains("INTRO")) return "💡 Introduction" + SuffixFromTitle();
+        if (upper.Contains("LINKS")) return "🔗 Links";
         return it.Title ?? it.Kind ?? "📄 Document";
     }
 
@@ -381,7 +438,17 @@ internal sealed class HtmlExporter
                 content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
             }
             var lines = string.IsNullOrEmpty(content) ? 0 : content!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
-            log?.Invoke($"Rendering help for {cmd}... ({lines} lines)");
+            if (model != null)
+            {
+                var sets = model.Syntax?.Count ?? 0;
+                var pcount = model.Parameters?.Count ?? 0;
+                var ex = model.Examples?.Count ?? 0;
+                log?.Invoke($"Rendering help for {cmd}... (structured: sets={sets}, params={pcount}, examples={ex})");
+            }
+            else
+            {
+                log?.Invoke($"Rendering help for {cmd}... ({lines} lines)");
+            }
             list.Add((cmd, model, content, lines));
         }
         return list;
@@ -391,24 +458,24 @@ internal sealed class HtmlExporter
     {
         if (!string.IsNullOrWhiteSpace(m.Synopsis))
         {
-            panel.Text("## Synopsis");
-            panel.Text(m.Synopsis.Trim());
+            panel.Markdown("## Synopsis", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+            panel.Markdown(m.Synopsis.Trim(), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             panel.LineBreak();
         }
         if (!string.IsNullOrWhiteSpace(m.Description))
         {
-            panel.Text("## Description");
-            panel.Text(m.Description.Trim());
+            panel.Markdown("## Description", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
+            panel.Markdown(m.Description.Trim(), new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             panel.LineBreak();
         }
         if (m.Syntax.Count > 0)
         {
-            panel.Text("## Syntax");
+            panel.Markdown("## Syntax", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             var total = m.Syntax.Count;
             for (int i = 0; i < total; i++)
             {
                 var s = m.Syntax[i];
-                panel.Text($"_Parameter set {i + 1} of {total}_");
+                panel.Markdown($"### Syntax — Set {i + 1} of {total}", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                 var parts = new System.Collections.Generic.List<string>();
                 foreach (var p in s.Parameters)
                 {
@@ -470,12 +537,12 @@ internal sealed class HtmlExporter
         }
         if (m.Examples.Count > 0)
         {
-            panel.Text("## Examples");
+            panel.Markdown("## Examples", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             int idx = 1;
             foreach (var ex in m.Examples)
             {
                 var title = NormalizeExampleTitle(ex.Title, idx);
-                panel.Text($"### {title}");
+                panel.Markdown($"### {title}", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
                 if (!string.IsNullOrWhiteSpace(ex.Code))
                 {
                     var fenced = $"```powershell\n{ex.Code.Trim()}\n```";
@@ -488,12 +555,12 @@ internal sealed class HtmlExporter
         }
         if (!string.IsNullOrWhiteSpace(m.Notes))
         {
-            panel.Text("## Notes");
+            panel.Markdown("## Notes", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             panel.Markdown(m.Notes!.Trim(), new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
         }
         if (m.RelatedLinks.Count > 0)
         {
-            panel.Text("## Related Links");
+            panel.Markdown("## Related Links", new MarkdownOptions { HeadingsBaseLevel = 2, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
             var md = string.Join("\n", m.RelatedLinks.Select(l => !string.IsNullOrEmpty(l.Uri) ? $"- [{l.Title}]({l.Uri})" : $"- {l.Title}"));
             panel.Markdown(md, new MarkdownOptions { HeadingsBaseLevel = 3, AutolinkBareUrls = true, Sanitize = true, AllowRawHtmlInline = true, AllowRawHtmlBlocks = true });
         }

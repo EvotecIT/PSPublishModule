@@ -72,6 +72,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         PSObject? delivery = null;
         string? projectUri = null;
 
+        string? manifestPathUsed = null;
         if (ParameterSetName == "ByPath")
         {
             if (string.IsNullOrWhiteSpace(DocsPath) || !Directory.Exists(DocsPath))
@@ -90,12 +91,13 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             if (manifestCandidates.Length > 0)
             {
                 var sb = this.InvokeCommand.NewScriptBlock("$m = Test-ModuleManifest -Path $args[0]; $m");
-                var pso = sb.Invoke(manifestCandidates[0]).FirstOrDefault() as PSObject;
+                manifestPathUsed = manifestCandidates[0];
+                var pso = sb.Invoke(manifestPathUsed).FirstOrDefault() as PSObject;
                 if (pso != null)
                 {
                     titleName = (pso.Properties["Name"]?.Value ?? pso.Properties["ModuleName"]?.Value)?.ToString();
                     titleVersion = pso.Properties["Version"]?.Value?.ToString();
-                    delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestCandidates[0]).FirstOrDefault() as PSObject;
+                    delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestPathUsed).FirstOrDefault() as PSObject;
                     projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestCandidates[0]).FirstOrDefault()?.ToString();
                     var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
                     var cand = Path.Combine(rootBase, internalsRel);
@@ -138,8 +140,9 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             var manifestPath = Directory.GetFiles(rootBase, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault();
             if (!string.IsNullOrEmpty(manifestPath))
             {
-                delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestPath).FirstOrDefault() as PSObject;
-                projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestPath).FirstOrDefault()?.ToString();
+                manifestPathUsed = manifestPath;
+                delivery = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery").Invoke(manifestPathUsed).FirstOrDefault() as PSObject;
+                projectUri = this.InvokeCommand.NewScriptBlock("(Test-ModuleManifest -Path $args[0]).PrivateData.PSData.ProjectUri").Invoke(manifestPathUsed).FirstOrDefault()?.ToString();
                 var internalsRel = delivery?.Properties["InternalsPath"]?.Value as string ?? "Internals";
                 var cand = Path.Combine(rootBase, internalsRel);
                 internalsBase = Directory.Exists(cand) ? cand : null;
@@ -150,6 +153,54 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                 internalsBase = Directory.Exists(cand) ? cand : null;
             }
         }
+
+        // Pull repository hints from delivery metadata when parameters are not specified
+        string? branchToUse = RepositoryBranch;
+        string[]? pathsToUse = RepositoryPaths;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(branchToUse) && delivery != null)
+            {
+                string? b = null;
+                try { b = delivery.Properties["RepositoryBranch"]?.Value?.ToString(); } catch { }
+                if (string.IsNullOrWhiteSpace(b))
+                {
+                    // Case-insensitive fallback
+                    var prop = delivery.Properties.FirstOrDefault(pp => string.Equals(pp.Name, "RepositoryBranch", StringComparison.OrdinalIgnoreCase));
+                    b = prop?.Value?.ToString();
+                }
+                if (string.IsNullOrWhiteSpace(b) && !string.IsNullOrEmpty(manifestPathUsed))
+                {
+                    // Hashtable-safe manifest fallback
+                    var sbGet = this.InvokeCommand.NewScriptBlock("$d = (Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery; if ($d -is [hashtable]) { $d['RepositoryBranch'] } else { $d.RepositoryBranch }");
+                    b = sbGet.Invoke(manifestPathUsed).FirstOrDefault()?.ToString();
+                }
+                if (!string.IsNullOrWhiteSpace(b)) branchToUse = b;
+            }
+            if ((pathsToUse == null || pathsToUse.Length == 0) && delivery != null)
+            {
+                System.Collections.IEnumerable? arr = null;
+                try { arr = delivery.Properties["RepositoryPaths"]?.Value as System.Collections.IEnumerable; } catch { }
+                if (arr == null)
+                {
+                    var prop = delivery.Properties.FirstOrDefault(pp => string.Equals(pp.Name, "RepositoryPaths", StringComparison.OrdinalIgnoreCase));
+                    arr = prop?.Value as System.Collections.IEnumerable;
+                }
+                if (arr == null && !string.IsNullOrEmpty(manifestPathUsed))
+                {
+                    var sbGet = this.InvokeCommand.NewScriptBlock("$d = (Test-ModuleManifest -Path $args[0]).PrivateData.PSData.PSPublishModuleDelivery; if ($d -is [hashtable]) { $d['RepositoryPaths'] } else { $d.RepositoryPaths }");
+                    var res = sbGet.Invoke(manifestPathUsed).FirstOrDefault();
+                    arr = res as System.Collections.IEnumerable;
+                }
+                if (arr != null)
+                {
+                    var list = new System.Collections.Generic.List<string>();
+                    foreach (var o in arr) { var s = o?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!); }
+                    if (list.Count > 0) pathsToUse = list.ToArray();
+                }
+            }
+        }
+        catch { }
 
         if (List)
         {
@@ -278,6 +329,55 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             }
         }
 
+        // Verbose: remote repository intent and inputs (without leaking secrets)
+        bool wantsRemote = (PreferRepository || FromRepository || (RepositoryPaths != null && RepositoryPaths.Length > 0)) && !SkipRemote.IsPresent;
+        if (wantsRemote)
+        {
+            if (string.IsNullOrWhiteSpace(projectUri))
+            {
+                WriteVerbose("Repository requested but manifest PrivateData.PSData.ProjectUri is empty.");
+            }
+            else
+            {
+                var info = RepoUrlParser.Parse(projectUri!);
+                if (info.Host == RepoHost.Unknown)
+                {
+                    WriteVerbose($"Repository URI could not be parsed: {projectUri}");
+                    if (projectUri.Contains("dev.azure.com", StringComparison.OrdinalIgnoreCase))
+                    {
+                        WriteVerbose("Expected Azure DevOps URL form: https://dev.azure.com/{organization}/{project}/_git/{repository}");
+                    }
+                }
+                else
+                {
+                    if (info.Host == RepoHost.GitHub)
+                    {
+                        WriteVerbose($"Repository host: GitHub, Owner: {info.Owner}, Repo: {info.Repo}");
+                    }
+                    else if (info.Host == RepoHost.AzureDevOps)
+                    {
+                        WriteVerbose($"Repository host: Azure DevOps, Org: {info.Organization}, Project: {info.Project}, Repo: {info.Repository}");
+                    }
+                    var branchMsg = string.IsNullOrWhiteSpace(branchToUse) ? "(default branch)" : branchToUse;
+                    WriteVerbose($"Branch requested: {branchMsg}");
+                    if (pathsToUse != null && pathsToUse.Length > 0)
+                    {
+                        WriteVerbose($"Repository paths: {string.Join(", ", pathsToUse)}");
+                    }
+                    // Token source (do not print secrets)
+                    bool tokenFromParam = !string.IsNullOrWhiteSpace(RepositoryToken);
+                    bool tokenFromEnv = !tokenFromParam && (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PG_GITHUB_TOKEN"))
+                                                             || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN"))
+                                                             || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PG_AZDO_PAT"))
+                                                             || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AZURE_DEVOPS_EXT_PAT")));
+                    bool tokenFromStore = false;
+                    try { tokenFromStore = !tokenFromParam && !tokenFromEnv && (TokenStore.GetToken(info.Host) != null); } catch { }
+                    var tokenSrc = tokenFromParam ? "parameter" : tokenFromEnv ? "environment" : tokenFromStore ? "stored" : "none";
+                    WriteVerbose($"Authentication token source: {tokenSrc}");
+                }
+            }
+        }
+
         // Centralized plan: HTML/Word only (no console rendering)
         var planner = new DocumentationPlanner(finder);
         var reqObj = new DocumentationPlanner.Request
@@ -286,9 +386,9 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             InternalsBase = internalsBase,
             Delivery = delivery,
             ProjectUri = SkipRemote.IsPresent ? null : projectUri,
-            RepositoryBranch = RepositoryBranch,
+            RepositoryBranch = branchToUse,
             RepositoryToken = RepositoryToken,
-            RepositoryPaths = RepositoryPaths,
+            RepositoryPaths = pathsToUse,
             PreferInternals = PreferInternals,
             Readme = Readme,
             Changelog = Changelog,
@@ -304,6 +404,23 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         };
         WriteVerbose("Planning documents (local + remote backfill if enabled)...");
         var plan = planner.Execute(reqObj);
+
+        // Verbose summary of repository/local docs discovered
+        try
+        {
+            var remoteDocs = plan.Items.Where(i => string.Equals(i.Source, "Remote", StringComparison.OrdinalIgnoreCase) && string.Equals(i.Kind, "DOC", StringComparison.OrdinalIgnoreCase)).Count();
+            var localDocs  = plan.Items.Where(i => string.Equals(i.Source, "Local", StringComparison.OrdinalIgnoreCase)  && string.Equals(i.Kind, "DOC", StringComparison.OrdinalIgnoreCase)).Count();
+            if (wantsRemote)
+            {
+                WriteVerbose($"Repository docs discovered: {remoteDocs}");
+                if (remoteDocs == 0 && RepositoryPaths != null && RepositoryPaths.Length > 0)
+                {
+                    WriteVerbose("No repository docs found at the requested paths. Verify branch and folder names.");
+                }
+            }
+            if (localDocs > 0) { WriteVerbose($"Internals docs discovered: {localDocs}"); }
+        }
+        catch { }
 
         var finalExportItems = new System.Collections.Generic.List<DocumentItem>();
         foreach (var di in plan.Items)
@@ -329,7 +446,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         var html = new HtmlExporter();
         var open = !DoNotShow.IsPresent; // default is to open
         WriteVerbose("Rendering HTML...");
-        var path = html.Export(meta, finalExportItems, OutputPath, open, s => WriteVerbose(s));
+        var path = html.Export(meta, finalExportItems, OutputPath, open, s => { if (!string.IsNullOrEmpty(s) && s.StartsWith("[WARN]")) { WriteWarning(s.Substring(6)); } else { WriteVerbose(s); } });
         WriteVerbose($"HTML exported to {path}");
         WriteObject(path);
         return;

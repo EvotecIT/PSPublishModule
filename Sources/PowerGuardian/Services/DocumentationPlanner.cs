@@ -120,15 +120,15 @@ internal sealed class DocumentationPlanner
                 bool anyRemote = false;
                 if (!string.IsNullOrEmpty(readme) && (req.Readme || req.All || !hasSelectors))
                 {
-                    res.Items.Add(MakeContentItem(req, "README (remote)", readme!)); anyRemote = true;
+                    var di = MakeContentItem(req, "README", readme!); di.Source = "Remote"; res.Items.Add(di); anyRemote = true;
                 }
                 if (!string.IsNullOrEmpty(changelog) && (req.Changelog || req.All))
                 {
-                    res.Items.Add(MakeContentItem(req, "CHANGELOG (remote)", changelog!)); anyRemote = true;
+                    var di = MakeContentItem(req, "CHANGELOG", changelog!); di.Source = "Remote"; res.Items.Add(di); anyRemote = true;
                 }
                 if (!string.IsNullOrEmpty(license) && (req.License || req.All))
                 {
-                    res.Items.Add(MakeContentItem(req, "LICENSE (remote)", license!)); anyRemote = true;
+                    var di = MakeContentItem(req, "LICENSE", license!); di.Source = "Remote"; res.Items.Add(di); anyRemote = true;
                 }
                 // Extra paths
                 if (req.RepositoryPaths != null)
@@ -141,7 +141,7 @@ internal sealed class DocumentationPlanner
                             if (!(ext == ".md" || ext == ".markdown" || ext == ".txt")) continue;
                             var content = client.GetFileContent(Path, branch);
                             if (string.IsNullOrEmpty(content)) continue;
-                            res.Items.Add(MakeContentItem(req, $"{Name} (remote)", content!)); anyRemote = true;
+                            var di = MakeContentItem(req, Name, content!); di.Source = "Remote"; res.Items.Add(di); anyRemote = true;
                         }
                     }
                 }
@@ -161,7 +161,7 @@ internal sealed class DocumentationPlanner
             {
                 var fileName = System.IO.Path.GetFileName(it.Path);
                 var title = BuildTitle(req, fileName);
-                res.Items.Add(new DocumentItem { Title = title, Kind = "FILE", Path = it.Path, FileName = fileName });
+                res.Items.Add(new DocumentItem { Title = title, Kind = "FILE", Path = it.Path, FileName = fileName, Source = "Local" });
                 continue;
             }
             if (it.Kind == "INTRO")
@@ -227,17 +227,17 @@ internal sealed class DocumentationPlanner
                         if (!hasReadme)
                         {
                             var readme = TryFetchFirst(client, branch, new[] { "README.md", "README.MD", "Readme.md" });
-                            if (!string.IsNullOrEmpty(readme)) res.Items.Add(MakeContentItem(req, "README (remote)", readme!));
+                            if (!string.IsNullOrEmpty(readme)) { var di = MakeContentItem(req, "README", readme!); di.Source = "Remote"; res.Items.Add(di); }
                         }
                         if (!hasChlog)
                         {
                             var ch = TryFetchFirst(client, branch, new[] { "CHANGELOG.md", "CHANGELOG.MD", "Changelog.md" });
-                            if (!string.IsNullOrEmpty(ch)) res.Items.Add(MakeContentItem(req, "CHANGELOG (remote)", ch!));
+                            if (!string.IsNullOrEmpty(ch)) { var di = MakeContentItem(req, "CHANGELOG", ch!); di.Source = "Remote"; res.Items.Add(di); }
                         }
                         if (!hasLic)
                         {
                             var lc = TryFetchFirst(client, branch, new[] { "LICENSE", "LICENSE.md", "LICENSE.txt" });
-                            if (!string.IsNullOrEmpty(lc)) res.Items.Add(MakeContentItem(req, "LICENSE (remote)", lc!));
+                            if (!string.IsNullOrEmpty(lc)) { var di = MakeContentItem(req, "LICENSE", lc!); di.Source = "Remote"; res.Items.Add(di); }
                         }
                     }
                 }

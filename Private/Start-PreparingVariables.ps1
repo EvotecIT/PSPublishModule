@@ -77,6 +77,7 @@
 
         # Do not globally prune 'Docs' when the build explicitly includes 'Internals\' via IncludeAll.
         # Otherwise Internals\Docs would be skipped and not bundled.
+            if ($Exclude) { $Exclude = $Exclude | Where-Object { $_ -ne 'Docs' } }
         if ($DirectoriesWithAll -and ($DirectoriesWithAll | Where-Object { $_ -match '^(?i)internals[\\/]+$|^(?i)internals[\\/]' })) {
             $PruneNames = $PruneNames | Where-Object { $_ -ne 'Docs' }
         }
@@ -155,6 +156,15 @@
                         continue
                     }
                     '*.*' {
+                        foreach ($dir in $DirectoriesWithAll) {
+                            if ($file -like "$dir*") {
+                                $file
+                            }
+                        }
+                        continue
+                    }
+                    default {
+                        # Include files without extension from directories requested via IncludeAll (e.g., Internals)
                         foreach ($dir in $DirectoriesWithAll) {
                             if ($file -like "$dir*") {
                                 $file

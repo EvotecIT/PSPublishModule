@@ -22,12 +22,12 @@ namespace PowerGuardian;
 ///   <code>Install-ModuleDocumentation -Name EFAdminManager -Path C:\\Docs -Layout Direct</code>
 /// </example>
 /// <example>
-/// <example>
 ///   <code>Install-ModuleDocumentation -Name EFAdminManager -Path C:\\Docs -OnExists Overwrite</code>
 /// </example>
 /// <example>
 ///   <code>Install-ModuleDocumentation -Name EFAdminManager -Path C:\\Docs -OnExists Merge -Force</code>
 /// </example>
+/// <example>
 ///   <code>New-ConfigurationInformation -IncludeAll 'Internals\\' ; New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -DocumentationOrder '01-Intro.md','02-HowTo.md' -IncludeRootReadme -IncludeRootChangelog</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Install, "ModuleDocumentation", DefaultParameterSetName = "ByName", SupportsShouldProcess = true)]
@@ -39,6 +39,7 @@ public sealed partial class InstallModuleDocumentationCommand : PSCmdlet
 
     /// <summary>
     /// Executes the copy operation according to parameters and writes the destination path.
+    /// </summary>
     protected override void ProcessRecord()
     {
         var resolver = new ModuleResolver(this);

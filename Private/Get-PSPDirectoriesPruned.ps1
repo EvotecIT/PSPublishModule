@@ -31,4 +31,3 @@ function Get-PSPDirectoriesPruned {
     }
     $list.ToArray()
 }
-
