@@ -291,7 +291,13 @@ function Show-ProjectDocumentation {
                 foreach ($l in $links) {
                     $title = if ($l.Title) { $l.Title } elseif ($l.Name) { $l.Name } else { $null }
                     $url = $l.Url
-                    if ($url) { Write-Host (" - " + ($title ? "$($title): $url" : $url)) }
+                    if ($url) {
+                        if ($title) {
+                            Write-Host (" - {0}: {1}" -f $title, $url)
+                        } else {
+                            Write-Host (" - " + $url)
+                        }
+                    }
                 }
             }
         }

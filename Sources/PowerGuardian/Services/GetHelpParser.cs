@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
+using System.Management.Automation.Language;
 
 namespace PowerGuardian;
 
-internal sealed class GetHelpParser
+internal sealed partial class GetHelpParser
 {
-    public CommandHelpModel? Parse(string commandName, int timeoutSeconds = 5)
+    public CommandHelpModel? Parse(string commandName, int timeoutSeconds = 5, ExamplesMode examplesMode = ExamplesMode.Auto)
     {
         using var ps = PowerShell.Create();
         ps.AddScript($"Get-Help -Name '{commandName}' -Full -ErrorAction SilentlyContinue");
@@ -72,15 +73,40 @@ internal sealed class GetHelpParser
             model.Parameters.Add(ph);
         }
 
-        // Examples
-        foreach (var ex in GetArray(help, "Examples", "Example"))
+        // Choose examples according to requested mode
+        var rawExamples = (examplesMode == ExamplesMode.Maml) ? null : TryExtractRawExamples(commandName, timeoutSeconds);
+        if (examplesMode == ExamplesMode.Raw && (rawExamples == null || rawExamples.Count == 0))
         {
-            model.Examples.Add(new ExampleHelp
+            // Forced Raw but none found: leave empty; caller will still have rest of help
+        }
+        else if (examplesMode == ExamplesMode.Raw && rawExamples != null)
+        {
+            model.Examples.AddRange(rawExamples);
+        }
+        else if (examplesMode == ExamplesMode.Auto && rawExamples != null && rawExamples.Count > 0)
+        {
+            model.Examples.AddRange(rawExamples);
+        }
+        else
+        {
+            // Fall back to MAML examples
+            foreach (var ex in GetArray(help, "Examples", "Example"))
             {
-                Title = (GetString(ex, "Title") ?? string.Empty).Trim(),
-                Code = (GetString(ex, "Code") ?? string.Empty).Trim(),
-                Remarks = string.Join(Environment.NewLine + Environment.NewLine, GetParagraphs(ex, "Remarks")).Trim()
-            });
+                var title      = (GetString(ex, "Title") ?? string.Empty).Trim();
+                var codeRaw    = (GetString(ex, "Code") ?? string.Empty) ?? string.Empty;
+                var remarksRaw = string.Join("\n\n", GetParagraphs(ex, "Remarks"));
+
+                var exItem = new ExampleHelp
+                {
+                    Title = title,
+                    Code = (codeRaw ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n', '\r'),
+                    Remarks = string.IsNullOrWhiteSpace(remarksRaw) ? string.Empty : remarksRaw.Replace("\r\n", "\n").TrimEnd('\n', '\r'),
+                    Mode = "structured:maml"
+                };
+                exItem.CodeLines = string.IsNullOrEmpty(exItem.Code) ? 0 : exItem.Code.Split(new[]{'\n'}, StringSplitOptions.None).Length;
+                exItem.RemarksLines = string.IsNullOrEmpty(exItem.Remarks) ? 0 : exItem.Remarks.Split(new[]{'\n'}, StringSplitOptions.None).Length;
+                model.Examples.Add(exItem);
+            }
         }
 
         // Inputs
@@ -112,6 +138,230 @@ internal sealed class GetHelpParser
         }
 
         return model;
+    }
+
+    // Try to detect trailing narrative that accidentally landed inside Code and split it out to Remarks
+    private bool TrySplitTrailingNarrativeFromCodeWithAst(string codeRaw, out string codeOnly, out string trailingAsRemarks)
+    {
+        codeOnly = codeRaw ?? string.Empty; trailingAsRemarks = string.Empty;
+        if (string.IsNullOrWhiteSpace(codeOnly)) return true;
+        try
+        {
+            var text = codeOnly.Replace("\r\n", "\n");
+            var lines = text.Split(new[] {'\n'}, StringSplitOptions.None);
+            var isCode = new bool[lines.Length];
+
+            bool LooksLikeCode(string l)
+            {
+                var t = (l ?? string.Empty).TrimStart();
+                if (t.Length == 0) return false; // blank handled by run logic below
+                if (t.StartsWith("PS>") || t.StartsWith("PS ") || t.StartsWith("C:\\")) return true;
+                if (t.StartsWith("#")) return true;
+                if (t.StartsWith("@{") || t.StartsWith("@(") || t.StartsWith("param(")) return true;
+                if (t.StartsWith("function ", StringComparison.OrdinalIgnoreCase) || t.StartsWith("if (", StringComparison.OrdinalIgnoreCase)) return true;
+                if (t.StartsWith("$") || t.StartsWith("[")) return true;
+                // Verb-Noun at line start
+                if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Za-z]+-[A-Za-z0-9]+(\s|$)")) return true;
+                // Parameter style anywhere: space dash param
+                if (System.Text.RegularExpressions.Regex.IsMatch(t, @"\s-[A-Za-z]")) return true;
+                return false;
+            }
+            for (int i=0;i<lines.Length;i++) isCode[i] = LooksLikeCode(lines[i]);
+
+            // find last code line index (ignore trailing blanks)
+            int lastCode = -1;
+            for (int i=0;i<lines.Length;i++) if (isCode[i]) lastCode = i;
+            if (lastCode < 0) { trailingAsRemarks = codeOnly.Trim(); codeOnly = string.Empty; return true; }
+
+            // But allow trailing blank lines after last code
+            int splitAt = lastCode + 1;
+            // If everything after splitAt are blanks → no trailing narrative
+            bool hasTrailingText = false;
+            for (int i = splitAt; i < lines.Length; i++) { if (!string.IsNullOrWhiteSpace(lines[i])) { hasTrailingText = true; break; } }
+            if (!hasTrailingText) { codeOnly = text.TrimEnd(); trailingAsRemarks = string.Empty; return true; }
+
+            codeOnly = string.Join("\n", lines.Take(splitAt)).TrimEnd();
+            trailingAsRemarks = string.Join("\n", lines.Skip(splitAt)).Trim();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    // Try to move the leading remarks lines that are actual code (by AST/token inspection) back into the Code block
+    private bool TryReclassifyLeadingCodeWithAst(string codeRaw, string remarksRaw, out string codeOut, out string remarksOut)
+    {
+        codeOut = codeRaw ?? string.Empty; remarksOut = remarksRaw ?? string.Empty;
+        if (string.IsNullOrEmpty(remarksOut)) { codeOut = codeOut.TrimEnd(); remarksOut = string.Empty; return true; }
+        try
+        {
+            var text = remarksOut.Replace("\r\n", "\n");
+            Token[] tokens; ParseError[] errors; var ast = Parser.ParseInput(text, out tokens, out errors);
+            var lines = text.Split(new[] {'\n'}, StringSplitOptions.None);
+            var isCode = new bool[lines.Length];
+
+            Func<Ast, bool> selector = a =>
+                a is PipelineAst || a is CommandAst || a is CommandExpressionAst ||
+                a is AssignmentStatementAst || a is HashtableAst || a is ArrayLiteralAst || a is ArrayExpressionAst ||
+                a is ScriptBlockAst || a is FunctionDefinitionAst || a is IfStatementAst || a is ForEachStatementAst || a is ForStatementAst ||
+                a is WhileStatementAst || a is DoWhileStatementAst || a is DoUntilStatementAst || a is TryStatementAst || a is SwitchStatementAst ||
+                a is TrapStatementAst || a is ReturnStatementAst || a is ThrowStatementAst || a is BreakStatementAst || a is ContinueStatementAst;
+
+            foreach (var node in ast.FindAll(selector, true))
+            {
+                var start = Math.Max(1, node.Extent.StartLineNumber) - 1;
+                var end   = Math.Max(start, node.Extent.EndLineNumber   - 1);
+                for (int i = start; i <= end && i < isCode.Length; i++) isCode[i] = true;
+            }
+            // Consume contiguous leading lines that are code (blank lines included while in a code run)
+            var prefix = new System.Text.StringBuilder();
+            int idx = 0; bool lastWasCode = false;
+            while (idx < lines.Length)
+            {
+                var l = lines[idx];
+                if (isCode[idx] || (string.IsNullOrWhiteSpace(l) && lastWasCode))
+                {
+                    prefix.AppendLine(l); idx++; lastWasCode = true; continue;
+                }
+                break;
+            }
+            if (prefix.Length > 0)
+            {
+                var codePartRaw = prefix.ToString().TrimEnd();
+                // If reclassified lines lost indentation (common in MAML Remarks), re-indent them
+                var codeLines = (codeOut ?? string.Empty).Replace("\r\n","\n").Split(new[]{'\n'}, StringSplitOptions.None);
+                string indent = string.Empty;
+                for (int i = codeLines.Length - 1; i >= 0; i--)
+                {
+                    var ln = codeLines[i];
+                    if (string.IsNullOrWhiteSpace(ln)) continue;
+                    indent = new string(ln.TakeWhile(ch => ch == ' ' || ch == '\t').ToArray());
+                    break;
+                }
+                if (!string.IsNullOrEmpty(indent))
+                {
+                    var plines = codePartRaw.Replace("\r\n","\n").Split(new[]{'\n'}, StringSplitOptions.None);
+                    for (int i=0;i<plines.Length;i++)
+                    {
+                        if (plines[i].Length == 0) continue;
+                        // Only indent lines that don't already start with whitespace
+                        if (!(plines[i].Length > 0 && (plines[i][0] == ' ' || plines[i][0] == '\t')))
+                            plines[i] = indent + plines[i];
+                    }
+                    codePartRaw = string.Join("\n", plines);
+                }
+                codeOut = string.IsNullOrEmpty(codeOut) ? codePartRaw : (codeOut.TrimEnd() + "\n\n" + codePartRaw);
+                remarksOut = string.Join("\n", lines.Skip(idx)).TrimStart('\n');
+            }
+            else
+            {
+                codeOut = codeOut.TrimEnd();
+                remarksOut = remarksOut.TrimStart('\n');
+            }
+            return true;
+        }
+        catch { return false; }
+    }
+
+    // Heuristic reclassification: treat leading lines in remarks as code continuation when they look like code
+    private static void ReclassifyExample(string codeRaw, string remarksRaw, out string codeOut, out string remarksOut)
+    {
+        var code = (codeRaw ?? string.Empty).Replace("\r\n", "\n");
+        var remarks = (remarksRaw ?? string.Empty).Replace("\r\n", "\n");
+
+        if (string.IsNullOrWhiteSpace(remarks))
+        {
+            codeOut = code.TrimEnd();
+            remarksOut = string.Empty;
+            return;
+        }
+
+        var lines = remarks.Split(new[] {'\n'}, StringSplitOptions.None).ToList();
+        var prefix = new System.Text.StringBuilder();
+        int idx = 0;
+        int curly = 0, paren = 0;
+        bool inDQuote = false, inSQuote = false; // simple string tracking
+        bool inHereD = false, inHereS = false;   // here-strings @"..."@ or @'...'@
+
+        // Helper local funcs
+        bool IsLikelyCode(string line)
+        {
+            var t = (line ?? string.Empty);
+            var trimmed = t.TrimStart();
+            if (trimmed.Length == 0) return true; // blank lines allowed within code blocks
+            if (trimmed.StartsWith("PS ") || trimmed.StartsWith("PS>") || trimmed.StartsWith("C:\\")) return true;
+            if (trimmed.StartsWith("#")) return true; // comments in code
+            if (trimmed.StartsWith("@{") || trimmed.StartsWith("@(") || trimmed.StartsWith("param(")) return true;
+            if (trimmed.StartsWith("function ") || trimmed.StartsWith("If(" , StringComparison.OrdinalIgnoreCase) || trimmed.StartsWith("if (")) return true;
+            if (trimmed.StartsWith("$")) return true;
+            if (trimmed.Contains(" = ") || trimmed.Contains(" -") || trimmed.Contains("`")) return true;
+            if (trimmed.StartsWith("Email", StringComparison.OrdinalIgnoreCase)) return true; // common DSL in examples
+            return false;
+        }
+
+        string NormalizeForDepth(string l)
+        {
+            // naive depth tracking; ignore braces inside quotes/here-strings
+            for (int i = 0; i < l.Length; i++)
+            {
+                var ch = l[i];
+                if (!inHereD && !inHereS)
+                {
+                    if (ch == '"' && !inSQuote) inDQuote = !inDQuote;
+                    else if (ch == '\'' && !inDQuote) inSQuote = !inSQuote;
+                    if (!inDQuote && !inSQuote)
+                    {
+                        if (ch == '{') curly++;
+                        else if (ch == '}') curly = Math.Max(0, curly - 1);
+                        else if (ch == '(') paren++;
+                        else if (ch == ')') paren = Math.Max(0, paren - 1);
+                    }
+                    // here-strings start
+                    if (i + 1 < l.Length && l[i] == '@' && (l[i+1] == '"' || l[i+1] == '\''))
+                    {
+                        if (l[i+1] == '"' && !inSQuote) { inHereD = true; i++; }
+                        else if (l[i+1] == '\'' && !inDQuote) { inHereS = true; i++; }
+                    }
+                }
+                else
+                {
+                    // end here-string when "@ or '@ appears at line start (PowerShell rule)
+                    var s = l.TrimStart();
+                    if (inHereD && s.StartsWith("\"@")) inHereD = false;
+                    if (inHereS && s.StartsWith("'@")) inHereS = false;
+                }
+            }
+            return l;
+        }
+
+        while (idx < lines.Count)
+        {
+            var line = lines[idx];
+            NormalizeForDepth(line);
+            if (IsLikelyCode(line) || inHereD || inHereS || curly > 0 || paren > 0)
+            {
+                prefix.AppendLine(line);
+                idx++;
+                continue;
+            }
+            // First narrative-looking line at zero depth ends the code continuation
+            break;
+        }
+
+        if (prefix.Length > 0)
+        {
+            // Merge original code with code-like remarks prefix; preserve a blank line between when appropriate
+            if (!string.IsNullOrEmpty(code))
+                codeOut = (code.TrimEnd() + "\n\n" + prefix.ToString().TrimEnd());
+            else
+                codeOut = prefix.ToString().TrimEnd();
+
+            remarksOut = string.Join("\n", lines.Skip(idx)).TrimStart('\n');
+        }
+        else
+        {
+            codeOut = code.TrimEnd();
+            remarksOut = remarks.TrimStart('\n');
+        }
     }
 
     // Helpers
@@ -276,6 +526,86 @@ internal sealed class GetHelpParser
     }
 }
 
+// Helper methods for recovering examples from source files to preserve exact formatting
+internal sealed partial class GetHelpParser
+{
+    private List<ExampleHelp>? TryExtractRawExamples(string commandName, int timeoutSeconds)
+    {
+        try
+        {
+            using var ps = PowerShell.Create();
+            var script = "$h = Get-Help -Full -Name '" + commandName.Replace("'", "''") + "' -ErrorAction SilentlyContinue; if ($h) { $h | Out-String -Width 1mb } else { '' }";
+            ps.AddScript(script);
+            var async = ps.BeginInvoke();
+            if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
+            {
+                try { ps.Stop(); } catch { }
+                return null;
+            }
+            var text = string.Join("", ps.EndInvoke(async).Select(o => o?.ToString()));
+            if (string.IsNullOrWhiteSpace(text)) return null;
+
+            var nl = text.Replace("\r\n", "\n");
+            var lines = nl.Split(new[]{'\n'}, StringSplitOptions.None);
+            // Locate EXAMPLES section
+            int exStart = -1; int exEnd = lines.Length;
+            for (int i=0;i<lines.Length;i++)
+            {
+                var t = (lines[i] ?? string.Empty).Trim();
+                if (string.Equals(t, "EXAMPLES", StringComparison.OrdinalIgnoreCase)) { exStart = i + 1; break; }
+            }
+            if (exStart < 0) return null;
+            // End at next major header
+            var headers = new[] { "INPUTS","OUTPUTS","NOTES","RELATED LINKS","ALIASES","REMARKS","SYNTAX","DESCRIPTION","PARAMETERS" };
+            for (int i=exStart;i<lines.Length;i++)
+            {
+                var t = (lines[i] ?? string.Empty).Trim();
+                if (headers.Any(h => string.Equals(t, h, StringComparison.OrdinalIgnoreCase))) { exEnd = i; break; }
+            }
+            var body = lines.Skip(exStart).Take(Math.Max(0, exEnd - exStart)).ToList();
+            if (body.Count == 0) return null;
+
+            // Split by EXAMPLE headers
+            var idxs = new System.Collections.Generic.List<int>();
+            for (int i=0;i<body.Count;i++)
+            {
+                var t = (body[i] ?? string.Empty).Trim();
+                if (t.StartsWith("EXAMPLE", StringComparison.OrdinalIgnoreCase) || t.StartsWith("Example", StringComparison.OrdinalIgnoreCase)) idxs.Add(i);
+            }
+            if (idxs.Count == 0) { idxs.Add(0); }
+            idxs.Add(body.Count);
+
+            var results = new List<ExampleHelp>(); int n = 1;
+            for (int k=0;k<idxs.Count-1;k++)
+            {
+                int s = idxs[k]; int e = idxs[k+1];
+                var chunk = body.Skip(s).Take(e - s).ToList();
+                if (chunk.Count == 0) continue;
+                var title = (chunk.FirstOrDefault() ?? string.Empty).Trim();
+                // remove header line if it looks like EXAMPLE heading
+                if (title.StartsWith("EXAMPLE", StringComparison.OrdinalIgnoreCase) || title.StartsWith("Example", StringComparison.OrdinalIgnoreCase))
+                {
+                    chunk = chunk.Skip(1).ToList();
+                }
+                var content = string.Join("\n", chunk);
+                var ex = new ExampleHelp
+                {
+                    Title = string.IsNullOrWhiteSpace(title) ? $"Example {n}" : title,
+                    Code = content.TrimEnd('\n','\r'),
+                    Remarks = string.Empty,
+                    Mode = "raw:text"
+                };
+                ex.CodeLines = string.IsNullOrEmpty(ex.Code) ? 0 : ex.Code.Split(new[]{'\n'}, StringSplitOptions.None).Length;
+                ex.RemarksLines = 0;
+                results.Add(ex);
+                n++;
+            }
+            return results;
+        }
+        catch { return null; }
+    }
+}
+
 internal sealed class CommandHelpModel
 {
     public string Name { get; set; } = string.Empty;
@@ -314,6 +644,10 @@ internal sealed class ExampleHelp
     public string Title { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string? Remarks { get; set; }
+    // Diagnostics for verbose logging
+    public string? Mode { get; set; }
+    public int CodeLines { get; set; }
+    public int RemarksLines { get; set; }
 }
 
 internal sealed class TypeHelp

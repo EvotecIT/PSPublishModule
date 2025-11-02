@@ -31,4 +31,6 @@ internal sealed class ModuleInfoModel
     public int MaxCommands { get; set; } = 100;
     public int HelpTimeoutSeconds { get; set; } = 3;
     public bool HelpAsCode { get; set; }
+    public ExamplesMode ExamplesMode { get; set; } = ExamplesMode.Auto;
+    public ExamplesLayout ExamplesLayout { get; set; } = ExamplesLayout.MamlDefault;
 }

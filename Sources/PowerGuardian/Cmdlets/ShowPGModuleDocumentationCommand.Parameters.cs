@@ -98,6 +98,20 @@ public sealed partial class ShowModuleDocumentationCommand
     /// <summary>Render command help inside fenced code blocks for uniform monospace formatting.</summary>
     [Parameter] public SwitchParameter HelpAsCode { get; set; }
 
+    /// <summary>
+    /// Controls how Examples are sourced. Raw = parse the EXAMPLES section from Get-Help text; Maml = use structured help object; Auto = Raw then Maml.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("Auto","Raw","Maml")]
+    public string ExamplesMode { get; set; } = "Auto";
+
+    /// <summary>
+    /// Controls how examples are rendered: MamlDefault (code then remarks), ProseFirst (remarks then code), or AllAsCode.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("MamlDefault","ProseFirst","AllAsCode")]
+    public string ExamplesLayout { get; set; } = "MamlDefault";
+
     // Remote repository support
     /// <summary>
     /// Pull documentation directly from the module repository (GitHub/Azure DevOps) based on <c>PrivateData.PSData.ProjectUri</c>.

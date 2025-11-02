@@ -438,6 +438,18 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         meta.MaxCommands = MaxCommands;
         meta.HelpTimeoutSeconds = HelpTimeoutSeconds;
         meta.HelpAsCode = HelpAsCode.IsPresent;
+        switch ((ExamplesMode ?? "Auto").ToLowerInvariant())
+        {
+            case "raw":  meta.ExamplesMode = PowerGuardian.ExamplesMode.Raw; break;
+            case "maml": meta.ExamplesMode = PowerGuardian.ExamplesMode.Maml; break;
+            default:      meta.ExamplesMode = PowerGuardian.ExamplesMode.Auto; break;
+        }
+        switch ((ExamplesLayout ?? "MamlDefault").ToLowerInvariant())
+        {
+            case "prosefirst": meta.ExamplesLayout = PowerGuardian.ExamplesLayout.ProseFirst; break;
+            case "allascode": meta.ExamplesLayout = PowerGuardian.ExamplesLayout.AllAsCode; break;
+            default:           meta.ExamplesLayout = PowerGuardian.ExamplesLayout.MamlDefault; break;
+        }
 
         WriteVerbose(meta.SkipDependencies ? "Skipping dependency processing." : $"Dependencies discovered: {meta.Dependencies.Count}");
         WriteVerbose(meta.SkipCommands ? "Skipping Commands tab." : $"Commands will be rendered (max {meta.MaxCommands}, per-help timeout {meta.HelpTimeoutSeconds}s).");
