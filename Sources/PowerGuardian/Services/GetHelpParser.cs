@@ -249,7 +249,7 @@ internal sealed partial class GetHelpParser
                     }
                     codePartRaw = string.Join("\n", plines);
                 }
-                codeOut = string.IsNullOrEmpty(codeOut) ? codePartRaw : (codeOut.TrimEnd() + "\n\n" + codePartRaw);
+                codeOut = string.IsNullOrEmpty(codeOut) ? codePartRaw : ((codeOut ?? string.Empty).TrimEnd() + "\n\n" + codePartRaw);
                 remarksOut = string.Join("\n", lines.Skip(idx)).TrimStart('\n');
             }
             else

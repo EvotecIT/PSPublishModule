@@ -90,7 +90,10 @@ internal sealed class DocumentationInstaller
         if (lic != null)
         {
             var licTarget = Path.Combine(dest, "license.txt");
-            lic.CopyTo(licTarget, overwrite: force);
+            if (!(File.Exists(licTarget) && !force))
+            {
+                lic.CopyTo(licTarget, overwrite: true);
+            }
         }
 
         if (open)
@@ -120,7 +123,12 @@ internal sealed class DocumentationInstaller
             var rel = file.Substring(source.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var target = Path.Combine(dest, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(file, target, overwrite);
+            if (File.Exists(target) && !overwrite)
+            {
+                // Merge semantics: keep existing file unless Force/overwrite specified
+                continue;
+            }
+            File.Copy(file, target, true);
         }
     }
 
@@ -130,7 +138,8 @@ internal sealed class DocumentationInstaller
         foreach (var f in di.GetFiles(pattern))
         {
             var target = Path.Combine(dest, f.Name);
-            f.CopyTo(target, overwrite: force);
+            if (File.Exists(target) && !force) continue; // keep existing unless -Force
+            f.CopyTo(target, overwrite: true);
         }
     }
 }
