@@ -7,6 +7,10 @@ using System.Management.Automation;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Resolves module base paths (root and Internals) and maps delivery options from the manifest.
+/// Provides helpers to locate standard documents (README/CHANGELOG/LICENSE/UPGRADE).
+/// </summary>
 internal sealed class DocumentationFinder
 {
     private readonly PSCmdlet _cmdlet;

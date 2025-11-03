@@ -207,42 +207,10 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         }
         catch { }
 
-        if (List)
-        {
-            var root = new DirectoryInfo(rootBase);
-            if (root.Exists)
-            {
-                foreach (var f in root.GetFiles("README*").Concat(root.GetFiles("CHANGELOG*").Concat(root.GetFiles("LICENSE*"))))
-                    WriteObject(new { Name = f.Name, FullName = f.FullName, Area = "Root" });
-            }
-            if (internalsBase != null)
-            {
-                var di = new DirectoryInfo(internalsBase);
-                foreach (var f in di.GetFiles("README*").Concat(di.GetFiles("CHANGELOG*").Concat(di.GetFiles("LICENSE*"))))
-                    WriteObject(new { Name = f.Name, FullName = f.FullName, Area = "Internals" });
-            }
-            return;
-        }
-
-        // Map -Type high-level selection into fine-grained flags when specified
-        if (Type != DocumentationSelection.Default)
-        {
-            Readme = false; Changelog = false; License = false; Intro = false; Upgrade = false; All = false;
-            switch (Type)
-            {
-                case DocumentationSelection.All: All = true; break;
-                case DocumentationSelection.Readme: Readme = true; break;
-                case DocumentationSelection.Changelog: Changelog = true; break;
-                case DocumentationSelection.License: License = true; break;
-                case DocumentationSelection.Intro: Intro = true; break;
-                case DocumentationSelection.Upgrade: Upgrade = true; break;
-                case DocumentationSelection.Links: /* handled later when rendering */ break;
-                default: /* Default no-op */ break;
-            }
-        }
+        // (-List removed; HTML viewer renders the full page.)
 
         // Fast mode maps to all skip flags
-        if (Fast.IsPresent) { SkipRemote = true; SkipDependencies = true; SkipCommands = true; }
+        if (Fast.IsPresent) { SkipDependencies = true; SkipCommands = true; }
 
         WriteVerbose("Resolving module and manifest...");
 
@@ -335,7 +303,9 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         }
 
         // Verbose: remote repository intent and inputs (without leaking secrets)
-        bool wantsRemote = (PreferRepository || FromRepository || (RepositoryPaths != null && RepositoryPaths.Length > 0)) && !SkipRemote.IsPresent;
+        // Legacy mapping (one-time warnings could be added here)
+        bool legacyRepoPaths  = (RepositoryPaths != null && RepositoryPaths.Length > 0);
+        bool wantsRemote = Online.IsPresent || legacyRepoPaths;
         if (wantsRemote)
         {
             if (string.IsNullOrWhiteSpace(projectUri))
@@ -390,24 +360,24 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
             RootBase = rootBase,
             InternalsBase = internalsBase,
             Delivery = delivery,
-            ProjectUri = SkipRemote.IsPresent ? null : projectUri,
+            ProjectUri = wantsRemote ? projectUri : null,
             RepositoryBranch = branchToUse,
             RepositoryToken = RepositoryToken,
             RepositoryPaths = pathsToUse,
             PreferInternals = PreferInternals,
-            Readme = Readme,
-            Changelog = Changelog,
-            License = License,
-            Intro = Intro,
-            Upgrade = Upgrade,
-            All = All,
-            PreferRepository = PreferRepository,
-            FromRepository = FromRepository,
+            Online = wantsRemote,
+            Mode = (Mode ?? (wantsRemote ? "All" : "PreferLocal")).Equals("PreferRemote", System.StringComparison.OrdinalIgnoreCase)
+                ? DocumentationMode.PreferRemote
+                : (Mode ?? (wantsRemote ? "All" : "PreferLocal")).Equals("All", System.StringComparison.OrdinalIgnoreCase)
+                    ? DocumentationMode.All
+                    : DocumentationMode.PreferLocal,
+            ShowDuplicates = ShowDuplicates.IsPresent,
             SingleFile = File,
             TitleName = titleName,
             TitleVersion = titleVersion
         };
-        WriteVerbose("Planning documents (local + remote backfill if enabled)...");
+        var modeLabel = reqObj.Online ? ($"Online/{reqObj.Mode}") : "LocalOnly";
+        WriteVerbose($"Planning documents (mode: {modeLabel})...");
         var plan = planner.Execute(reqObj);
 
         // Verbose summary of repository/local docs discovered
@@ -443,17 +413,20 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         meta.MaxCommands = MaxCommands;
         meta.HelpTimeoutSeconds = HelpTimeoutSeconds;
         meta.HelpAsCode = HelpAsCode.IsPresent;
+        meta.Online = wantsRemote;
+        meta.Mode = reqObj.Mode;
+        meta.ShowDuplicates = ShowDuplicates.IsPresent;
         switch ((ExamplesMode ?? "Auto").ToLowerInvariant())
         {
             case "raw":  meta.ExamplesMode = PowerGuardian.ExamplesMode.Raw; break;
             case "maml": meta.ExamplesMode = PowerGuardian.ExamplesMode.Maml; break;
             default:      meta.ExamplesMode = PowerGuardian.ExamplesMode.Auto; break;
         }
-        switch ((ExamplesLayout ?? "MamlDefault").ToLowerInvariant())
+        switch ((ExamplesLayout ?? "ProseFirst").ToLowerInvariant())
         {
             case "prosefirst": meta.ExamplesLayout = PowerGuardian.ExamplesLayout.ProseFirst; break;
             case "allascode": meta.ExamplesLayout = PowerGuardian.ExamplesLayout.AllAsCode; break;
-            default:           meta.ExamplesLayout = PowerGuardian.ExamplesLayout.MamlDefault; break;
+            default:           meta.ExamplesLayout = PowerGuardian.ExamplesLayout.ProseFirst; break;
         }
 
         WriteVerbose(meta.SkipDependencies ? "Skipping dependency processing." : $"Dependencies discovered: {meta.Dependencies.Count}");

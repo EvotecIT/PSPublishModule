@@ -30,8 +30,11 @@ internal sealed class DocumentationPlanner
         public bool Intro { get; set; }
         public bool Upgrade { get; set; }
         public bool All { get; set; }
-        public bool PreferRepository { get; set; }
-        public bool FromRepository { get; set; }
+        public bool PreferRepository { get; set; } // legacy
+        public bool FromRepository { get; set; }   // legacy
+        public bool Online { get; set; }
+        public DocumentationMode Mode { get; set; } = DocumentationMode.PreferLocal;
+        public bool ShowDuplicates { get; set; }
         public string? SingleFile { get; set; }
         public string? TitleName { get; set; }
         public string? TitleVersion { get; set; }
@@ -92,8 +95,8 @@ internal sealed class DocumentationPlanner
             if (introLines != null || !string.IsNullOrEmpty(introFile)) items.Add(("INTRO", string.Empty));
         }
 
-        // Remote repo fetch
-        var wantRemote = req.FromRepository || req.PreferRepository || items.Count == 0;
+        // Remote repo fetch only when Online is requested
+        var wantRemote = req.Online;
         if (wantRemote && (!string.IsNullOrWhiteSpace(req.ProjectUri) || clientOverride != null))
         {
             var client = clientOverride;
@@ -111,26 +114,25 @@ internal sealed class DocumentationPlanner
             if (client != null)
             {
                 string branch = string.IsNullOrWhiteSpace(req.RepositoryBranch) ? client.GetDefaultBranch() : req.RepositoryBranch!;
-                // Default remote files
+                // Default remote files (always add candidates; selection policy is applied later in the exporter)
                 var readme = TryFetchFirst(client, branch, new[] { "README.md", "README.MD", "Readme.md" });
                 var changelog = TryFetchFirst(client, branch, new[] { "CHANGELOG.md", "CHANGELOG.MD", "Changelog.md" });
                 var license = TryFetchFirst(client, branch, new[] { "LICENSE", "LICENSE.md", "LICENSE.txt" });
 
-                // Render remote regardless of local presence if -PreferRepository/-FromRepository
                 bool anyRemote = false;
-                if (!string.IsNullOrEmpty(readme) && (req.Readme || req.All || !hasSelectors))
+                if (!string.IsNullOrEmpty(readme))
                 {
                     var di = MakeContentItem(req, "README", readme!);
                     di.Source = "Remote"; di.FileName = "README.md"; di.Title = "README";
                     res.Items.Add(di); anyRemote = true;
                 }
-                if (!string.IsNullOrEmpty(changelog) && (req.Changelog || req.All))
+                if (!string.IsNullOrEmpty(changelog))
                 {
                     var di = MakeContentItem(req, "CHANGELOG", changelog!);
                     di.Source = "Remote"; di.FileName = "CHANGELOG.md"; di.Title = "CHANGELOG";
                     res.Items.Add(di); anyRemote = true;
                 }
-                if (!string.IsNullOrEmpty(license) && (req.License || req.All))
+                if (!string.IsNullOrEmpty(license))
                 {
                     var di = MakeContentItem(req, "LICENSE", license!);
                     di.Source = "Remote"; di.FileName = "LICENSE"; di.Title = "LICENSE";

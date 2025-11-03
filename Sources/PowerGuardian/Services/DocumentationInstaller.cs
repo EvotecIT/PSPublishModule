@@ -6,7 +6,9 @@ using System.Management.Automation;
 namespace PowerGuardian;
 
 /// <summary>
-/// Installs (copies) module documentation to a destination according to layout and overwrite options.
+/// Installs (copies) module documentation to a destination according to layout
+/// (Direct/Module/ModuleAndVersion) and overwrite/merge options.
+/// Handles Internals content and selected root files (README/CHANGELOG/LICENSE).
 /// </summary>
 internal sealed class DocumentationInstaller
 {

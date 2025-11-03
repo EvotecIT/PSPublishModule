@@ -5,6 +5,10 @@ using System.Management.Automation.Language;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Classifies example text into Code and Remarks segments while preserving the author's formatting.
+/// Used by structured and raw help paths to decide what goes inside fenced code blocks versus prose.
+/// </summary>
 internal sealed class ExampleClassifier
 {
     private readonly HashSet<string> _approvedVerbs;

@@ -6,6 +6,10 @@ using System.Management.Automation.Language;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Parses PowerShell Get-Help output into a structured model (syntax, parameters, examples)
+/// and optionally extracts raw EXAMPLES text for verbatim rendering. Optimized for PS5.1+.
+/// </summary>
 internal sealed partial class GetHelpParser
 {
     public CommandHelpModel? Parse(string commandName, int timeoutSeconds = 5, ExamplesMode examplesMode = ExamplesMode.Auto)

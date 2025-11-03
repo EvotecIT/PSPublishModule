@@ -9,6 +9,10 @@ using HtmlForgeX.Extensions;
 
 namespace PowerGuardian;
 
+/// <summary>
+/// Builds the interactive HTML documentation page (tabs, markdown rendering, DataTables, diagrams)
+/// from a module's metadata and planned document items.
+/// </summary>
 internal sealed class HtmlExporter
 {
     public string Export(ModuleInfoModel module, IEnumerable<DocumentItem> items, string? destinationPath, bool open, Action<string>? log = null)
@@ -52,42 +56,142 @@ internal sealed class HtmlExporter
 
                                 // If both local and remote versions of README/CHANGELOG/LICENSE exist,
                                 // annotate local copies with "(local)" for clarity.
-                                try
+                                // Standard tabs selection with de-dup and mode
+                                string BaseLabel(string t, string? fileName)
                                 {
-                                    string BaseLabel(string t, string? fileName)
+                                    if (!string.IsNullOrEmpty(fileName))
                                     {
-                                        // Prefer filename when it clearly indicates kind
-                                        if (!string.IsNullOrEmpty(fileName))
-                                        {
-                                            var fn = (fileName ?? string.Empty).Trim();
-                                            if (fn.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
-                                            if (fn.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)) return "CHANGELOG";
-                                            if (fn.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
-                                        }
-                                        if (string.IsNullOrEmpty(t)) return t;
-                                        var u = t.Trim();
-                                        if (u.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
-                                        if (u.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)) return "CHANGELOG";
-                                        if (u.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
-                                        return u;
+                                        var fn = (fileName ?? string.Empty).Trim();
+                                        if (fn.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
+                                        if (fn.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)) return "CHANGELOG";
+                                        if (fn.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
                                     }
-                                    var groups = standard.GroupBy(s => BaseLabel(s.Title ?? string.Empty, s.FileName), StringComparer.OrdinalIgnoreCase);
-                                    foreach (var g in groups)
-                                    {
-                                        if (g.Key == "README" || g.Key == "CHANGELOG" || g.Key == "LICENSE")
-                                        {
-                                            bool hasRemote = g.Any(x => string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase));
-                                            // Do not mutate titles; badges indicate source.
-                                        }
-                                    }
+                                    if (string.IsNullOrEmpty(t)) return t;
+                                    var u = t.Trim();
+                                    if (u.StartsWith("README", StringComparison.OrdinalIgnoreCase)) return "README";
+                                    if (u.StartsWith("CHANGELOG", StringComparison.OrdinalIgnoreCase)) return "CHANGELOG";
+                                    if (u.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase)) return "LICENSE";
+                                    return u;
                                 }
-                                catch (System.Exception ex)
-                                {
-                                    log?.Invoke($"[WARN] Document labelling failed: {ex.Message}");
-                                }
-                                // Do not append (root)/(internals) suffixes; upstream selection ensures a single local copy.
+                                string NormalizeForCompare(string s)
+                                    => string.Join("\n", (s ?? string.Empty).Replace("\r\n","\n").Split('\n').Select(l => l.TrimEnd())).TrimEnd();
 
-                                foreach (var it in standard)
+                                var groups = standard.GroupBy(s => BaseLabel(s.Title ?? string.Empty, s.FileName), StringComparer.OrdinalIgnoreCase);
+                                var selected = new System.Collections.Generic.List<DocumentItem>();
+                                foreach (var g in groups)
+                                {
+                                    var label = g.Key;
+                                    if (!(label == "README" || label == "CHANGELOG" || label == "LICENSE"))
+                                    {
+                                        // Non-standard files (should be rare here) — include as-is
+                                        selected.AddRange(g);
+                                        continue;
+                                    }
+                                    var locals = g.Where(x => string.Equals(x.Source, "Local", StringComparison.OrdinalIgnoreCase)).ToList();
+                                    var remotes = g.Where(x => string.Equals(x.Source, "Remote", StringComparison.OrdinalIgnoreCase)).ToList();
+
+                                    // de-dup identical local copies (if multiple appear)
+                                    if (locals.Count > 1 && !module.ShowDuplicates)
+                                    {
+                                        var first = locals.First();
+                                        var firstN = NormalizeForCompare(first.Content ?? string.Empty);
+                                        var uniq = new System.Collections.Generic.List<DocumentItem> { first };
+                                        foreach (var it in locals.Skip(1))
+                                        {
+                                            if (NormalizeForCompare(it.Content ?? string.Empty) != firstN) { uniq.Add(it); }
+                                        }
+                                        var removed = locals.Count - uniq.Count;
+                                        if (removed > 0)
+                                            log?.Invoke($"[INFO] {label}: removed {removed} duplicate Local copy/copies (identical content).");
+                                        locals = uniq;
+                                    }
+                                    // de-dup identical remote copies
+                                    if (remotes.Count > 1 && !module.ShowDuplicates)
+                                    {
+                                        var first = remotes.First();
+                                        var firstN = NormalizeForCompare(first.Content ?? string.Empty);
+                                        var uniq = new System.Collections.Generic.List<DocumentItem> { first };
+                                        foreach (var it in remotes.Skip(1))
+                                        {
+                                            if (NormalizeForCompare(it.Content ?? string.Empty) != firstN) { uniq.Add(it); }
+                                        }
+                                        var removed = remotes.Count - uniq.Count;
+                                        if (removed > 0)
+                                            log?.Invoke($"[INFO] {label}: removed {removed} duplicate Remote copy/copies (identical content).");
+                                        remotes = uniq;
+                                    }
+
+                                    var hasLocal = locals.Count > 0;
+                                    var hasRemote = module.Online && remotes.Count > 0;
+
+                                    DocumentItem? pickLocal = hasLocal ? locals.First() : null;
+                                    DocumentItem? pickRemote = hasRemote ? remotes.First() : null;
+
+                                    bool equalLR = false;
+                                    if (pickLocal != null && pickRemote != null)
+                                    {
+                                        equalLR = NormalizeForCompare(pickLocal.Content ?? string.Empty) == NormalizeForCompare(pickRemote.Content ?? string.Empty);
+                                    }
+
+                                    if (!module.Online)
+                                    {
+                                        // Local-only
+                                        if (pickLocal != null) selected.Add(pickLocal);
+                                        continue;
+                                    }
+
+                                    switch (module.Mode)
+                                    {
+                                        case DocumentationMode.All:
+                                            if (pickLocal != null && pickRemote != null)
+                                            {
+                                                if (equalLR && !module.ShowDuplicates)
+                                                {
+                                                    // collapse to one (prefer Local)
+                                                    log?.Invoke($"[INFO] {label}: Remote identical to Local — showing one tab (Local).");
+                                                    selected.Add(pickLocal);
+                                                }
+                                                else
+                                                {
+                                                    selected.Add(pickLocal);
+                                                    selected.Add(pickRemote);
+                                                    if (!equalLR)
+                                                        log?.Invoke($"[INFO] {label}: Local and Remote differ — showing both.");
+                                                }
+                                            }
+                                            else if (pickLocal != null) selected.Add(pickLocal);
+                                            else if (pickRemote != null) selected.Add(pickRemote);
+                                            break;
+                                        case DocumentationMode.PreferRemote:
+                                            if (pickRemote != null)
+                                            {
+                                                if (pickLocal != null && equalLR && !module.ShowDuplicates)
+                                                    log?.Invoke($"[INFO] {label}: Local identical to Remote — hiding Local (PreferRemote).");
+                                                selected.Add(pickRemote);
+                                            }
+                                            else if (pickLocal != null)
+                                            {
+                                                log?.Invoke($"[INFO] {label}: Remote missing — using Local (PreferRemote fallback).");
+                                                selected.Add(pickLocal);
+                                            }
+                                            break;
+                                        default: // PreferLocal
+                                            if (pickLocal != null)
+                                            {
+                                                if (pickRemote != null && equalLR && !module.ShowDuplicates)
+                                                    log?.Invoke($"[INFO] {label}: Remote identical to Local — hiding Remote (PreferLocal).");
+                                                selected.Add(pickLocal);
+                                            }
+                                            else if (pickRemote != null)
+                                            {
+                                                log?.Invoke($"[INFO] {label}: Local missing — using Remote (PreferLocal fallback).");
+                                                selected.Add(pickRemote);
+                                            }
+                                            break;
+                                    }
+                                }
+
+                                foreach (var it in selected)
                                 {
                                     var title = MakeShortTabTitle(it);
                                     var src = string.IsNullOrEmpty(it.Source) ? "unknown" : it.Source;
@@ -261,8 +365,9 @@ internal sealed class HtmlExporter
                                                 p.Card(c => {
                                                     c.Header(h => h.Title("Declared Dependencies"));
                                                     c.DataTable(rows, t => t
-                                                        .Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))
-                                                        .Settings(s => s.ToggleViewButton("Switch View", ToggleViewMode.Responsive, persist: true))
+                                                        .Settings(s => s.Preset(DataTablesPreset.Minimal))
+                                                        .Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy))
+                                                        .Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))
                                                     );
                                                 });
                                             });
@@ -745,8 +850,9 @@ internal sealed class HtmlExporter
                 panel.Card(c => {
                     c.Header(h => h.Title($"Parameters — Set {i + 1} of {total}"));
                     c.DataTable(rows, t => t
-                        .Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))
-                        .Settings(s => s.ToggleViewButton("Switch View", ToggleViewMode.Responsive, persist: true))
+                        .Settings(s => s.Preset(DataTablesPreset.Minimal))
+                        .Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy))
+                        .Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))
                     );
                 });
             }
@@ -755,12 +861,12 @@ internal sealed class HtmlExporter
         if (m.Inputs.Count > 0)
         {
             var rows = m.Inputs.Select(t => new { Type = t.TypeName, Description = t.Description ?? string.Empty }).ToList();
-            panel.Card(c => { c.Header(h => h.Title("Inputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))); });
+            panel.Card(c => { c.Header(h => h.Title("Inputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.Minimal)).Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy)).Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))); });
         }
         if (m.Outputs.Count > 0)
         {
             var rows = m.Outputs.Select(t => new { Type = t.TypeName, Description = t.Description ?? string.Empty }).ToList();
-            panel.Card(c => { c.Header(h => h.Title("Outputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.MinimalWithExport))); });
+            panel.Card(c => { c.Header(h => h.Title("Outputs")); c.DataTable(rows, t => t.Settings(s => s.Preset(DataTablesPreset.Minimal)).Settings(s => s.Export(DataTablesExportFormat.Excel, DataTablesExportFormat.CSV, DataTablesExportFormat.Copy)).Settings(s => s.ToggleViewButton("Switch to ScrollX", ToggleViewMode.ScrollX, persist: true))); });
         }
         if (m.Examples.Count > 0)
         {

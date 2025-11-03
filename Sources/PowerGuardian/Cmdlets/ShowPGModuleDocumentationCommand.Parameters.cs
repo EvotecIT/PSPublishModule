@@ -26,29 +26,10 @@ public sealed partial class ShowModuleDocumentationCommand
     /// <summary>Path to a module root (folder that contains the module manifest). Useful for unpacked builds.</summary>
     [Parameter(ParameterSetName = "ByBase")]
     public string? ModuleBase { get; set; }
-
-    /// <summary>Show README.*.</summary>
-    [Parameter] public SwitchParameter Readme { get; set; }
-    /// <summary>Show CHANGELOG.*.</summary>
-    [Parameter] public SwitchParameter Changelog { get; set; }
-    /// <summary>Show LICENSE.*.</summary>
-    [Parameter] public SwitchParameter License { get; set; }
-    /// <summary>Show configured IntroText/IntroFile (from Delivery metadata).</summary>
-    [Parameter] public SwitchParameter Intro { get; set; }
-    /// <summary>Show configured UpgradeText/UpgradeFile (from Delivery metadata or UPGRADE.*).</summary>
-    [Parameter] public SwitchParameter Upgrade { get; set; }
-    /// <summary>Convenience switch to show Intro, README, CHANGELOG and LICENSE in order.</summary>
-    [Parameter] public SwitchParameter All { get; set; }
-    /// <summary>Display ImportantLinks defined in Delivery metadata at the end.</summary>
-    [Parameter] public SwitchParameter Links { get; set; }
     /// <summary>Show a specific file by name (relative to module root or Internals) or full path.</summary>
     [Parameter] public string? File { get; set; }
     /// <summary>Prefer Internals folder over module root when both contain the same file kind.</summary>
     [Parameter] public SwitchParameter PreferInternals { get; set; }
-    /// <summary>List discovered documentation files (without rendering).</summary>
-    [Parameter] public SwitchParameter List { get; set; }
-    /// <summary>Print raw file content without Markdown rendering.</summary>
-    [Parameter] public SwitchParameter Raw { get; set; }
     /// <summary>Open the chosen document in the default shell handler instead of rendering to console.</summary>
     [Parameter] public SwitchParameter Open { get; set; }
     /// <summary>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</summary>
@@ -74,16 +55,9 @@ public sealed partial class ShowModuleDocumentationCommand
     [Parameter]
     public SwitchParameter DisableTokenizer { get; set; }
 
-    /// <summary>
-    /// High-level selection of which documents to show. Overrides granular switches when specified.
-    /// Default is <see cref="DocumentationSelection.Default"/> which includes README, CHANGELOG, LICENSE (and Intro/Upgrade when present).
-    /// </summary>
-    [Parameter]
-    public DocumentationSelection Type { get; set; } = DocumentationSelection.All;
+    // High-level selection (-Type) removed for Show-ModuleDocumentation; full HTML is rendered by default.
 
     // Performance/scope controls
-    /// <summary>Skip fetching remote docs even when local files are missing.</summary>
-    [Parameter] public SwitchParameter SkipRemote { get; set; }
     /// <summary>Skip building the dependency list and graph.</summary>
     [Parameter] public SwitchParameter SkipDependencies { get; set; }
     /// <summary>Skip building the Commands tab (fast export).</summary>
@@ -105,24 +79,14 @@ public sealed partial class ShowModuleDocumentationCommand
     public string ExamplesMode { get; set; } = "Auto";
 
     /// <summary>
-    /// Controls how examples are rendered: MamlDefault (code then remarks), ProseFirst (remarks then code), or AllAsCode.
+    /// Controls how examples are rendered: ProseFirst (remarks then code), MamlDefault (code then remarks), or AllAsCode.
+    /// Default is ProseFirst.
     /// </summary>
     [Parameter]
     [ValidateSet("MamlDefault","ProseFirst","AllAsCode")]
-    public string ExamplesLayout { get; set; } = "MamlDefault";
+    public string ExamplesLayout { get; set; } = "ProseFirst";
 
-    // Remote repository support
-    /// <summary>
-    /// Pull documentation directly from the module repository (GitHub/Azure DevOps) based on <c>PrivateData.PSData.ProjectUri</c>.
-    /// Use with -Readme/-Changelog/-License or -RepositoryPaths. Honors -RepositoryBranch and -RepositoryToken.
-    /// </summary>
-    [Parameter]
-    public SwitchParameter FromRepository { get; set; }
-    /// <summary>
-    /// Prefer remote repository documents even if local files exist. Useful to view the current branch content.
-    /// </summary>
-    [Parameter]
-    public SwitchParameter PreferRepository { get; set; }
+    // Remote repository support (enable with -Online). Legacy switches removed; scripts using them will be mapped internally if needed.
     /// <summary>
     /// Branch name to use when fetching remote docs. If omitted, the provider default branch is used.
     /// </summary>
@@ -140,4 +104,16 @@ public sealed partial class ShowModuleDocumentationCommand
     /// </summary>
     [Parameter]
     public string[]? RepositoryPaths { get; set; }
+
+    /// <summary>Enable repository access (fetch remote docs using manifest defaults or -Repository* overrides).</summary>
+    [Parameter] public SwitchParameter Online { get; set; }
+    /// <summary>
+    /// Selection policy for standard tabs when Local and Remote exist (applies only when -Online):
+    /// PreferLocal (default), PreferRemote, or All.
+    /// </summary>
+    [Parameter]
+    [ValidateSet("PreferLocal","PreferRemote","All")]
+    public string Mode { get; set; } = "All";
+    /// <summary>Show both variants even when content is identical (root vs internals and local vs remote).</summary>
+    [Parameter] public SwitchParameter ShowDuplicates { get; set; }
 }
