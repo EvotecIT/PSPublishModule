@@ -1,5 +1,4 @@
 // ReSharper disable All
-#nullable enable
 using System;
 using System.Management.Automation;
 
@@ -18,6 +17,7 @@ public sealed partial class InstallModuleDocumentationCommand
     public PSModuleInfo? Module { get; set; }
 
     /// <summary>Exact version to select when multiple module versions are installed.</summary>
+    [Parameter]
     public Version? RequiredVersion { get; set; }
 
     /// <summary>Destination folder where documentation will be written.</summary>
@@ -25,9 +25,11 @@ public sealed partial class InstallModuleDocumentationCommand
     public string Path { get; set; } = string.Empty;
 
     /// <summary>Output folder structure strategy. Default is ModuleAndVersion.</summary>
+    [Parameter]
     public DocumentationLayout Layout { get; set; } = DocumentationLayout.ModuleAndVersion;
 
     /// <summary>Behavior when the destination folder already exists. Default is Merge.</summary>
+    [Parameter]
     public OnExistsOption OnExists { get; set; } = OnExistsOption.Merge;
 
     /// <summary>Legacy toggle equivalent to selecting ModuleAndVersion when set; Direct when not set.</summary>
@@ -41,4 +43,3 @@ public sealed partial class InstallModuleDocumentationCommand
     /// <summary>Suppress IntroText display during installation.</summary>
     [Parameter] public SwitchParameter NoIntro { get; set; }
 }
-

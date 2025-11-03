@@ -1,5 +1,4 @@
 // ReSharper disable All
-#nullable enable
 using System;
 using System.IO;
 using System.Linq;
@@ -29,6 +28,12 @@ namespace PowerGuardian;
 /// </example>
 /// <example>
 ///   <code>Show-ModuleDocumentation -ModuleBase 'C:\\Program Files\\WindowsPowerShell\\Modules\\EFAdminManager\\3.0.0' -Readme</code>
+/// </example>
+/// <example>
+///   <code>Show-ModuleDocumentation -Name EFAdminManager -ExamplesMode Raw</code>
+/// </example>
+/// <example>
+///   <code>Show-ModuleDocumentation -Name EFAdminManager -ExamplesLayout ProseFirst</code>
 /// </example>
 /// </example>
 /// <example>
@@ -343,7 +348,7 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
                 if (info.Host == RepoHost.Unknown)
                 {
                     WriteVerbose($"Repository URI could not be parsed: {projectUri}");
-                    if (projectUri.Contains("dev.azure.com", StringComparison.OrdinalIgnoreCase))
+                    if ((projectUri ?? string.Empty).IndexOf("dev.azure.com", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         WriteVerbose("Expected Azure DevOps URL form: https://dev.azure.com/{organization}/{project}/_git/{repository}");
                     }

@@ -1,5 +1,4 @@
 // ReSharper disable All
-#nullable enable
 using System;
 using System.Management.Automation;
 
@@ -77,4 +76,3 @@ public sealed partial class GetModuleDocumentationCommand
     /// <summary>Repository-relative folders to enumerate and display (e.g., 'docs', 'articles'). Only .md/.markdown/.txt files are rendered.</summary>
     [Parameter] public string[]? RepositoryPaths { get; set; }
 }
-
