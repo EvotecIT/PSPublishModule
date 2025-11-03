@@ -53,28 +53,28 @@ function Install-ProjectDocumentation {
     Suppress introductory notes and important links printed after installation.
 
     .EXAMPLE
-    Install-ModuleDocumentation -Name AdminManager -Path 'C:\Docs'
+    Install-ProjectDocumentation -Name AdminManager -Path 'C:\Docs'
 
     .EXAMPLE
-    Get-Module -ListAvailable AdminManager | Install-ModuleDocumentation -Path 'D:\\AM'
+    Get-Module -ListAvailable AdminManager | Install-ProjectDocumentation -Path 'D:\\AM'
     Installs the highest available version of AdminManager to D:\AM\AdminManager\<Version>
 
     .EXAMPLE
     # Copy into Path\Name only, merge on re-run without overwriting existing files
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -Layout Module
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\Docs' -Layout Module
 
     .EXAMPLE
     # Overwrite destination on re-run
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -OnExists Overwrite
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\Docs' -OnExists Overwrite
 
     .EXAMPLE
     # Dry-run: show what would be copied and where
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -ListOnly -Verbose
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\Docs' -ListOnly -Verbose
 
     .EXAMPLE
     # Copy, suppress intro/links printing, and open README afterwards
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\Docs' -NoIntro -Open
-    
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\Docs' -NoIntro -Open
+
     .EXAMPLE
     # Typical build time configuration
     New-ConfigurationInformation -IncludeAll 'Internals\'
@@ -82,23 +82,23 @@ function Install-ProjectDocumentation {
 
     .EXAMPLE
     # Direct layout into target folder (no Module/Version subfolders)
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Direct
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Direct
 
     .EXAMPLE
     # Copy into C:\\Docs\\EFAdminManager and merge on rerun (only overwrite when -Force)
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Module -OnExists Merge -Force
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\\Docs' -Layout Module -OnExists Merge -Force
 
     .EXAMPLE
     # Overwrite destination entirely on rerun
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Overwrite
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Overwrite
 
     .EXAMPLE
     # Skip if destination exists
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Skip
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\\Docs' -OnExists Skip
 
     .EXAMPLE
     # Plan only with verbose output
-    Install-ModuleDocumentation -Name EFAdminManager -Path 'C:\\Docs' -ListOnly -Verbose
+    Install-ProjectDocumentation -Name EFAdminManager -Path 'C:\\Docs' -ListOnly -Verbose
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ByName')]
     param(
