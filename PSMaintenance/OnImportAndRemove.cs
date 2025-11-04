@@ -32,7 +32,7 @@ public class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModuleAssemb
     /// <param name="sender"></param>
     /// <param name="args"></param>
     /// <returns></returns>
-    private static Assembly MyResolveEventHandler(object sender, ResolveEventArgs args) {
+    private static Assembly? MyResolveEventHandler(object? sender, ResolveEventArgs args) {
         //This code is used to resolve the assemblies
         //Console.WriteLine($"Resolving {args.Name}");
         var directoryPath = Path.GetDirectoryName(typeof(OnModuleImportAndRemove).Assembly.Location);

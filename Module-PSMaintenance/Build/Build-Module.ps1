@@ -66,7 +66,7 @@
         MergeModuleOnBuild                = $true
         MergeFunctionsFromApprovedModules = $true
         CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
-        NETProjectPath                    = "$PSScriptRoot\..\..\Sources\PSMaintenance"
+        NETProjectPath                    = "$PSScriptRoot\..\..\PSMaintenance"
         ResolveBinaryConflicts            = $true
         ResolveBinaryConflictsName        = 'PSMaintenance'
         NETProjectName                    = 'PSMaintenance'
