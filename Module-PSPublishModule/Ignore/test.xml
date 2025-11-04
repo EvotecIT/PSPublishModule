@@ -1,0 +1,35 @@
+﻿<w:p>
+    <w:r>
+        <w:fldChar w:fldCharType="begin" w:fldLock="1" />
+    </w:r>
+    <w:r>
+        <w:instrText xml:space="preserve"> MERGEFIELD Vorname </w:instrText>
+    </w:r>
+    <w:r>
+        <w:fldChar w:fldCharType="separate" />
+    </w:r>
+    <w:r>
+        <w:t>Hans</w:t>
+    </w:r>
+    <w:r>
+        <w:fldChar w:fldCharType="end" />
+    </w:r>
+    <w:r>
+        <w:t xml:space="preserve"> </w:t>
+    </w:r>
+    <w:r>
+        <w:fldChar w:fldCharType="begin" w:fldLock="1" />
+    </w:r>
+    <w:r>
+        <w:instrText xml:space="preserve"> MERGEFIELD Name </w:instrText>
+    </w:r>
+    <w:r>
+        <w:fldChar w:fldCharType="separate" />
+    </w:r>
+    <w:r>
+        <w:t>Peter</w:t>
+    </w:r>
+    <w:r>
+        <w:fldChar w:fldCharType="end" />
+    </w:r>
+</w:p>
