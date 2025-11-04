@@ -1,7 +1,7 @@
 ﻿@{
     AliasesToExport      = @('Install-Documentation', 'Set-Documentation', 'Show-Documentation')
     Author               = 'Przemyslaw Klys'
-    CmdletsToExport      = @('Get-ModuleDocumentation', 'Install-ModuleDocumentation', 'Set-ModuleDocumentation', 'Show-ModuleDocumentation')
+    CmdletsToExport      = @('Get-ModuleDocumentation', 'Install-ModuleDocumentation', 'Set-ModuleDocumentation', 'Show-ModuleDocumentation', 'Install-ModuleScript')
     CompanyName          = 'Evotec'
     CompatiblePSEditions = @('Desktop', 'Core')
     Copyright            = '(c) 2011 - 2025 Przemyslaw Klys @ Evotec. All rights reserved.'
