@@ -1,0 +1,305 @@
+function Show-ProjectDocumentation {
+    <#
+    .SYNOPSIS
+    Shows README/CHANGELOG or a chosen document for a module, with a simple console view.
+
+    .DESCRIPTION
+    Finds a module (by name or PSModuleInfo) and renders README/CHANGELOG from the module root
+    or from its Internals folder (as defined in PrivateData.PSData.Delivery).
+    You can also point directly to a docs folder via -DocsPath (e.g., output of Install-ModuleDocumentation).
+
+    .PARAMETER Name
+    Module name to show documentation for. Accepts pipeline by value.
+
+    .PARAMETER Module
+    A PSModuleInfo object (e.g., from Get-Module -ListAvailable) to operate on directly.
+
+    .PARAMETER RequiredVersion
+    Specific version of the module to target. If omitted, selects the highest available.
+
+    .PARAMETER DocsPath
+    A folder that contains documentation to display (e.g., the destination created by Install-ModuleDocumentation).
+    When provided, the cmdlet does not look up the module and shows docs from this folder.
+
+    .PARAMETER Readme
+    Show README*. If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
+
+    .PARAMETER Changelog
+    Show CHANGELOG*. If both root and Internals copies exist, the root copy is preferred unless -PreferInternals is set.
+
+    .PARAMETER License
+    Show LICENSE. If multiple variants exist (LICENSE.md, LICENSE.txt), the resolver prefers a normalized 'license.txt' in
+    the chosen area (root vs Internals).
+
+    .PARAMETER Intro
+    Show introduction text defined in PrivateData.PSData.Delivery.IntroText when available. If not defined,
+    falls back to README resolution (root vs Internals honoring -PreferInternals).
+
+    .PARAMETER Upgrade
+    Show upgrade text defined in PrivateData.PSData.Delivery.UpgradeText when available. If not defined,
+    looks for an UPGRADE* file; otherwise throws.
+
+    .PARAMETER All
+    Show Introduction, README, CHANGELOG and LICENSE in a standard order. You can still add
+    specific switches (e.g., -Changelog) and they will be included additively without duplication.
+
+    .PARAMETER Links
+    Print ImportantLinks defined in PrivateData.PSData.Delivery after the selected documents.
+
+    .PARAMETER File
+    Relative path to a specific file to display (relative to module root or Internals). If rooted, used as-is.
+
+    .PARAMETER PreferInternals
+    Prefer the Internals copy of README/CHANGELOG when both exist.
+
+    .PARAMETER List
+    List available README/CHANGELOG files found (root and Internals) instead of displaying content.
+
+    .PARAMETER Raw
+    Output the raw file content (no styling).
+
+    .PARAMETER Open
+    Open the resolved file in the system default viewer instead of rendering in the console.
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -Readme
+
+    .EXAMPLE
+    Get-Module -ListAvailable EFAdminManager | Show-ProjectDocumentation -Changelog
+
+    .EXAMPLE
+    Show-ProjectDocumentation -DocsPath 'C:\Docs\EFAdminManager\3.0.0' -Readme -Open
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -License
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -Intro
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -Upgrade
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -List
+
+    .EXAMPLE
+    Show-ProjectDocumentation -Name EFAdminManager -All -Links
+    Displays Introduction, README, CHANGELOG, LICENSE and prints ImportantLinks.
+
+    .EXAMPLE
+    # Prefer Internals copy of README/CHANGELOG when both root and Internals exist
+    Show-ProjectDocumentation -Name EFAdminManager -Readme -Changelog -PreferInternals
+
+    .EXAMPLE
+    # Show a specific file from a copied docs folder
+    Show-ProjectDocumentation -DocsPath 'C:\\Docs\\EFAdminManager\\3.0.0' -File 'Internals\\Docs\\HowTo.md'
+
+    .EXAMPLE
+    # Quick list of found README/CHANGELOG/License in root and Internals
+    Show-ProjectDocumentation -Name EFAdminManager -List | Format-Table -Auto
+
+    .EXAMPLE
+    # Open the resolved README in the default viewer
+    Show-ProjectDocumentation -Name EFAdminManager -Readme -Open
+    #>
+    [CmdletBinding(DefaultParameterSetName='ByName')]
+    param(
+        [Parameter(ParameterSetName='ByName', Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Alias('ModuleName')]
+        [string] $Name,
+        [Parameter(ParameterSetName='ByModule', ValueFromPipeline=$true)]
+        [Alias('InputObject','ModuleInfo')]
+        [System.Management.Automation.PSModuleInfo] $Module,
+        [version] $RequiredVersion,
+        [Parameter(ParameterSetName='ByPath')]
+        [string] $DocsPath,
+        [switch] $Readme,
+        [switch] $Changelog,
+        [switch] $License,
+        [switch] $Intro,
+        [switch] $Upgrade,
+        [switch] $All,
+        [switch] $Links,
+        [string] $File,
+        [switch] $PreferInternals,
+        [switch] $List,
+        [switch] $Raw,
+        [switch] $Open
+    )
+
+    begin {}
+    process {
+        $rootBase = $null
+        $internalsBase = $null
+        $moduleName = $null
+        $moduleVersion = $null
+
+        if ($PSCmdlet.ParameterSetName -eq 'ByPath') {
+            if (-not $DocsPath) { throw 'Specify -DocsPath for the ByPath parameter set.' }
+            if (-not (Test-Path -LiteralPath $DocsPath)) { throw "DocsPath '$DocsPath' not found." }
+            $rootBase = $DocsPath
+            $intCandidate = Join-Path $DocsPath 'Internals'
+            if (Test-Path -LiteralPath $intCandidate) { $internalsBase = $intCandidate }
+        } else {
+            if ($PSCmdlet.ParameterSetName -eq 'ByName') {
+                if (-not $Name) { throw "Specify -Name or pipe a module via -Module." }
+                $candidates = Get-Module -ListAvailable -Name $Name
+                if (-not $candidates) { throw "Module '$Name' not found." }
+                if ($RequiredVersion) {
+                    $Module = $candidates | Where-Object { $_.Version -eq $RequiredVersion } | Sort-Object Version -Descending | Select-Object -First 1
+                    if (-not $Module) { throw "Module '$Name' with version $RequiredVersion not found." }
+                } else {
+                    $Module = $candidates | Sort-Object Version -Descending | Select-Object -First 1
+                }
+            } elseif ($PSCmdlet.ParameterSetName -eq 'ByModule') {
+                if (-not $Module) { throw "Pipeline didn't pass a PSModuleInfo object. Use -Name or pipe Get-Module output." }
+                if ($RequiredVersion -and $Module.Version -ne $RequiredVersion) {
+                    $resolved = Get-Module -ListAvailable -Name $Module.Name | Where-Object { $_.Version -eq $RequiredVersion } | Sort-Object Version -Descending | Select-Object -First 1
+                    if ($resolved) { $Module = $resolved } else { throw "Module '$($Module.Name)' with version $RequiredVersion not found." }
+                }
+            }
+            $rootBase = $Module.ModuleBase
+            $moduleName = $Module.Name
+            $moduleVersion = $Module.Version
+
+            $manifestPath = Join-Path $rootBase ("{0}.psd1" -f $Module.Name)
+            $delivery = $null
+            if (Test-Path -LiteralPath $manifestPath) {
+                try { $manifest = Test-ModuleManifest -Path $manifestPath; $delivery = $manifest.PrivateData.PSData.Delivery } catch {}
+            }
+            $internalsRel = if ($delivery -and $delivery.InternalsPath) { [string]$delivery.InternalsPath } else { 'Internals' }
+            $intCandidate = Join-Path $rootBase $internalsRel
+            if (Test-Path -LiteralPath $intCandidate) { $internalsBase = $intCandidate }
+        }
+
+        if ($List) {
+            $rows = @()
+            if ($rootBase) {
+                $rows += Get-ChildItem -LiteralPath $rootBase -Filter 'README*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Root' } }
+                $rows += Get-ChildItem -LiteralPath $rootBase -Filter 'CHANGELOG*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Root' } }
+                $rows += Get-ChildItem -LiteralPath $rootBase -Filter 'LICENSE*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Root' } }
+            }
+            if ($internalsBase) {
+                $rows += Get-ChildItem -LiteralPath $internalsBase -Filter 'README*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Internals' } }
+                $rows += Get-ChildItem -LiteralPath $internalsBase -Filter 'CHANGELOG*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Internals' } }
+                $rows += Get-ChildItem -LiteralPath $internalsBase -Filter 'LICENSE*' -File -ErrorAction SilentlyContinue | ForEach-Object { [pscustomobject]@{ Name=$_.Name; FullName=$_.FullName; Area='Internals' } }
+            }
+            if ($rows.Count -eq 0) { Write-Warning 'No README/CHANGELOG found.' } else { $rows }
+            return
+        }
+        # Build an additive list of targets to display in order
+        $targets = New-Object System.Collections.ArrayList
+        if ($File) {
+            $resolved = $null
+            if ([System.IO.Path]::IsPathRooted($File)) {
+                if (-not (Test-Path -LiteralPath $File)) { throw "File '$File' not found." }
+                $resolved = (Get-Item -LiteralPath $File).FullName
+            } else {
+                $try1 = if ($rootBase) { Join-Path $rootBase $File }
+                $try2 = if ($internalsBase) { Join-Path $internalsBase $File }
+                if ($try1 -and (Test-Path -LiteralPath $try1)) { $resolved = (Get-Item -LiteralPath $try1).FullName }
+                elseif ($try2 -and (Test-Path -LiteralPath $try2)) { $resolved = (Get-Item -LiteralPath $try2).FullName }
+                else { throw "File '$File' not found under root or Internals." }
+            }
+            [void]$targets.Add(@{ Kind='File'; Path=$resolved })
+        }
+        if ($Intro) { [void]$targets.Add(@{ Kind='Intro' }) }
+        if ($All) {
+            if (-not $Intro) { [void]$targets.Add(@{ Kind='Intro' }) }
+            $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f -and -not $Readme) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) }
+            $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f -and -not $Changelog) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) }
+            $f = Resolve-DocFile -Kind 'LICENSE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f -and -not $License) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) }
+        }
+        if ($Readme) {
+            $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'README not found.' }
+        }
+        if ($Changelog) {
+            $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'CHANGELOG not found.' }
+        }
+        if ($License) {
+            $f = Resolve-DocFile -Kind 'LICENSE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { Write-Warning 'LICENSE not found.' }
+        }
+        if ($Upgrade) { [void]$targets.Add(@{ Kind='Upgrade' }) }
+
+        if ($targets.Count -eq 0) {
+            # Default when nothing specified: README else CHANGELOG
+            $f = Resolve-DocFile -Kind 'README' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+            if (-not $f) { $f = Resolve-DocFile -Kind 'CHANGELOG' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals }
+            if ($f) { [void]$targets.Add(@{ Kind='File'; Path=$f.FullName }) } else { throw 'No README or CHANGELOG found.' }
+        }
+
+        # Handle -Open: only meaningful for single file target; otherwise open first file
+        if ($Open) {
+            $firstFile = ($targets | Where-Object { $_.Kind -eq 'File' } | Select-Object -First 1)
+            if ($firstFile) { Start-Process -FilePath $firstFile.Path | Out-Null; return } else { Start-Process -FilePath $rootBase | Out-Null; return }
+        }
+
+        foreach ($t in $targets) {
+            if ($t.Kind -eq 'Intro') {
+                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.Delivery -and $manifest.PrivateData.PSData.Delivery.IntroText) {
+                    $title = if ($moduleName) { "$moduleName $moduleVersion - Introduction" } else { 'Introduction' }
+                    Write-Heading -Text $title
+                    foreach ($line in [string[]]$manifest.PrivateData.PSData.Delivery.IntroText) { Write-Host $line }
+                } else {
+                    Write-Warning 'Introduction text not defined in delivery metadata.'
+                }
+                continue
+            }
+            if ($t.Kind -eq 'Upgrade') {
+                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.Delivery -and $manifest.PrivateData.PSData.Delivery.UpgradeText) {
+                    $title = if ($moduleName) { "$moduleName $moduleVersion - Upgrade" } else { 'Upgrade' }
+                    Write-Heading -Text $title
+                    foreach ($line in [string[]]$manifest.PrivateData.PSData.Delivery.UpgradeText) { Write-Host $line }
+                } else {
+                    $f = Resolve-DocFile -Kind 'UPGRADE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
+                    if ($f) {
+                        $title = if ($moduleName) { "$moduleName $moduleVersion - $($f.Name)" } else { $f.Name }
+                        Write-Heading -Text $title
+                        try { $content = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop; Write-Host $content } catch { Write-Warning "Failed to read '$($f.FullName)': $($_.Exception.Message)" }
+                    } else {
+                        Write-Warning 'Upgrade instructions not defined and no UPGRADE file found.'
+                    }
+                }
+                continue
+            }
+            # Kind = File
+            $target = $t.Path
+            if ($Raw) {
+                Get-Content -LiteralPath $target -Raw -ErrorAction Stop
+            } else {
+                $title = if ($moduleName) { "$moduleName $moduleVersion - $([IO.Path]::GetFileName($target))" } else { [IO.Path]::GetFileName($target) }
+                Write-Heading -Text $title
+                try {
+                    $content = Get-Content -LiteralPath $target -Raw -ErrorAction Stop
+                    Write-Host $content
+                } catch {
+                    Write-Warning "Failed to read '$target': $($_.Exception.Message)"
+                }
+            }
+            Write-Host
+        }
+        if ($Links) {
+            $links = $manifest.PrivateData.PSData.Delivery.ImportantLinks
+            if ($links) {
+                Write-Heading -Text ((if ($moduleName) { "$moduleName $moduleVersion - Links" } else { 'Links' }))
+                foreach ($l in $links) {
+                    $title = if ($l.Title) { $l.Title } elseif ($l.Name) { $l.Name } else { $null }
+                    $url = $l.Url
+                    if ($url) {
+                        if ($title) {
+                            Write-Host (" - {0}: {1}" -f $title, $url)
+                        } else {
+                            Write-Host (" - " + $url)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
