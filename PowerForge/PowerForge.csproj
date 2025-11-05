@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net472;net8.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>CS1591</WarningsAsErrors>
+    <Company>Evotec</Company>
+    <Authors>Przemyslaw Klys</Authors>
+    <Description>PowerForge core library: reusable engine for building, formatting, packaging and publishing PowerShell modules.</Description>
+    <AssemblyName>PowerForge</AssemblyName>
+    <RootNamespace>PowerForge</RootNamespace>
+  </PropertyGroup>
+
+</Project>

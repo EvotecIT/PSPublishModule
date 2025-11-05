@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PowerForge.Cli</AssemblyName>
+    <RootNamespace>PowerForge.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>powerforge</ToolCommandName>
+    <Description>PowerForge command-line interface for building and publishing PowerShell modules.</Description>
+    <Company>Evotec</Company>
+    <Authors>Przemyslaw Klys</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
+  </ItemGroup>
+
+</Project>
+
