@@ -3,7 +3,7 @@
 # most modules should be run via PSD1 or by it's name (which in the background uses PD1)
 
 # This version is for local building
-# We need to rmeove library before we start, as it may contain old files, which will be in use once PSD1 loads
+# We need to remove library before we start, as it may contain old files, which will be in use once PSD1 loads
 # This is only required for PSPublisModule, as it's the only module that is being built by itself
 Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Module\Lib" -Recurse -Force -ErrorAction SilentlyContinue
 

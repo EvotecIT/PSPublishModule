@@ -35,7 +35,7 @@ Show-ProjectDocumentation [-RequiredVersion <Version>] [-DocsPath <String>] [-Re
 
 ## DESCRIPTION
 Finds a module (by name or PSModuleInfo) and renders README/CHANGELOG from the module root
-or from its Internals folder (as defined in PrivateData.PSData.PSPublishModuleDelivery).
+or from its Internals folder (as defined in PrivateData.PSData.Delivery).
 You can also point directly to a docs folder via -DocsPath (e.g., output of Install-ModuleDocumentation).
 
 ## EXAMPLES
@@ -220,7 +220,7 @@ Accept wildcard characters: False
 ```
 
 ### -Intro
-Show introduction text defined in PrivateData.PSData.PSPublishModuleDelivery.IntroText when available.
+Show introduction text defined in PrivateData.PSData.Delivery.IntroText when available.
 If not defined,
 falls back to README resolution (root vs Internals honoring -PreferInternals).
 
@@ -237,7 +237,7 @@ Accept wildcard characters: False
 ```
 
 ### -Upgrade
-Show upgrade text defined in PrivateData.PSData.PSPublishModuleDelivery.UpgradeText when available.
+Show upgrade text defined in PrivateData.PSData.Delivery.UpgradeText when available.
 If not defined,
 looks for an UPGRADE* file; otherwise throws.
 
@@ -271,7 +271,7 @@ Accept wildcard characters: False
 ```
 
 ### -Links
-Print ImportantLinks defined in PrivateData.PSData.PSPublishModuleDelivery after the selected documents.
+Print ImportantLinks defined in PrivateData.PSData.Delivery after the selected documents.
 
 ```yaml
 Type: SwitchParameter

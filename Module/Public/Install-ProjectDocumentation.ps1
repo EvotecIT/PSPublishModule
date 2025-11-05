@@ -5,7 +5,7 @@ function Install-ProjectDocumentation {
 
     .DESCRIPTION
     Copies the contents of a module's Internals folder (or the path defined in
-    PrivateData.PSData.PSPublishModuleDelivery) to a destination outside of
+    PrivateData.PSData.Delivery) to a destination outside of
     $env:PSModulePath, including subfolders such as Scripts, Docs, Binaries, Config.
     When -IncludeRootReadme/-IncludeRootChangelog/-IncludeRootLicense are enabled in
     New-ConfigurationDelivery, root README/CHANGELOG/LICENSE are also copied.
@@ -152,7 +152,7 @@ function Install-ProjectDocumentation {
         }
 
         $manifest = Test-ModuleManifest -Path $manifestPath
-        $delivery = $manifest.PrivateData.PSData.PSPublishModuleDelivery
+        $delivery = $manifest.PrivateData.PSData.Delivery
 
         $internalsRel = if ($delivery -and $delivery.InternalsPath) { [string]$delivery.InternalsPath } else { 'Internals' }
         $includeReadme = if ($null -ne $delivery.IncludeRootReadme) { [bool]$delivery.IncludeRootReadme } else { $true }

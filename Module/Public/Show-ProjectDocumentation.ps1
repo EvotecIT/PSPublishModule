@@ -5,7 +5,7 @@ function Show-ProjectDocumentation {
 
     .DESCRIPTION
     Finds a module (by name or PSModuleInfo) and renders README/CHANGELOG from the module root
-    or from its Internals folder (as defined in PrivateData.PSData.PSPublishModuleDelivery).
+    or from its Internals folder (as defined in PrivateData.PSData.Delivery).
     You can also point directly to a docs folder via -DocsPath (e.g., output of Install-ModuleDocumentation).
 
     .PARAMETER Name
@@ -32,11 +32,11 @@ function Show-ProjectDocumentation {
     the chosen area (root vs Internals).
 
     .PARAMETER Intro
-    Show introduction text defined in PrivateData.PSData.PSPublishModuleDelivery.IntroText when available. If not defined,
+    Show introduction text defined in PrivateData.PSData.Delivery.IntroText when available. If not defined,
     falls back to README resolution (root vs Internals honoring -PreferInternals).
 
     .PARAMETER Upgrade
-    Show upgrade text defined in PrivateData.PSData.PSPublishModuleDelivery.UpgradeText when available. If not defined,
+    Show upgrade text defined in PrivateData.PSData.Delivery.UpgradeText when available. If not defined,
     looks for an UPGRADE* file; otherwise throws.
 
     .PARAMETER All
@@ -44,7 +44,7 @@ function Show-ProjectDocumentation {
     specific switches (e.g., -Changelog) and they will be included additively without duplication.
 
     .PARAMETER Links
-    Print ImportantLinks defined in PrivateData.PSData.PSPublishModuleDelivery after the selected documents.
+    Print ImportantLinks defined in PrivateData.PSData.Delivery after the selected documents.
 
     .PARAMETER File
     Relative path to a specific file to display (relative to module root or Internals). If rooted, used as-is.
@@ -165,7 +165,7 @@ function Show-ProjectDocumentation {
             $manifestPath = Join-Path $rootBase ("{0}.psd1" -f $Module.Name)
             $delivery = $null
             if (Test-Path -LiteralPath $manifestPath) {
-                try { $manifest = Test-ModuleManifest -Path $manifestPath; $delivery = $manifest.PrivateData.PSData.PSPublishModuleDelivery } catch {}
+                try { $manifest = Test-ModuleManifest -Path $manifestPath; $delivery = $manifest.PrivateData.PSData.Delivery } catch {}
             }
             $internalsRel = if ($delivery -and $delivery.InternalsPath) { [string]$delivery.InternalsPath } else { 'Internals' }
             $intCandidate = Join-Path $rootBase $internalsRel
@@ -242,20 +242,20 @@ function Show-ProjectDocumentation {
 
         foreach ($t in $targets) {
             if ($t.Kind -eq 'Intro') {
-                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) {
+                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.Delivery -and $manifest.PrivateData.PSData.Delivery.IntroText) {
                     $title = if ($moduleName) { "$moduleName $moduleVersion - Introduction" } else { 'Introduction' }
                     Write-Heading -Text $title
-                    foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.IntroText) { Write-Host $line }
+                    foreach ($line in [string[]]$manifest.PrivateData.PSData.Delivery.IntroText) { Write-Host $line }
                 } else {
                     Write-Warning 'Introduction text not defined in delivery metadata.'
                 }
                 continue
             }
             if ($t.Kind -eq 'Upgrade') {
-                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.PSPublishModuleDelivery -and $manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) {
+                if ($manifest -and $manifest.PrivateData -and $manifest.PrivateData.PSData -and $manifest.PrivateData.PSData.Delivery -and $manifest.PrivateData.PSData.Delivery.UpgradeText) {
                     $title = if ($moduleName) { "$moduleName $moduleVersion - Upgrade" } else { 'Upgrade' }
                     Write-Heading -Text $title
-                    foreach ($line in [string[]]$manifest.PrivateData.PSData.PSPublishModuleDelivery.UpgradeText) { Write-Host $line }
+                    foreach ($line in [string[]]$manifest.PrivateData.PSData.Delivery.UpgradeText) { Write-Host $line }
                 } else {
                     $f = Resolve-DocFile -Kind 'UPGRADE' -RootBase $rootBase -InternalsBase $internalsBase -PreferInternals:$PreferInternals
                     if ($f) {
@@ -285,7 +285,7 @@ function Show-ProjectDocumentation {
             Write-Host
         }
         if ($Links) {
-            $links = $manifest.PrivateData.PSData.PSPublishModuleDelivery.ImportantLinks
+            $links = $manifest.PrivateData.PSData.Delivery.ImportantLinks
             if ($links) {
                 Write-Heading -Text ((if ($moduleName) { "$moduleName $moduleVersion - Links" } else { 'Links' }))
                 foreach ($l in $links) {

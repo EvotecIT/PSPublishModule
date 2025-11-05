@@ -5,7 +5,7 @@ function New-ConfigurationDelivery {
 
     .DESCRIPTION
     Adds Delivery options to the PSPublishModule configuration so the build embeds
-    discovery metadata in the manifest (PrivateData.PSData.PSPublishModuleDelivery)
+    runtime metadata in the manifest (PrivateData.PSData.Delivery and PrivateData.PSData.Repository)
     and so the Internals folder is easy to find post-install by helper cmdlets
     such as Install-ModuleDocumentation.
 
@@ -74,7 +74,7 @@ function New-ConfigurationDelivery {
 
     .EXAMPLE
     PS> New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog
-    Emits Options.Delivery and causes PrivateData.PSData.PSPublishModuleDelivery to be written in the manifest.
+    Emits Options.Delivery and causes PrivateData.PSData.Delivery/Repository to be written in the manifest.
 
     .EXAMPLE
     PS> New-ConfigurationInformation -IncludeAll 'Internals\'

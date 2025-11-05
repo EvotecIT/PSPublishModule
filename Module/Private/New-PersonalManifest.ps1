@@ -99,7 +99,7 @@ function New-PersonalManifest {
         if ($Data.Path) {
             $Data.Remove('Path')
         }
-        $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies', 'PSPublishModuleDelivery')
+        $ValidateEntriesPrivateData = @('Tags', 'LicenseUri', 'ProjectURI', 'IconUri', 'ReleaseNotes', 'Prerelease', 'RequireLicenseAcceptance', 'ExternalModuleDependencies', 'Delivery', 'Repository')
         foreach ($Entry in [string[]] $Data.Keys) {
             if ($Entry -in $ValidateEntriesPrivateData) {
                 $Data.PrivateData.PSData.$Entry = $Data.$Entry
@@ -124,9 +124,31 @@ function New-PersonalManifest {
         if ($Configuration.Steps.PublishModule.Prerelease) {
             $Data.PrivateData.PSData.Prerelease = $Configuration.Steps.PublishModule.Prerelease
         }
-        # Emit delivery metadata when provided
+        # Emit Delivery/Repository metadata (runtime-only) when provided
         if ($Configuration.Options.Delivery -and $Configuration.Options.Delivery.Enable) {
-            $Data.PrivateData.PSData.PSPublishModuleDelivery = $Configuration.Options.Delivery
+            $deliveryCfg = $Configuration.Options.Delivery
+            # Build runtime Delivery node
+            $deliveryNode = [ordered] @{
+                InternalsPath       = $deliveryCfg.InternalsPath
+                ImportantLinks      = $deliveryCfg.ImportantLinks
+                IntroText           = $deliveryCfg.IntroText
+                UpgradeText         = $deliveryCfg.UpgradeText
+                IntroFile           = $deliveryCfg.IntroFile
+                UpgradeFile         = $deliveryCfg.UpgradeFile
+                DocumentationOrder  = $deliveryCfg.DocumentationOrder
+            }
+            Remove-EmptyValue -Hashtable $deliveryNode
+            $Data.PrivateData.PSData.Delivery = $deliveryNode
+
+            # Build Repository node (branch/paths only)
+            $repositoryNode = [ordered] @{
+                Branch = $deliveryCfg.RepositoryBranch
+                Paths  = $deliveryCfg.RepositoryPaths
+            }
+            Remove-EmptyValue -Hashtable $repositoryNode
+            if ($repositoryNode.Count -gt 0) {
+                $Data.PrivateData.PSData.Repository = $repositoryNode
+            }
         }
         if ($TemporaryManifest.ExternalModuleDependencies) {
             # Add External Module Dependencies

@@ -23,7 +23,7 @@ New-ConfigurationDelivery [-Enable] [[-InternalsPath] <String>] [-IncludeRootRea
 
 ## DESCRIPTION
 Adds Delivery options to the PSPublishModule configuration so the build embeds
-discovery metadata in the manifest (PrivateData.PSData.PSPublishModuleDelivery)
+runtime metadata in the manifest (PrivateData.PSData.Delivery and PrivateData.PSData.Repository)
 and so the Internals folder is easy to find post-install by helper cmdlets
 such as Install-ModuleDocumentation.
 
@@ -36,7 +36,7 @@ directory is physically included in the shipped module and discoverable later.
 ### EXAMPLE 1
 ```
 New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog
-Emits Options.Delivery and causes PrivateData.PSData.PSPublishModuleDelivery to be written in the manifest.
+Emits Options.Delivery and causes PrivateData.PSData.Delivery/Repository to be written in the manifest.
 ```
 
 ### EXAMPLE 2
