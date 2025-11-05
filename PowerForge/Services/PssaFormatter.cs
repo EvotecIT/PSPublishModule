@@ -23,6 +23,12 @@ public sealed class PssaFormatter : IFormatter
     /// <inheritdoc />
     public IReadOnlyList<FormatterResult> FormatFiles(IEnumerable<string> files, TimeSpan? timeout = null)
     {
+        return FormatFilesWithSettings(files, settingsJson: null, timeout);
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<FormatterResult> FormatFilesWithSettings(IEnumerable<string> files, string? settingsJson, TimeSpan? timeout = null)
+    {
         var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (list.Length == 0) return Array.Empty<FormatterResult>();
 
@@ -32,7 +38,14 @@ public sealed class PssaFormatter : IFormatter
         var scriptPath = Path.Combine(tempDir, $"format_{Guid.NewGuid():N}.ps1");
         File.WriteAllText(scriptPath, script, new UTF8Encoding(true));
 
-        var args = new List<string>(list.Length + 1) { "--" };
+        string settingsB64 = string.Empty;
+        if (!string.IsNullOrEmpty(settingsJson))
+        {
+            var bytes = Encoding.UTF8.GetBytes(settingsJson);
+            settingsB64 = Convert.ToBase64String(bytes);
+        }
+
+        var args = new List<string>(list.Length + 2) { settingsB64, "--" };
         args.AddRange(list);
         var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
 
@@ -95,7 +108,7 @@ public sealed class PssaFormatter : IFormatter
     private static string BuildScript()
     {
         return @"
-param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
+param([string]$SettingsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
 $ErrorActionPreference = 'Stop'
 try {
     if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
@@ -108,10 +121,24 @@ try {
     exit 3
 }
 
+$settings = $null
+if ($SettingsB64) {
+  try {
+    $json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($SettingsB64))
+    $settings = ConvertFrom-Json -InputObject $json
+  } catch {
+    $settings = $null
+  }
+}
+
 foreach ($f in $Files) {
   try {
     $text = Get-Content -LiteralPath $f -Raw -ErrorAction Stop
-    $formatted = Invoke-Formatter -ScriptDefinition $text
+    if ($null -ne $settings) {
+        $formatted = Invoke-Formatter -ScriptDefinition $text -Settings $settings
+    } else {
+        $formatted = Invoke-Formatter -ScriptDefinition $text
+    }
     if ($null -ne $formatted -and $formatted -ne $text) {
         [System.IO.File]::WriteAllText($f, $formatted, [System.Text.UTF8Encoding]::new($true))
         Write-Output (""FORMATTED::"" + $f)

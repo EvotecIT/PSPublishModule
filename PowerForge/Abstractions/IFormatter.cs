@@ -30,4 +30,8 @@ public interface IFormatter
     /// <param name="files">Files to format.</param>
     /// <param name="timeout">Optional timeout for the entire formatting run.</param>
     IReadOnlyList<FormatterResult> FormatFiles(IEnumerable<string> files, TimeSpan? timeout = null);
+    /// <summary>
+    /// Formats files with an optional settings JSON payload compatible with PSScriptAnalyzer settings.
+    /// </summary>
+    IReadOnlyList<FormatterResult> FormatFilesWithSettings(IEnumerable<string> files, string? settingsJson, TimeSpan? timeout = null);
 }
