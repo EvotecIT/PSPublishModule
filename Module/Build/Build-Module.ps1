@@ -110,7 +110,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     $newConfigurationBuildSplat = @{
         Enable                            = $true
         SignModule                        = if ($Env:COMPUTERNAME -eq 'EVOMONSTER') { $true } else { $false }
-        DeleteTargetModuleBeforeBuild     = $true
+        # DeleteTargetModuleBeforeBuild     = $true
         MergeModuleOnBuild                = $true
         CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
         #CertificatePFXBase64           = $BasePfx
@@ -132,6 +132,11 @@ Build-Module -ModuleName 'PSPublishModule' {
 
         # This has to be disabled as it will not have DLLs required to do this
         NETBinaryModuleCmdletScanDisabled = $true
+
+        VersionedInstallStrategy          = 'AutoRevision'   # or 'Exact'
+        VersionedInstallKeep              = 3                # how many versions to retain
+        KillLockersBeforeInstall          = $true
+        KillLockersForce                  = $true
     }
 
     New-ConfigurationBuild @newConfigurationBuildSplat

@@ -166,14 +166,55 @@
         # Restore configuration, as some PersonalManifest plays with those
         $Configuration = $SaveConfiguration
 
-        $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSD1
-        if ($Success -eq $false) {
-            return $false
+        # Ensure PSPublishModule/PowerForge assemblies are loaded (self-build scenario)
+        if (-not ([type]::GetType('PSPublishModule.BuildServices, PSPublishModule', $false, $false))) {
+            Write-Verbose '[BuildServices] Not loaded. Loading PSPublishModule/PowerForge from FullProjectPath\Lib.'
+            $libRoot = if ($PSEdition -eq 'Core') { [IO.Path]::Combine($FullProjectPath, 'Lib', 'Core') } else { [IO.Path]::Combine($FullProjectPath, 'Lib', 'Default') }
+            $pf = [IO.Path]::Combine($libRoot, 'PowerForge.dll')
+            $pm = [IO.Path]::Combine($libRoot, 'PSPublishModule.dll')
+            $pfExists = Test-Path -LiteralPath $pf -PathType Leaf
+            $pmExists = Test-Path -LiteralPath $pm -PathType Leaf
+            if (-not $pfExists -or -not $pmExists) {
+                Write-Text "[-] Required assemblies not found in '$libRoot'. Aborting formatting step." -Color Red
+                return $false
+            }
+            try { Add-Type -Path $pf -ErrorAction Stop } catch { Write-Text "[-] Failed to load '$pf': $($_.Exception.Message)" -Color Red; return $false }
+            try { Add-Type -Path $pm -ErrorAction Stop } catch { Write-Text "[-] Failed to load '$pm': $($_.Exception.Message)" -Color Red; return $false }
+
+            $bs = $null
+            foreach ($asm in [AppDomain]::CurrentDomain.GetAssemblies()) {
+                $bs = $asm.GetType('PSPublishModule.BuildServices', $false)
+                if ($bs) { break }
+            }
+            if (-not $bs) { Write-Text '[-] PSPublishModule.BuildServices still not available after load. Aborting.' -Color Red; return $false }
+            Write-Verbose "[BuildServices] Loaded from '$libRoot'"
         }
-        $Success = Format-Code -FilePath $PSM1FilePath -FormatCode $Configuration.Options.Standard.FormatCodePSM1
-        if ($Success -eq $false) {
-            return $false
-        }
+
+        # Format PSD1 and PSM1 using C# pipeline (preprocess + PSSA + normalize)
+        $SettingsJsonPSD1 = $null
+        if ($Configuration.Options.Standard.FormatCodePSD1.FormatterSettings) { try { $SettingsJsonPSD1 = ($Configuration.Options.Standard.FormatCodePSD1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJsonPSD1 = $null } }
+        $utf8Bom = $true
+        [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSD1FilePath)),
+            [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveCommentsInParamBlock,
+            [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveCommentsBeforeParamBlock,
+            [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveAllEmptyLines,
+            [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveEmptyLines,
+            $SettingsJsonPSD1,
+            120,
+            [PowerForge.LineEnding]::CRLF,
+            $utf8Bom)
+
+        $SettingsJsonPSM1 = $null
+        if ($Configuration.Options.Standard.FormatCodePSM1.FormatterSettings) { try { $SettingsJsonPSM1 = ($Configuration.Options.Standard.FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJsonPSM1 = $null } }
+        [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSM1FilePath)),
+            [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveCommentsInParamBlock,
+            [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveCommentsBeforeParamBlock,
+            [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveAllEmptyLines,
+            [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveEmptyLines,
+            $SettingsJsonPSM1,
+            120,
+            [PowerForge.LineEnding]::CRLF,
+            $utf8Bom)
 
         if ($Configuration.Steps.BuildModule.RefreshPSD1Only) {
             return
@@ -203,34 +244,68 @@
         Set-Location -Path $CurrentLocation
 
         $Success = if ($Configuration.Steps.BuildModule.Enable) {
-            if ($DestinationPaths.Desktop) {
-                Write-TextWithTime -Text "Copy module to PowerShell 5 destination: $($DestinationPaths.Desktop)" {
-                    $Success = Remove-Directory -Directory $DestinationPaths.Desktop
-                    if ($Success -eq $false) {
-                        return $false
-                    }
-                    Add-Directory -Directory $DestinationPaths.Desktop
-                    Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Desktop -Recurse
-                    # cleans up empty directories
-                    Get-ChildItem $DestinationPaths.Desktop -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
-                        Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
-                        Remove-Item #-Verbose
-                } -PreAppend Plus
+            # Versioned install using C# (avoids folder-in-use and preserves older versions)
+            $Roots = @()
+            if ($DestinationPaths.Desktop) { $Roots += [System.IO.Path]::GetDirectoryName($DestinationPaths.Desktop) }
+            if ($DestinationPaths.Core) { $Roots += [System.IO.Path]::GetDirectoryName($DestinationPaths.Core) }
+
+            # Allow configuration overrides
+            $strategy = [PowerForge.InstallationStrategy]::AutoRevision
+            if ($Configuration.Steps.BuildModule.VersionedInstallStrategy) {
+                switch -Regex ($Configuration.Steps.BuildModule.VersionedInstallStrategy) {
+                    '^Exact$'        { $strategy = [PowerForge.InstallationStrategy]::Exact; break }
+                    '^AutoRevision$' { $strategy = [PowerForge.InstallationStrategy]::AutoRevision; break }
+                }
             }
-            if ($DestinationPaths.Core) {
-                Write-TextWithTime -Text "Copy module to PowerShell 6/7 destination: $($DestinationPaths.Core)" {
-                    $Success = Remove-Directory -Directory $DestinationPaths.Core
-                    if ($Success -eq $false) {
-                        return $false
-                    }
-                    Add-Directory -Directory $DestinationPaths.Core
-                    Get-ChildItem -LiteralPath $FullModuleTemporaryPath | Copy-Item -Destination $DestinationPaths.Core -Recurse
-                    # cleans up empty directories
-                    Get-ChildItem $DestinationPaths.Core -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
-                        Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `
-                        Remove-Item #-Verbose
-                } -PreAppend Plus
+            # Auto-switch to Exact when publishing is planned (default: true)
+            $autoSwitch = $true
+            if ($null -ne $Configuration.Steps.BuildModule.AutoSwitchExactOnPublish) { $autoSwitch = [bool]$Configuration.Steps.BuildModule.AutoSwitchExactOnPublish }
+            if ($autoSwitch) {
+                $publishingPlanned = $false
+                foreach ($n in @($Configuration.Steps.BuildModule.GalleryNugets)) { if ($n -and $n.Enabled) { $publishingPlanned = $true; break } }
+                if (-not $publishingPlanned) { foreach ($n in @($Configuration.Steps.BuildModule.GitHubNugets)) { if ($n -and $n.Enabled) { $publishingPlanned = $true; break } } }
+                if ($publishingPlanned) { $strategy = [PowerForge.InstallationStrategy]::Exact }
             }
+            $keep = 3
+            if ($Configuration.Steps.BuildModule.VersionedInstallKeep) { $keep = [int]$Configuration.Steps.BuildModule.VersionedInstallKeep }
+
+            # Resolve module version for install (prefer configuration, then PSD1)
+            $moduleVersionForInstall = $Configuration.Information.Manifest.ModuleVersion
+            if (-not $moduleVersionForInstall -and (Test-Path -LiteralPath $PSD1FilePath)) {
+                try { $moduleVersionForInstall = (Import-PowerShellDataFile -Path $PSD1FilePath -ErrorAction Stop).ModuleVersion } catch { $moduleVersionForInstall = $null }
+            }
+            if (-not $moduleVersionForInstall) { Write-Text "[-] ModuleVersion is not resolved; cannot proceed with versioned install." -Color Red; return $false }
+
+            # Optional: attempt to kill processes locking module roots (Windows only)
+            if ($Configuration.Steps.BuildModule.KillLockersBeforeInstall) {
+                try {
+                    $locks = [PSPublishModule.BuildServices]::GetLockingProcesses(([string[]]$Roots))
+                    if ($locks.Count -gt 0) {
+                        Write-Text "   [i] Locking processes detected: $($locks | ForEach-Object { "PID=$($_.Item1) Name=$($_.Item2)" } -join ', ')" -Color Yellow
+                        $killed = [PSPublishModule.BuildServices]::TerminateLockingProcesses(([string[]]$Roots), [bool]$Configuration.Steps.BuildModule.KillLockersForce)
+                        Write-Text "   [i] Terminated $killed locking process(es)." -Color Yellow
+                    }
+                } catch { Write-Text "   [i] Locker inspection failed: $($_.Exception.Message)" -Color Yellow }
+            }
+
+            Write-TextWithTime -Text "Installing module (versioned) into user Modules roots (strategy=$strategy, keep=$keep)" {
+                try {
+                    $res = [PSPublishModule.BuildServices]::InstallVersioned(
+                        $FullModuleTemporaryPath,
+                        $ProjectName,
+                        ([string]$moduleVersionForInstall),
+                        $strategy,
+                        $keep,
+                        ([string[]]$Roots),
+                        $true
+                    )
+                    foreach ($p in $res.InstalledPaths) { Write-Text "   [+] Installed: $p" -Color DarkGray }
+                    if ($res.PrunedPaths.Count -gt 0) { Write-Text "   [i] Pruned old versions: $($res.PrunedPaths.Count)" -Color Yellow }
+                } catch {
+                    Write-Text "[-] Versioned install failed: $($_.Exception.Message)" -Color Red
+                    return $false
+                }
+            } -PreAppend Plus
         }
         if ($Success -contains $false) {
             return $false

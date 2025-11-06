@@ -98,10 +98,21 @@ function Merge-Module {
 
     $UsingInPlace = Format-UsingNamespace -FilePath $PSM1FilePath -FilePathUsing $FilePathUsing
     if ($UsingInPlace) {
-        $Success = Format-Code -FilePath $FilePathUsing -FormatCode $FormatCodePSM1
-        if ($Success -eq $false) {
-            return $false
+        # Convert settings to JSON if present
+        $SettingsJson = $null
+        if ($FormatCodePSM1.FormatterSettings) {
+            try { $SettingsJson = ($FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null }
         }
+        $utf8Bom = $true
+        [void][PSPublishModule.BuildServices]::Format(([string[]]@($FilePathUsing)),
+            [bool]$FormatCodePSM1.RemoveCommentsInParamBlock,
+            [bool]$FormatCodePSM1.RemoveCommentsBeforeParamBlock,
+            [bool]$FormatCodePSM1.RemoveAllEmptyLines,
+            [bool]$FormatCodePSM1.RemoveEmptyLines,
+            $SettingsJson,
+            120,
+            [PowerForge.LineEnding]::CRLF,
+            $utf8Bom)
         $Configuration.UsingInPlace = "$ModuleName.Usings.ps1"
     }
 
@@ -346,16 +357,32 @@ function Merge-Module {
     }
 
     # Format standard PSM1 file
-    $Success = Format-Code -FilePath $PSM1FilePath -FormatCode $FormatCodePSM1
-    if ($Success -eq $false) {
-        return $false
-    }
+    $SettingsJson = $null
+    if ($FormatCodePSM1.FormatterSettings) { try { $SettingsJson = ($FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null } }
+    $utf8Bom = $true
+    [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSM1FilePath)),
+        [bool]$FormatCodePSM1.RemoveCommentsInParamBlock,
+        [bool]$FormatCodePSM1.RemoveCommentsBeforeParamBlock,
+        [bool]$FormatCodePSM1.RemoveAllEmptyLines,
+        [bool]$FormatCodePSM1.RemoveEmptyLines,
+        $SettingsJson,
+        120,
+        [PowerForge.LineEnding]::CRLF,
+        $utf8Bom)
     # Format libraries PS1 file
     if ($LibariesPath) {
-        $Success = Format-Code -FilePath $LibariesPath -FormatCode $FormatCodePSM1
-        if ($Success -eq $false) {
-            return $false
-        }
+        $SettingsJson = $null
+        if ($FormatCodePSM1.FormatterSettings) { try { $SettingsJson = ($FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null } }
+        $utf8Bom = $true
+        [void][PSPublishModule.BuildServices]::Format(([string[]]@($LibariesPath)),
+            [bool]$FormatCodePSM1.RemoveCommentsInParamBlock,
+            [bool]$FormatCodePSM1.RemoveCommentsBeforeParamBlock,
+            [bool]$FormatCodePSM1.RemoveAllEmptyLines,
+            [bool]$FormatCodePSM1.RemoveEmptyLines,
+            $SettingsJson,
+            120,
+            [PowerForge.LineEnding]::CRLF,
+            $utf8Bom)
     }
     # Build PSD1 file
     $newPersonalManifestSplat = @{
@@ -397,10 +424,18 @@ function Merge-Module {
     }
 
     # Format PSD1 file
-    $Success = Format-Code -FilePath $PSD1FilePath -FormatCode $FormatCodePSD1
-    if ($Success -eq $false) {
-        return $false
-    }
+    $SettingsJson = $null
+    if ($FormatCodePSD1.FormatterSettings) { try { $SettingsJson = ($FormatCodePSD1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null } }
+    $utf8Bom = $true
+    [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSD1FilePath)),
+        [bool]$FormatCodePSD1.RemoveCommentsInParamBlock,
+        [bool]$FormatCodePSD1.RemoveCommentsBeforeParamBlock,
+        [bool]$FormatCodePSD1.RemoveAllEmptyLines,
+        [bool]$FormatCodePSD1.RemoveEmptyLines,
+        $SettingsJson,
+        120,
+        [PowerForge.LineEnding]::CRLF,
+        $utf8Bom)
     # cleans up empty directories
     Get-ChildItem $ModulePathTarget -Recurse -Force -Directory | Sort-Object -Property FullName -Descending | `
         Where-Object { $($_ | Get-ChildItem -Force | Select-Object -First 1).Count -eq 0 } | `

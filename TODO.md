@@ -15,8 +15,8 @@
   - PowerShell module: `PSPublishModule` (net472 + net8.0) — thin cmdlets
     - Namespace: `PSPublishModule`
     - Wraps `PowerForge` services; no logic duplication
-  - CLI tool: `PSPublishModule.Cli` (net8.0) — dotnet global tool `pspub`
-    - Namespace: `PSPublishModule.Cli`
+  - CLI tool: `PowerForge.Cli` (net8.0) — dotnet global tool `powerforge`
+    - Namespace: `PowerForge.Cli`
     - Calls `PowerForge` services for CI/GitHub Actions
 - Folders (in PowerForge): `Abstractions/`, `Services/`, `Models/`, `Diagnostics/`, `Repositories/`
 - No nested namespaces beyond the root per assembly.
@@ -126,12 +126,21 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '8.0.x' }
       - run: dotnet tool restore
-      - run: pspub build --verbosity detailed
-      - run: pspub docs --mode ProseFirst
-      - run: pspub pack --out artifacts
+      - run: powerforge build --verbosity detailed
+      - run: powerforge docs --mode ProseFirst
+      - run: powerforge pack --out artifacts
       - uses: actions/upload-artifact@v4
         with: { name: module, path: artifacts }
 ```
+
+**Repositories and Private Galleries**
+- Add first-class support for Microsoft.PowerShell.PSResourceGet repositories (wrap out-of-proc for now) and direct NuGet V3 endpoints for private feeds/Azure Artifacts.
+- Configuration should allow multiple named repositories with credentials (PAT/API key/credential store) and per-repo publish policies.
+
+**Versioning & Dev Builds**
+- Use `New-ConfigurationBuild -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3` during development.
+- Keep PSD1 `ModuleVersion` stable (e.g., `2.0.27` or `2.0.X` resolved at build) while installer generates `2.0.27.<n>` on install.
+- Do not introduce `2.0.X.D` in `ModuleVersion`; document AutoRevision semantics instead to avoid Step-Version parsing changes.
 
 **Notes**
 - Formatting remains optional; when PSSA conflicts (e.g., VSCode), we log and continue.
