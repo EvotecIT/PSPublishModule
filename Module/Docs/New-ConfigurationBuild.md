@@ -17,7 +17,8 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries]
  [-SignIncludeExe] [[-SignCustomInclude] <String[]>] [[-SignExcludePaths] <String[]>] [-DotSourceClasses]
  [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions]
- [-LocalVersioning] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths]
+ [-LocalVersioning] [-VersionedInstallStrategy <String>] [-VersionedInstallKeep <Int32>] [-SkipBuiltinReplacements]
+ [-DoNotAttemptToFixRelativePaths]
  [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>]
  [[-CertificatePFXPassword] <String>] [[-NETProjectPath] <String>] [[-NETConfiguration] <String>]
  [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary]
@@ -49,6 +50,8 @@ $newConfigurationBuildSplat = @{
     DotSourceLibraries                = $true
     DotSourceClasses                  = $true
     DeleteTargetModuleBeforeBuild     = $true
+    VersionedInstallStrategy          = 'AutoRevision'
+    VersionedInstallKeep              = 3
 }
 ```
 
@@ -733,3 +736,33 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 General notes
 
 ## RELATED LINKS
+### -VersionedInstallStrategy
+Controls how the module is installed into user Module roots after build.
+Exact installs to `<Modules>\\Name\\<ModuleVersion>`. AutoRevision installs to `<ModuleVersion>.<n>` choosing the next free revision — recommended for dev runs to avoid folder-in-use issues.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: AutoRevision
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -VersionedInstallKeep
+How many versions to keep per module when using versioned installs. Older ones are pruned.
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: 3
+Accept pipeline input: False
+Accept wildcard characters: False
+```

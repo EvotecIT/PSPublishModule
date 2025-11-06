@@ -11,12 +11,6 @@ Locale: en-US
 {{ Fill in the Description }}
 
 ## PSPublishModule Cmdlets
-### [Convert-ProjectEncoding](Convert-ProjectEncoding.md)
-{{ Fill in the Description }}
-
-### [Convert-ProjectLineEnding](Convert-ProjectLineEnding.md)
-{{ Fill in the Description }}
-
 ### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
 {{ Fill in the Description }}
 
