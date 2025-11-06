@@ -62,6 +62,15 @@
     .PARAMETER LocalVersioning
     Use local versioning (bump PSD1 version on each build without querying PSGallery).
 
+    .PARAMETER VersionedInstallStrategy
+    Controls how the module is installed into user Module roots after build.
+    - Exact: installs to <Modules>\Name\<ModuleVersion> (fails if it already exists)
+    - AutoRevision: installs to <Modules>\Name\<ModuleVersion>.<n> choosing the next free revision.
+    Recommended for development iterations to avoid folder-in-use issues.
+
+    .PARAMETER VersionedInstallKeep
+    How many versions to keep per module when using versioned installs (default 3). Older ones are pruned.
+
     .PARAMETER DoNotAttemptToFixRelativePaths
     Configures module builder to not replace $PSScriptRoot\..\ with $PSScriptRoot\
     This is useful if you have a module that has a lot of relative paths that are required when using Private/Public folders,
@@ -199,6 +208,8 @@
         [switch] $RefreshPSD1Only,
         [switch] $UseWildcardForFunctions,
         [switch] $LocalVersioning,
+        [ValidateSet('Exact','AutoRevision')][string] $VersionedInstallStrategy,
+        [int] $VersionedInstallKeep,
 
         [switch] $SkipBuiltinReplacements,
         [switch] $DoNotAttemptToFixRelativePaths,
@@ -225,7 +236,10 @@
         [alias("NETDocumentation", "NETBinaryModuleDocumenation")][switch] $NETBinaryModuleDocumentation,
         [switch] $NETDoNotCopyLibrariesRecursively,
         [string] $NETSearchClass,
-        [switch] $NETHandleRuntimes
+        [switch] $NETHandleRuntimes,
+        [switch] $KillLockersBeforeInstall,
+        [switch] $KillLockersForce,
+        [switch] $AutoSwitchExactOnPublish
     )
 
     if ($PSBoundParameters.ContainsKey('Enable')) {
@@ -336,6 +350,16 @@
         }
     }
 
+    if ($PSBoundParameters.ContainsKey('VersionedInstallStrategy') -or $PSBoundParameters.ContainsKey('VersionedInstallKeep')) {
+        [ordered] @{
+            Type        = 'Build'
+            BuildModule = [ordered] @{
+                VersionedInstallStrategy = $VersionedInstallStrategy
+                VersionedInstallKeep     = if ($PSBoundParameters.ContainsKey('VersionedInstallKeep')) { [int]$VersionedInstallKeep } else { $null }
+            }
+        }
+    }
+
     if ($PSBoundParameters.ContainsKey('DoNotAttemptToFixRelativePaths')) {
         [ordered] @{
             Type        = 'Build'
@@ -350,6 +374,25 @@
             Type        = 'Build'
             BuildModule = [ordered] @{
                 DebugDLL = $NETMergeLibraryDebugging.IsPresent
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('KillLockersBeforeInstall') -or $PSBoundParameters.ContainsKey('KillLockersForce')) {
+        [ordered] @{
+            Type        = 'Build'
+            BuildModule = [ordered] @{
+                KillLockersBeforeInstall = $KillLockersBeforeInstall.IsPresent
+                KillLockersForce         = $KillLockersForce.IsPresent
+            }
+        }
+    }
+
+    if ($PSBoundParameters.ContainsKey('AutoSwitchExactOnPublish')) {
+        [ordered] @{
+            Type        = 'Build'
+            BuildModule = [ordered] @{
+                AutoSwitchExactOnPublish = $AutoSwitchExactOnPublish.IsPresent
             }
         }
     }
