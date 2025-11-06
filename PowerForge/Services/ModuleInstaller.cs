@@ -36,32 +36,104 @@ public sealed class ModuleInstaller
         string resolvedVersion = ResolveVersion(roots, moduleName, moduleVersion, options.Strategy);
         _logger.Info($"Install strategy: {options.Strategy} → target version {resolvedVersion}");
 
+        var failures = new List<string>();
         foreach (var root in roots)
         {
-            var moduleRoot = Path.Combine(root, moduleName);
-            Directory.CreateDirectory(moduleRoot);
-            var finalPath = Path.Combine(moduleRoot, resolvedVersion);
-            var tempPath = Path.Combine(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
-
-            CopyDirectory(stagingPath, tempPath);
-            // Attempt atomic move into final path
-            if (Directory.Exists(finalPath))
+            try
             {
-                // Extremely unlikely due to ResolveVersion, but guard anyway
-                _logger.Warn($"Target exists, computing next revision for {finalPath}");
-                resolvedVersion = ResolveVersion(new[] { root }, moduleName, moduleVersion, InstallationStrategy.AutoRevision);
-                finalPath = Path.Combine(moduleRoot, resolvedVersion);
-            }
-            Directory.Move(tempPath, finalPath);
-            installed.Add(finalPath);
+                var moduleRoot = Path.Combine(root, moduleName);
+                Directory.CreateDirectory(moduleRoot);
+                var finalPath = Path.Combine(moduleRoot, resolvedVersion);
+                var tempPath = Path.Combine(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
 
-            // Prune old versions
-            var left = PruneOldVersions(moduleRoot, options.KeepVersions, out var removed);
-            pruned.AddRange(removed);
-            _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
+                // Prefer temp under moduleRoot for fast rename; fall back to OS temp on access issues
+                try
+                {
+                    CopyDirectory(stagingPath, tempPath);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    var globalTemp = Path.Combine(Path.GetTempPath(), "PowerForgeInstall", Guid.NewGuid().ToString("N"));
+                    CopyDirectory(stagingPath, globalTemp);
+                    tempPath = globalTemp;
+                }
+                catch (IOException)
+                {
+                    var globalTemp = Path.Combine(Path.GetTempPath(), "PowerForgeInstall", Guid.NewGuid().ToString("N"));
+                    CopyDirectory(stagingPath, globalTemp);
+                    tempPath = globalTemp;
+                }
+
+                // If target exists
+                if (Directory.Exists(finalPath))
+                {
+                    if (options.Strategy == InstallationStrategy.AutoRevision)
+                    {
+                        // Compute next revision
+                        _logger.Warn($"Target exists, computing next revision for {finalPath}");
+                        resolvedVersion = ResolveVersion(new[] { root }, moduleName, moduleVersion, InstallationStrategy.AutoRevision);
+                        finalPath = Path.Combine(moduleRoot, resolvedVersion);
+                    }
+                    else
+                    {
+                        // Exact: overwrite existing contents in place
+                        _logger.Info($"Target exists; overwriting Exact version in-place at {finalPath}");
+                        CopyDirectory(tempPath, finalPath);
+                        TryDeleteDirectory(tempPath);
+                        installed.Add(finalPath);
+                        var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, out var removedInExact);
+                        pruned.AddRange(removedInExact);
+                        _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
+                        continue;
+                    }
+                }
+                try
+                {
+                    Directory.Move(tempPath, finalPath);
+                }
+                catch (IOException)
+                {
+                    // Cross-volume or locked rename; fall back to copy-then-delete
+                    CopyDirectory(tempPath, finalPath);
+                    TryDeleteDirectory(tempPath);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Permissions edge case: try copy-then-delete
+                    CopyDirectory(tempPath, finalPath);
+                    TryDeleteDirectory(tempPath);
+                }
+                installed.Add(finalPath);
+
+                // Prune old versions
+                var left = PruneOldVersions(moduleRoot, options.KeepVersions, out var removed);
+                pruned.AddRange(removed);
+                _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{root}: {ex.Message}");
+            }
+        }
+
+        if (installed.Count == 0)
+        {
+            throw new UnauthorizedAccessException($"Failed to install into any module root. Errors: {string.Join("; ", failures)}");
         }
 
         return new ModuleInstallerResult(resolvedVersion, installed, pruned);
+    }
+
+    /// <summary>
+    /// Resolves the final version that should be installed given desired <paramref name="moduleVersion"/> and <paramref name="strategy"/>.
+    /// When <paramref name="strategy"/> is <see cref="InstallationStrategy.AutoRevision"/>, computes the next revision across
+    /// the provided <paramref name="roots"/>. When null/empty, default module roots are used.
+    /// </summary>
+    public static string ResolveTargetVersion(IEnumerable<string>? roots, string moduleName, string moduleVersion, InstallationStrategy strategy)
+    {
+        var list = (roots == null ? Array.Empty<string>() : roots.ToArray());
+        var effectiveRoots = list.Length > 0 ? list : GetDefaultModuleRoots();
+        return ResolveVersion(effectiveRoots, moduleName, moduleVersion, strategy);
     }
 
     private static IReadOnlyList<string> GetDefaultModuleRoots()
@@ -137,6 +209,12 @@ public sealed class ModuleInstaller
             var target = Path.Combine(destDir, name!);
             CopyDirectory(dir, target);
         }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try { Directory.Delete(path, recursive: true); }
+        catch { /* best effort */ }
     }
 
     private static int PruneOldVersions(string moduleRoot, int keep, out List<string> removed)
