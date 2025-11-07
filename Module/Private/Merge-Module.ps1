@@ -104,7 +104,7 @@ function Merge-Module {
             try { $SettingsJson = ($FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null }
         }
         $utf8Bom = $true
-        [void][PSPublishModule.BuildServices]::Format(([string[]]@($FilePathUsing)),
+        [void][PowerForge.BuildServices]::Format(([string[]]@($FilePathUsing)),
             [bool]$FormatCodePSM1.RemoveCommentsInParamBlock,
             [bool]$FormatCodePSM1.RemoveCommentsBeforeParamBlock,
             [bool]$FormatCodePSM1.RemoveAllEmptyLines,
@@ -360,7 +360,7 @@ function Merge-Module {
     $SettingsJson = $null
     if ($FormatCodePSM1.FormatterSettings) { try { $SettingsJson = ($FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null } }
     $utf8Bom = $true
-    [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSM1FilePath)),
+    [void][PowerForge.BuildServices]::Format(([string[]]@($PSM1FilePath)),
         [bool]$FormatCodePSM1.RemoveCommentsInParamBlock,
         [bool]$FormatCodePSM1.RemoveCommentsBeforeParamBlock,
         [bool]$FormatCodePSM1.RemoveAllEmptyLines,
@@ -374,7 +374,7 @@ function Merge-Module {
         $SettingsJson = $null
         if ($FormatCodePSM1.FormatterSettings) { try { $SettingsJson = ($FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null } }
         $utf8Bom = $true
-        [void][PSPublishModule.BuildServices]::Format(([string[]]@($LibariesPath)),
+        [void][PowerForge.BuildServices]::Format(([string[]]@($LibariesPath)),
             [bool]$FormatCodePSM1.RemoveCommentsInParamBlock,
             [bool]$FormatCodePSM1.RemoveCommentsBeforeParamBlock,
             [bool]$FormatCodePSM1.RemoveAllEmptyLines,
@@ -398,6 +398,25 @@ function Merge-Module {
     }
 
     New-PersonalManifest @newPersonalManifestSplat
+
+    # Auto-detect exports (functions/cmdlets/aliases) and write into PSD1 using C# services
+    try {
+        $PublicFolder = $Configuration.Information.FunctionsToExportFolder
+        if (-not $PublicFolder) { $PublicFolder = 'Public' }
+        $PublicPath = [System.IO.Path]::Combine($ModulePathSource, $PublicFolder)
+
+        [Array] $Dlls = Get-ChildItem -Path $ModulePathTarget -Filter *.dll -Recurse -ErrorAction SilentlyContinue
+        $exports = [PowerForge.BuildServices]::ComputeExports($PublicPath, ([string[]]$Dlls.FullName))
+
+        # Write exports into PSD1
+        [void][PowerForge.BuildServices]::SetManifestExports($PSD1FilePath,
+            ([string[]]$exports.Functions),
+            ([string[]]$exports.Cmdlets),
+            ([string[]]$exports.Aliases))
+    } catch {
+        Write-Text "[-] Export detection failed: $($_.Exception.Message)" -Color Red
+        return $false
+    }
 
     # Copy FormatsToProcess files if they exist in the manifest
     if ($Configuration.Information.Manifest.FormatsToProcess) {
@@ -427,7 +446,7 @@ function Merge-Module {
     $SettingsJson = $null
     if ($FormatCodePSD1.FormatterSettings) { try { $SettingsJson = ($FormatCodePSD1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJson = $null } }
     $utf8Bom = $true
-    [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSD1FilePath)),
+    [void][PowerForge.BuildServices]::Format(([string[]]@($PSD1FilePath)),
         [bool]$FormatCodePSD1.RemoveCommentsInParamBlock,
         [bool]$FormatCodePSD1.RemoveCommentsBeforeParamBlock,
         [bool]$FormatCodePSD1.RemoveAllEmptyLines,
