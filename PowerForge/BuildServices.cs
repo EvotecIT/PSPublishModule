@@ -159,4 +159,26 @@ public static class BuildServices
             changed |= ManifestEditor.TrySetPsDataSubStringArray(psd1Path, "Delivery", "UpgradeText", upgradeText.ToArray());
         return changed;
     }
+
+    /// <summary>Sets RequiredModules from an array of PowerShell dictionaries (ModuleName/ModuleVersion/Guid).</summary>
+    public static bool SetRequiredModulesFromDictionaries(string psd1Path, System.Collections.IEnumerable dicts)
+    {
+        var list = new System.Collections.Generic.List<ManifestEditor.RequiredModule>();
+        foreach (var obj in dicts)
+        {
+            if (obj is System.Collections.IDictionary d)
+            {
+                var name = d.Contains("ModuleName") ? d["ModuleName"]?.ToString() : d.Contains("Module") ? d["Module"]?.ToString() : null;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var ver = d.Contains("ModuleVersion") ? d["ModuleVersion"]?.ToString() : null;
+                var guid = d.Contains("Guid") ? d["Guid"]?.ToString() : null;
+                list.Add(new ManifestEditor.RequiredModule(name!, ver, guid));
+            }
+            else if (obj is string s && !string.IsNullOrWhiteSpace(s))
+            {
+                list.Add(new ManifestEditor.RequiredModule(s));
+            }
+        }
+        return ManifestEditor.TrySetRequiredModules(psd1Path, list.ToArray());
+    }
 }
