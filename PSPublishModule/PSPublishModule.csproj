@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net472;netstandard2.0;net8.0</TargetFrameworks>
+    <TargetFrameworks>net472;net8.0</TargetFrameworks>
     <Description>PSPublishModule</Description>
     <AssemblyName>PSPublishModule</AssemblyName>
     <AssemblyTitle>PSPublishModule</AssemblyTitle>
@@ -30,12 +30,8 @@
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
   </ItemGroup>
 
-  <ItemGroup Condition=" '$(TargetFramework)' != 'netstandard2.0' ">
+  <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0' ">
-    <Compile Remove="Cmdlets\*.cs" />
   </ItemGroup>
 
 </Project>

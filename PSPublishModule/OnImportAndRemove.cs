@@ -3,7 +3,6 @@ using System.IO;
 using System.Management.Automation;
 using System.Reflection;
 
-#nullable enable
 
 /// <summary>
 /// Namespace for module import and removal handling.

@@ -1,11 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-#if !NETSTANDARD2_0
 using PowerForge;
-#endif
 
-#nullable enable
 
 namespace PSPublishModule;
 
@@ -16,7 +13,6 @@ namespace PSPublishModule;
 /// </summary>
 public static class BuildServices
 {
-#if !NETSTANDARD2_0
     /// <summary>
     /// Runs the out-of-process PSSA formatter on the provided files using optional settings JSON.
     /// </summary>
@@ -97,7 +93,6 @@ public static class BuildServices
         var logger = new ConsoleLogger { IsVerbose = false };
         var installer = new ModuleInstaller(logger);
         // Pre-resolve version; adjust staged manifest before install
-#if !NETSTANDARD2_0
         var resolved = ModuleInstaller.ResolveTargetVersion(roots, moduleName, moduleVersion, strategy);
         if (updateManifestToResolvedVersion)
         {
@@ -106,56 +101,62 @@ public static class BuildServices
         // Install exactly into the resolved version (prevents re-bumping)
         var opts = new ModuleInstallerOptions(roots, PowerForge.InstallationStrategy.Exact, keepVersions);
         return installer.InstallFromStaging(stagingPath, moduleName, resolved, opts);
-#else
-        var opts = new ModuleInstallerOptions(roots, strategy, keepVersions);
-        return installer.InstallFromStaging(stagingPath, moduleName, moduleVersion, opts);
-#endif
     }
-#else
-    /// <summary>Placeholder for netstandard2.0 target; no-op formatter.</summary>
-    /// <param name="files">Ignored.</param>
-    /// <param name="settingsJson">Ignored.</param>
-    /// <param name="timeoutSeconds">Ignored.</param>
-    public static IList<object> FormatFiles(IEnumerable<string> files, string? settingsJson = null, int timeoutSeconds = 120)
-        => Array.Empty<object>();
-    /// <summary>Placeholder for netstandard2.0 target; no-op normalizer.</summary>
-    /// <param name="files">Ignored.</param>
-    /// <param name="lineEnding">Ignored.</param>
-    /// <param name="utf8Bom">Ignored.</param>
-    public static IList<object> NormalizeFiles(IEnumerable<string> files, object? lineEnding = null, bool utf8Bom = true)
-        => Array.Empty<object>();
-    /// <summary>Placeholder for netstandard2.0 target; no-op installer.</summary>
-    /// <param name="stagingPath">Ignored.</param>
-    /// <param name="moduleName">Ignored.</param>
-    /// <param name="moduleVersion">Ignored.</param>
-    /// <param name="strategy">Ignored.</param>
-    /// <param name="keepVersions">Ignored.</param>
-    /// <param name="roots">Ignored.</param>
-    public static object InstallVersioned(string stagingPath, string moduleName, string moduleVersion, object? strategy = null, int keepVersions = 3, IEnumerable<string>? roots = null)
-        => new object();
-#endif
+
+    /// <summary>Detects function names across PowerShell script files.</summary>
+    public static IList<string> DetectScriptFunctions(IEnumerable<string> scriptFiles)
+        => PowerForge.ExportDetector.DetectScriptFunctions(scriptFiles ?? Array.Empty<string>()).ToList();
+
+    /// <summary>Detects cmdlet names (Verb-Noun) from binary assemblies.</summary>
+    public static IList<string> DetectBinaryCmdlets(IEnumerable<string> assemblies)
+        => PowerForge.ExportDetector.DetectBinaryCmdlets(assemblies ?? Array.Empty<string>()).ToList();
+
+    /// <summary>Detects alias names from binary assemblies.</summary>
+    public static IList<string> DetectBinaryAliases(IEnumerable<string> assemblies)
+        => PowerForge.ExportDetector.DetectBinaryAliases(assemblies ?? Array.Empty<string>()).ToList();
+
+    /// <summary>Sets FunctionsToExport/CmdletsToExport/AliasesToExport in a PSD1 manifest.</summary>
+    public static bool SetManifestExports(string psd1Path, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
+    {
+        bool changed = false;
+        if (functions != null)
+            changed |= PowerForge.ManifestEditor.TrySetTopLevelStringArray(psd1Path, "FunctionsToExport", functions.ToArray());
+        if (cmdlets != null)
+            changed |= PowerForge.ManifestEditor.TrySetTopLevelStringArray(psd1Path, "CmdletsToExport", cmdlets.ToArray());
+        if (aliases != null)
+            changed |= PowerForge.ManifestEditor.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
+        return changed;
+    }
+
+    /// <summary>
+    /// Computes exports from a public scripts folder and a set of assemblies.
+    /// </summary>
+    public static PowerForge.ExportSet ComputeExports(string publicFolderPath, IEnumerable<string> assemblies)
+    {
+        var scripts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(publicFolderPath) && System.IO.Directory.Exists(publicFolderPath))
+        {
+            try { scripts.AddRange(System.IO.Directory.GetFiles(publicFolderPath, "*.ps1", System.IO.SearchOption.AllDirectories)); } catch { }
+        }
+        var funcs = PowerForge.ExportDetector.DetectScriptFunctions(scripts);
+        var cmds  = PowerForge.ExportDetector.DetectBinaryCmdlets(assemblies);
+        var alis  = PowerForge.ExportDetector.DetectBinaryAliases(assemblies);
+        return new PowerForge.ExportSet(funcs.ToArray(), cmds.ToArray(), alis.ToArray());
+    }
+
+    /// <summary>Sets the top-level RootModule in the PSD1.</summary>
+    public static bool SetRootModule(string psd1Path, string rootModule)
+        => PowerForge.ManifestEditor.TrySetTopLevelString(psd1Path, "RootModule", rootModule);
 
     /// <summary>
     /// Returns processes that currently lock any of the specified paths (Windows only; empty on other OSes).
     /// </summary>
     public static IList<(int Pid, string Name)> GetLockingProcesses(IEnumerable<string> paths)
-    {
-#if !NETSTANDARD2_0
-        return PowerForge.LockInspector.GetLockingProcesses(paths ?? Array.Empty<string>()).ToList();
-#else
-        return Array.Empty<(int, string)>();
-#endif
-    }
+        => PowerForge.LockInspector.GetLockingProcesses(paths ?? Array.Empty<string>()).ToList();
 
     /// <summary>
     /// Attempts to terminate processes that lock any of the specified paths. Returns count terminated.
     /// </summary>
     public static int TerminateLockingProcesses(IEnumerable<string> paths, bool force = false)
-    {
-#if !NETSTANDARD2_0
-        return PowerForge.LockInspector.TerminateLockingProcesses(paths ?? Array.Empty<string>(), force);
-#else
-        return 0;
-#endif
-    }
+        => PowerForge.LockInspector.TerminateLockingProcesses(paths ?? Array.Empty<string>(), force);
 }
