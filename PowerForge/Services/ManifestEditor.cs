@@ -545,6 +545,19 @@ public static class ManifestEditor
         return InsertKeyValue(parent!, content, filePath, key, valueExpression);
     }
 
+    /// <summary>Sets a PSData sub-hashtable array (e.g., Delivery.ImportantLinks = @(@{ Name='..'; Link='..' }, ...)).</summary>
+    public static bool TrySetPsDataSubHashtableArray(string filePath, string parentKey, string key, System.Collections.Generic.IEnumerable<System.Collections.Generic.IDictionary<string, string>> items)
+    {
+        var arr = items?.ToArray() ?? Array.Empty<System.Collections.Generic.IDictionary<string, string>>();
+        var parts = arr.Select(dict =>
+        {
+            var kvs = dict.Select(kv => kv.Key + " = " + EscapeAndQuote(kv.Value ?? string.Empty));
+            return "@{ " + string.Join("; ", kvs) + " }";
+        });
+        var valueExpression = "@(" + string.Join(", ", parts) + ")";
+        return TrySetPsDataSubValue(filePath, parentKey, key, valueExpression);
+    }
+
     private static HashtableAst? FindChildHashtable(HashtableAst parent, string key)
     {
         foreach (var kv in parent.KeyValuePairs)

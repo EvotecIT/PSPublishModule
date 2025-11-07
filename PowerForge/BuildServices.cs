@@ -160,6 +160,22 @@ public static class BuildServices
         return changed;
     }
 
+    /// <summary>Sets PrivateData.PSData.Delivery.ImportantLinks from PowerShell dictionaries (e.g., @{ Name='..'; Link='..' }).</summary>
+    public static bool SetDeliveryImportantLinks(string psd1Path, System.Collections.IEnumerable links)
+    {
+        var list = new System.Collections.Generic.List<System.Collections.Generic.IDictionary<string, string>>();
+        foreach (var obj in links)
+        {
+            if (obj is System.Collections.IDictionary d)
+            {
+                var dict = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+                foreach (var k in d.Keys) { var ks = k?.ToString() ?? string.Empty; dict[ks] = d[k]?.ToString() ?? string.Empty; }
+                list.Add(dict);
+            }
+        }
+        return ManifestEditor.TrySetPsDataSubHashtableArray(psd1Path, "Delivery", "ImportantLinks", list);
+    }
+
     /// <summary>Sets RequiredModules from an array of PowerShell dictionaries (ModuleName/ModuleVersion/Guid).</summary>
     public static bool SetRequiredModulesFromDictionaries(string psd1Path, System.Collections.IEnumerable dicts)
     {
