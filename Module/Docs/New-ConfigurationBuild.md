@@ -17,16 +17,17 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
  [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries]
  [-SignIncludeExe] [[-SignCustomInclude] <String[]>] [[-SignExcludePaths] <String[]>] [-DotSourceClasses]
  [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions]
- [-LocalVersioning] [-VersionedInstallStrategy <String>] [-VersionedInstallKeep <Int32>] [-SkipBuiltinReplacements]
- [-DoNotAttemptToFixRelativePaths]
- [[-CertificateThumbprint] <String>] [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>]
- [[-CertificatePFXPassword] <String>] [[-NETProjectPath] <String>] [[-NETConfiguration] <String>]
- [[-NETFramework] <String[]>] [[-NETProjectName] <String>] [-NETExcludeMainLibrary]
- [[-NETExcludeLibraryFilter] <String[]>] [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>]
- [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled]
- [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>]
- [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>]
- [-NETHandleRuntimes] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-LocalVersioning] [[-VersionedInstallStrategy] <String>] [[-VersionedInstallKeep] <Int32>]
+ [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [[-CertificateThumbprint] <String>]
+ [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>]
+ [[-NETProjectPath] <String>] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>]
+ [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [[-NETExcludeLibraryFilter] <String[]>]
+ [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>] [-NETHandleAssemblyWithSameName]
+ [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging]
+ [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [-NETBinaryModuleDocumentation]
+ [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>] [-NETHandleRuntimes]
+ [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -50,8 +51,6 @@ $newConfigurationBuildSplat = @{
     DotSourceLibraries                = $true
     DotSourceClasses                  = $true
     DeleteTargetModuleBeforeBuild     = $true
-    VersionedInstallStrategy          = 'AutoRevision'
-    VersionedInstallKeep              = 3
 }
 ```
 
@@ -317,6 +316,40 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -VersionedInstallStrategy
+Controls how the module is installed into user Module roots after build.
+- Exact: installs to \<Modules\>\Name\\\<ModuleVersion\> (fails if it already exists)
+- AutoRevision: installs to \<Modules\>\Name\\\<ModuleVersion\>.\<n\> choosing the next free revision.
+Recommended for development iterations to avoid folder-in-use issues.
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -VersionedInstallKeep
+How many versions to keep per module when using versioned installs (default 3).
+Older ones are pruned.
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -SkipBuiltinReplacements
 Skip builtin replacements option disables builtin replacements that are done by module builder.
 This is useful if you use any of known replacements and you don't want them to be replaced by module builder.
@@ -371,7 +404,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 3
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -386,7 +419,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 4
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -401,7 +434,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 5
+Position: 7
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -416,7 +449,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -432,7 +465,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 7
+Position: 9
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -447,7 +480,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 8
+Position: 10
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -462,7 +495,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 9
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -478,7 +511,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 10
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -510,7 +543,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 11
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -527,7 +560,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 12
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -546,7 +579,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 13
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -640,7 +673,7 @@ Parameter Sets: (All)
 Aliases: ResolveBinaryConflictsName
 
 Required: False
-Position: 14
+Position: 16
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -687,7 +720,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 15
+Position: 17
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -697,6 +730,51 @@ Accept wildcard characters: False
 Add special logic to handle runtimes.
 It's useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
 For example library that's not NET based and is as dependency for other libraries
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -KillLockersBeforeInstall
+{{ Fill KillLockersBeforeInstall Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -KillLockersForce
+{{ Fill KillLockersForce Description }}
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -AutoSwitchExactOnPublish
+{{ Fill AutoSwitchExactOnPublish Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -736,33 +814,3 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 General notes
 
 ## RELATED LINKS
-### -VersionedInstallStrategy
-Controls how the module is installed into user Module roots after build.
-Exact installs to `<Modules>\\Name\\<ModuleVersion>`. AutoRevision installs to `<ModuleVersion>.<n>` choosing the next free revision — recommended for dev runs to avoid folder-in-use issues.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: AutoRevision
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -VersionedInstallKeep
-How many versions to keep per module when using versioned installs. Older ones are pruned.
-
-```yaml
-Type: Int32
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: 3
-Accept pipeline input: False
-Accept wildcard characters: False
-```

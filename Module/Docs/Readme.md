@@ -134,6 +134,5 @@ Locale: en-US
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
 {{ Fill in the Description }}
 
-### [Show-ProjectDocumentation](Show-ProjectDocumentation.md)
 {{ Fill in the Description }}
 
