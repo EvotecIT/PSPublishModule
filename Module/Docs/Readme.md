@@ -50,7 +50,6 @@ Locale: en-US
 ### [Initialize-ProjectManager](Initialize-ProjectManager.md)
 {{ Fill in the Description }}
 
-### [Install-ProjectDocumentation](Install-ProjectDocumentation.md)
 {{ Fill in the Description }}
 
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)

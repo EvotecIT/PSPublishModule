@@ -43,8 +43,7 @@ public static class ManifestWriter
 
         static void AppendKV(StringBuilder b, string key, string value)
             => b.AppendLine($"    {key} = {value}");
-        static string Quote(string s) => "'" + (s?.Replace("'", "''") ?? string.Empty) + "'";
+        static string Quote(string? s) => "'" + (s?.Replace("'", "''") ?? string.Empty) + "'";
         static string ArrayOf(string[] arr) => "@(" + string.Join(", ", (arr ?? Array.Empty<string>()).Select(a => "'" + (a?.Replace("'", "''") ?? string.Empty) + "'")) + ")";
     }
 }
-

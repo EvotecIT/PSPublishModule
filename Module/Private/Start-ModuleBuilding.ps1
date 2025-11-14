@@ -74,6 +74,51 @@
         return $false
     }
 
+    # Resolve install/build strategy early and compute assembly version to avoid in-session DLL conflicts
+    $Roots = @()
+    if ($DestinationPaths.Desktop) { $Roots += [System.IO.Path]::GetDirectoryName($DestinationPaths.Desktop) }
+    if ($DestinationPaths.Core)    { $Roots += [System.IO.Path]::GetDirectoryName($DestinationPaths.Core) }
+    $Roots = $Roots | Select-Object -Unique
+
+    $strategy = 'AutoRevision'
+    if ($Configuration.Steps.BuildModule.VersionedInstallStrategy) { $strategy = [string]$Configuration.Steps.BuildModule.VersionedInstallStrategy }
+    # Auto-switch to Exact when any publish target is enabled
+    $publishingPlanned = $false
+    foreach ($n in @($Configuration.Steps.BuildModule.GalleryNugets)) { if ($n -and $n.Enabled) { $publishingPlanned = $true; break } }
+    if (-not $publishingPlanned) { foreach ($n in @($Configuration.Steps.BuildModule.GitHubNugets)) { if ($n -and $n.Enabled) { $publishingPlanned = $true; break } } }
+    if (-not $publishingPlanned -and $Configuration.Steps.PublishModule.Enabled) { $publishingPlanned = $true }
+    if (-not $publishingPlanned -and $Configuration.Steps.PublishModule.GitHub)  { $publishingPlanned = $true }
+    if ($publishingPlanned) { $strategy = 'Exact' }
+
+    # Compute assembly/version for build
+    $baseVersion = [string]$Configuration.Information.Manifest.ModuleVersion
+    if ($strategy -ieq 'AutoRevision') {
+        # Next revision across module roots
+        $max = -1
+        foreach ($r in $Roots) {
+            $mr = Join-Path $r $ProjectName
+            if (Test-Path -LiteralPath $mr) {
+                Get-ChildItem -LiteralPath $mr -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                    $n = $_.Name
+                    $re = "^$([Regex]::Escape($baseVersion))(?:\.(\d+))?$"
+                    $m = [Regex]::Match($n, $re, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+                    if ($m.Success) {
+                        if ($m.Groups[1].Success) {
+                            $v = 0; [void][int]::TryParse($m.Groups[1].Value, [ref]$v); if ($v -gt $max) { $max = $v }
+                        } else {
+                            if ($max -lt 0) { $max = 0 }
+                        }
+                    }
+                }
+            }
+        }
+        $resolvedAssemblyVersion = if ($max -ge 0) { "$baseVersion.$($max + 1)" } else { "$baseVersion.1" }
+    } else {
+        $resolvedAssemblyVersion = $baseVersion
+    }
+
+    # Stamp resolved version for the entire build/runtime to ensure unique assembly identity
+    $Configuration.Information.Manifest.ModuleVersion = $resolvedAssemblyVersion
 
     $CmdletsAliases = [ordered] @{}
 
@@ -130,22 +175,46 @@
         }
 
         # Copy Configuration
-        $SaveConfiguration = Copy-DictionaryManual -Dictionary $Configuration
+        # Ensure PowerForge is available before using ManifestWriter
+        if (-not ([type]::GetType('PowerForge.ManifestWriter, PowerForge', $false, $false))) {
+            Write-Verbose '[ManifestWriter] Not loaded. Loading PowerForge from FullProjectPath\Lib.'
+            $libRoot = if ($PSEdition -eq 'Core') { [IO.Path]::Combine($FullProjectPath, 'Lib', 'Core') } else { [IO.Path]::Combine($FullProjectPath, 'Lib', 'Default') }
+            $pf = [IO.Path]::Combine($libRoot, 'PowerForge.dll')
+            if (-not (Test-Path -LiteralPath $pf -PathType Leaf)) {
+                Write-Text "[-] Required assembly not found for manifest generation at '$pf'. Aborting." -Color Red
+                return $false
+            }
+            try { Add-Type -Path $pf -ErrorAction Stop } catch { $msg = $_.Exception.Message; if ($msg -notmatch 'already loaded') { Write-Text "[-] Failed to load '$pf': $msg" -Color Red; return $false } }
+            if (-not ([type]::GetType('PowerForge.ManifestWriter, PowerForge', $false, $false))) {
+                Write-Text '[-] PowerForge.ManifestWriter still not available after load. Aborting.' -Color Red
+                return $false
+            }
+        }
 
-        $newPersonalManifestSplat = @{
-            Configuration       = $Configuration
-            ManifestPath        = $PSD1FilePath
-            AddScriptsToProcess = $true
+        # Generate PSD1 manifest (C#) and set PSData basics
+        $ModuleVersion = [string]$Configuration.Information.Manifest.ModuleVersion
+        $Author        = [string]$Configuration.Information.Manifest.Author
+        $CompanyName   = [string]$Configuration.Information.Manifest.CompanyName
+        $Description   = [string]$Configuration.Information.Manifest.Description
+        $Compat        = if ($Configuration.Information.Manifest.CompatiblePSEditions) { [string[]]$Configuration.Information.Manifest.CompatiblePSEditions } else { @('Desktop','Core') }
+        $RootModule    = "$ProjectName.psm1"
+        $ScriptsToProcess = @()
+        if ($Configuration.UsingInPlace -and -not [string]::IsNullOrWhiteSpace($Configuration.UsingInPlace)) { $ScriptsToProcess += [string]$Configuration.UsingInPlace }
+        try {
+            [void][PowerForge.ManifestWriter]::Generate($PSD1FilePath, $ProjectName, $ModuleVersion, $Author, $CompanyName, $Description, ([string[]]$Compat), $RootModule, ([string[]]$ScriptsToProcess))
+        } catch {
+            Write-Text "[-] Manifest generation failed: $($_.Exception.Message)" -Color Red
+            return $false
         }
-        if ($Configuration.Steps.BuildModule.UseWildcardForFunctions) {
-            $newPersonalManifestSplat.UseWildcardForFunctions = $Configuration.Steps.BuildModule.UseWildcardForFunctions
-        }
-        # if this is hybrid or binary module, we need to make changes to PSD1
-        if ($Configuration.Steps.BuildLibraries.BinaryModule) {
-            $newPersonalManifestSplat.BinaryModule = $Configuration.Steps.BuildLibraries.BinaryModule
-        }
-        $Success = New-PersonalManifest @newPersonalManifestSplat
-        if ($Success -eq $false) {
+        try {
+            if ($Configuration.Information.Manifest.PrivateData.PSData.Tags) { [void][PowerForge.BuildServices]::SetPsDataStringArray($PSD1FilePath, 'Tags', ([string[]]$Configuration.Information.Manifest.PrivateData.PSData.Tags)) }
+            if ($Configuration.Information.Manifest.PrivateData.PSData.IconUri) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'IconUri', [string]$Configuration.Information.Manifest.PrivateData.PSData.IconUri) }
+            if ($Configuration.Information.Manifest.PrivateData.PSData.ProjectUri) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'ProjectUri', [string]$Configuration.Information.Manifest.PrivateData.PSData.ProjectUri) }
+            if ($Configuration.Information.Manifest.PrivateData.PSData.ReleaseNotes) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'ReleaseNotes', [string]$Configuration.Information.Manifest.PrivateData.PSData.ReleaseNotes) }
+            if ($Configuration.Information.Manifest.PrivateData.PSData.Prerelease) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'Prerelease', [string]$Configuration.Information.Manifest.PrivateData.PSData.Prerelease) }
+            if ($Configuration.Information.Manifest.PrivateData.PSData.RequireLicenseAcceptance -ne $null) { [void][PowerForge.BuildServices]::SetPsDataBool($PSD1FilePath, 'RequireLicenseAcceptance', [bool]$Configuration.Information.Manifest.PrivateData.PSData.RequireLicenseAcceptance) }
+        } catch {
+            Write-Text "[-] Writing PSData basics failed: $($_.Exception.Message)" -Color Red
             return $false
         }
 
@@ -163,30 +232,24 @@
             }
         } -ColorBefore Yellow -ColorTime Yellow -Color Yellow
 
-        # Restore configuration, as some PersonalManifest plays with those
-        $Configuration = $SaveConfiguration
-
         # Ensure PSPublishModule/PowerForge assemblies are loaded (self-build scenario)
-        if (-not ([type]::GetType('PSPublishModule.BuildServices, PSPublishModule', $false, $false))) {
-            Write-Verbose '[BuildServices] Not loaded. Loading PSPublishModule/PowerForge from FullProjectPath\Lib.'
+        if (-not ([type]::GetType('PowerForge.BuildServices, PowerForge', $false, $false))) {
+            Write-Verbose '[BuildServices] Not loaded. Loading PowerForge from FullProjectPath\Lib.'
             $libRoot = if ($PSEdition -eq 'Core') { [IO.Path]::Combine($FullProjectPath, 'Lib', 'Core') } else { [IO.Path]::Combine($FullProjectPath, 'Lib', 'Default') }
             $pf = [IO.Path]::Combine($libRoot, 'PowerForge.dll')
-            $pm = [IO.Path]::Combine($libRoot, 'PSPublishModule.dll')
             $pfExists = Test-Path -LiteralPath $pf -PathType Leaf
-            $pmExists = Test-Path -LiteralPath $pm -PathType Leaf
-            if (-not $pfExists -or -not $pmExists) {
+            if (-not $pfExists) {
                 Write-Text "[-] Required assemblies not found in '$libRoot'. Aborting formatting step." -Color Red
                 return $false
             }
             try { Add-Type -Path $pf -ErrorAction Stop } catch { Write-Text "[-] Failed to load '$pf': $($_.Exception.Message)" -Color Red; return $false }
-            try { Add-Type -Path $pm -ErrorAction Stop } catch { Write-Text "[-] Failed to load '$pm': $($_.Exception.Message)" -Color Red; return $false }
 
             $bs = $null
             foreach ($asm in [AppDomain]::CurrentDomain.GetAssemblies()) {
-                $bs = $asm.GetType('PSPublishModule.BuildServices', $false)
+                $bs = $asm.GetType('PowerForge.BuildServices', $false)
                 if ($bs) { break }
             }
-            if (-not $bs) { Write-Text '[-] PSPublishModule.BuildServices still not available after load. Aborting.' -Color Red; return $false }
+            if (-not $bs) { Write-Text '[-] PowerForge.BuildServices still not available after load. Aborting.' -Color Red; return $false }
             Write-Verbose "[BuildServices] Loaded from '$libRoot'"
         }
 
@@ -194,7 +257,7 @@
         $SettingsJsonPSD1 = $null
         if ($Configuration.Options.Standard.FormatCodePSD1.FormatterSettings) { try { $SettingsJsonPSD1 = ($Configuration.Options.Standard.FormatCodePSD1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJsonPSD1 = $null } }
         $utf8Bom = $true
-        [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSD1FilePath)),
+        [void][PowerForge.BuildServices]::Format(([string[]]@($PSD1FilePath)),
             [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveCommentsInParamBlock,
             [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveCommentsBeforeParamBlock,
             [bool]$Configuration.Options.Standard.FormatCodePSD1.RemoveAllEmptyLines,
@@ -206,7 +269,7 @@
 
         $SettingsJsonPSM1 = $null
         if ($Configuration.Options.Standard.FormatCodePSM1.FormatterSettings) { try { $SettingsJsonPSM1 = ($Configuration.Options.Standard.FormatCodePSM1.FormatterSettings | ConvertTo-Json -Depth 20 -Compress) } catch { $SettingsJsonPSM1 = $null } }
-        [void][PSPublishModule.BuildServices]::Format(([string[]]@($PSM1FilePath)),
+        [void][PowerForge.BuildServices]::Format(([string[]]@($PSM1FilePath)),
             [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveCommentsInParamBlock,
             [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveCommentsBeforeParamBlock,
             [bool]$Configuration.Options.Standard.FormatCodePSM1.RemoveAllEmptyLines,
@@ -279,10 +342,10 @@
             # Optional: attempt to kill processes locking module roots (Windows only)
             if ($Configuration.Steps.BuildModule.KillLockersBeforeInstall) {
                 try {
-                    $locks = [PSPublishModule.BuildServices]::GetLockingProcesses(([string[]]$Roots))
+                    $locks = [PowerForge.BuildServices]::GetLockingProcesses(([string[]]$Roots))
                     if ($locks.Count -gt 0) {
                         Write-Text "   [i] Locking processes detected: $($locks | ForEach-Object { "PID=$($_.Item1) Name=$($_.Item2)" } -join ', ')" -Color Yellow
-                        $killed = [PSPublishModule.BuildServices]::TerminateLockingProcesses(([string[]]$Roots), [bool]$Configuration.Steps.BuildModule.KillLockersForce)
+                        $killed = [PowerForge.BuildServices]::TerminateLockingProcesses(([string[]]$Roots), [bool]$Configuration.Steps.BuildModule.KillLockersForce)
                         Write-Text "   [i] Terminated $killed locking process(es)." -Color Yellow
                     }
                 } catch { Write-Text "   [i] Locker inspection failed: $($_.Exception.Message)" -Color Yellow }
@@ -290,7 +353,7 @@
 
             Write-TextWithTime -Text "Installing module (versioned) into user Modules roots (strategy=$strategy, keep=$keep)" {
                 try {
-                    $res = [PSPublishModule.BuildServices]::InstallVersioned(
+                    $res = [PowerForge.BuildServices]::InstallVersioned(
                         $FullModuleTemporaryPath,
                         $ProjectName,
                         ([string]$moduleVersionForInstall),

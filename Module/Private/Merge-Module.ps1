@@ -385,19 +385,49 @@ function Merge-Module {
             $utf8Bom)
     }
     # Build PSD1 file
-    $newPersonalManifestSplat = @{
-        Configuration           = $Configuration
-        ManifestPath            = $PSD1FilePath
-        AddUsingsToProcess      = $true
-        ScriptsToProcessLibrary = $ScriptsToProcessLibrary
-        OnMerge                 = $true
+    # Generate PSD1 manifest via PowerForge
+    $ModuleVersion = [string]$Configuration.Information.Manifest.ModuleVersion
+    $Author        = [string]$Configuration.Information.Manifest.Author
+    $CompanyName   = [string]$Configuration.Information.Manifest.CompanyName
+    $Description   = [string]$Configuration.Information.Manifest.Description
+    $Compat        = if ($Configuration.Information.Manifest.CompatiblePSEditions) { [string[]]$Configuration.Information.Manifest.CompatiblePSEditions } else { @('Desktop','Core') }
+    $RootModule    = "$ModuleName.psm1"
+    $ScriptsToProcess = @()
+    if ($Configuration.UsingInPlace -and -not [string]::IsNullOrWhiteSpace($Configuration.UsingInPlace)) { $ScriptsToProcess += [string]$Configuration.UsingInPlace }
+    if ($ScriptsToProcessLibrary) { $ScriptsToProcess += [string]$ScriptsToProcessLibrary }
+    try {
+        [void][PowerForge.ManifestWriter]::Generate($PSD1FilePath, $ModuleName, $ModuleVersion, $Author, $CompanyName, $Description, ([string[]]$Compat), $RootModule, ([string[]]$ScriptsToProcess))
+    } catch {
+        Write-Text "[-] Manifest generation failed: $($_.Exception.Message)" -Color Red
+        return $false
     }
 
-    if ($Configuration.Steps.BuildLibraries.BinaryModule) {
-        $newPersonalManifestSplat.BinaryModule = $Configuration.Steps.BuildLibraries.BinaryModule
+    # PSData basics from configuration (optional)
+    try {
+        if ($Configuration.Information.Manifest.PrivateData.PSData.Tags) { [void][PowerForge.BuildServices]::SetPsDataStringArray($PSD1FilePath, 'Tags', ([string[]]$Configuration.Information.Manifest.PrivateData.PSData.Tags)) }
+        if ($Configuration.Information.Manifest.PrivateData.PSData.IconUri) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'IconUri', [string]$Configuration.Information.Manifest.PrivateData.PSData.IconUri) }
+        if ($Configuration.Information.Manifest.PrivateData.PSData.ProjectUri) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'ProjectUri', [string]$Configuration.Information.Manifest.PrivateData.PSData.ProjectUri) }
+        if ($Configuration.Information.Manifest.PrivateData.PSData.ReleaseNotes) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'ReleaseNotes', [string]$Configuration.Information.Manifest.PrivateData.PSData.ReleaseNotes) }
+        if ($Configuration.Information.Manifest.PrivateData.PSData.Prerelease) { [void][PowerForge.BuildServices]::SetPsDataString($PSD1FilePath, 'Prerelease', [string]$Configuration.Information.Manifest.PrivateData.PSData.Prerelease) }
+        if ($Configuration.Information.Manifest.PrivateData.PSData.RequireLicenseAcceptance -ne $null) { [void][PowerForge.BuildServices]::SetPsDataBool($PSD1FilePath, 'RequireLicenseAcceptance', [bool]$Configuration.Information.Manifest.PrivateData.PSData.RequireLicenseAcceptance) }
+    } catch {
+        Write-Text "[-] Writing PSData basics failed: $($_.Exception.Message)" -Color Red
+        return $false
     }
 
-    New-PersonalManifest @newPersonalManifestSplat
+    # RequiredModules and ExternalModuleDependencies
+    try {
+        $req = @()
+        if ($Configuration.Information.Manifest.RequiredModules) { $req += $Configuration.Information.Manifest.RequiredModules }
+        if ($Configuration.Information.Manifest.ExternalModuleDependencies) {
+            [void][PowerForge.BuildServices]::SetPsDataStringArray($PSD1FilePath, 'ExternalModuleDependencies', ([string[]]$Configuration.Information.Manifest.ExternalModuleDependencies))
+            $req += $Configuration.Information.Manifest.ExternalModuleDependencies
+        }
+        if ($req.Count -gt 0) { [void][PowerForge.BuildServices]::SetRequiredModulesFromDictionaries($PSD1FilePath, ([System.Collections.IDictionary[]]$req)) }
+    } catch {
+        Write-Text "[-] Writing RequiredModules failed: $($_.Exception.Message)" -Color Red
+        return $false
+    }
 
     # Auto-detect exports (functions/cmdlets/aliases) and write into PSD1 using C# services
     try {

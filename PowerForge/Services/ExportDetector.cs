@@ -72,7 +72,9 @@ public static class ExportDetector
         try
         {
             var runtimeAssemblies = Directory.GetFiles(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "*.dll");
-            using var ralc = new System.Reflection.MetadataLoadContext(new System.Reflection.PathAssemblyResolver(runtimeAssemblies.Append(assemblyPath)));
+            using var ralc = new System.Reflection.MetadataLoadContext(
+                new System.Reflection.PathAssemblyResolver(
+                    runtimeAssemblies.Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
             var asm = ralc.LoadFromAssemblyPath(assemblyPath);
             foreach (var t in asm.GetTypes())
             {
@@ -151,7 +153,9 @@ public static class ExportDetector
         try
         {
             var runtimeAssemblies = Directory.GetFiles(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "*.dll");
-            using var ralc = new System.Reflection.MetadataLoadContext(new System.Reflection.PathAssemblyResolver(runtimeAssemblies.Append(assemblyPath)));
+            using var ralc = new System.Reflection.MetadataLoadContext(
+                new System.Reflection.PathAssemblyResolver(
+                    runtimeAssemblies.Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
             var asm = ralc.LoadFromAssemblyPath(assemblyPath);
             foreach (var t in asm.GetTypes())
             {

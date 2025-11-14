@@ -73,7 +73,7 @@ That's it. Whenever there's a new version you simply run the command and you can
 
 ### Documentation - Local, GitHub, Azure DevOps
 
-PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Config) and root README/CHANGELOG/LICENSE. Use Install-ProjectDocumentation to copy them out for end‑users, and PSMaintenance to view docs with a rich UI (README + CHANGELOG + License + Docs tabs, dependencies graph, commands help).
+PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Config) and root README/CHANGELOG/LICENSE. Use PSMaintenance to view docs with a rich UI (README + CHANGELOG + License + Docs tabs, dependencies graph, commands help).
 
 - Build-time bundling (in your module's Build script):
   - `New-ConfigurationInformation -IncludeAll 'Internals\'`
@@ -83,10 +83,7 @@ PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Con
     - Azure DevOps: `New-ConfigurationDelivery -RepositoryPaths 'Docs/en-US' -RepositoryBranch main`
 
 - Copy docs for a module already installed:
-  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -Layout ModuleAndVersion`
-  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -Layout Direct`
-  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -OnExists Overwrite`
-  - `Install-ProjectDocumentation -Name EFAdminManager -Path C:\Docs -Layout Module -OnExists Merge -Force`
+  - Use the PSMaintenance module for viewing documentation locally.
 
 - View docs (PSMaintenance):
   - Local files: `Show-ModuleDocumentation -Name 'EFAdminManager' -Readme -Changelog`

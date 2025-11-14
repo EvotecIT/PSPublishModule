@@ -117,8 +117,9 @@ public static class BuildServices
             try { scripts.AddRange(System.IO.Directory.GetFiles(publicFolderPath, "*.ps1", System.IO.SearchOption.AllDirectories)); } catch { }
         }
         var funcs = ExportDetector.DetectScriptFunctions(scripts);
-        var cmds  = ExportDetector.DetectBinaryCmdlets(assemblies);
-        var alis  = ExportDetector.DetectBinaryAliases(assemblies);
+        var asmUnique = (assemblies ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var cmds  = ExportDetector.DetectBinaryCmdlets(asmUnique);
+        var alis  = ExportDetector.DetectBinaryAliases(asmUnique);
         return new ExportSet(funcs.ToArray(), cmds.ToArray(), alis.ToArray());
     }
 
