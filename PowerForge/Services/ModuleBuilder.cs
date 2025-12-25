@@ -91,16 +91,30 @@ public sealed class ModuleBuilder
         var psd1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psd1");
         // Prefer a script RootModule for compatibility; load binary via NestedModules
         var rootModule = $"{opts.ModuleName}.psm1";
-        ManifestWriter.Generate(
-            path: psd1,
-            moduleName: opts.ModuleName,
-            moduleVersion: opts.ModuleVersion,
-            author: opts.Author,
-            companyName: opts.CompanyName,
-            description: opts.Description,
-            compatiblePSEditions: opts.CompatiblePSEditions.ToArray(),
-            rootModule: rootModule,
-            scriptsToProcess: Array.Empty<string>());
+        if (File.Exists(psd1))
+        {
+            // Preserve existing manifest metadata (GUID, RequiredModules, etc.) and patch only the key fields.
+            ManifestEditor.TrySetTopLevelModuleVersion(psd1, opts.ModuleVersion);
+            ManifestEditor.TrySetTopLevelString(psd1, "RootModule", rootModule);
+            if (!string.IsNullOrWhiteSpace(opts.Author)) ManifestEditor.TrySetTopLevelString(psd1, "Author", opts.Author!);
+            if (!string.IsNullOrWhiteSpace(opts.CompanyName)) ManifestEditor.TrySetTopLevelString(psd1, "CompanyName", opts.CompanyName!);
+            if (!string.IsNullOrWhiteSpace(opts.Description)) ManifestEditor.TrySetTopLevelString(psd1, "Description", opts.Description!);
+            if (opts.CompatiblePSEditions.Count > 0)
+                ManifestEditor.TrySetTopLevelStringArray(psd1, "CompatiblePSEditions", opts.CompatiblePSEditions.ToArray());
+        }
+        else
+        {
+            ManifestWriter.Generate(
+                path: psd1,
+                moduleName: opts.ModuleName,
+                moduleVersion: opts.ModuleVersion,
+                author: opts.Author,
+                companyName: opts.CompanyName,
+                description: opts.Description,
+                compatiblePSEditions: opts.CompatiblePSEditions.ToArray(),
+                rootModule: rootModule,
+                scriptsToProcess: Array.Empty<string>());
+        }
 
         if (opts.Tags.Count > 0) BuildServices.SetPsDataStringArray(psd1, "Tags", opts.Tags.ToArray());
         if (!string.IsNullOrWhiteSpace(opts.IconUri)) BuildServices.SetPsDataString(psd1, "IconUri", opts.IconUri!);
