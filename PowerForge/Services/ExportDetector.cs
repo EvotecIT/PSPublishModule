@@ -72,13 +72,15 @@ public static class ExportDetector
         try
         {
             var runtimeAssemblies = Directory.GetFiles(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "*.dll");
+            var dir = Path.GetDirectoryName(assemblyPath);
+            var localAssemblies = string.IsNullOrWhiteSpace(dir) ? Array.Empty<string>() : Directory.GetFiles(dir, "*.dll");
             using var ralc = new System.Reflection.MetadataLoadContext(
                 new System.Reflection.PathAssemblyResolver(
-                    runtimeAssemblies.Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
+                    runtimeAssemblies.Concat(localAssemblies).Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
             var asm = ralc.LoadFromAssemblyPath(assemblyPath);
             foreach (var t in asm.GetTypes())
             {
-                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
+                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))  
                 {
                     if (ca.AttributeType.FullName == "System.Management.Automation.CmdletAttribute")
                     {
@@ -99,6 +101,19 @@ public static class ExportDetector
             try
             {
                 var alc = new AssemblyLoadContext("ExportDetector", isCollectible: true);
+                var baseDir = Path.GetDirectoryName(assemblyPath);
+                if (!string.IsNullOrWhiteSpace(baseDir))
+                {
+                    alc.Resolving += (_, name) =>
+                    {
+                        try
+                        {
+                            var candidate = Path.Combine(baseDir!, name.Name + ".dll");
+                            return File.Exists(candidate) ? alc.LoadFromAssemblyPath(candidate) : null;
+                        }
+                        catch { return null; }
+                    };
+                }
                 var asm = alc.LoadFromAssemblyPath(assemblyPath);
                 foreach (var t in asm.GetTypes())
                 {
@@ -123,22 +138,43 @@ public static class ExportDetector
 #else
         try
         {
-            var asm = Assembly.ReflectionOnlyLoadFrom(assemblyPath);
-            foreach (var t in asm.GetTypes())
+            ResolveEventHandler? handler = null;
+            var baseDir = Path.GetDirectoryName(assemblyPath);
+            handler = (_, args) =>
             {
-                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
+                try
                 {
-                    if (ca.AttributeType.FullName == "System.Management.Automation.CmdletAttribute")
+                    if (string.IsNullOrWhiteSpace(baseDir)) return null;
+                    var an = new AssemblyName(args.Name);
+                    var candidate = Path.Combine(baseDir!, an.Name + ".dll");
+                    return File.Exists(candidate) ? Assembly.ReflectionOnlyLoadFrom(candidate) : null;
+                }
+                catch { return null; }
+            };
+            AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += handler;
+            try
+            {
+                var asm = Assembly.ReflectionOnlyLoadFrom(assemblyPath);
+                foreach (var t in asm.GetTypes())
+                {
+                    foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
                     {
-                        if (ca.ConstructorArguments.Count >= 2)
+                        if (ca.AttributeType.FullName == "System.Management.Automation.CmdletAttribute")
                         {
-                            var verb = ca.ConstructorArguments[0].Value?.ToString() ?? string.Empty;
-                            var noun = ca.ConstructorArguments[1].Value?.ToString() ?? string.Empty;
-                            if (!string.IsNullOrWhiteSpace(verb) && !string.IsNullOrWhiteSpace(noun))
-                                list.Add(verb + "-" + noun);
+                            if (ca.ConstructorArguments.Count >= 2)
+                            {
+                                var verb = ca.ConstructorArguments[0].Value?.ToString() ?? string.Empty;
+                                var noun = ca.ConstructorArguments[1].Value?.ToString() ?? string.Empty;
+                                if (!string.IsNullOrWhiteSpace(verb) && !string.IsNullOrWhiteSpace(noun))
+                                    list.Add(verb + "-" + noun);
+                            }
                         }
                     }
                 }
+            }
+            finally
+            {
+                AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve -= handler;
             }
         }
         catch { }
@@ -153,13 +189,15 @@ public static class ExportDetector
         try
         {
             var runtimeAssemblies = Directory.GetFiles(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "*.dll");
+            var dir = Path.GetDirectoryName(assemblyPath);
+            var localAssemblies = string.IsNullOrWhiteSpace(dir) ? Array.Empty<string>() : Directory.GetFiles(dir, "*.dll");
             using var ralc = new System.Reflection.MetadataLoadContext(
                 new System.Reflection.PathAssemblyResolver(
-                    runtimeAssemblies.Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
+                    runtimeAssemblies.Concat(localAssemblies).Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
             var asm = ralc.LoadFromAssemblyPath(assemblyPath);
             foreach (var t in asm.GetTypes())
             {
-                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
+                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))  
                 {
                     if (ca.AttributeType.FullName == "System.Management.Automation.AliasAttribute")
                     {
@@ -186,6 +224,19 @@ public static class ExportDetector
             try
             {
                 var alc = new AssemblyLoadContext("ExportDetector", isCollectible: true);
+                var baseDir = Path.GetDirectoryName(assemblyPath);
+                if (!string.IsNullOrWhiteSpace(baseDir))
+                {
+                    alc.Resolving += (_, name) =>
+                    {
+                        try
+                        {
+                            var candidate = Path.Combine(baseDir!, name.Name + ".dll");
+                            return File.Exists(candidate) ? alc.LoadFromAssemblyPath(candidate) : null;
+                        }
+                        catch { return null; }
+                    };
+                }
                 var asm = alc.LoadFromAssemblyPath(assemblyPath);
                 foreach (var t in asm.GetTypes())
                 {
@@ -217,29 +268,50 @@ public static class ExportDetector
 #else
         try
         {
-            var asm = Assembly.ReflectionOnlyLoadFrom(assemblyPath);
-            foreach (var t in asm.GetTypes())
+            ResolveEventHandler? handler = null;
+            var baseDir = Path.GetDirectoryName(assemblyPath);
+            handler = (_, args) =>
             {
-                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
+                try
                 {
-                    if (ca.AttributeType.FullName == "System.Management.Automation.AliasAttribute")
+                    if (string.IsNullOrWhiteSpace(baseDir)) return null;
+                    var an = new AssemblyName(args.Name);
+                    var candidate = Path.Combine(baseDir!, an.Name + ".dll");
+                    return File.Exists(candidate) ? Assembly.ReflectionOnlyLoadFrom(candidate) : null;
+                }
+                catch { return null; }
+            };
+            AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += handler;
+            try
+            {
+                var asm = Assembly.ReflectionOnlyLoadFrom(assemblyPath);
+                foreach (var t in asm.GetTypes())
+                {
+                    foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
                     {
-                        foreach (var arg in ca.ConstructorArguments)
+                        if (ca.AttributeType.FullName == "System.Management.Automation.AliasAttribute")
                         {
-                            if (arg.Value is IEnumerable<CustomAttributeTypedArgument> arr)
+                            foreach (var arg in ca.ConstructorArguments)
                             {
-                                foreach (var v in arr)
+                                if (arg.Value is IEnumerable<CustomAttributeTypedArgument> arr)
                                 {
-                                    var s = v.Value?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
+                                    foreach (var v in arr)
+                                    {
+                                        var s = v.Value?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
+                                    }
                                 }
-                            }
-                            else if (arg.Value is string sa && !string.IsNullOrWhiteSpace(sa))
-                            {
-                                list.Add(sa);
+                                else if (arg.Value is string sa && !string.IsNullOrWhiteSpace(sa))
+                                {
+                                    list.Add(sa);
+                                }
                             }
                         }
                     }
                 }
+            }
+            finally
+            {
+                AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve -= handler;
             }
         }
         catch { }

@@ -170,7 +170,13 @@ public static class BuildServices
             if (obj is System.Collections.IDictionary d)
             {
                 var dict = new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
-                foreach (var k in d.Keys) { var ks = k?.ToString() ?? string.Empty; dict[ks] = d[k]?.ToString() ?? string.Empty; }
+                foreach (var k in d.Keys)
+                {
+                    var ks = k?.ToString() ?? string.Empty;
+                    object? value = null;
+                    try { if (k != null) value = d[k]; } catch { }
+                    dict[ks] = value?.ToString() ?? string.Empty;
+                }
                 list.Add(dict);
             }
         }

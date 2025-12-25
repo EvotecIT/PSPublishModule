@@ -11,29 +11,56 @@ namespace PowerForge;
 public sealed class ModuleBuilder
 {
     private readonly ILogger _logger;
+
+    /// <summary>
+    /// Creates a new module builder that logs progress via <paramref name="logger"/>.
+    /// </summary>
     public ModuleBuilder(ILogger logger) => _logger = logger;
 
+    /// <summary>
+    /// Options controlling module build behavior.
+    /// </summary>
     public sealed class Options
     {
-        public string ProjectRoot { get; init; } = string.Empty;            // e.g., Module folder
-        public string ModuleName  { get; init; } = string.Empty;            // e.g., PSPublishModule
-        public string CsprojPath  { get; init; } = string.Empty;            // path to csproj to publish
-        public string Configuration { get; init; } = "Release";
-        public IReadOnlyList<string> Frameworks { get; init; } = Array.Empty<string>(); // e.g., net472, net8.0
-        public string ModuleVersion { get; init; } = "1.0.0";
-        public InstallationStrategy Strategy { get; init; } = InstallationStrategy.AutoRevision;
-        public int KeepVersions { get; init; } = 3;
-        public IReadOnlyList<string> InstallRoots { get; init; } = Array.Empty<string>();
-        public string? Author { get; init; }
-        public string? CompanyName { get; init; }
-        public string? Description { get; init; }
-        public IReadOnlyList<string> CompatiblePSEditions { get; init; } = new[] { "Desktop", "Core" };
-        public IReadOnlyList<string> Tags { get; init; } = Array.Empty<string>();
-        public string? IconUri { get; init; }
-        public string? ProjectUri { get; init; }
+        /// <summary>Path to the staged module root folder (contains PSD1/PSM1).</summary>
+        public string ProjectRoot { get; set; } = string.Empty;
+        /// <summary>Name of the module being built (used for PSD1 naming and exports).</summary>
+        public string ModuleName { get; set; } = string.Empty;
+        /// <summary>Path to the .NET project that should be published into the module Lib folder.</summary>
+        public string CsprojPath { get; set; } = string.Empty;
+        /// <summary>Build configuration used for publishing (e.g., Release).</summary>
+        public string Configuration { get; set; } = "Release";
+        /// <summary>Target frameworks to publish (e.g., net472, net8.0).</summary>
+        public IReadOnlyList<string> Frameworks { get; set; } = Array.Empty<string>();
+        /// <summary>Base module version to write to the manifest before install resolution.</summary>
+        public string ModuleVersion { get; set; } = "1.0.0";
+        /// <summary>Installation strategy controlling versioned install behavior.</summary>
+        public InstallationStrategy Strategy { get; set; } = InstallationStrategy.AutoRevision;
+        /// <summary>Number of installed versions to keep after install.</summary>
+        public int KeepVersions { get; set; } = 3;
+        /// <summary>Destination module roots to install to. When empty, defaults are used.</summary>
+        public IReadOnlyList<string> InstallRoots { get; set; } = Array.Empty<string>();
+        /// <summary>Author value written to the manifest.</summary>
+        public string? Author { get; set; }
+        /// <summary>CompanyName value written to the manifest.</summary>
+        public string? CompanyName { get; set; }
+        /// <summary>Description value written to the manifest.</summary>
+        public string? Description { get; set; }
+        /// <summary>CompatiblePSEditions written to the manifest.</summary>
+        public IReadOnlyList<string> CompatiblePSEditions { get; set; } = new[] { "Desktop", "Core" };
+        /// <summary>Tags written to the manifest PrivateData.PSData.</summary>
+        public IReadOnlyList<string> Tags { get; set; } = Array.Empty<string>();
+        /// <summary>IconUri written to the manifest PrivateData.PSData.</summary>
+        public string? IconUri { get; set; }
+        /// <summary>ProjectUri written to the manifest PrivateData.PSData.</summary>
+        public string? ProjectUri { get; set; }
     }
 
-    public ModuleInstallerResult Build(Options opts)
+    /// <summary>
+    /// Builds the module layout in-place under <see cref="Options.ProjectRoot"/> without installing it.
+    /// </summary>
+    /// <param name="opts">Build options.</param>
+    public void BuildInPlace(Options opts)
     {
         if (string.IsNullOrWhiteSpace(opts.ProjectRoot) || !Directory.Exists(opts.ProjectRoot))
             throw new DirectoryNotFoundException($"Project root not found: {opts.ProjectRoot}");
@@ -75,19 +102,26 @@ public sealed class ModuleBuilder
             rootModule: rootModule,
             scriptsToProcess: Array.Empty<string>());
 
-        // Ensure NestedModules includes the binary
-        ManifestEditor.TrySetTopLevelStringArray(psd1, "NestedModules", new[] { $"{opts.ModuleName}.dll" });
-
         if (opts.Tags.Count > 0) BuildServices.SetPsDataStringArray(psd1, "Tags", opts.Tags.ToArray());
         if (!string.IsNullOrWhiteSpace(opts.IconUri)) BuildServices.SetPsDataString(psd1, "IconUri", opts.IconUri!);
         if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) BuildServices.SetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
 
-        // 3) Exports: only binary cmdlets and aliases; functions from scripts are none for binary module
-        var dlls = Directory.EnumerateFiles(opts.ProjectRoot, "*.dll", SearchOption.AllDirectories).ToArray();
-        var exports = BuildServices.ComputeExports(publicFolderPath: Path.Combine(opts.ProjectRoot, "Public"), assemblies: dlls);
-        BuildServices.SetManifestExports(psd1, functions: Array.Empty<string>(), cmdlets: exports.Cmdlets, aliases: exports.Aliases);
+        // 3) Exports
+        var moduleDlls = Directory.EnumerateFiles(opts.ProjectRoot, $"{opts.ModuleName}.dll", SearchOption.AllDirectories).ToArray();
+        if (moduleDlls.Length == 0)
+            _logger.Warn($"No '{opts.ModuleName}.dll' found under staging; binary cmdlet export detection will be skipped.");
+        var exports = BuildServices.ComputeExports(publicFolderPath: Path.Combine(opts.ProjectRoot, "Public"), assemblies: moduleDlls);
+        BuildServices.SetManifestExports(psd1, functions: exports.Functions, cmdlets: exports.Cmdlets, aliases: exports.Aliases);
+    }
 
-        // 4) Install versioned
+    /// <summary>
+    /// Builds the module into <see cref="Options.ProjectRoot"/> and installs it using versioned install.
+    /// </summary>
+    /// <param name="opts">Build options.</param>
+    /// <returns>Installation result including resolved version and installed paths.</returns>
+    public ModuleInstallerResult Build(Options opts)
+    {
+        BuildInPlace(opts);
         return BuildServices.InstallVersioned(
             stagingPath: opts.ProjectRoot,
             moduleName: opts.ModuleName,
@@ -106,10 +140,25 @@ public sealed class ModuleBuilder
         Directory.CreateDirectory(destDir);
         foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
-            var rel  = Path.GetRelativePath(sourceDir, file);
+            var rel  = ComputeRelativePath(sourceDir, file);
             var dest = Path.Combine(destDir, rel);
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            if (filePredicate(file)) File.Copy(file, dest, overwrite: true);
+            if (filePredicate(file)) File.Copy(file, dest, overwrite: true);    
         }
     }
+
+    private static string ComputeRelativePath(string baseDir, string fullPath)
+    {
+        try
+        {
+            var baseUri = new Uri(AppendDirectorySeparatorChar(Path.GetFullPath(baseDir)));
+            var pathUri = new Uri(Path.GetFullPath(fullPath));
+            var rel = Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString());
+            return rel.Replace('/', Path.DirectorySeparatorChar);
+        }
+        catch { return Path.GetFileName(fullPath) ?? fullPath; }
+    }
+
+    private static string AppendDirectorySeparatorChar(string path)
+        => path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? path : path + Path.DirectorySeparatorChar;
 }
