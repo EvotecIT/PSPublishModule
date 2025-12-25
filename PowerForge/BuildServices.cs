@@ -202,6 +202,69 @@ public static class BuildServices
                 list.Add(new ManifestEditor.RequiredModule(s));
             }
         }
-        return ManifestEditor.TrySetRequiredModules(psd1Path, list.ToArray());
+        return ManifestEditor.TrySetRequiredModules(psd1Path, list.ToArray());  
+    }
+
+    /// <summary>
+    /// Finds PowerShell resources using PSResourceGet (out-of-process).
+    /// </summary>
+    /// <param name="names">Resource names to search for.</param>
+    /// <param name="version">Version constraint string (PSResourceGet -Version value).</param>
+    /// <param name="prerelease">Whether to include prerelease versions.</param>
+    /// <param name="repositories">Optional repository names to restrict search.</param>
+    /// <param name="timeoutSeconds">Execution timeout in seconds.</param>
+    public static IList<PSResourceInfo> FindPSResources(
+        IEnumerable<string> names,
+        string? version = null,
+        bool prerelease = false,
+        IEnumerable<string>? repositories = null,
+        int timeoutSeconds = 120)
+    {
+        var logger = new ConsoleLogger { IsVerbose = false };
+        var runner = new PowerShellRunner();
+        var client = new PSResourceGetClient(runner, logger);
+        var opts = new PSResourceFindOptions(
+            names: (names ?? Array.Empty<string>()).Where(n => !string.IsNullOrWhiteSpace(n)).ToArray(),
+            version: version,
+            prerelease: prerelease,
+            repositories: (repositories ?? Array.Empty<string>()).Where(r => !string.IsNullOrWhiteSpace(r)).ToArray());
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds));
+        return client.Find(opts, timeout).ToList();
+    }
+
+    /// <summary>
+    /// Publishes a PowerShell module/script using PSResourceGet (out-of-process).
+    /// </summary>
+    /// <param name="path">Module folder path (<c>-Path</c>) or .nupkg path (<c>-NupkgPath</c>).</param>
+    /// <param name="repository">Repository name to publish to.</param>
+    /// <param name="apiKey">API key used for authentication (if required).</param>
+    /// <param name="isNupkg">When true, publishes the given <paramref name="path"/> as a .nupkg.</param>
+    /// <param name="destinationPath">Optional destination path passed to PSResourceGet.</param>
+    /// <param name="skipDependenciesCheck">Skip dependency check.</param>
+    /// <param name="skipModuleManifestValidate">Skip module manifest validation.</param>
+    /// <param name="timeoutSeconds">Execution timeout in seconds.</param>
+    public static void PublishPSResource(
+        string path,
+        string? repository = null,
+        string? apiKey = null,
+        bool isNupkg = false,
+        string? destinationPath = null,
+        bool skipDependenciesCheck = false,
+        bool skipModuleManifestValidate = false,
+        int timeoutSeconds = 600)
+    {
+        var logger = new ConsoleLogger { IsVerbose = false };
+        var runner = new PowerShellRunner();
+        var client = new PSResourceGetClient(runner, logger);
+        var opts = new PSResourcePublishOptions(
+            path: path,
+            isNupkg: isNupkg,
+            repository: repository,
+            apiKey: apiKey,
+            destinationPath: destinationPath,
+            skipDependenciesCheck: skipDependenciesCheck,
+            skipModuleManifestValidate: skipModuleManifestValidate);
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds));
+        client.Publish(opts, timeout);
     }
 }

@@ -76,9 +76,14 @@ public sealed class PowerShellRunner : IPowerShellRunner
         void AddArg(string s)
         {
             if (sb.Length > 0) sb.Append(' ');
+            if (string.IsNullOrEmpty(s))
+            {
+                sb.Append("\"\"");
+                return;
+            }
             if (s.IndexOf(' ') >= 0 || s.IndexOf('"') >= 0)
             {
-                sb.Append('"').Append(s.Replace("\"", "\\\"")).Append('"');
+                sb.Append('"').Append(s.Replace("\"", "\\\"")).Append('"');     
             }
             else sb.Append(s);
         }

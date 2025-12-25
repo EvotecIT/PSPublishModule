@@ -45,7 +45,7 @@ public sealed class PssaFormatter : IFormatter
             settingsB64 = Convert.ToBase64String(bytes);
         }
 
-        var args = new List<string>(list.Length + 2) { settingsB64, "--" };
+        var args = new List<string>(list.Length + 1) { settingsB64 };
         args.AddRange(list);
         var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
 
