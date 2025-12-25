@@ -12,6 +12,55 @@ if (args.Length == 0 || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
 var cmd = args[0].ToLowerInvariant();
 switch (cmd)
 {
+    case "build":
+    {
+        var parsed = ParseBuildArgs(args.Skip(1).ToArray());
+        if (parsed is null) { PrintHelp(); return 2; }
+        var p = parsed.Value;
+
+        var source = Path.GetFullPath(p.Source.Trim().Trim('"'));
+        var staging = string.IsNullOrWhiteSpace(p.Staging)
+            ? Path.Combine(Path.GetTempPath(), "PowerForge", "build", $"{p.Name}_{Guid.NewGuid():N}")
+            : Path.GetFullPath(p.Staging.Trim().Trim('"'));
+
+        if (!Directory.Exists(source))
+        {
+            logger.Error($"Source directory not found: {source}");
+            return 2;
+        }
+
+        if (Directory.Exists(staging) && Directory.EnumerateFileSystemEntries(staging).Any())
+        {
+            logger.Error($"Staging directory already exists and is not empty: {staging}");
+            return 2;
+        }
+
+        Directory.CreateDirectory(staging);
+        CopyDirectoryFiltered(source, staging, new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "Artefacts"
+        });
+
+        var builder = new PowerForge.ModuleBuilder(logger);
+        builder.BuildInPlace(new PowerForge.ModuleBuilder.Options
+        {
+            ProjectRoot = staging,
+            ModuleName = p.Name,
+            CsprojPath = Path.GetFullPath(p.Csproj.Trim().Trim('"')),
+            ModuleVersion = p.Version,
+            Configuration = p.Configuration,
+            Frameworks = p.Frameworks,
+            Author = p.Author,
+            CompanyName = p.CompanyName,
+            Description = p.Description,
+            Tags = p.Tags,
+            IconUri = p.IconUri,
+            ProjectUri = p.ProjectUri,
+        });
+
+        logger.Success($"Built staging for {p.Name} {p.Version} at {staging}");
+        return 0;
+    }
     case "normalize":
     {
         var targets = args.Skip(1).Where(a => !a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -41,11 +90,13 @@ switch (cmd)
         var parsed = ParseInstallArgs(args.Skip(1).ToArray());
         if (parsed is null) { PrintHelp(); return 2; }
         var p = parsed.Value;
+        var resolved = PowerForge.ModuleInstaller.ResolveTargetVersion(p.Roots, p.Name, p.Version, p.Strategy);
+        try { ManifestEditor.TrySetTopLevelModuleVersion(Path.Combine(p.Staging, $"{p.Name}.psd1"), resolved); } catch { }
         var installer = new PowerForge.ModuleInstaller(logger);
-        var options = new PowerForge.ModuleInstallerOptions(p.Roots, p.Strategy, p.Keep);
-        var res = installer.InstallFromStaging(p.Staging, p.Name, p.Version, options);
-        logger.Success($"Installed {p.Name} {res.Version}");
-        foreach (var path in res.InstalledPaths) logger.Info($" → {path}");
+        var options = new PowerForge.ModuleInstallerOptions(p.Roots, PowerForge.InstallationStrategy.Exact, p.Keep);
+        var res = installer.InstallFromStaging(p.Staging, p.Name, resolved, options);
+        logger.Success($"Installed {p.Name} {resolved}");
+        foreach (var path in res.InstalledPaths) logger.Info($" → {path}");     
         if (res.PrunedPaths.Count > 0) logger.Warn($"Pruned versions: {res.PrunedPaths.Count}");
         return 0;
     }
@@ -58,11 +109,95 @@ static void PrintHelp()
 {
     Console.WriteLine(@"PowerForge CLI
 Usage:
-  powerforge normalize <files...>   Normalize encodings and line endings
+  powerforge build --name <ModuleName> --project-root <path> --csproj <path> --version <X.Y.Z> [--staging <path>] [--configuration Release] [--framework <tfm>]* [--author <name>] [--company <name>] [--description <text>] [--tag <tag>]*
+  powerforge normalize <files...>   Normalize encodings and line endings        
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc)
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
   powerforge -Verbose               Enable verbose diagnostics
 ");
+}
+
+static (string Name, string Source, string? Staging, string Csproj, string Version, string Configuration, string[] Frameworks, string? Author, string? CompanyName, string? Description, string[] Tags, string? IconUri, string? ProjectUri)? ParseBuildArgs(string[] argv)
+{
+    string? name = null, source = null, staging = null, csproj = null, version = null;
+    string configuration = "Release";
+    var frameworks = new List<string>();
+    string? author = null, companyName = null, description = null, iconUri = null, projectUri = null;
+    var tags = new List<string>();
+
+    for (int i = 0; i < argv.Length; i++)
+    {
+        var a = argv[i];
+        if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        switch (a.ToLowerInvariant())
+        {
+            case "--name": name = ++i < argv.Length ? argv[i] : null; break;
+            case "--project-root":
+            case "--source": source = ++i < argv.Length ? argv[i] : null; break;
+            case "--staging": staging = ++i < argv.Length ? argv[i] : null; break;
+            case "--csproj": csproj = ++i < argv.Length ? argv[i] : null; break;
+            case "--version": version = ++i < argv.Length ? argv[i] : null; break;
+            case "--configuration": configuration = ++i < argv.Length ? argv[i] : configuration; break;
+            case "--framework":
+                if (++i < argv.Length)
+                {
+                    foreach (var f in argv[i].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                        frameworks.Add(f.Trim());
+                }
+                break;
+            case "--author": author = ++i < argv.Length ? argv[i] : null; break;
+            case "--company": companyName = ++i < argv.Length ? argv[i] : null; break;
+            case "--description": description = ++i < argv.Length ? argv[i] : null; break;
+            case "--tag": if (++i < argv.Length) tags.Add(argv[i]); break;
+            case "--tags":
+                if (++i < argv.Length)
+                {
+                    foreach (var t in argv[i].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                        tags.Add(t.Trim());
+                }
+                break;
+            case "--icon-uri": iconUri = ++i < argv.Length ? argv[i] : null; break;
+            case "--project-uri": projectUri = ++i < argv.Length ? argv[i] : null; break;
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(csproj) || string.IsNullOrWhiteSpace(version))
+        return null;
+
+    var tfms = frameworks.Count > 0 ? frameworks.ToArray() : new[] { "net472", "net8.0" };
+    return (name!, source!, staging, csproj!, version!, configuration, tfms, author, companyName, description, tags.ToArray(), iconUri, projectUri);
+}
+
+static void CopyDirectoryFiltered(string sourceDir, string destDir, ISet<string> excludedDirectoryNames)
+{
+    var sourceFull = Path.GetFullPath(sourceDir);
+    var destFull = Path.GetFullPath(destDir);
+
+    var stack = new Stack<string>();
+    stack.Push(sourceFull);
+
+    while (stack.Count > 0)
+    {
+        var current = stack.Pop();
+        var rel = Path.GetRelativePath(sourceFull, current);
+        var targetDir = string.IsNullOrEmpty(rel) || rel == "." ? destFull : Path.Combine(destFull, rel);
+        Directory.CreateDirectory(targetDir);
+
+        foreach (var file in Directory.EnumerateFiles(current, "*", SearchOption.TopDirectoryOnly))
+        {
+            var destFile = Path.Combine(targetDir, Path.GetFileName(file));
+            File.Copy(file, destFile, overwrite: true);
+        }
+
+        foreach (var dir in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(dir);
+            if (!string.IsNullOrEmpty(name) && excludedDirectoryNames.Contains(name)) continue;
+            stack.Push(dir);
+        }
+    }
 }
 
 static (string Name, string Version, string Staging, string[] Roots, PowerForge.InstallationStrategy Strategy, int Keep)? ParseInstallArgs(string[] argv)
