@@ -1,7 +1,8 @@
 ﻿Describe "Get-ModuleTestFailures Tests" {
     BeforeAll {
-        # Import the module
-        Import-Module PSPublishModule -Force
+        # Import the local module from the repository (avoid using an installed copy).
+        $ModulePath = [IO.Path]::Combine($PSScriptRoot, '..', 'PSPublishModule.psd1')
+        Import-Module $ModulePath -Force
     }
 
     Context "Parameter Validation" {
