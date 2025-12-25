@@ -46,15 +46,21 @@
         if ($Module) {
             if (-not $LocalPSD1) {
                 try {
-                    $ModuleGallery = Find-Module -Name $Module -ErrorAction Stop -Verbose:$false -WarningAction SilentlyContinue
-                    $CurrentVersion = [version] $ModuleGallery.Version
+                    # Prefer PSResourceGet out-of-process (no PowerShellGet cmdlets exposed).
+                    $Found = [PowerForge.BuildServices]::FindPSResources(([string[]]@($Module)), $null, $false, ([string[]]@('PSGallery')), 120)
+                    $Hit = $Found | Where-Object { $_.Name -eq $Module } | Select-Object -First 1
+                    if ($Hit -and $Hit.Version) {
+                        $CurrentVersion = [version] $Hit.Version
+                    } else {
+                        $CurrentVersion = $null
+                    }
                 } catch {
                     #throw "Couldn't find module $Module to asses version information. Terminating."
-                    $CurrentVersion = [version] $null
+                    $CurrentVersion = $null
                 }
             } else {
                 if (Test-Path -LiteralPath $LocalPSD1) {
-                    $PSD1Data = Import-PowerShellDataFile -Path $LocalPSD1
+                    $PSD1Data = Import-PowerShellDataFile -Path $LocalPSD1      
                     if ($PSD1Data.ModuleVersion) {
                         try {
                             $CurrentVersion = [version] $PSD1Data.ModuleVersion

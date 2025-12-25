@@ -414,7 +414,7 @@
 
     # Publish Module Section (old configuration)
     if ($Configuration.Steps.PublishModule.Enabled) {
-        $Publishing = Start-PublishingGallery -Configuration $Configuration
+        $Publishing = Start-PublishingGallery -Configuration $Configuration -ModulePath $FullModuleTemporaryPath
         if ($Publishing -eq $false) {
             return $false
         }
@@ -429,7 +429,7 @@
 
     # new configuration allowing multiple galleries
     foreach ($ChosenNuget in $Configuration.Steps.BuildModule.GalleryNugets) {
-        $Success = Start-PublishingGallery -Configuration $Configuration -ChosenNuget $ChosenNuget
+        $Success = Start-PublishingGallery -Configuration $Configuration -ChosenNuget $ChosenNuget -ModulePath $FullModuleTemporaryPath
         if ($Success -eq $false) {
             return $false
         }
