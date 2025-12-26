@@ -21,13 +21,22 @@ public sealed class ModulePipelineResult
     public ModuleInstallerResult? InstallResult { get; }
 
     /// <summary>
+    /// Artefact results produced during the run.
+    /// </summary>
+    public ArtefactBuildResult[] ArtefactResults { get; }
+
+    /// <summary>
     /// Creates a new result instance.
     /// </summary>
-    public ModulePipelineResult(ModulePipelinePlan plan, ModuleBuildResult buildResult, ModuleInstallerResult? installResult)
+    public ModulePipelineResult(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        ModuleInstallerResult? installResult,
+        ArtefactBuildResult[] artefactResults)
     {
         Plan = plan;
         BuildResult = buildResult;
         InstallResult = installResult;
+        ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
     }
 }
-

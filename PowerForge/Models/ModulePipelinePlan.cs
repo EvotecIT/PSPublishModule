@@ -46,6 +46,21 @@ public sealed class ModulePipelinePlan
     public ManifestEditor.RequiredModule[] RequiredModules { get; }
 
     /// <summary>
+    /// Required modules that should be packaged into artefacts when enabled (excludes ExternalModule dependencies).
+    /// </summary>
+    public ManifestEditor.RequiredModule[] RequiredModulesForPackaging { get; }
+
+    /// <summary>
+    /// Optional information configuration (include/exclude patterns) used for artefact packaging.
+    /// </summary>
+    public InformationConfiguration? Information { get; }
+
+    /// <summary>
+    /// Artefact configuration segments enabled for this pipeline run.
+    /// </summary>
+    public ConfigurationArtefactSegment[] Artefacts { get; }
+
+    /// <summary>
     /// When true, installs the module after building.
     /// </summary>
     public bool InstallEnabled { get; }
@@ -87,6 +102,9 @@ public sealed class ModulePipelinePlan
         ModuleBuildSpec buildSpec,
         string[] compatiblePSEditions,
         ManifestEditor.RequiredModule[] requiredModules,
+        ManifestEditor.RequiredModule[] requiredModulesForPackaging,
+        InformationConfiguration? information,
+        ConfigurationArtefactSegment[] artefacts,
         bool installEnabled,
         InstallationStrategy installStrategy,
         int installKeepVersions,
@@ -102,6 +120,9 @@ public sealed class ModulePipelinePlan
         BuildSpec = buildSpec;
         CompatiblePSEditions = compatiblePSEditions;
         RequiredModules = requiredModules;
+        RequiredModulesForPackaging = requiredModulesForPackaging;
+        Information = information;
+        Artefacts = artefacts;
         InstallEnabled = installEnabled;
         InstallStrategy = installStrategy;
         InstallKeepVersions = installKeepVersions;
@@ -110,4 +131,3 @@ public sealed class ModulePipelinePlan
         DeleteGeneratedStagingAfterRun = deleteGeneratedStagingAfterRun;
     }
 }
-
