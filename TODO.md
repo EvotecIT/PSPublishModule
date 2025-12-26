@@ -1,40 +1,66 @@
 **PSPublishModule C# Migration and GitHub Actions Adoption**
 
 **Goals**
-- Move PSPublishModule behavior into a single C# library and thin PS wrappers.
+- Move PSPublishModule behavior into a reusable C# library and thin PowerShell wrappers.
 - Make functionality reusable by GitHub Actions and other repos without scripts.
 - Replace PlatyPS/HelpOut with a C# help/doc generator.
-- Fix reliability: versioned installs, safe formatting, deterministic encodings.
+- Fix reliability: versioned installs, safe formatting, deterministic encodings, no “in use” self-build pain.
 - Keep today’s UX (messages, defaults) while improving robustness/performance.
+- Enable future tooling (VSCode extension) via stable machine-readable outputs and JSON configuration.
+
+**Guardrails (non-negotiable)**
+- All non-trivial logic lives in `PowerForge` (C#) and is reusable from cmdlets + CLI + future VSCode extension.
+- `PSPublishModule` cmdlets are thin wrappers: parameter binding + `ShouldProcess` + call a service + emit typed result.
+- Keep code typed: POCOs/records + enums + typed results; avoid `Hashtable`/`OrderedDictionary`/`IDictionary` in new public surfaces (allowed only in legacy adapters).
+- Cmdlet size budget: keep each cmdlet file ~600–700 LOC max; if it grows, move logic to services and/or split into `partial` (parameters vs execution).
+- Do not expose low-level PSResourceGet cmdlets; use PSResourceGet internally from configuration/publish workflows (like we do with PowerShellGet).
+- Must remain `net472` compatible (Windows PowerShell 5.1), plus `net8.0`, and plan for `net10.0` (when available).
+- CLI must be machine-friendly (stable JSON output + exit codes + no-color mode) and AOT/trim-friendly for VSCode scenarios.
+
+**Current status (as of 2025-12-26)**
+- Most `Module/Public/*.ps1` functions are now C# cmdlets; legacy scripts removed as they were replaced.
+- `Module/Build/Build-Module.ps1` defaults to PowerForge CLI staging build to avoid self-build file locking.
+- PowerShell compatibility analysis no longer depends on PS helper functions (moved to C# analyzer).
+- PSResourceGet is already used internally (out-of-proc wrapper) and not exposed as standalone cmdlets.
 
 **Architecture**
 - One namespace per assembly; small set of assemblies:
-  - Core library: `PowerForge` (net472 + net8.0) — reusable engine
+  - Core library: `PowerForge` (net472 + net8.0 + net10.0) — reusable engine (keep AOT/trim friendly paths)
     - Namespace: `PowerForge`
-    - Provides all building blocks (IO, versioning, formatting, docs, packaging, gallery clients)
-  - PowerShell module: `PSPublishModule` (net472 + net8.0) — thin cmdlets
+    - Provides building blocks (IO, versioning, formatting, docs, packaging, repo clients)
+  - PowerShell module: `PSPublishModule` (net472 + net8.0 + net10.0) — thin cmdlets (PowerShell UX surface)
     - Namespace: `PSPublishModule`
     - Wraps `PowerForge` services; no logic duplication
-  - CLI tool: `PowerForge.Cli` (net8.0) — dotnet global tool `powerforge`
+  - CLI tool: `PowerForge.Cli` (net8.0 + net10.0) — dotnet tool `powerforge` (AOT candidate)
     - Namespace: `PowerForge.Cli`
-    - Calls `PowerForge` services for CI/GitHub Actions
+    - Calls `PowerForge` services for CI/GitHub Actions/VSCode
 - Folders (in PowerForge): `Abstractions/`, `Services/`, `Models/`, `Diagnostics/`, `Repositories/`
 - No nested namespaces beyond the root per assembly.
 
 **Phase 0 — Prereqs**
 - Add coding guidelines to `CONTRIBUTING.md` (nullability enabled, docs required, perf notes).
-- Enable nullable in csproj; clean remaining warnings.
+- Reduce nullable warnings (keep builds clean; warnings-as-errors where feasible).
 - Baseline perf + memory measurements for key paths (build, format, docs).
+- Define “machine output” contract for CLI (`--output json`, `--no-color`, stable exit codes).
+
+**Phase 0b — Make cmdlets truly thin (close the current gap)**
+- Identify “fat cmdlets” and extract orchestration into `PowerForge` services:
+  - `ModuleBuildService` / `ModuleBuildPipeline`
+  - `ModuleTestService`
+  - `ReleasePublisher` (GitHub assets) + `PackagePublisher` (NuGet/PSGallery/feeds)
+  - `ProjectCleanupService`
+- Keep cmdlets as: parameter mapping → call service → output typed result.
+- Use `partial` cmdlet classes to split parameters vs execution (file size guardrail).
 
 **Phase 1 — Core Services (no behavior change)**
 - Interfaces: `IModuleVersionResolver`, `IModuleInstaller`, `IFormatter`, `ILineEndingsNormalizer`, `IFileSystem`, `IPowerShellRunner`, `ILogger`.
 - Line endings + encoding:
-  - Normalize `.ps1/.psm1/.psd1` to CRLF, UTF‑8 (BOM optional) deterministically.
+  - Normalize `.ps1/.psm1/.psd1` deterministically (CRLF + UTF-8 BOM by default for PS 5.1 safety).
   - Detect mixed endings and fix; never fail build solely on formatting.
-- Out‑of‑proc PSScriptAnalyzer:
+- Out-of-proc PSScriptAnalyzer:
   - Spawn `pwsh`/`powershell.exe` `-NoProfile -NonInteractive` and run `Invoke-Formatter`.
   - Timeout + graceful fallback (skip formatting but keep normalization).
-- Logging adapter mapping to `[i]/[+]/[-]/[e]` style.
+- Logging adapter mapping to `[i]/[+]/[-]/[e]` style (no emojis).
 
 **Phase 1a — PowerForge Core Packaging + Repo Abstractions**
 - Abstractions:
@@ -44,75 +70,78 @@
   - `NuGetV3Publisher` (NuGet.Protocol; supports PSGallery via API key)
   - `AzureArtifactsPublisher` (v3; PAT auth)
   - `FileSharePublisher` (copy artifacts)
-  - Optional `PSResourceGetPublisher` wrapper (out-of-proc) for environments preferring PowerShell repos
+  - `PSResourceGetPublisher` wrapper (out-of-proc) only when explicitly requested by config
 - Credentials:
   - Read from env vars/PS credentials/TokenStore; no secrets in logs
 - Private galleries supported via explicit repository URL + creds.
 
 **Phase 2 — Versioned Install (fix locking)**
-- Strategy `Exact` (release): install to `<Modules>\Name\<ModuleVersion>\`.
+- Strategy `Exact` (release): install to `<Modules>\\Name\\<ModuleVersion>\\`.
 - Strategy `AutoRevision` (dev): if version exists, install as `<ModuleVersion>.<rev>` without touching source manifest.
 - Stage to temp, then atomic move; prune old versions (keep N=3 by default).
 - PowerShell wrappers call C# installer; messages preserved.
 
 **Phase 3 — Docs Engine (replace PlatyPS/HelpOut)**
 - `DocumentationEngine` service:
-  - Source: manifest + script files (AST via PowerShell SDK) + XML doc from binary cmdlets.
+  - Source: manifest + script files + XML doc from binary cmdlets.
   - Emit: MAML XML for external help, `about_*.help.txt`, and Markdown (README/CHANGELOG synthesis if desired).
-  - Examples: support `<example>` in XML docs, and comment-based help; honor ProseFirst/CodeFirst/CodeOnly modes.
-- Drop PlatyPS/HelpOut once parity validated on PSPublishModule itself.
+  - Examples: support `<example>` in XML docs and comment-based help; honor ProseFirst/CodeFirst/CodeOnly modes.
+- Drop PlatyPS/HelpOut once parity is validated on PSPublishModule itself.
 
-- **Phase 4 — CLI + GitHub Actions**
-- `PowerForge.Cli` dotnet tool `powerforge` commands:
-  - `powerforge build`: compile, copy binaries, normalize/format, stage output.
-  - `powerforge install`: versioned install to user Modules path.
-  - `powerforge docs`: run docs engine (MAML, about_*, Markdown).
-  - `powerforge pack`: create NuGet-like artifact or zip for release.
-  - `powerforge publish`: publish to PSGallery/private (NuGet APIs) or via PSResourceGet.
-  - Optional alias package: `PSPublishModule.Cli` with command `pspub` calling into the same library (for backward compat).
+**Phase 4 — CLI + GitHub Actions + VSCode**
+- `PowerForge.Cli` tool commands:
+  - `powerforge build`: stage build (no in-place writes), compile/publish, normalize/format, produce artifacts.
+  - `powerforge install`: versioned install from staging.
+  - `powerforge docs`: generate external help and docs.
+  - `powerforge pack`: create zip/nupkg artifacts for release.
+  - `powerforge publish`: publish to PSGallery/private feeds (NuGet APIs) or via PSResourceGet wrapper.
+  - `--config <json>`: run build/publish/test from a typed JSON config (extension-friendly).
+  - `--output json`: stable schema for every command (VSCode can parse progress/results).
+  - `--no-color`, `--quiet`, `--diagnostics`, consistent exit codes.
 - GitHub Actions integration (`/mnt/c/Support/Github/github-actions`):
   - Add composite action `pspub-build`:
-    - Steps: setup-dotnet → cache → `dotnet tool restore` → `powerforge build` → `powerforge docs` → `powerforge pack`.
-  - Add composite action `pspub-install` (for self-hosted runners testing module import).
-  - Optionally add container action for consistent toolchain; for Windows runners, use composite.
-  - Caching: NuGet, PSScriptAnalyzer module, dotnet tool cache.
-  - Optional publishing action `pspub-publish` using `PowerForge` repository providers (PSGallery/Private)
+    - setup-dotnet → cache → `dotnet tool restore` → `powerforge build` → `powerforge docs` → `powerforge pack`
+  - Add composite action `pspub-install` for runner import sanity.
+  - Optional publishing action `pspub-publish`.
 
 **Phase 5 — Replace Script Functions with C#**
 - Replace incrementally while keeping cmdlet names/parameters:
-  - `Format-Code` → `IFormatter` (out‑of‑proc PSSA) + `ILineEndingsNormalizer`.
-  - `Get-ProjectVersion` → `IModuleVersionResolver`.
-  - `Copy-Binaries`/structure → `IPackagingService` + `IModuleInstaller`.
-  - Docs commands → `DocumentationEngine`.
-- Keep thin PS functions that call the C# implementations until fully removed.
+  - `Format-Code` → `IFormatter` + `ILineEndingsNormalizer`
+  - `Get-ProjectVersion` → `IModuleVersionResolver`
+  - Copy/structure/artefacts → packaging + installer services
+  - Docs commands → `DocumentationEngine`
+- Legacy compatibility must remain:
+  - Existing `Build-Module` DSL and scripts still work, but translate into typed models internally.
+  - Old PowerShell-only implementations are deleted once replaced.
 
-**Phase 6 — Telemetry and Perf**
-- Optional minimal telemetry (opt-in env var) to measure durations and error rates.
-- Parallelize safe operations (file copy, hash, parse) with TPL; bound concurrency.
+**Phase 6 — AOT + Trimming (CLI)**
+- Ensure `PowerForge` paths used by the CLI are trim-safe (avoid reflection-heavy/dynamic usage).
+- Add `net10.0` target (when available) and validate `dotnet publish -p:PublishAot=true` for `PowerForge.Cli`.
+- Keep PowerShell module multi-targeting (`net472` + modern) without blocking CLI AOT.
 
 **Deprecations To Remove (when parity reached)**
 - PlatyPS and HelpOut usage.
 - In-proc PSScriptAnalyzer formatting.
-- Unversioned installs to `...\Modules\Name\`.
- - Scripted `Publish-Module` flow; prefer `PowerForge` publishers (NuGet APIs) or out-of-proc PSResourceGet wrapper only when requested.
+- Unversioned installs to `...\\Modules\\Name\\`.
+- Scripted `Publish-Module` flow; prefer `PowerForge` publishers or out-of-proc PSResourceGet wrapper only when requested.
 
 **Validation**
 - Unit tests for services (file ops, versioning, formatter, docs parser/emitters).
-- Integration tests pipeline on Windows + Ubuntu: `pspub build`, `pspub docs`, `Import-Module` sanity.
+- Integration tests on Windows + Ubuntu:
+  - `powerforge build`, `powerforge docs`, `powerforge pack`
+  - `Import-Module` sanity + minimal cmdlet invocation
 - Golden files for generated MAML/about_*.help.txt.
 
 **Action Items (Checklist)**
-- [ ] Create interfaces and base services (Phase 1)
-- [ ] Wire PS wrappers to call C# for formatting + normalization
-- [ ] Implement versioned installer + dev AutoRevision (Phase 2)
-- [ ] Port docs generator MVP (external help + about_*)
-- [ ] Ship `PSPublishModule.Cli` dotnet tool with `build/docs/install`
-- [ ] Publish GitHub composite actions that call the CLI
-- [ ] Migrate PSPublishModule pipeline to use the action; remove PlatyPS/HelpOut
-- [ ] Add tests and golden files; enable CI matrix (win/ubuntu)
-- [ ] Introduce `PowerForge` core project and move services under it
-- [ ] Add PSGallery/Private gallery publishers via NuGet APIs
-- [ ] Add optional PSResourceGet out-of-proc publisher and repository management
+- [ ] Add coding guidelines + cmdlet size guardrail rules
+- [ ] Define typed config models for build/test/publish + JSON loader
+- [ ] Refactor “fat cmdlets” into `PowerForge` services (cmdlets become thin wrappers)
+- [ ] Add stable JSON output contract for CLI (for VSCode extension)
+- [ ] Finish docs engine MVP and remove PlatyPS/HelpOut
+- [ ] Add GitHub composite actions calling the CLI
+- [ ] Plan `net10.0` + AOT publish for CLI (validate trim/AOT paths)
+- [ ] Expand tests (service unit tests + CLI integration)
+- [ ] PSResourceGet support: repository management + publish/find logic (internal; no standalone cmdlets)
 
 **Sample GitHub Workflow (sketch)**
 ```
@@ -126,23 +155,22 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '8.0.x' }
       - run: dotnet tool restore
-      - run: powerforge build --verbosity detailed
-      - run: powerforge docs --mode ProseFirst
-      - run: powerforge pack --out artifacts
+      - run: powerforge build --output json
+      - run: powerforge docs --output json
+      - run: powerforge pack --out artifacts --output json
       - uses: actions/upload-artifact@v4
         with: { name: module, path: artifacts }
 ```
 
 **Repositories and Private Galleries**
-- Add first-class support for Microsoft.PowerShell.PSResourceGet repositories (wrap out-of-proc for now) and direct NuGet V3 endpoints for private feeds/Azure Artifacts.
-- Configuration should allow multiple named repositories with credentials (PAT/API key/credential store) and per-repo publish policies.
+- First-class support for Microsoft.PowerShell.PSResourceGet repositories (wrap out-of-proc for now) and direct NuGet V3 endpoints (private feeds/Azure Artifacts).
+- Configuration must allow multiple named repositories with credentials and per-repo publish policies.
 
 **Versioning & Dev Builds**
 - Use `New-ConfigurationBuild -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3` during development.
-- Keep PSD1 `ModuleVersion` stable (e.g., `2.0.27` or `2.0.X` resolved at build) while installer generates `2.0.27.<n>` on install.
-- Do not introduce `2.0.X.D` in `ModuleVersion`; document AutoRevision semantics instead to avoid Step-Version parsing changes.
+- Keep PSD1 `ModuleVersion` stable while installer generates `<ver>.<rev>` on install.
+- Do not introduce custom suffixes in `ModuleVersion`; document AutoRevision semantics instead.
 
 **Notes**
 - Formatting remains optional; when PSSA conflicts (e.g., VSCode), we log and continue.
-- Secrets (PSGallery API key) should flow via GitHub secrets; never logged.
-- About topics (`about_<ModuleName>.help.txt`) can be generated from Delivery docs.
+- Secrets (PSGallery API key) flow via env vars/GitHub secrets; never logged.
