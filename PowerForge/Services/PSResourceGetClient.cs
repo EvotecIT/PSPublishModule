@@ -150,6 +150,52 @@ public sealed class PSResourceInstallOptions
 }
 
 /// <summary>
+/// Options for <c>Save-PSResource</c>.
+/// </summary>
+public sealed class PSResourceSaveOptions
+{
+    /// <summary>Resource name to save.</summary>
+    public string Name { get; }
+    /// <summary>Destination path passed to <c>-Path</c>.</summary>
+    public string DestinationPath { get; }
+    /// <summary>Version constraint string (PSResourceGet -Version value).</summary>
+    public string? Version { get; }
+    /// <summary>Repository to save from (optional).</summary>
+    public string? Repository { get; }
+    /// <summary>Whether to include prerelease versions.</summary>
+    public bool Prerelease { get; }
+    /// <summary>Whether to trust repository (avoid prompts).</summary>
+    public bool TrustRepository { get; }
+    /// <summary>Whether to skip dependency checks.</summary>
+    public bool SkipDependencyCheck { get; }
+    /// <summary>Whether to accept license prompts.</summary>
+    public bool AcceptLicense { get; }
+
+    /// <summary>
+    /// Creates a new options instance.
+    /// </summary>
+    public PSResourceSaveOptions(
+        string name,
+        string destinationPath,
+        string? version = null,
+        string? repository = null,
+        bool prerelease = false,
+        bool trustRepository = true,
+        bool skipDependencyCheck = true,
+        bool acceptLicense = true)
+    {
+        Name = name;
+        DestinationPath = destinationPath;
+        Version = version;
+        Repository = repository;
+        Prerelease = prerelease;
+        TrustRepository = trustRepository;
+        SkipDependencyCheck = skipDependencyCheck;
+        AcceptLicense = acceptLicense;
+    }
+}
+
+/// <summary>
 /// Out-of-process wrapper for PSResourceGet (Find-PSResource / Publish-PSResource).
 /// </summary>
 public sealed class PSResourceGetClient
@@ -278,6 +324,49 @@ public sealed class PSResourceGetClient
         }
     }
 
+    /// <summary>
+    /// Saves a PowerShell resource using PSResourceGet (<c>Save-PSResource</c>).
+    /// </summary>
+    public IReadOnlyList<PSResourceInfo> Save(PSResourceSaveOptions options, TimeSpan? timeout = null)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(options.Name)) throw new ArgumentException("Name is required.", nameof(options));
+        if (string.IsNullOrWhiteSpace(options.DestinationPath)) throw new ArgumentException("DestinationPath is required.", nameof(options));
+
+        var dest = Path.GetFullPath(options.DestinationPath);
+        Directory.CreateDirectory(dest);
+
+        var script = BuildSaveScript();
+        var args = new List<string>(8)
+        {
+            options.Name,
+            options.Version ?? string.Empty,
+            options.Repository ?? string.Empty,
+            dest,
+            options.Prerelease ? "1" : "0",
+            options.TrustRepository ? "1" : "0",
+            options.SkipDependencyCheck ? "1" : "0",
+            options.AcceptLicense ? "1" : "0"
+        };
+
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        var items = ParseSaveOutput(result.StdOut);
+
+        if (result.ExitCode != 0)
+        {
+            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Save-PSResource failed (exit {result.ExitCode}). {message}".Trim();
+            _logger.Error(full);
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut))
+                _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr))
+                _logger.Verbose(result.StdErr.Trim());
+            throw new InvalidOperationException(full);
+        }
+
+        return items;
+    }
+
     private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
     {
         var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "PowerForge", "psresourceget");
@@ -310,6 +399,23 @@ public sealed class PSResourceGetClient
             var author = EmptyToNull(Decode(parts[5]));
             var desc = EmptyToNull(Decode(parts[6]));
             list.Add(new PSResourceInfo(name, version, repo, author, desc));
+        }
+        return list;
+    }
+
+    private static IReadOnlyList<PSResourceInfo> ParseSaveOutput(string stdout)
+    {
+        var list = new List<PSResourceInfo>();
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPSRG::SAVE::ITEM::", StringComparison.Ordinal)) continue;
+            var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
+            if (parts.Length < 5) continue;
+
+            var name = Decode(parts[3]);
+            var version = Decode(parts[4]);
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(version)) continue;
+            list.Add(new PSResourceInfo(name, version, repository: null, author: null, description: null));
         }
         return list;
     }
@@ -486,6 +592,59 @@ if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
 try {
   Install-PSResource @params | Out-Null
   Write-Output 'PFPSRG::INSTALL::OK'
+  exit 0
+} catch {
+  $msg = $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 1
+}
+";
+    }
+
+    private static string BuildSaveScript()
+    {
+        return @"
+param(
+  [string]$Name,
+  [string]$Version,
+  [string]$Repository,
+  [string]$Path,
+  [string]$PrereleaseFlag,
+  [string]$TrustRepositoryFlag,
+  [string]$SkipDependencyFlag,
+  [string]$AcceptLicenseFlag
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+try {
+  Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'Microsoft.PowerShell.PSResourceGet not available: ' + $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 3
+}
+
+$params = @{ ErrorAction = 'Stop' }
+$params.Name = $Name
+$params.Path = $Path
+if (-not [string]::IsNullOrWhiteSpace($Version)) { $params.Version = $Version }
+if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
+if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
+if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }
+if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
+if ($AcceptLicenseFlag -eq '1') { $params.AcceptLicense = $true }
+
+try {
+  $saved = Save-PSResource @params -PassThru
+  foreach ($r in @($saved)) {
+    $name = [string]$r.Name
+    $ver = [string]$r.Version
+    $fields = @($name, $ver) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
+    Write-Output ('PFPSRG::SAVE::ITEM::' + ($fields -join '::'))
+  }
   exit 0
 } catch {
   $msg = $_.Exception.Message

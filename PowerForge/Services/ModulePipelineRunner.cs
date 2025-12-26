@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace PowerForge;
 
@@ -10,6 +11,22 @@ namespace PowerForge;
 public sealed class ModulePipelineRunner
 {
     private readonly ILogger _logger;
+
+    private sealed class RequiredModuleDraft
+    {
+        public string ModuleName { get; }
+        public string? ModuleVersion { get; }
+        public string? RequiredVersion { get; }
+        public string? Guid { get; }
+
+        public RequiredModuleDraft(string moduleName, string? moduleVersion, string? requiredVersion, string? guid)
+        {
+            ModuleName = moduleName;
+            ModuleVersion = moduleVersion;
+            RequiredVersion = requiredVersion;
+            Guid = guid;
+        }
+    }
 
     /// <summary>
     /// Creates a new instance using the provided logger.
@@ -55,8 +72,13 @@ public sealed class ModulePipelineRunner
         string? netProjectName = null;
         string? netProjectPath = null;
 
-        var requiredModules = new List<ManifestEditor.RequiredModule>();
+        InformationConfiguration? information = null;
+        var artefacts = new List<ConfigurationArtefactSegment>();
+
+        var requiredModulesDraft = new List<RequiredModuleDraft>();
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
+        var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
         {
@@ -96,24 +118,46 @@ public sealed class ModulePipelineRunner
                 }
                 case ConfigurationModuleSegment moduleSeg:
                 {
-                    if (moduleSeg.Kind != ModuleDependencyKind.RequiredModule) break;
+                    if (moduleSeg.Kind is not (ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule))
+                        break;
 
                     var md = moduleSeg.Configuration;
                     if (string.IsNullOrWhiteSpace(md.ModuleName)) break;
-                    var rm = new ManifestEditor.RequiredModule(
-                        md.ModuleName.Trim(),
-                        md.ModuleVersion,
-                        md.RequiredVersion,
-                        md.Guid);
-                    if (requiredIndex.TryGetValue(rm.ModuleName, out var idx))
-                    {
-                        requiredModules[idx] = rm;
-                    }
+                    var name = md.ModuleName.Trim();
+                    var draft = new RequiredModuleDraft(
+                        moduleName: name,
+                        moduleVersion: md.ModuleVersion,
+                        requiredVersion: md.RequiredVersion,
+                        guid: md.Guid);
+
+                    if (requiredIndex.TryGetValue(name, out var idx))
+                        requiredModulesDraft[idx] = draft;
                     else
                     {
-                        requiredIndex[rm.ModuleName] = requiredModules.Count;
-                        requiredModules.Add(rm);
+                        requiredIndex[name] = requiredModulesDraft.Count;
+                        requiredModulesDraft.Add(draft);
                     }
+
+                    if (moduleSeg.Kind == ModuleDependencyKind.RequiredModule)
+                    {
+                        if (requiredPackagingIndex.TryGetValue(name, out var pidx))
+                            requiredModulesDraftForPackaging[pidx] = draft;
+                        else
+                        {
+                            requiredPackagingIndex[name] = requiredModulesDraftForPackaging.Count;
+                            requiredModulesDraftForPackaging.Add(draft);
+                        }
+                    }
+                    break;
+                }
+                case ConfigurationInformationSegment info:
+                {
+                    information = info.Configuration;
+                    break;
+                }
+                case ConfigurationArtefactSegment artefact:
+                {
+                    artefacts.Add(artefact);
                     break;
                 }
             }
@@ -179,6 +223,12 @@ public sealed class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
+        var requiredModules = ResolveRequiredModules(requiredModulesDraft);
+        var requiredModulesForPackaging = ResolveRequiredModules(requiredModulesDraftForPackaging);
+        var enabledArtefacts = artefacts
+            .Where(a => a is not null && a.Configuration?.Enabled == true)
+            .ToArray();
+
         return new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,
@@ -187,7 +237,10 @@ public sealed class ModulePipelineRunner
             preRelease: preRelease,
             buildSpec: buildSpec,
             compatiblePSEditions: compatible,
-            requiredModules: requiredModules.ToArray(),
+            requiredModules: requiredModules,
+            requiredModulesForPackaging: requiredModulesForPackaging,
+            information: information,
+            artefacts: enabledArtefacts,
             installEnabled: installEnabled,
             installStrategy: strategy,
             installKeepVersions: keep,
@@ -212,6 +265,24 @@ public sealed class ModulePipelineRunner
         if (plan.RequiredModules is { Length: > 0 })
             ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
 
+        var artefactResults = new List<ArtefactBuildResult>();
+        if (plan.Artefacts is { Length: > 0 })
+        {
+            var builder = new ArtefactBuilder(_logger);
+            foreach (var artefact in plan.Artefacts)
+            {
+                artefactResults.Add(builder.Build(
+                    segment: artefact,
+                    projectRoot: plan.ProjectRoot,
+                    stagingPath: buildResult.StagingPath,
+                    moduleName: plan.ModuleName,
+                    moduleVersion: plan.ResolvedVersion,
+                    preRelease: plan.PreRelease,
+                    requiredModules: plan.RequiredModulesForPackaging,
+                    information: plan.Information));
+            }
+        }
+
         ModuleInstallerResult? installResult = null;
         if (plan.InstallEnabled)
         {
@@ -229,12 +300,169 @@ public sealed class ModulePipelineRunner
 
         if (plan.DeleteGeneratedStagingAfterRun)
         {
-            try { Directory.Delete(buildResult.StagingPath, recursive: true); }
+            try { Directory.Delete(buildResult.StagingPath, recursive: true); } 
             catch { /* best effort */ }
         }
 
-        return new ModulePipelineResult(plan, buildResult, installResult);
+        return new ModulePipelineResult(plan, buildResult, installResult, artefactResults.ToArray());
     }
+
+    private ManifestEditor.RequiredModule[] ResolveRequiredModules(IReadOnlyList<RequiredModuleDraft> drafts)
+    {
+        var list = (drafts ?? Array.Empty<RequiredModuleDraft>())
+            .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.ModuleName))
+            .ToArray();
+        if (list.Length == 0) return Array.Empty<ManifestEditor.RequiredModule>();
+
+        var moduleNames = list.Select(d => d.ModuleName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var installed = TryGetLatestInstalledModuleInfo(moduleNames);
+
+        var results = new List<ManifestEditor.RequiredModule>(list.Length);
+        foreach (var d in list)
+        {
+            installed.TryGetValue(d.ModuleName, out var info);
+
+            var required = ResolveAutoOrLatest(d.RequiredVersion, info.Version);
+            var moduleVersion = ResolveAutoOrLatest(d.ModuleVersion, info.Version);
+            var guid = ResolveAutoGuid(d.Guid, info.Guid);
+
+            // RequiredVersion is exact; do not also emit ModuleVersion when present.
+            if (!string.IsNullOrWhiteSpace(required)) moduleVersion = null;
+
+            results.Add(new ManifestEditor.RequiredModule(d.ModuleName, moduleVersion: moduleVersion, requiredVersion: required, guid: guid));
+        }
+
+        return results.ToArray();
+    }
+
+    private static string? ResolveAutoOrLatest(string? value, string? installedVersion)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value!.Trim();
+        if (trimmed.Equals("Latest", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.IsNullOrWhiteSpace(installedVersion) ? null : installedVersion;
+        }
+        return trimmed;
+    }
+
+    private static string? ResolveAutoGuid(string? value, string? installedGuid)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value!.Trim();
+        if (trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+            return string.IsNullOrWhiteSpace(installedGuid) ? null : installedGuid;
+        return trimmed;
+    }
+
+    private Dictionary<string, (string? Version, string? Guid)> TryGetLatestInstalledModuleInfo(IReadOnlyList<string> names)
+    {
+        var list = (names ?? Array.Empty<string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (list.Length == 0) return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+
+        var runner = new PowerShellRunner();
+        var script = BuildGetInstalledModuleInfoScript();
+        var args = new List<string>(1) { EncodeLines(list) };
+
+        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(2));
+        if (result.ExitCode != 0)
+        {
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var map = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in SplitLines(result.StdOut))
+        {
+            if (!line.StartsWith("PFMODINFO::ITEM::", StringComparison.Ordinal)) continue;
+            var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
+            if (parts.Length < 5) continue;
+
+            var name = Decode(parts[2]);
+            var ver = EmptyToNull(Decode(parts[3]));
+            var guid = EmptyToNull(Decode(parts[4]));
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            map[name] = (ver, guid);
+        }
+
+        foreach (var n in list)
+            if (!map.ContainsKey(n)) map[n] = (null, null);
+
+        return map;
+    }
+
+    private static PowerShellRunResult RunScript(IPowerShellRunner runner, string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
+        Directory.CreateDirectory(tempDir);
+        var scriptPath = Path.Combine(tempDir, $"modulepipeline_{Guid.NewGuid():N}.ps1");
+        File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        try
+        {
+            return runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); } catch { /* ignore */ }
+        }
+    }
+
+    private static string BuildGetInstalledModuleInfoScript()
+    {
+        return @"
+param(
+  [string]$NamesB64
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+function DecodeLines([string]$b64) {
+  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
+  $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
+  return $text -split ""`n"" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+}
+
+$names = DecodeLines $NamesB64
+foreach ($n in $names) {
+  try {
+    $m = Get-Module -ListAvailable -Name $n | Sort-Object Version -Descending | Select-Object -First 1
+    $ver = if ($m) { [string]$m.Version } else { '' }
+    $guid = if ($m) { [string]$m.Guid } else { '' }
+    $fields = @($n, $ver, $guid) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
+    Write-Output ('PFMODINFO::ITEM::' + ($fields -join '::'))
+  } catch {
+    $fields = @($n, '', '') | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
+    Write-Output ('PFMODINFO::ITEM::' + ($fields -join '::'))
+  }
+}
+exit 0
+";
+    }
+
+    private static IEnumerable<string> SplitLines(string? text)
+        => (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static string EncodeLines(IEnumerable<string> lines)
+    {
+        var joined = string.Join("\n", lines ?? Array.Empty<string>());
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(joined));
+    }
+
+    private static string Decode(string? b64)
+    {
+        if (string.IsNullOrWhiteSpace(b64)) return string.Empty;
+        try { return Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
+        catch { return string.Empty; }
+    }
+
+    private static string? EmptyToNull(string? s)
+        => string.IsNullOrWhiteSpace(s) ? null : s;
 
     private static string? TryResolveCsprojPath(string projectRoot, string moduleName, string? netProjectPath, string? netProjectName)
     {
