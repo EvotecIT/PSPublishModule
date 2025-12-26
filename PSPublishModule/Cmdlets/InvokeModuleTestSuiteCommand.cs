@@ -1,11 +1,9 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Management.Automation.Runspaces;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -80,7 +78,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
     [Parameter]
     public SwitchParameter SkipImport { get; set; }
 
-    /// <summary>Return the test results object.</summary>
+    /// <summary>Return the test suite result object.</summary>
     [Parameter]
     public SwitchParameter PassThru { get; set; }
 
@@ -107,9 +105,9 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             if (!Directory.Exists(projectRoot))
                 throw new DirectoryNotFoundException($"Path '{projectRoot}' does not exist or is not a directory");
 
-            HostWriteLineSafe(CICD.IsPresent ? "=== CI/CD Module Testing Pipeline ===" : "=== PowerShell Module Test Suite ===",
-                ConsoleColor.Magenta);
+            HostWriteLineSafe(CICD.IsPresent ? "=== CI/CD Module Testing Pipeline ===" : "=== PowerShell Module Test Suite ===", ConsoleColor.Magenta);
             HostWriteLineSafe($"Project Path: {projectRoot}", ConsoleColor.Cyan);
+
             var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
             var psVersion = psVersionTable?["PSVersion"]?.ToString() ?? string.Empty;
             var psEdition = psVersionTable?["PSEdition"]?.ToString() ?? string.Empty;
@@ -118,99 +116,83 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             HostWriteLineSafe(string.Empty);
 
             HostWriteLineSafe("Step 1: Gathering module information...", ConsoleColor.Yellow);
-            var moduleInfo = GetModuleInformation(projectRoot);
+            var moduleInfo = new ModuleInformationReader().Read(projectRoot);
+            HostWriteLineSafe($"  Module Name: {moduleInfo.ModuleName}", ConsoleColor.Green);
+            HostWriteLineSafe($"  Module Version: {moduleInfo.ModuleVersion ?? string.Empty}", ConsoleColor.Green);
+            HostWriteLineSafe($"  Manifest Path: {moduleInfo.ManifestPath}", ConsoleColor.Green);
+            HostWriteLineSafe($"  Required Modules: {(moduleInfo.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Length}", ConsoleColor.Green);
+            HostWriteLineSafe(string.Empty);
 
-            var moduleName = GetString(moduleInfo, "ModuleName");
-            var moduleVersion = GetString(moduleInfo, "ModuleVersion");
-            var manifestPath = GetString(moduleInfo, "ManifestPath");
-            var requiredModules = GetEnumerable(moduleInfo, "RequiredModules");
+            HostWriteLineSafe("Step 2: Executing test suite (out-of-process)...", ConsoleColor.Yellow);
+            var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: true);
 
-            HostWriteLineSafe($"  Module Name: {moduleName}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Module Version: {moduleVersion}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Manifest Path: {manifestPath}", ConsoleColor.Green);
-            HostWriteLineSafe($"  Required Modules: {requiredModules.Count}", ConsoleColor.Green);
+            var service = new ModuleTestSuiteService(new PowerShellRunner(), logger);
+            var result = service.Run(new ModuleTestSuiteSpec
+            {
+                ProjectPath = projectRoot,
+                TestPath = TestPath,
+                AdditionalModules = AdditionalModules ?? Array.Empty<string>(),
+                SkipModules = SkipModules ?? Array.Empty<string>(),
+                OutputFormat = MapOutputFormat(OutputFormat),
+                EnableCodeCoverage = EnableCodeCoverage.IsPresent,
+                Force = Force.IsPresent,
+                SkipDependencies = SkipDependencies.IsPresent,
+                SkipImport = SkipImport.IsPresent,
+                KeepResultsXml = false,
+                PreferPwsh = true
+            });
+
+            // Emit captured Pester output if requested.
+            if (OutputFormat != ModuleTestSuiteOutputFormat.Minimal && !string.IsNullOrWhiteSpace(result.StdOut))
+            {
+                HostWriteLineSafe(result.StdOut);
+                HostWriteLineSafe(string.Empty);
+            }
+
+            HostWriteLineSafe("Step 3: Dependency summary...", ConsoleColor.Yellow);
+            WriteDependencySummary(result.RequiredModules);
+            WriteAdditionalModulesSummary();
             HostWriteLineSafe(string.Empty);
 
             if (!SkipDependencies.IsPresent)
             {
-                HostWriteLineSafe("Step 2: Checking and installing required modules...", ConsoleColor.Yellow);
-                EnsureDependencies(moduleName, requiredModules);
-                HostWriteLineSafe(string.Empty);
-            }
-            else
-            {
-                HostWriteLineSafe("Step 2: Skipping dependency check (as requested)", ConsoleColor.Yellow);
+                HostWriteLineSafe("Step 4: Dependency installation results...", ConsoleColor.Yellow);
+                WriteDependencyInstallResults(result.DependencyResults);
                 HostWriteLineSafe(string.Empty);
             }
 
-            if (!SkipImport.IsPresent)
-            {
-                HostWriteLineSafe("Step 3: Importing module under test...", ConsoleColor.Yellow);
-                ImportModuleUnderTest(moduleInfo, force: Force.IsPresent, showInformation: true);
-                HostWriteLineSafe(string.Empty);
-            }
-            else
-            {
-                HostWriteLineSafe("Step 3: Skipping module import (as requested)", ConsoleColor.Yellow);
-                HostWriteLineSafe(string.Empty);
-            }
-
-            HostWriteLineSafe("Step 4: Module dependency summary...", ConsoleColor.Yellow);
-            WriteDependencySummary(requiredModules);
-            WriteAdditionalModulesSummary();
+            var successColor = result.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green;
+            HostWriteLineSafe(result.FailedCount > 0 ? "=== Test Suite Failed ===" : "=== Test Suite Completed Successfully ===", successColor);
+            HostWriteLineSafe($"Module: {result.ModuleName} v{result.ModuleVersion ?? string.Empty}", ConsoleColor.Green);
+            HostWriteLineSafe($"Tests: {result.PassedCount}/{result.TotalCount} passed", result.FailedCount > 0 ? ConsoleColor.Yellow : ConsoleColor.Green);
+            if (result.Duration.HasValue)
+                HostWriteLineSafe($"Duration: {result.Duration.Value}", ConsoleColor.Green);
             HostWriteLineSafe(string.Empty);
 
-            HostWriteLineSafe("Step 5: Executing module tests...", ConsoleColor.Yellow);
-
-            var effectiveTestPath = ResolveTestPath(projectRoot);
-            var enableCoverage = EnableCodeCoverage.IsPresent && string.IsNullOrWhiteSpace(TestPath);
-            var testResults = InvokePester(effectiveTestPath, OutputFormat, enableCoverage ? projectRoot : null);
-
-            HostWriteLineSafe(string.Empty);
-
-            var counts = GetCounts(testResults);
-            var duration = GetDurationOrNull(testResults);
-
-            if (CICD.IsPresent)
-                HostWriteLineSafe("=== CI/CD Pipeline Completed ===", counts.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green);
-            else
-                HostWriteLineSafe(counts.FailedCount > 0 ? "=== Test Suite Failed ===" : "=== Test Suite Completed Successfully ===",
-                    counts.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green);
-
-            HostWriteLineSafe($"Module: {moduleName} v{moduleVersion}", ConsoleColor.Green);
-            HostWriteLineSafe($"Tests: {counts.PassedCount}/{counts.TotalCount} passed",
-                counts.FailedCount > 0 ? ConsoleColor.Yellow : ConsoleColor.Green);
-            if (duration.HasValue)
-                HostWriteLineSafe($"Duration: {duration.Value}", ConsoleColor.Green);
-
-            if (counts.FailedCount > 0)
+            if (result.FailedCount > 0)
             {
                 if (ShowFailureSummary.IsPresent || CICD.IsPresent)
                 {
-                    HostWriteLineSafe(string.Empty);
                     HostWriteLineSafe("=== Test Failure Analysis ===", ConsoleColor.Yellow);
-                    try
-                    {
-                        InvokeGetModuleTestFailures(testResults, FailureSummaryFormat);
-                    }
-                    catch (Exception ex)
-                    {
-                        WriteWarning($"Failed to generate failure summary: {ex.Message}");
-                    }
+                    WriteFailureSummary(result.FailureAnalysis, FailureSummaryFormat);
+                    HostWriteLineSafe(string.Empty);
                 }
 
-                EmitCiOutputs(counts, testResults, success: false, errorMessage: $"{counts.FailedCount} test{(counts.FailedCount != 1 ? "s" : string.Empty)} failed");
+                EmitCiOutputs(result, success: false, errorMessage: $"{result.FailedCount} test{(result.FailedCount != 1 ? "s" : string.Empty)} failed");
 
                 if (ExitOnFailure.IsPresent)
                     Environment.ExitCode = 1;
 
-                throw new InvalidOperationException($"{counts.FailedCount} test{(counts.FailedCount != 1 ? "s" : string.Empty)} failed");
+                if (PassThru.IsPresent)
+                    WriteObject(result, enumerateCollection: false);
+
+                throw new InvalidOperationException($"{result.FailedCount} test{(result.FailedCount != 1 ? "s" : string.Empty)} failed");
             }
 
-            EmitCiOutputs(counts, testResults, success: true, errorMessage: null);
+            EmitCiOutputs(result, success: true, errorMessage: null);
 
             if (PassThru.IsPresent)
-                WriteObject(testResults, enumerateCollection: false);
+                WriteObject(result, enumerateCollection: false);
         }
         catch (Exception ex)
         {
@@ -231,35 +213,15 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
 
     private string ResolveProjectPath()
     {
-        var p = ProjectPath;
-        if (p != null && !string.IsNullOrWhiteSpace(p))
-            return Path.GetFullPath(p.Trim().Trim('"'));
+        if (!string.IsNullOrWhiteSpace(ProjectPath))
+            return Path.GetFullPath(ProjectPath!.Trim().Trim('"'));
 
         return SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Directory.GetCurrentDirectory();
     }
 
-    private Hashtable GetModuleInformation(string projectRoot)
+    private void WriteDependencySummary(ManifestEditor.RequiredModule[] requiredModules)
     {
-        using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        ps.AddCommand("Get-ModuleInformation").AddParameter("Path", projectRoot);
-
-        var results = ps.Invoke();
-        if (ps.HadErrors)
-        {
-            var msg = string.Join("; ", ps.Streams.Error.Select(e => e.Exception?.Message ?? e.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)));
-            if (string.IsNullOrWhiteSpace(msg)) msg = "Get-ModuleInformation failed";
-            throw new InvalidOperationException(msg);
-        }
-
-        if (results.Count == 0 || results[0]?.BaseObject is not Hashtable ht)
-            throw new InvalidOperationException("Get-ModuleInformation returned no data");
-
-        return ht;
-    }
-
-    private void WriteDependencySummary(List<object?> requiredModules)
-    {
-        if (requiredModules.Count == 0)
+        if (requiredModules.Length == 0)
         {
             HostWriteLineSafe("  No required modules specified in manifest", ConsoleColor.Gray);
             return;
@@ -268,24 +230,17 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
         HostWriteLineSafe("Required modules:", ConsoleColor.Cyan);
         foreach (var m in requiredModules)
         {
-            if (m is IDictionary dict)
-            {
-                var name = dict.Contains("ModuleName") ? dict["ModuleName"]?.ToString() : null;
-                var min = dict.Contains("ModuleVersion") ? dict["ModuleVersion"]?.ToString() : null;
-                var req = dict.Contains("RequiredVersion") ? dict["RequiredVersion"]?.ToString() : null;
-                var max = dict.Contains("MaximumVersion") ? dict["MaximumVersion"]?.ToString() : null;
+            var name = m.ModuleName;
+            var min = m.ModuleVersion;
+            var req = m.RequiredVersion;
+            var max = m.MaximumVersion;
 
-                var versionInfo = string.Empty;
-                if (!string.IsNullOrWhiteSpace(min)) versionInfo += $" (Min: {min})";
-                if (!string.IsNullOrWhiteSpace(req)) versionInfo += $" (Required: {req})";
-                if (!string.IsNullOrWhiteSpace(max)) versionInfo += $" (Max: {max})";
+            var versionInfo = string.Empty;
+            if (!string.IsNullOrWhiteSpace(min)) versionInfo += $" (Min: {min})";
+            if (!string.IsNullOrWhiteSpace(req)) versionInfo += $" (Required: {req})";
+            if (!string.IsNullOrWhiteSpace(max)) versionInfo += $" (Max: {max})";
 
-                HostWriteLineSafe($"  [>] {name}{versionInfo}", ConsoleColor.Green);
-            }
-            else
-            {
-                HostWriteLineSafe($"  [>] {m}", ConsoleColor.Green);
-            }
+            HostWriteLineSafe($"  [>] {name}{versionInfo}", ConsoleColor.Green);
         }
     }
 
@@ -304,125 +259,14 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
         }
     }
 
-    private string ResolveTestPath(string projectRoot)
+    private void WriteDependencyInstallResults(ModuleDependencyInstallResult[] results)
     {
-        var path = string.IsNullOrWhiteSpace(TestPath) ? Path.Combine(projectRoot, "Tests") : TestPath!;
-        path = Path.GetFullPath(path.Trim().Trim('"'));
-        if (!File.Exists(path) && !Directory.Exists(path))
-            throw new FileNotFoundException($"Test path '{path}' does not exist", path);
-        return path;
-    }
-
-    private object InvokePester(string testPath, ModuleTestSuiteOutputFormat outputFormat, string? coverageProjectRoot)
-    {
-        using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        var script = @"
-param(
-  [string]$TestPath,
-  [string]$OutputFormat,
-  [bool]$EnableCodeCoverage,
-  [string]$CoverageProjectRoot,
-  [bool]$EnableExit
-)
-
-Import-Module -Name Pester -Force -ErrorAction Stop
-$p = Get-Module -Name Pester
-$useV5 = $p.Version.Major -ge 5
-
-if ($useV5) {
-  $Configuration = [PesterConfiguration]::Default
-  $Configuration.Run.Path = $TestPath
-  $Configuration.Run.Exit = $EnableExit
-  $Configuration.Run.PassThru = $true
-  $Configuration.Should.ErrorAction = 'Continue'
-  $Configuration.CodeCoverage.Enabled = $EnableCodeCoverage
-  switch ($OutputFormat) {
-    'Detailed' { $Configuration.Output.Verbosity = 'Detailed' }
-    'Normal'   { $Configuration.Output.Verbosity = 'Normal' }
-    'Minimal'  { $Configuration.Output.Verbosity = 'Minimal' }
-  }
-  Invoke-Pester -Configuration $Configuration
-} else {
-  $PesterParams = @{
-    Script   = $TestPath
-    Verbose  = ($OutputFormat -eq 'Detailed')
-    PassThru = $true
-  }
-
-  if ($OutputFormat -eq 'Detailed') {
-    $PesterParams.OutputFormat = 'NUnitXml'
-  }
-
-  if ($EnableCodeCoverage -and $CoverageProjectRoot) {
-    $ModuleFiles = Get-ChildItem -Path $CoverageProjectRoot -Filter '*.ps1' -Recurse | Where-Object { $_.Directory.Name -in @('Public', 'Private') }
-    if ($ModuleFiles) { $PesterParams.CodeCoverage = $ModuleFiles.FullName }
-  }
-
-  Invoke-Pester @PesterParams
-}
-";
-        ps.AddScript(script)
-            .AddArgument(testPath)
-            .AddArgument(outputFormat.ToString())
-            .AddArgument(EnableCodeCoverage.IsPresent && !string.IsNullOrWhiteSpace(coverageProjectRoot))
-            .AddArgument(coverageProjectRoot ?? string.Empty)
-            .AddArgument(ExitOnFailure.IsPresent);
-
-        var results = ps.Invoke();
-        if (ps.HadErrors)
+        if (results.Length == 0)
         {
-            var msg = string.Join("; ", ps.Streams.Error.Select(e => e.Exception?.Message ?? e.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)));
-            if (string.IsNullOrWhiteSpace(msg)) msg = "Invoke-Pester failed";
-            throw new InvalidOperationException(msg);
-        }
-
-        if (results.Count == 0)
-            throw new InvalidOperationException("Invoke-Pester returned no results");
-
-        return results[0].BaseObject ?? results[0];
-    }
-
-    private void EnsureDependencies(string moduleName, List<object?> requiredModules)
-    {
-        var deps = new List<ModuleDependency>();
-
-        foreach (var name in AdditionalModules ?? Array.Empty<string>())
-        {
-            if (!string.IsNullOrWhiteSpace(name))
-                deps.Add(new ModuleDependency(name));
-        }
-
-        foreach (var m in requiredModules)
-        {
-            if (m is IDictionary dict)
-            {
-                var name = dict.Contains("ModuleName") ? dict["ModuleName"]?.ToString() : null;
-                if (string.IsNullOrWhiteSpace(name)) continue;
-
-                var min = dict.Contains("ModuleVersion") ? dict["ModuleVersion"]?.ToString() : null;
-                var req = dict.Contains("RequiredVersion") ? dict["RequiredVersion"]?.ToString() : null;
-                var max = dict.Contains("MaximumVersion") ? dict["MaximumVersion"]?.ToString() : null;
-                deps.Add(new ModuleDependency(name.Trim(), requiredVersion: req, minimumVersion: min, maximumVersion: max));
-            }
-            else if (m is string s && !string.IsNullOrWhiteSpace(s))
-            {
-                deps.Add(new ModuleDependency(s));
-            }
-        }
-
-        if (deps.Count == 0)
-        {
-            WriteWarning($"No required modules specified for module '{moduleName}'");
+            HostWriteLineSafe("  (no dependency install actions)", ConsoleColor.Gray);
             return;
         }
 
-        HostWriteLineSafe($"Checking required modules for: {moduleName}", ConsoleColor.Yellow);
-
-        var logger = new NullLogger { IsVerbose = MyInvocation.BoundParameters.ContainsKey("Verbose") };
-        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), logger);
-        var results = installer.EnsureInstalled(dependencies: deps, skipModules: SkipModules, force: Force.IsPresent);
-
-        var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         foreach (var r in results)
         {
             switch (r.Status)
@@ -442,88 +286,58 @@ if ($useV5) {
                     break;
             }
         }
-
-        if (failures.Length > 0)
-            throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
-
-        HostWriteLineSafe("Module dependency check completed successfully", ConsoleColor.Green);
     }
 
-    private void ImportModuleUnderTest(Hashtable moduleInfo, bool force, bool showInformation)
+    private void WriteFailureSummary(ModuleTestFailureAnalysis? analysis, ModuleTestSuiteFailureSummaryFormat format)
     {
-        var displayName = GetString(moduleInfo, "ModuleName");
-        var manifestPath = GetString(moduleInfo, "ManifestPath");
-        var importPath = !string.IsNullOrWhiteSpace(manifestPath) ? manifestPath : displayName;
-
-        HostWriteLineSafe($"Importing module: {displayName}", ConsoleColor.Yellow);
-        WriteVerbose($"Import path: {importPath}");
-
-        using (var ps = PowerShell.Create(RunspaceMode.CurrentRunspace))
+        if (analysis is null)
         {
-            ps.AddCommand("Import-Module")
-                .AddParameter("Name", importPath)
-                .AddParameter("Force", force)
-                .AddParameter("ErrorAction", "Stop");
-
-            ps.Invoke();
-            if (ps.HadErrors)
-            {
-                var msg = string.Join("; ", ps.Streams.Error.Select(e => e.Exception?.Message ?? e.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)));
-                if (string.IsNullOrWhiteSpace(msg)) msg = "Import-Module failed";
-                throw new InvalidOperationException(msg);
-            }
-        }
-
-        HostWriteLineSafe($"  Successfully imported module: {displayName}", ConsoleColor.Green);
-
-        if (!showInformation)
+            HostWriteLineSafe("No failure analysis available.", ConsoleColor.Yellow);
             return;
+        }
 
-        using (var ps = PowerShell.Create(RunspaceMode.CurrentRunspace))
+        if (analysis.TotalCount == 0)
         {
-            ps.AddCommand("Get-Module").AddParameter("Name", displayName);
+            HostWriteLineSafe("No test results found", ConsoleColor.Yellow);
+            return;
+        }
 
-            var results = ps.Invoke();
-            if (ps.HadErrors)
-                return;
+        var color = analysis.FailedCount == 0 ? ConsoleColor.Green : ConsoleColor.Yellow;
+        HostWriteLineSafe($"Summary: {analysis.PassedCount}/{analysis.TotalCount} tests passed", color);
+        HostWriteLineSafe(string.Empty);
 
-            var mod = results.FirstOrDefault();
-            if (mod is null)
-                return;
+        if (analysis.FailedCount == 0)
+        {
+            HostWriteLineSafe("All tests passed successfully!", ConsoleColor.Green);
+            return;
+        }
 
-            var m = PSObject.AsPSObject(mod.BaseObject ?? mod);
-            HostWriteLineSafe("Module Information:", ConsoleColor.Cyan);
-            HostWriteLineSafe($"  Name: {m.Properties["Name"]?.Value}");
-            HostWriteLineSafe($"  Version: {m.Properties["Version"]?.Value}");
-            HostWriteLineSafe($"  Path: {m.Properties["Path"]?.Value}");
+        HostWriteLineSafe($"Failed Tests ({analysis.FailedCount}):", ConsoleColor.Red);
+        HostWriteLineSafe(string.Empty);
 
-            try
+        foreach (var f in analysis.FailedTests)
+        {
+            HostWriteLineSafe($"- {f.Name}", ConsoleColor.Red);
+            if (format == ModuleTestSuiteFailureSummaryFormat.Detailed &&
+                !string.IsNullOrWhiteSpace(f.ErrorMessage) &&
+                !string.Equals(f.ErrorMessage, "No error message available", StringComparison.Ordinal))
             {
-                var exportedFunctions = m.Properties["ExportedFunctions"]?.Value as IDictionary;
-                var exportedCmdlets = m.Properties["ExportedCmdlets"]?.Value as IDictionary;
-                var exportedAliases = m.Properties["ExportedAliases"]?.Value as IDictionary;
-                if (exportedFunctions is not null) HostWriteLineSafe($"  Exported Functions: {exportedFunctions.Count}");
-                if (exportedCmdlets is not null) HostWriteLineSafe($"  Exported Cmdlets: {exportedCmdlets.Count}");
-                if (exportedAliases is not null) HostWriteLineSafe($"  Exported Aliases: {exportedAliases.Count}");
+                foreach (var line in f.ErrorMessage.Split(new[] { '\n' }, StringSplitOptions.None))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.Length > 0)
+                        HostWriteLineSafe($"   {trimmed}", ConsoleColor.Yellow);
+                }
             }
-            catch
-            {
-                // ignore shape differences across editions
-            }
+
+            if (format == ModuleTestSuiteFailureSummaryFormat.Detailed && f.Duration.HasValue)
+                HostWriteLineSafe($"   Duration: {f.Duration.Value}", ConsoleColor.DarkGray);
+
+            HostWriteLineSafe(string.Empty);
         }
     }
 
-    private void InvokeGetModuleTestFailures(object testResults, ModuleTestSuiteFailureSummaryFormat format)
-    {
-        using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
-        ps.AddCommand("Get-ModuleTestFailures")
-            .AddParameter("TestResults", testResults)
-            .AddParameter("OutputFormat", format.ToString());
-
-        ps.Invoke();
-    }
-
-    private void EmitCiOutputs(TestCounts counts, object testResults, bool success, string? errorMessage)
+    private void EmitCiOutputs(ModuleTestSuiteResult result, bool success, string? errorMessage)
     {
         if (!CICD.IsPresent)
             return;
@@ -531,153 +345,33 @@ if ($useV5) {
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("GITHUB_ACTIONS")))
         {
             HostWriteLineSafe($"::set-output name=test-result::{(success ? "true" : "false")}");
-            HostWriteLineSafe($"::set-output name=total-tests::{counts.TotalCount}");
-            HostWriteLineSafe($"::set-output name=failed-tests::{counts.FailedCount}");
+            HostWriteLineSafe($"::set-output name=total-tests::{result.TotalCount}");
+            HostWriteLineSafe($"::set-output name=failed-tests::{result.FailedCount}");
             if (!success && !string.IsNullOrWhiteSpace(errorMessage))
                 HostWriteLineSafe($"::set-output name=error-message::{errorMessage}");
-
-            var coverage = GetCoveragePercentOrNull(testResults);
-            if (coverage.HasValue)
-                HostWriteLineSafe($"::set-output name=code-coverage::{coverage.Value.ToString("0.00", CultureInfo.InvariantCulture)}");
+            if (result.CoveragePercent.HasValue)
+                HostWriteLineSafe($"::set-output name=code-coverage::{result.CoveragePercent.Value.ToString("0.00", CultureInfo.InvariantCulture)}");
         }
 
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("TF_BUILD")))
         {
             HostWriteLineSafe($"##vso[task.setvariable variable=TestResult;isOutput=true]{(success ? "true" : "false")}");
-            HostWriteLineSafe($"##vso[task.setvariable variable=TotalTests;isOutput=true]{counts.TotalCount}");
-            HostWriteLineSafe($"##vso[task.setvariable variable=FailedTests;isOutput=true]{counts.FailedCount}");
+            HostWriteLineSafe($"##vso[task.setvariable variable=TotalTests;isOutput=true]{result.TotalCount}");
+            HostWriteLineSafe($"##vso[task.setvariable variable=FailedTests;isOutput=true]{result.FailedCount}");
             if (!success && !string.IsNullOrWhiteSpace(errorMessage))
                 HostWriteLineSafe($"##vso[task.setvariable variable=ErrorMessage;isOutput=true]{errorMessage}");
         }
     }
 
-    private static double? GetCoveragePercentOrNull(object testResults)
+    private static PowerForge.ModuleTestSuiteOutputFormat MapOutputFormat(ModuleTestSuiteOutputFormat format)
     {
-        var ps = PSObject.AsPSObject(testResults);
-        var cc = ps.Properties["CodeCoverage"]?.Value;
-        if (cc is null) return null;
-
-        var psCc = PSObject.AsPSObject(cc);
-        var executed = GetNullableDouble(psCc, "NumberOfCommandsExecuted");
-        var analyzed = GetNullableDouble(psCc, "NumberOfCommandsAnalyzed");
-        if (!executed.HasValue || !analyzed.HasValue || analyzed.Value <= 0)
-            return null;
-
-        return Math.Round((executed.Value / analyzed.Value) * 100.0, 2);
-    }
-
-    private static double? GetNullableDouble(PSObject o, string name)
-    {
-        try
+        return format switch
         {
-            var v = o.Properties[name]?.Value;
-            if (v is null) return null;
-            return Convert.ToDouble(v, CultureInfo.InvariantCulture);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static TimeSpan? GetDurationOrNull(object testResults)
-    {
-        var ps = PSObject.AsPSObject(testResults);
-        var v = ps.Properties["Time"]?.Value;
-        return v is TimeSpan ts ? ts : null;
-    }
-
-    private static TestCounts GetCounts(object testResults)
-    {
-        var ps = PSObject.AsPSObject(testResults);
-
-        var total = GetNullableInt(ps, "TotalCount");
-        var passed = GetNullableInt(ps, "PassedCount");
-        var failed = GetNullableInt(ps, "FailedCount");
-        var skipped = GetNullableInt(ps, "SkippedCount");
-
-        if (total.HasValue && passed.HasValue && failed.HasValue)
-        {
-            return new TestCounts(total.Value, passed.Value, failed.Value, skipped ?? 0);
-        }
-
-        var tests = ps.Properties["Tests"]?.Value as IEnumerable;
-        if (tests is null)
-            return new TestCounts(0, 0, 0, 0);
-
-        var t = 0;
-        var p = 0;
-        var f = 0;
-        var s = 0;
-        foreach (var it in tests)
-        {
-            t++;
-            var ti = PSObject.AsPSObject(it);
-            var res = ti.Properties["Result"]?.Value?.ToString();
-            if (string.Equals(res, "Passed", StringComparison.OrdinalIgnoreCase)) p++;
-            else if (string.Equals(res, "Failed", StringComparison.OrdinalIgnoreCase)) f++;
-            else if (string.Equals(res, "Skipped", StringComparison.OrdinalIgnoreCase)) s++;
-        }
-        return new TestCounts(t, p, f, s);
-    }
-
-    private static int? GetNullableInt(PSObject o, string name)
-    {
-        try
-        {
-            var v = o.Properties[name]?.Value;
-            if (v is null) return null;
-            return Convert.ToInt32(v, CultureInfo.InvariantCulture);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string GetString(Hashtable ht, string key)
-    {
-        try
-        {
-            return ht.ContainsKey(key) ? (ht[key]?.ToString() ?? string.Empty) : string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private static List<object?> GetEnumerable(Hashtable ht, string key)
-    {
-        var list = new List<object?>();
-        try
-        {
-            if (!ht.ContainsKey(key))
-                return list;
-
-            var v = ht[key];
-            if (v is null)
-                return list;
-
-            if (v is string)
-            {
-                list.Add(v);
-                return list;
-            }
-
-            if (v is IEnumerable e)
-            {
-                foreach (var it in e) list.Add(it);
-                return list;
-            }
-
-            list.Add(v);
-            return list;
-        }
-        catch
-        {
-            return list;
-        }
+            ModuleTestSuiteOutputFormat.Detailed => PowerForge.ModuleTestSuiteOutputFormat.Detailed,
+            ModuleTestSuiteOutputFormat.Normal => PowerForge.ModuleTestSuiteOutputFormat.Normal,
+            ModuleTestSuiteOutputFormat.Minimal => PowerForge.ModuleTestSuiteOutputFormat.Minimal,
+            _ => PowerForge.ModuleTestSuiteOutputFormat.Detailed
+        };
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
@@ -699,20 +393,5 @@ if ($useV5) {
             // ignore host limitations
         }
     }
-
-    private readonly struct TestCounts
-    {
-        public int TotalCount { get; }
-        public int PassedCount { get; }
-        public int FailedCount { get; }
-        public int SkippedCount { get; }
-
-        public TestCounts(int totalCount, int passedCount, int failedCount, int skippedCount)
-        {
-            TotalCount = totalCount;
-            PassedCount = passedCount;
-            FailedCount = failedCount;
-            SkippedCount = skippedCount;
-        }
-    }
 }
+
