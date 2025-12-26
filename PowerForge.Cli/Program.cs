@@ -1,4 +1,5 @@
 using PowerForge;
+using PowerForge.Cli;
 using System.Text.Json;
 
 var logger = new ConsoleLogger { IsVerbose = args.Contains("-Verbose", StringComparer.OrdinalIgnoreCase) };
@@ -195,6 +196,77 @@ switch (cmd)
             return 1;
         }
     }
+    case "pipeline":
+    case "run":
+    {
+        var argv = args.Skip(1).ToArray();
+        var configPath = TryGetOptionValue(argv, "--config");
+        var outputJson = IsJsonOutput(argv);
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            Console.WriteLine("Usage: powerforge pipeline --config <Pipeline.json> [--output json]");
+            return 2;
+        }
+
+        ModulePipelineSpec spec;
+        try
+        {
+            spec = LoadJson<ModulePipelineSpec>(configPath);
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { command = "pipeline", success = false, exitCode = 2, error = ex.Message });
+                return 2;
+            }
+
+            logger.Error(ex.Message);
+            return 2;
+        }
+
+        try
+        {
+            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var runner = new ModulePipelineRunner(cmdLogger);
+            var res = runner.Run(spec);
+
+            if (outputJson)
+            {
+                WriteJson(new
+                {
+                    command = "pipeline",
+                    success = true,
+                    exitCode = 0,
+                    spec,
+                    result = res,
+                    logs = ((BufferingLogger)cmdLogger).Entries
+                });
+                return 0;
+            }
+
+            logger.Success($"Pipeline built {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
+            logger.Info($"Staging: {res.BuildResult.StagingPath}");
+            if (res.InstallResult is not null)
+            {
+                logger.Success($"Installed {res.Plan.ModuleName} {res.InstallResult.Version}");
+                foreach (var path in res.InstallResult.InstalledPaths) logger.Info($" → {path}");
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { command = "pipeline", success = false, exitCode = 1, error = ex.Message });
+                return 1;
+            }
+
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
     case "find":
     {
         var argv = args.Skip(1).ToArray();
@@ -313,6 +385,7 @@ Usage:
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
   powerforge install --config <InstallSpec.json>
+  powerforge pipeline --config <Pipeline.json>
   powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
   powerforge publish --path <Path> [--repo <Repo>] [--apikey <Key>] [--nupkg] [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
   powerforge -Verbose               Enable verbose diagnostics
@@ -427,6 +500,7 @@ static T LoadJson<T>(string path)
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
     };
+    options.Converters.Add(new ConfigurationSegmentJsonConverter());
 
     var obj = JsonSerializer.Deserialize<T>(json, options);
     if (obj is null) throw new InvalidOperationException($"Failed to deserialize config file: {full}");
@@ -567,11 +641,14 @@ static string[] ParseTargets(string[] argv)
 
 static void WriteJson(object obj)
 {
-    var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions
+    var options = new JsonSerializerOptions
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false
-    });
+    };
+    options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+    var json = JsonSerializer.Serialize(obj, options);
     Console.WriteLine(json);
 }
 
