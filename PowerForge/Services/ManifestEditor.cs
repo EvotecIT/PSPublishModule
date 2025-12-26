@@ -61,11 +61,18 @@ public static class ManifestEditor
         public string ModuleName { get; }
         /// <summary>Optional explicit module version.</summary>
         public string? ModuleVersion { get; }
+        /// <summary>Optional exact required version.</summary>
+        public string? RequiredVersion { get; }
         /// <summary>Optional module GUID.</summary>
         public string? Guid { get; }
         /// <summary>Creates a new required module entry.</summary>
-        public RequiredModule(string moduleName, string? moduleVersion = null, string? guid = null)
-        { ModuleName = moduleName; ModuleVersion = moduleVersion; Guid = guid; }
+        public RequiredModule(string moduleName, string? moduleVersion = null, string? requiredVersion = null, string? guid = null)
+        {
+            ModuleName = moduleName;
+            ModuleVersion = moduleVersion;
+            RequiredVersion = requiredVersion;
+            Guid = guid;
+        }
     }
 
     /// <summary>Gets the RequiredModules list from the top-level manifest.</summary>
@@ -348,7 +355,7 @@ public static class ManifestEditor
         if (expr is ConstantExpressionAst c && c.Value is string raw) return new RequiredModule(raw);
         if (expr is HashtableAst h)
         {
-            string? name = null, version = null, guid = null;
+            string? name = null, version = null, requiredVersion = null, guid = null;
             foreach (var kv in h.KeyValuePairs)
             {
                 var key = GetKeyName(kv.Item1);
@@ -361,12 +368,16 @@ public static class ManifestEditor
                 {
                     if (val is StringConstantExpressionAst vv) version = vv.Value; else if (val is ConstantExpressionAst vc && vc.Value is string vss) version = vss;
                 }
+                else if (string.Equals(key, "RequiredVersion", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (val is StringConstantExpressionAst rv) requiredVersion = rv.Value; else if (val is ConstantExpressionAst rc && rc.Value is string rss) requiredVersion = rss;
+                }
                 else if (string.Equals(key, "Guid", StringComparison.OrdinalIgnoreCase))
                 {
                     if (val is StringConstantExpressionAst gv) guid = gv.Value; else if (val is ConstantExpressionAst gc && gc.Value is string gss) guid = gss;
                 }
             }
-            if (!string.IsNullOrWhiteSpace(name)) return new RequiredModule(name!, version, guid);
+            if (!string.IsNullOrWhiteSpace(name)) return new RequiredModule(name!, version, requiredVersion, guid);
         }
         return null;
     }
@@ -376,9 +387,10 @@ public static class ManifestEditor
         // Keep compact, on one line per entry for readability
         var items = modules.Select(m =>
         {
-            if (m.ModuleVersion == null && m.Guid == null) return EscapeAndQuote(m.ModuleName);
+            if (m.ModuleVersion == null && m.RequiredVersion == null && m.Guid == null) return EscapeAndQuote(m.ModuleName);
             var parts = new System.Collections.Generic.List<string> { $"ModuleName = {EscapeAndQuote(m.ModuleName)}" };
             if (!string.IsNullOrWhiteSpace(m.ModuleVersion)) parts.Add($"ModuleVersion = {EscapeAndQuote(m.ModuleVersion!)}");
+            if (!string.IsNullOrWhiteSpace(m.RequiredVersion)) parts.Add($"RequiredVersion = {EscapeAndQuote(m.RequiredVersion!)}");
             if (!string.IsNullOrWhiteSpace(m.Guid)) parts.Add($"Guid = {EscapeAndQuote(m.Guid!)}");
             return "@{ " + string.Join("; ", parts) + " }";
         });

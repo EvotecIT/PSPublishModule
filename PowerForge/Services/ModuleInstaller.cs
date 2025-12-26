@@ -139,19 +139,38 @@ public sealed class ModuleInstaller
     private static IReadOnlyList<string> GetDefaultModuleRoots()
     {
         var list = new List<string>();
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        if (!string.IsNullOrEmpty(home))
+
+        if (Path.DirectorySeparatorChar == '\\')
         {
-            var core = Path.Combine(home, "PowerShell", "Modules");
-            list.Add(core);
-            if (Path.DirectorySeparatorChar == '\\')
+            var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (string.IsNullOrWhiteSpace(docs))
+                docs = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+            if (!string.IsNullOrWhiteSpace(docs))
             {
-                var desktop = Path.Combine(home, "WindowsPowerShell", "Modules");
-                list.Add(desktop);
+                list.Add(Path.Combine(docs, "PowerShell", "Modules"));
+                list.Add(Path.Combine(docs, "WindowsPowerShell", "Modules"));
             }
         }
+        else
+        {
+            var home = Environment.GetEnvironmentVariable("HOME");
+            if (string.IsNullOrWhiteSpace(home))
+                home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+            var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            var dataHome = !string.IsNullOrWhiteSpace(xdgDataHome)
+                ? xdgDataHome
+                : (!string.IsNullOrWhiteSpace(home)
+                    ? Path.Combine(home!, ".local", "share")
+                    : null);
+
+            if (!string.IsNullOrWhiteSpace(dataHome))
+                list.Add(Path.Combine(dataHome!, "powershell", "Modules"));
+        }
+
         // Deduplicate
-        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();       
     }
 
     private static string ResolveVersion(IEnumerable<string> roots, string moduleName, string baseVersion, InstallationStrategy strategy)
