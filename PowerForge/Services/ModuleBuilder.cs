@@ -26,7 +26,10 @@ public sealed class ModuleBuilder
         public string ProjectRoot { get; set; } = string.Empty;
         /// <summary>Name of the module being built (used for PSD1 naming and exports).</summary>
         public string ModuleName { get; set; } = string.Empty;
-        /// <summary>Path to the .NET project that should be published into the module Lib folder.</summary>
+        /// <summary>
+        /// Optional path to a .NET project (.csproj) that should be published into the module Lib folder.
+        /// When empty, binary publishing is skipped (script-only build).
+        /// </summary>
         public string CsprojPath { get; set; } = string.Empty;
         /// <summary>Build configuration used for publishing (e.g., Release).</summary>
         public string Configuration { get; set; } = "Release";
@@ -66,25 +69,36 @@ public sealed class ModuleBuilder
             throw new DirectoryNotFoundException($"Project root not found: {opts.ProjectRoot}");
         if (string.IsNullOrWhiteSpace(opts.ModuleName))
             throw new ArgumentException("ModuleName is required", nameof(opts.ModuleName));
-        if (string.IsNullOrWhiteSpace(opts.CsprojPath) || !File.Exists(opts.CsprojPath))
+
+        var hasCsproj = !string.IsNullOrWhiteSpace(opts.CsprojPath);
+        if (hasCsproj && !File.Exists(opts.CsprojPath))
             throw new FileNotFoundException($"Project file not found: {opts.CsprojPath}");
 
-        var libRoot = Path.Combine(opts.ProjectRoot, "Lib");
-        var coreDir = Path.Combine(libRoot, "Core");
-        var defDir  = Path.Combine(libRoot, "Default");
-        if (Directory.Exists(libRoot)) Directory.Delete(libRoot, recursive: true);
-        Directory.CreateDirectory(coreDir);
-        Directory.CreateDirectory(defDir);
-
-        // 1) Build libraries (dotnet publish) per framework and copy to Lib/<Core|Default>
-        var publisher = new DotnetPublisher(_logger);
-        var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, opts.Frameworks, opts.ModuleVersion);
-        foreach (var kv in publishes)
+        if (hasCsproj)
         {
-            var tfm = kv.Key;
-            var src = kv.Value;
-            var target = IsCore(tfm) ? coreDir : defDir;
-            CopyFiltered(src, target, static p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+            var frameworks = opts.Frameworks.Count > 0 ? opts.Frameworks : new[] { "net472", "net8.0" };
+
+            var libRoot = Path.Combine(opts.ProjectRoot, "Lib");
+            var coreDir = Path.Combine(libRoot, "Core");
+            var defDir  = Path.Combine(libRoot, "Default");
+            if (Directory.Exists(libRoot)) Directory.Delete(libRoot, recursive: true);
+            Directory.CreateDirectory(coreDir);
+            Directory.CreateDirectory(defDir);
+
+            // 1) Build libraries (dotnet publish) per framework and copy to Lib/<Core|Default>
+            var publisher = new DotnetPublisher(_logger);
+            var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion);
+            foreach (var kv in publishes)
+            {
+                var tfm = kv.Key;
+                var src = kv.Value;
+                var target = IsCore(tfm) ? coreDir : defDir;
+                CopyFiltered(src, target, static p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        else
+        {
+            _logger.Verbose($"No CsprojPath specified for {opts.ModuleName}; skipping binary publish step.");
         }
 
         // 2) Manifest generation
