@@ -73,7 +73,10 @@ public sealed class ModulePipelineRunner
         string? netProjectPath = null;
 
         InformationConfiguration? information = null;
+        DocumentationConfiguration? documentation = null;
+        BuildDocumentationConfiguration? documentationBuild = null;
         var artefacts = new List<ConfigurationArtefactSegment>();
+        var publishes = new List<ConfigurationPublishSegment>();
 
         var requiredModulesDraft = new List<RequiredModuleDraft>();
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -155,6 +158,21 @@ public sealed class ModulePipelineRunner
                     information = info.Configuration;
                     break;
                 }
+                case ConfigurationDocumentationSegment docs:
+                {
+                    documentation = docs.Configuration;
+                    break;
+                }
+                case ConfigurationBuildDocumentationSegment buildDocs:
+                {
+                    documentationBuild = buildDocs.Configuration;
+                    break;
+                }
+                case ConfigurationPublishSegment publish:
+                {
+                    publishes.Add(publish);
+                    break;
+                }
                 case ConfigurationArtefactSegment artefact:
                 {
                     artefacts.Add(artefact);
@@ -226,7 +244,10 @@ public sealed class ModulePipelineRunner
         var requiredModules = ResolveRequiredModules(requiredModulesDraft);
         var requiredModulesForPackaging = ResolveRequiredModules(requiredModulesDraftForPackaging);
         var enabledArtefacts = artefacts
-            .Where(a => a is not null && a.Configuration?.Enabled == true)
+            .Where(a => a is not null && a.Configuration?.Enabled == true)      
+            .ToArray();
+        var enabledPublishes = publishes
+            .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
 
         return new ModulePipelinePlan(
@@ -240,6 +261,9 @@ public sealed class ModulePipelineRunner
             requiredModules: requiredModules,
             requiredModulesForPackaging: requiredModulesForPackaging,
             information: information,
+            documentation: documentation,
+            documentationBuild: documentationBuild,
+            publishes: enabledPublishes,
             artefacts: enabledArtefacts,
             installEnabled: installEnabled,
             installStrategy: strategy,
@@ -265,6 +289,24 @@ public sealed class ModulePipelineRunner
         if (plan.RequiredModules is { Length: > 0 })
             ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
 
+        if (!string.IsNullOrWhiteSpace(plan.PreRelease))
+            ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+
+        DocumentationBuildResult? documentationResult = null;
+        if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
+        {
+            var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
+            documentationResult = engine.Build(
+                moduleName: plan.ModuleName,
+                stagingPath: buildResult.StagingPath,
+                moduleManifestPath: buildResult.ManifestPath,
+                documentation: plan.Documentation,
+                buildDocumentation: plan.DocumentationBuild!);
+        }
+
+        if (documentationResult is not null && !documentationResult.Succeeded)
+            throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
+
         var artefactResults = new List<ArtefactBuildResult>();
         if (plan.Artefacts is { Length: > 0 })
         {
@@ -280,6 +322,16 @@ public sealed class ModulePipelineRunner
                     preRelease: plan.PreRelease,
                     requiredModules: plan.RequiredModulesForPackaging,
                     information: plan.Information));
+            }
+        }
+
+        var publishResults = new List<ModulePublishResult>();
+        if (plan.Publishes is { Length: > 0 })
+        {
+            var publisher = new ModulePublisher(_logger);
+            foreach (var publish in plan.Publishes)
+            {
+                publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults));
             }
         }
 
@@ -304,7 +356,7 @@ public sealed class ModulePipelineRunner
             catch { /* best effort */ }
         }
 
-        return new ModulePipelineResult(plan, buildResult, installResult, artefactResults.ToArray());
+        return new ModulePipelineResult(plan, buildResult, installResult, documentationResult, publishResults.ToArray(), artefactResults.ToArray());
     }
 
     private ManifestEditor.RequiredModule[] ResolveRequiredModules(IReadOnlyList<RequiredModuleDraft> drafts)

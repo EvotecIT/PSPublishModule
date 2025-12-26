@@ -138,8 +138,11 @@ public sealed class EncodingConverter
         return kind switch
         {
             TextEncodingKind.Ascii => Encoding.ASCII,
-            TextEncodingKind.BigEndianUnicode => Encoding.BigEndianUnicode,
+            TextEncodingKind.BigEndianUnicode => Encoding.BigEndianUnicode,     
             TextEncodingKind.Unicode => Encoding.Unicode,
+#pragma warning disable SYSLIB0001
+            TextEncodingKind.UTF7 => Encoding.UTF7,
+#pragma warning restore SYSLIB0001
             TextEncodingKind.UTF8 => new UTF8Encoding(false),
             TextEncodingKind.UTF8BOM => new UTF8Encoding(true),
             TextEncodingKind.UTF32 => Encoding.UTF32,

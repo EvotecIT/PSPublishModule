@@ -140,8 +140,12 @@ public sealed class ModuleBuildPipeline
     {
         try
         {
-            var baseUri = new Uri(AppendDirectorySeparatorChar(Path.GetFullPath(baseDir)));
-            var pathUri = new Uri(Path.GetFullPath(fullPath));
+            var baseFull = AppendDirectorySeparatorChar(Path.GetFullPath(baseDir));
+            var full = Path.GetFullPath(fullPath);
+            var pathForUri = Directory.Exists(full) ? AppendDirectorySeparatorChar(full) : full;
+
+            var baseUri = new Uri(baseFull);
+            var pathUri = new Uri(pathForUri);
             var rel = Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString());
             return rel.Replace('/', Path.DirectorySeparatorChar);
         }
