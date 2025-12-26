@@ -195,8 +195,9 @@ public static class BuildServices
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 var ver = d.Contains("ModuleVersion") ? d["ModuleVersion"]?.ToString() : null;
                 var req = d.Contains("RequiredVersion") ? d["RequiredVersion"]?.ToString() : null;
+                var max = d.Contains("MaximumVersion") ? d["MaximumVersion"]?.ToString() : null;
                 var guid = d.Contains("Guid") ? d["Guid"]?.ToString() : null;   
-                list.Add(new ManifestEditor.RequiredModule(name!, moduleVersion: ver, requiredVersion: req, guid: guid));
+                list.Add(new ManifestEditor.RequiredModule(name!, moduleVersion: ver, requiredVersion: req, maximumVersion: max, guid: guid));
             }
             else if (obj is string s && !string.IsNullOrWhiteSpace(s))
             {

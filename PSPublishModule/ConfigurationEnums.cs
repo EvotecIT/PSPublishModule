@@ -38,33 +38,3 @@ public enum CertificateHashAlgorithm
     /// <summary>SHA512.</summary>
     SHA512
 }
-
-/// <summary>
-/// Cleanup type used by <c>Remove-ProjectFiles</c>.
-/// </summary>
-public enum ProjectCleanupType
-{
-    /// <summary>Build artefacts (bin/obj/etc).</summary>
-    Build,
-    /// <summary>Log and trace files/folders.</summary>
-    Logs,
-    /// <summary>HTML files.</summary>
-    Html,
-    /// <summary>Temporary files/folders.</summary>
-    Temp,
-    /// <summary>All supported cleanup types combined.</summary>
-    All
-}
-
-/// <summary>
-/// Deletion method used by <c>Remove-ProjectFiles</c>.
-/// </summary>
-public enum ProjectDeleteMethod
-{
-    /// <summary>Use standard file system delete operations.</summary>
-    RemoveItem,
-    /// <summary>Use <c>System.IO</c> delete operations (useful for some cloud-file edge cases).</summary>
-    DotNetDelete,
-    /// <summary>Move items to the Recycle Bin (Windows only).</summary>
-    RecycleBin
-}

@@ -197,6 +197,81 @@ switch (cmd)
             return 1;
         }
     }
+    case "test":
+    {
+        var argv = args.Skip(1).ToArray();
+        var configPath = TryGetOptionValue(argv, "--config");
+        var outputJson = IsJsonOutput(argv);
+
+        ModuleTestSuiteSpec spec;
+        if (!string.IsNullOrWhiteSpace(configPath))
+        {
+            spec = LoadJson<ModuleTestSuiteSpec>(configPath);
+        }
+        else
+        {
+            var parsed = ParseTestArgs(argv);
+            if (parsed is null) { PrintHelp(); return 2; }
+            spec = parsed;
+        }
+
+        try
+        {
+            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var service = new ModuleTestSuiteService(new PowerShellRunner(), cmdLogger);
+            var res = service.Run(spec);
+
+            var success = res.FailedCount == 0;
+            var exitCode = success ? 0 : 1;
+
+            if (outputJson)
+            {
+                WriteJson(new
+                {
+                    command = "test",
+                    success,
+                    exitCode,
+                    spec,
+                    result = res,
+                    logs = ((BufferingLogger)cmdLogger).Entries
+                });
+                return exitCode;
+            }
+
+            if (!string.IsNullOrWhiteSpace(res.StdOut))
+                Console.WriteLine(res.StdOut);
+
+            if (!string.IsNullOrWhiteSpace(res.StdErr))
+                logger.Warn(res.StdErr.Trim());
+
+            logger.Info($"Tests: {res.PassedCount}/{res.TotalCount} passed (failed: {res.FailedCount}, skipped: {res.SkippedCount})");
+            if (res.Duration is not null) logger.Info($"Duration: {res.Duration}");
+            if (res.CoveragePercent is not null) logger.Info($"Coverage: {res.CoveragePercent:0.00}%");
+
+            if (!success && res.FailureAnalysis is not null && res.FailureAnalysis.FailedTests.Length > 0)
+            {
+                logger.Error($"Failed tests ({res.FailureAnalysis.FailedTests.Length}):");
+                foreach (var f in res.FailureAnalysis.FailedTests)
+                    logger.Error($" - {f.Name}");
+            }
+
+            if (success) logger.Success("Test suite passed");
+            else logger.Error("Test suite failed");
+
+            return exitCode;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { command = "test", success = false, exitCode = 1, error = ex.Message });
+                return 1;
+            }
+
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
     case "pipeline":
     case "run":
     {
@@ -384,6 +459,9 @@ Usage:
   powerforge build --config <BuildSpec.json>
   powerforge normalize <files...>   Normalize encodings and line endings [--output json]
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
+  powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
+                 [--skip-dependencies] [--skip-import] [--keep-xml] [--timeout <seconds>] [--output json]
+  powerforge test --config <TestSpec.json>
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
   powerforge install --config <InstallSpec.json>
   powerforge pipeline --config <Pipeline.json>
@@ -476,8 +554,97 @@ static (string Name, string Version, string Staging, string[] Roots, PowerForge.
     }
     if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(staging))
         return null;
-    return (name!, version!, staging!, roots.ToArray(), strategy, keep);
+    return (name!, version!, staging!, roots.ToArray(), strategy, keep);        
 }
+
+static ModuleTestSuiteSpec? ParseTestArgs(string[] argv)
+{
+    var spec = new ModuleTestSuiteSpec { ProjectPath = Directory.GetCurrentDirectory() };
+
+    for (int i = 0; i < argv.Length; i++)
+    {
+        var a = argv[i];
+        if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        switch (a.ToLowerInvariant())
+        {
+            case "--project-root":
+            case "--project":
+            case "--path":
+                if (++i >= argv.Length) return null;
+                spec.ProjectPath = argv[i];
+                break;
+            case "--test-path":
+                if (++i >= argv.Length) return null;
+                spec.TestPath = argv[i];
+                break;
+            case "--format":
+            case "--output-format":
+                if (++i >= argv.Length) return null;
+                if (!Enum.TryParse<ModuleTestSuiteOutputFormat>(argv[i], ignoreCase: true, out var fmt))
+                    return null;
+                spec.OutputFormat = fmt;
+                break;
+            case "--additional-modules":
+            case "--modules":
+                if (++i >= argv.Length) return null;
+                spec.AdditionalModules = SplitCsv(argv[i]);
+                break;
+            case "--skip-modules":
+                if (++i >= argv.Length) return null;
+                spec.SkipModules = SplitCsv(argv[i]);
+                break;
+            case "--coverage":
+            case "--enable-code-coverage":
+                spec.EnableCodeCoverage = true;
+                break;
+            case "--force":
+                spec.Force = true;
+                break;
+            case "--skip-dependencies":
+                spec.SkipDependencies = true;
+                break;
+            case "--skip-import":
+                spec.SkipImport = true;
+                break;
+            case "--keep-xml":
+            case "--keep-results-xml":
+                spec.KeepResultsXml = true;
+                break;
+            case "--timeout":
+            case "--timeout-seconds":
+                if (++i >= argv.Length) return null;
+                if (!int.TryParse(argv[i], out var t)) return null;
+                spec.TimeoutSeconds = t;
+                break;
+            case "--prefer-powershell":
+            case "--prefer-windows-powershell":
+                spec.PreferPwsh = false;
+                break;
+            case "--prefer-pwsh":
+                spec.PreferPwsh = true;
+                break;
+            case "--config":
+                i++;
+                break;
+            case "--output":
+                i++;
+                break;
+            case "--output-json":
+            case "--json":
+                break;
+        }
+    }
+
+    return spec;
+}
+
+static string[] SplitCsv(string value)
+    => (value ?? string.Empty).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(s => s.Trim())
+        .Where(s => !string.IsNullOrWhiteSpace(s))
+        .ToArray();
 
 static string? TryGetOptionValue(string[] argv, string optionName)
 {
