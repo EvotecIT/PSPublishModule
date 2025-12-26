@@ -100,6 +100,58 @@ switch (cmd)
         if (res.PrunedPaths.Count > 0) logger.Warn($"Pruned versions: {res.PrunedPaths.Count}");
         return 0;
     }
+    case "find":
+    {
+        var parsed = ParseFindArgs(args.Skip(1).ToArray());
+        if (parsed is null) { PrintHelp(); return 2; }
+        var p = parsed.Value;
+
+        try
+        {
+            var runner = new PowerShellRunner();
+            var client = new PSResourceGetClient(runner, logger);
+            var opts = new PSResourceFindOptions(p.Names, p.Version, p.Prerelease, p.Repositories);
+            var results = client.Find(opts);
+            foreach (var r in results)
+            {
+                Console.WriteLine($"{r.Name}\t{r.Version}\t{r.Repository ?? string.Empty}");
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
+    case "publish":
+    {
+        var parsed = ParsePublishArgs(args.Skip(1).ToArray());
+        if (parsed is null) { PrintHelp(); return 2; }
+        var p = parsed.Value;
+
+        try
+        {
+            var runner = new PowerShellRunner();
+            var client = new PSResourceGetClient(runner, logger);
+            var opts = new PSResourcePublishOptions(
+                path: Path.GetFullPath(p.Path.Trim().Trim('"')),
+                isNupkg: p.IsNupkg,
+                repository: p.Repository,
+                apiKey: p.ApiKey,
+                destinationPath: p.DestinationPath,
+                skipDependenciesCheck: p.SkipDependenciesCheck,
+                skipModuleManifestValidate: p.SkipModuleManifestValidate);
+            client.Publish(opts);
+            logger.Success($"Published {opts.Path}{(string.IsNullOrWhiteSpace(p.Repository) ? string.Empty : " to " + p.Repository)}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
     default:
         PrintHelp();
         return 2;
@@ -113,6 +165,8 @@ Usage:
   powerforge normalize <files...>   Normalize encodings and line endings        
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc)
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
+  powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
+  powerforge publish --path <Path> [--repo <Repo>] [--apikey <Key>] [--nupkg] [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
   powerforge -Verbose               Enable verbose diagnostics
 ");
 }
@@ -225,5 +279,89 @@ static (string Name, string Version, string Staging, string[] Roots, PowerForge.
     }
     if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(staging))
         return null;
-    return (name!, version!, staging!, roots.ToArray(), strategy, keep);
+    return (name!, version!, staging!, roots.ToArray(), strategy, keep);        
+}
+
+static (string[] Names, string? Version, bool Prerelease, string[] Repositories)? ParseFindArgs(string[] argv)
+{
+    var names = new List<string>();
+    var repos = new List<string>();
+    string? version = null;
+    bool prerelease = false;
+
+    for (int i = 0; i < argv.Length; i++)
+    {
+        var a = argv[i];
+        if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        switch (a.ToLowerInvariant())
+        {
+            case "--name":
+                if (++i < argv.Length)
+                {
+                    foreach (var n in argv[i].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                        names.Add(n.Trim());
+                }
+                break;
+            case "--repo":
+            case "--repository":
+                if (++i < argv.Length) repos.Add(argv[i]);
+                break;
+            case "--version":
+                version = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--prerelease":
+                prerelease = true;
+                break;
+        }
+    }
+
+    if (names.Count == 0) return null;
+    return (names.ToArray(), version, prerelease, repos.ToArray());
+}
+
+static (string Path, string? Repository, string? ApiKey, bool IsNupkg, string? DestinationPath, bool SkipDependenciesCheck, bool SkipModuleManifestValidate)? ParsePublishArgs(string[] argv)
+{
+    string? path = null, repo = null, apiKey = null, destination = null;
+    bool isNupkg = false, skipDeps = false, skipManifest = false;
+
+    for (int i = 0; i < argv.Length; i++)
+    {
+        var a = argv[i];
+        if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        switch (a.ToLowerInvariant())
+        {
+            case "--path":
+                path = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--repo":
+            case "--repository":
+                repo = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--apikey":
+            case "--api-key":
+                apiKey = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--destination":
+            case "--destination-path":
+                destination = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--nupkg":
+                isNupkg = true;
+                break;
+            case "--skip-dependencies-check":
+                skipDeps = true;
+                break;
+            case "--skip-manifest-validate":
+            case "--skip-module-manifest-validate":
+                skipManifest = true;
+                break;
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(path)) return null;
+    return (path!, repo, apiKey, isNupkg, destination, skipDeps, skipManifest);
 }
