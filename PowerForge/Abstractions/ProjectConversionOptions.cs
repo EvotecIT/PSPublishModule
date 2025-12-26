@@ -22,6 +22,8 @@ public enum TextEncodingKind
     BigEndianUnicode,
     /// <summary>UTF-16 Little Endian.</summary>
     Unicode,
+    /// <summary>UTF-7 (legacy, not recommended).</summary>
+    UTF7,
     /// <summary>UTF-8 without BOM.</summary>
     UTF8,
     /// <summary>UTF-8 with BOM.</summary>
