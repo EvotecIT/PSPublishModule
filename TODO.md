@@ -18,16 +18,17 @@
 - CLI must be machine-friendly (stable JSON output + exit codes + no-color mode) and AOT/trim-friendly for VSCode scenarios.
 
 **Current status (as of 2025-12-26)**
-- Most former `Module/Public/*.ps1` functions are now C# cmdlets (the folder is now empty; scripts remain only for legacy build DSL).
+- PSPublishModule is now primarily a binary module: `Module/Public` and `Module/Private` contain no shipped `.ps1` functions (bootstrap `Module/PSPublishModule.psm1` remains, plus `Module/Build/Build-Module.ps1` for compatibility).
 - `PowerForge` has typed build/install models + a staging-first build pipeline to avoid self-build file locking.
-- `PowerForge.Cli` supports `build`/`install` via `--config <json>` and initial machine output via `--output json`.
+- `New-Configuration*` cmdlets now emit typed `PowerForge` configuration segment objects (no `OrderedDictionary`/`Hashtable` outputs); the legacy DSL parser accepts both typed segments and legacy dictionaries.
+- `PowerForge.Cli` supports `build`/`install` via `--config <json>` and initial machine output via `--output json`, plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options).
 - `Invoke-ModuleBuild` routes both the simple build path and the legacy DSL (`-Settings {}` / `Build-Module {}`) through the PowerForge pipeline (C#); the legacy PowerShell `Start-*` build scripts were removed.
 - `Module/Build/Build-Module.ps1` defaults to CLI staging build; `-Legacy` runs the DSL build path (still C#) for compatibility.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
-- PSResourceGet is used internally (out-of-proc wrapper) and is not exposed as standalone cmdlets.
+- PSResourceGet is used internally (out-of-proc wrapper for find/publish/install) and is not exposed as standalone cmdlets.
 
 **Replacement roadmap (priority order)**
-- Make configuration typed end-to-end: replace `OrderedDictionary` configuration “segments” with typed models + enums, and keep legacy DSL via adapters/translation.
+- (done) Configuration is typed end-to-end: configuration “segments” are typed models + enums in `PowerForge`, with legacy DSL supported via adapters/translation.
 - Re-implement the legacy “one-shot build” features (docs/artefacts/publish) in C# services + CLI, now that the old PowerShell `Start-*` orchestration scripts are removed.
 - Move remaining orchestration out of cmdlets into `PowerForge` services and slim cmdlets down to parameter mapping + `ShouldProcess` + typed output.
 - Expand CLI contracts (stable JSON schema, `--no-color`, consistent exit codes) and add commands (`docs`, `pack`, `publish`) backed by the same `PowerForge` services.
@@ -147,8 +148,10 @@
 - [x] Add typed build/install models + staging-first build pipeline (PowerForge).
 - [x] Use staging build by default for self-build (`Module/Build/Build-Module.ps1`).
 - [x] Add CLI `--config <json>` for `build`/`install` and initial `--output json`.
-- [ ] Migrate configuration cmdlets away from `OrderedDictionary` to typed models + enums (legacy adapters allowed).
+- [x] Add CLI `pipeline`/`run` command + polymorphic JSON segment deserialization.
+- [x] Migrate configuration cmdlets away from `OrderedDictionary` to typed models + enums (legacy adapters allowed).
 - [x] Replace legacy PowerShell build pipeline scripts with C# services (build/install) and delete the scripts (`Module/Private/New-PrepareStructure.ps1`, `Start-ModuleBuilding.ps1`, `Start-*`).
+- [x] Remove remaining `Module/Private/*.ps1` helpers and port test-suite steps to C# (`PowerForge.ModuleDependencyInstaller`, `Invoke-ModuleTestSuite`).
 - [ ] Restore parity for removed build-script features: docs, artefacts/pack, publish orchestration (PowerForge services + CLI commands).
 - [ ] Refactor “fat cmdlets” into `PowerForge` services + `partial` cmdlets (enforce ~600–700 LOC budget).
 - [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
