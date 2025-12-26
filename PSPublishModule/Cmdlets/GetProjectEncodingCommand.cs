@@ -1,12 +1,8 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Text;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -47,7 +43,7 @@ public sealed class GetProjectEncodingCommand : PSCmdlet
     public string? ExportPath { get; set; }
 
     /// <summary>
-    /// Executes the encoding analysis and returns a report object.
+    /// Executes the encoding analysis and returns a typed report object.
     /// </summary>
     protected override void ProcessRecord()
     {
@@ -66,164 +62,55 @@ public sealed class GetProjectEncodingCommand : PSCmdlet
             customExtensions: ProjectType.Equals("Custom", StringComparison.OrdinalIgnoreCase) ? patterns : null,
             excludeDirectories: ExcludeDirectories);
 
-        var files = ProjectFileEnumerator.Enumerate(enumeration)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var analyzer = new ProjectEncodingAnalyzer(logger);
+        var report = analyzer.Analyze(
+            enumeration: enumeration,
+            projectType: ProjectType,
+            includeFiles: ShowFiles.IsPresent,
+            groupByEncoding: GroupByEncoding.IsPresent,
+            exportPath: ExportPath);
 
-        if (files.Length == 0)
+        if (report.Summary.TotalFiles == 0)
         {
             WriteWarning("No files found matching the specified criteria");
             return;
         }
 
-        HostWriteLineSafe($"Analyzing {files.Length} files...", ConsoleColor.Green);
+        var s = report.Summary;
 
-        var fileDetails = new List<EncodingFileDetail>(files.Length);
-        var encodingStats = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var extensionStats = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var file in files)
-        {
-            try
-            {
-                var encName = ProjectFileAnalysis.DetectEncodingName(file);
-                var info = new FileInfo(file);
-                var ext = info.Extension.ToLowerInvariant();
-                var rel = ProjectFileAnalysis.ComputeRelativePath(root, file);
-
-                var detail = new EncodingFileDetail(
-                    relativePath: rel,
-                    fullPath: file,
-                    extension: ext,
-                    encoding: encName,
-                    size: info.Length,
-                    lastModified: info.LastWriteTime,
-                    directory: info.DirectoryName ?? string.Empty);
-
-                fileDetails.Add(detail);
-
-                if (!encodingStats.ContainsKey(encName)) encodingStats[encName] = 0;
-                encodingStats[encName]++;
-
-                if (!extensionStats.TryGetValue(ext, out var perExt))
-                {
-                    perExt = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    extensionStats[ext] = perExt;
-                }
-                if (!perExt.ContainsKey(encName)) perExt[encName] = 0;
-                perExt[encName]++;
-            }
-            catch (Exception ex)
-            {
-                WriteWarning($"Failed to analyze {file}: {ex.Message}");
-            }
-        }
-
-        var totalFiles = fileDetails.Count;
-        if (totalFiles == 0)
-        {
-            WriteWarning("No files found for analysis");
-            return;
-        }
-
-        var uniqueEncodings = encodingStats.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToArray();
-        var mostCommonEncoding = encodingStats.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault() ?? string.Empty;
-        var inconsistentExtensions = extensionStats
-            .Where(kv => kv.Value.Count > 1)
-            .Select(kv => kv.Key)
-            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var encodingDistribution = new Hashtable();
-        foreach (var kv in encodingStats.OrderByDescending(kv => kv.Value))
-            encodingDistribution[kv.Key] = kv.Value;
-
-        var extensionEncodingMap = new Hashtable();
-        foreach (var ext in extensionStats.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
-        {
-            var inner = new Hashtable();
-            foreach (var kv in extensionStats[ext].OrderByDescending(kv => kv.Value))
-                inner[kv.Key] = kv.Value;
-            extensionEncodingMap[ext] = inner;
-        }
-
-        var summary = new OrderedDictionary
-        {
-            ["ProjectPath"] = root,
-            ["ProjectType"] = ProjectType,
-            ["TotalFiles"] = totalFiles,
-            ["UniqueEncodings"] = uniqueEncodings,
-            ["EncodingCount"] = uniqueEncodings.Length,
-            ["MostCommonEncoding"] = mostCommonEncoding,
-            ["InconsistentExtensions"] = inconsistentExtensions,
-            ["EncodingDistribution"] = encodingDistribution,
-            ["ExtensionEncodingMap"] = extensionEncodingMap,
-            ["AnalysisDate"] = DateTime.Now
-        };
-
-        // Display summary (preserve existing UX: always prints to host).
         HostWriteLineSafe("");
         HostWriteLineSafe("Encoding Analysis Summary:", ConsoleColor.Cyan);
-        HostWriteLineSafe($"  Total files analyzed: {totalFiles}");
-        HostWriteLineSafe($"  Unique encodings found: {uniqueEncodings.Length}");
-        if (!string.IsNullOrWhiteSpace(mostCommonEncoding))
+        HostWriteLineSafe($"  Total files analyzed: {s.TotalFiles}");
+        HostWriteLineSafe($"  Unique encodings found: {s.UniqueEncodings.Length}");
+        if (s.ErrorFiles > 0)
+            HostWriteLineSafe($"  Files with read errors: {s.ErrorFiles}", ConsoleColor.Yellow);
+
+        if (s.MostCommonEncoding.HasValue)
         {
-            HostWriteLineSafe($"  Most common encoding: {mostCommonEncoding} ({encodingStats[mostCommonEncoding]} files)", ConsoleColor.Green);
+            var count = s.Distribution.FirstOrDefault(d => d.Encoding == s.MostCommonEncoding.Value)?.Count ?? 0;
+            HostWriteLineSafe($"  Most common encoding: {s.MostCommonEncoding.Value} ({count} files)", ConsoleColor.Green);
         }
 
-        if (inconsistentExtensions.Length > 0)
-        {
-            HostWriteLineSafe($"  Extensions with mixed encodings: {string.Join(", ", inconsistentExtensions)}", ConsoleColor.Yellow);
-        }
+        if (s.InconsistentExtensions.Length > 0)
+            HostWriteLineSafe($"  Extensions with mixed encodings: {string.Join(", ", s.InconsistentExtensions)}", ConsoleColor.Yellow);
         else
-        {
-            HostWriteLineSafe("  All file extensions have consistent encodings", ConsoleColor.Green);
-        }
+            HostWriteLineSafe("  All file extensions have consistent encoding", ConsoleColor.Green);
 
         HostWriteLineSafe("");
         HostWriteLineSafe("Encoding Distribution:", ConsoleColor.Cyan);
-        foreach (var kv in encodingStats.OrderByDescending(kv => kv.Value))
+        var denom = Math.Max(1, s.TotalFiles - s.ErrorFiles);
+        foreach (var d in s.Distribution)
         {
-            var pct = totalFiles > 0 ? Math.Round((double)kv.Value / totalFiles * 100, 1) : 0;
-            HostWriteLineSafe($"  {kv.Key}: {kv.Value} files ({pct.ToString("0.0", CultureInfo.InvariantCulture)}%)");
+            var pct = Math.Round((double)d.Count / denom * 100, 1);
+            HostWriteLineSafe($"  {d.Encoding}: {d.Count} files ({pct.ToString("0.00", CultureInfo.InvariantCulture)}%)");
         }
 
-        if (ExportPath is not null && fileDetails.Count > 0)
+        if (!string.IsNullOrWhiteSpace(ExportPath) && File.Exists(ExportPath!))
         {
-            try
-            {
-                WriteCsv(
-                    ExportPath,
-                    headers: new[] { "RelativePath", "FullPath", "Extension", "Encoding", "Size", "LastModified", "Directory" },
-                    rows: fileDetails.Select(f => new[]
-                    {
-                        f.RelativePath,
-                        f.FullPath,
-                        f.Extension,
-                        f.Encoding,
-                        f.Size.ToString(CultureInfo.InvariantCulture),
-                        f.LastModified.ToString("o", CultureInfo.InvariantCulture),
-                        f.Directory
-                    }));
-                HostWriteLineSafe($"");
-                HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
-            }
-            catch (Exception ex)
-            {
-                WriteWarning($"Failed to export report to {ExportPath}: {ex.Message}");
-            }
+            HostWriteLineSafe("");
+            HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
         }
-
-        object? filesOut = ShowFiles.IsPresent ? fileDetails.ToArray() : null;
-        object? groupedOut = GroupByEncoding.IsPresent ? GroupByEncodingMap(fileDetails, uniqueEncodings) : null;
-
-        var report = new OrderedDictionary
-        {
-            ["Summary"] = summary,
-            ["Files"] = filesOut,
-            ["GroupedByEncoding"] = groupedOut
-        };
 
         WriteObject(report);
     }
@@ -254,34 +141,6 @@ public sealed class GetProjectEncodingCommand : PSCmdlet
         };
     }
 
-    private static object GroupByEncodingMap(IReadOnlyList<EncodingFileDetail> files, IReadOnlyList<string> encodings)
-    {
-        var grouped = new Hashtable();
-        foreach (var enc in encodings)
-        {
-            grouped[enc] = files.Where(f => string.Equals(f.Encoding, enc, StringComparison.OrdinalIgnoreCase)).ToArray();
-        }
-        return grouped;
-    }
-
-    private static void WriteCsv(string path, IEnumerable<string> headers, IEnumerable<string[]> rows)
-    {
-        using var sw = new StreamWriter(path, append: false, new UTF8Encoding(true));
-        sw.WriteLine(string.Join(",", headers.Select(EscapeCsv)));
-        foreach (var row in rows)
-        {
-            sw.WriteLine(string.Join(",", row.Select(EscapeCsv)));
-        }
-    }
-
-    private static string EscapeCsv(string? value)
-    {
-        value ??= string.Empty;
-        bool mustQuote = value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r');
-        if (!mustQuote) return value;
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
-    }
-
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
     {
         try
@@ -301,33 +160,5 @@ public sealed class GetProjectEncodingCommand : PSCmdlet
             // ignore host limitations
         }
     }
-
-    private sealed class EncodingFileDetail
-    {
-        public string RelativePath { get; }
-        public string FullPath { get; }
-        public string Extension { get; }
-        public string Encoding { get; }
-        public long Size { get; }
-        public DateTime LastModified { get; }
-        public string Directory { get; }
-
-        public EncodingFileDetail(
-            string relativePath,
-            string fullPath,
-            string extension,
-            string encoding,
-            long size,
-            DateTime lastModified,
-            string directory)
-        {
-            RelativePath = relativePath;
-            FullPath = fullPath;
-            Extension = extension;
-            Encoding = encoding;
-            Size = size;
-            LastModified = lastModified;
-            Directory = directory;
-        }
-    }
 }
+

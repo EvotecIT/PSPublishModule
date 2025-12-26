@@ -5,6 +5,7 @@ using System.Linq;
 using System.Management.Automation;
 using System.Text;
 using System.Text.RegularExpressions;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -48,7 +49,7 @@ internal static class PowerShellCompatibilityAnalyzer
             }
             else
             {
-                var encodingName = ProjectFileAnalysis.DetectEncodingName(fullPath);
+                var encodingName = ProjectTextInspection.DetectEncodingKind(fullPath).ToString();
                 AddEncodingIssues(fullPath, encodingName, issues);
 
                 var content = ReadTextBestEffort(fullPath);
@@ -222,7 +223,7 @@ internal static class PowerShellCompatibilityAnalyzer
         try
         {
             if (File.Exists(path))
-                return ProjectFileAnalysis.DetectEncodingName(path);
+                return ProjectTextInspection.DetectEncodingKind(path).ToString();
         }
         catch { }
         return string.Empty;
@@ -233,7 +234,7 @@ internal static class PowerShellCompatibilityAnalyzer
         try
         {
             if (!string.IsNullOrWhiteSpace(baseDirectory))
-                return ProjectFileAnalysis.ComputeRelativePath(baseDirectory!, fullPath);
+                return ProjectTextInspection.ComputeRelativePath(baseDirectory!, fullPath);
         }
         catch { }
 

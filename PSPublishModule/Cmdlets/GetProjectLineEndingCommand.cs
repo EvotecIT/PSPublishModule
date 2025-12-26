@@ -1,12 +1,8 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using System.Text;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -55,7 +51,7 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
     public SwitchParameter Internal { get; set; }
 
     /// <summary>
-    /// Executes the line ending analysis and returns a report object.
+    /// Executes the line ending analysis and returns a typed report object.
     /// </summary>
     protected override void ProcessRecord()
     {
@@ -64,6 +60,7 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
             throw new DirectoryNotFoundException($"Project path '{root}' not found or is not a directory");
 
         var patterns = ResolvePatterns(ProjectType, CustomExtensions);
+
         if (Internal.IsPresent)
         {
             WriteVerbose($"Analyzing project line endings for: {root}");
@@ -81,229 +78,92 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
             customExtensions: ProjectType.Equals("Custom", StringComparison.OrdinalIgnoreCase) ? patterns : null,
             excludeDirectories: ExcludeDirectories);
 
-        var files = ProjectFileEnumerator.Enumerate(enumeration)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var logger = new CmdletLogger(
+            cmdlet: this,
+            isVerbose: MyInvocation.BoundParameters.ContainsKey("Verbose"),
+            warningsAsVerbose: Internal.IsPresent);
 
-        if (files.Length == 0)
+        var analyzer = new ProjectLineEndingAnalyzer(logger);
+        var report = analyzer.Analyze(
+            enumeration: enumeration,
+            projectType: ProjectType,
+            includeFiles: ShowFiles.IsPresent,
+            groupByLineEnding: GroupByLineEnding.IsPresent,
+            checkMixed: CheckMixed.IsPresent,
+            exportPath: ExportPath);
+
+        if (report.Summary.TotalFiles == 0)
         {
             if (Internal.IsPresent) WriteVerbose("No files found matching the specified criteria");
             else WriteWarning("No files found matching the specified criteria");
             return;
         }
 
-        if (Internal.IsPresent) WriteVerbose($"Analyzing {files.Length} files...");
-        else HostWriteLineSafe($"Analyzing {files.Length} files...", ConsoleColor.Green);
-
-        var fileDetails = new List<LineEndingFileDetail>(files.Length);
-        var lineEndingStats = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var extensionStats = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
-        var problemFiles = new List<LineEndingFileDetail>();
-        var filesWithoutFinalNewline = new List<LineEndingFileDetail>();
-
-        var finalNewlineExtensions = new HashSet<string>(new[]
-        {
-            ".ps1",".psm1",".psd1",".cs",".js",".py",".rb",".java",".cpp",".h",".hpp",".sql",".md",".txt",".yaml",".yml"
-        }, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var file in files)
-        {
-            try
-            {
-                var info = new FileInfo(file);
-                var ext = info.Extension.ToLowerInvariant();
-                var rel = ProjectFileAnalysis.ComputeRelativePath(root, file);
-
-                var le = ProjectFileAnalysis.DetectLineEnding(file);
-
-                var detail = new LineEndingFileDetail(
-                    relativePath: rel,
-                    fullPath: file,
-                    extension: ext,
-                    lineEnding: le.LineEnding,
-                    hasFinalNewline: le.HasFinalNewline,
-                    size: info.Length,
-                    lastModified: info.LastWriteTime,
-                    directory: info.DirectoryName ?? string.Empty);
-
-                fileDetails.Add(detail);
-
-                if (detail.LineEnding == "Mixed" || (CheckMixed.IsPresent && detail.LineEnding == "Mixed"))
-                    problemFiles.Add(detail);
-
-                if (!detail.HasFinalNewline && info.Length > 0 && finalNewlineExtensions.Contains(ext))
-                    filesWithoutFinalNewline.Add(detail);
-
-                if (!lineEndingStats.ContainsKey(detail.LineEnding)) lineEndingStats[detail.LineEnding] = 0;
-                lineEndingStats[detail.LineEnding]++;
-
-                if (!extensionStats.TryGetValue(ext, out var perExt))
-                {
-                    perExt = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                    extensionStats[ext] = perExt;
-                }
-                if (!perExt.ContainsKey(detail.LineEnding)) perExt[detail.LineEnding] = 0;
-                perExt[detail.LineEnding]++;
-            }
-            catch (Exception ex)
-            {
-                if (Internal.IsPresent) WriteVerbose($"Failed to analyze {file}: {ex.Message}");
-                else WriteWarning($"Failed to analyze {file}: {ex.Message}");
-            }
-        }
-
-        var totalFiles = fileDetails.Count;
-        var uniqueLineEndings = lineEndingStats.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToArray();
-        var mostCommonLineEnding = lineEndingStats.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).FirstOrDefault() ?? string.Empty;
-        var inconsistentExtensions = extensionStats
-            .Where(kv => kv.Value.Count > 1)
-            .Select(kv => kv.Key)
-            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var hasProblems = problemFiles.Count > 0 || filesWithoutFinalNewline.Count > 0 || inconsistentExtensions.Length > 0;
-        var status = !hasProblems
-            ? "Pass"
-            : (problemFiles.Count == 0 && inconsistentExtensions.Length <= 2 ? "Warning" : "Fail");
-
-        var lineEndingDistribution = new Hashtable();
-        foreach (var kv in lineEndingStats.OrderByDescending(kv => kv.Value))
-            lineEndingDistribution[kv.Key] = kv.Value;
-
-        var extensionLineEndingMap = new Hashtable();
-        foreach (var ext in extensionStats.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase))
-        {
-            var inner = new Hashtable();
-            foreach (var kv in extensionStats[ext].OrderByDescending(kv => kv.Value))
-                inner[kv.Key] = kv.Value;
-            extensionLineEndingMap[ext] = inner;
-        }
-
-        var recommendations = new string[0];
-        if (hasProblems)
-        {
-            var recs = new List<string>();
-            if (problemFiles.Count > 0) recs.Add("Fix files with mixed line endings");
-            if (filesWithoutFinalNewline.Count > 0) recs.Add("Add missing final newlines");
-            if (inconsistentExtensions.Length > 0) recs.Add("Standardize line endings by file extension");
-            recs.Add("Use Convert-ProjectLineEnding to fix issues");
-            recommendations = recs.ToArray();
-        }
-
-        var message = status switch
-        {
-            "Pass" => $"All {totalFiles} files have consistent line endings",
-            "Warning" => $"Minor line ending issues found: {problemFiles.Count} mixed files, {filesWithoutFinalNewline.Count} missing newlines",
-            _ => $"Significant line ending issues: {problemFiles.Count} mixed files, {inconsistentExtensions.Length} inconsistent extensions"
-        };
-
-        var summary = new OrderedDictionary
-        {
-            ["Status"] = status,
-            ["ProjectPath"] = root,
-            ["ProjectType"] = ProjectType,
-            ["TotalFiles"] = totalFiles,
-            ["UniqueLineEndings"] = uniqueLineEndings,
-            ["LineEndingCount"] = uniqueLineEndings.Length,
-            ["MostCommonLineEnding"] = mostCommonLineEnding,
-            ["InconsistentExtensions"] = inconsistentExtensions,
-            ["ProblemFiles"] = problemFiles.Count,
-            ["FilesWithoutFinalNewline"] = filesWithoutFinalNewline.Count,
-            ["LineEndingDistribution"] = lineEndingDistribution,
-            ["ExtensionLineEndingMap"] = extensionLineEndingMap,
-            ["AnalysisDate"] = DateTime.Now,
-            ["Message"] = message,
-            ["Recommendations"] = recommendations
-        };
+        var s = report.Summary;
 
         if (Internal.IsPresent)
         {
-            WriteVerbose($"Line Ending Analysis: {status} - {message}");
-            if (!string.Equals(status, "Pass", StringComparison.OrdinalIgnoreCase) && recommendations.Length > 0)
-                WriteVerbose($"Recommendations: {string.Join("; ", recommendations)}");
+            WriteVerbose($"Line Ending Analysis: {s.Status} - {s.Message}");
+            if (s.Recommendations.Length > 0)
+                WriteVerbose($"Recommendations: {string.Join("; ", s.Recommendations)}");
         }
         else
         {
             HostWriteLineSafe("");
             HostWriteLineSafe("Line Ending Analysis Summary:", ConsoleColor.Cyan);
-            HostWriteLineSafe($"Status: {status}", status == "Pass" ? ConsoleColor.Green : status == "Warning" ? ConsoleColor.Yellow : ConsoleColor.Red);
-            HostWriteLineSafe($"  Total files analyzed: {totalFiles}");
-            HostWriteLineSafe($"  Unique line endings found: {uniqueLineEndings.Length}");
-            HostWriteLineSafe($"  Most common line ending: {mostCommonLineEnding} ({(lineEndingStats.TryGetValue(mostCommonLineEnding, out var c) ? c : 0)} files)", ConsoleColor.Green);
 
-            if (problemFiles.Count > 0)
-                HostWriteLineSafe($"  Files with mixed line endings: {problemFiles.Count}", ConsoleColor.Red);
+            var statusColor = s.Status switch
+            {
+                CheckStatus.Pass => ConsoleColor.Green,
+                CheckStatus.Warning => ConsoleColor.Yellow,
+                _ => ConsoleColor.Red
+            };
+            HostWriteLineSafe($"Status: {s.Status}", statusColor);
+            HostWriteLineSafe($"  Total files analyzed: {s.TotalFiles}");
+            HostWriteLineSafe($"  Unique line endings found: {s.UniqueLineEndings.Length}");
 
-            if (filesWithoutFinalNewline.Count > 0)
-                HostWriteLineSafe($"  Files without final newline: {filesWithoutFinalNewline.Count}", ConsoleColor.Yellow);
+            var mostCount = s.Distribution.FirstOrDefault(d => d.LineEnding == s.MostCommonLineEnding)?.Count ?? 0;
+            HostWriteLineSafe($"  Most common line ending: {s.MostCommonLineEnding} ({mostCount} files)", ConsoleColor.Green);
+
+            if (s.ProblemFiles > 0)
+                HostWriteLineSafe($"  Files with mixed line endings: {s.ProblemFiles}", ConsoleColor.Red);
+
+            if (s.FilesMissingFinalNewline > 0)
+                HostWriteLineSafe($"  Files without final newline: {s.FilesMissingFinalNewline}", ConsoleColor.Yellow);
             else
                 HostWriteLineSafe("  All files end with proper newlines", ConsoleColor.Green);
 
-            if (inconsistentExtensions.Length > 0)
-                HostWriteLineSafe($"  Extensions with mixed line endings: {string.Join(", ", inconsistentExtensions)}", ConsoleColor.Yellow);
+            if (s.InconsistentExtensions.Length > 0)
+                HostWriteLineSafe($"  Extensions with mixed line endings: {string.Join(", ", s.InconsistentExtensions)}", ConsoleColor.Yellow);
             else
                 HostWriteLineSafe("  All file extensions have consistent line endings", ConsoleColor.Green);
 
-            if (recommendations.Length > 0)
+            if (s.Recommendations.Length > 0)
             {
                 HostWriteLineSafe("");
                 HostWriteLineSafe("Recommendations:", ConsoleColor.Cyan);
-                foreach (var r in recommendations) HostWriteLineSafe($"  - {r}", ConsoleColor.Yellow);
+                foreach (var r in s.Recommendations)
+                    HostWriteLineSafe($"  - {r}", ConsoleColor.Yellow);
             }
 
             HostWriteLineSafe("");
             HostWriteLineSafe("Line Ending Distribution:", ConsoleColor.Cyan);
-            foreach (var kv in lineEndingStats.OrderByDescending(kv => kv.Value))
+            foreach (var d in s.Distribution)
             {
-                var pct = totalFiles > 0 ? Math.Round((double)kv.Value / totalFiles * 100, 1) : 0;
-                HostWriteLineSafe($"  {kv.Key}: {kv.Value} files ({pct.ToString("0.0", CultureInfo.InvariantCulture)}%)");
+                var pct = s.TotalFiles > 0 ? Math.Round((double)d.Count / s.TotalFiles * 100, 1) : 0;
+                HostWriteLineSafe($"  {d.LineEnding}: {d.Count} files ({pct.ToString("0.0", CultureInfo.InvariantCulture)}%)");
             }
         }
 
-        if (ExportPath is not null && fileDetails.Count > 0)
+        if (!string.IsNullOrWhiteSpace(ExportPath) && File.Exists(ExportPath!))
         {
-            try
+            if (Internal.IsPresent) WriteVerbose($"Detailed report exported to: {ExportPath}");
+            else
             {
-                WriteCsv(
-                    ExportPath,
-                    headers: new[] { "RelativePath", "FullPath", "Extension", "LineEnding", "HasFinalNewline", "Size", "LastModified", "Directory" },
-                    rows: fileDetails.Select(f => new[]
-                    {
-                        f.RelativePath,
-                        f.FullPath,
-                        f.Extension,
-                        f.LineEnding,
-                        f.HasFinalNewline ? "True" : "False",
-                        f.Size.ToString(CultureInfo.InvariantCulture),
-                        f.LastModified.ToString("o", CultureInfo.InvariantCulture),
-                        f.Directory
-                    }));
-
-                if (Internal.IsPresent) WriteVerbose($"Detailed report exported to: {ExportPath}");
-                else
-                {
-                    HostWriteLineSafe("");
-                    HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
-                }
-            }
-            catch (Exception ex)
-            {
-                if (Internal.IsPresent) WriteVerbose($"Failed to export report to {ExportPath}: {ex.Message}");
-                else WriteWarning($"Failed to export report to {ExportPath}: {ex.Message}");
+                HostWriteLineSafe("");
+                HostWriteLineSafe($"Detailed report exported to: {ExportPath}", ConsoleColor.Green);
             }
         }
-
-        object? filesOut = ShowFiles.IsPresent ? fileDetails.ToArray() : null;
-        object? groupedOut = GroupByLineEnding.IsPresent ? GroupByLineEndingMap(fileDetails, uniqueLineEndings) : null;
-
-        var report = new OrderedDictionary
-        {
-            ["Summary"] = summary,
-            ["Files"] = filesOut,
-            ["ProblemFiles"] = problemFiles.ToArray(),
-            ["GroupedByLineEnding"] = groupedOut
-        };
 
         WriteObject(report);
     }
@@ -334,34 +194,6 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
         };
     }
 
-    private static object GroupByLineEndingMap(IReadOnlyList<LineEndingFileDetail> files, IReadOnlyList<string> lineEndings)
-    {
-        var grouped = new Hashtable();
-        foreach (var le in lineEndings)
-        {
-            grouped[le] = files.Where(f => string.Equals(f.LineEnding, le, StringComparison.OrdinalIgnoreCase)).ToArray();
-        }
-        return grouped;
-    }
-
-    private static void WriteCsv(string path, IEnumerable<string> headers, IEnumerable<string[]> rows)
-    {
-        using var sw = new StreamWriter(path, append: false, new UTF8Encoding(true));
-        sw.WriteLine(string.Join(",", headers.Select(EscapeCsv)));
-        foreach (var row in rows)
-        {
-            sw.WriteLine(string.Join(",", row.Select(EscapeCsv)));
-        }
-    }
-
-    private static string EscapeCsv(string? value)
-    {
-        value ??= string.Empty;
-        bool mustQuote = value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r');
-        if (!mustQuote) return value;
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
-    }
-
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
     {
         try
@@ -381,36 +213,5 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
             // ignore host limitations
         }
     }
-
-    private sealed class LineEndingFileDetail
-    {
-        public string RelativePath { get; }
-        public string FullPath { get; }
-        public string Extension { get; }
-        public string LineEnding { get; }
-        public bool HasFinalNewline { get; }
-        public long Size { get; }
-        public DateTime LastModified { get; }
-        public string Directory { get; }
-
-        public LineEndingFileDetail(
-            string relativePath,
-            string fullPath,
-            string extension,
-            string lineEnding,
-            bool hasFinalNewline,
-            long size,
-            DateTime lastModified,
-            string directory)
-        {
-            RelativePath = relativePath;
-            FullPath = fullPath;
-            Extension = extension;
-            LineEnding = lineEnding;
-            HasFinalNewline = hasFinalNewline;
-            Size = size;
-            LastModified = lastModified;
-            Directory = directory;
-        }
-    }
 }
+
