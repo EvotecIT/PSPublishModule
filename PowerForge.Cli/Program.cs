@@ -1,6 +1,7 @@
 using PowerForge;
 using PowerForge.Cli;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var logger = new ConsoleLogger { IsVerbose = args.Contains("-Verbose", StringComparer.OrdinalIgnoreCase) };
 var forge = new PowerForgeFacade(logger);
@@ -500,6 +501,7 @@ static T LoadJson<T>(string path)
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
     };
+    options.Converters.Add(new JsonStringEnumConverter());
     options.Converters.Add(new ConfigurationSegmentJsonConverter());
 
     var obj = JsonSerializer.Deserialize<T>(json, options);

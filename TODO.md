@@ -22,7 +22,7 @@
 - `PowerForge` has typed build/install models + a staging-first build pipeline to avoid self-build file locking.
 - `New-Configuration*` cmdlets now emit typed `PowerForge` configuration segment objects (no `OrderedDictionary`/`Hashtable` outputs); the legacy DSL parser accepts both typed segments and legacy dictionaries.
 - `PowerForge.Cli` supports `build`/`install` via `--config <json>` and initial machine output via `--output json`, plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options).
-- `ModulePipelineRunner` now executes `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc) and produces typed artefact results.
+- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (PlatyPS out-of-proc), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc), and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
 - `Invoke-ModuleBuild` routes both the simple build path and the legacy DSL (`-Settings {}` / `Build-Module {}`) through the PowerForge pipeline (C#); the legacy PowerShell `Start-*` build scripts were removed.
 - `Module/Build/Build-Module.ps1` defaults to CLI staging build; `-Legacy` runs the DSL build path (still C#) for compatibility.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
@@ -151,12 +151,13 @@
 - [x] Add CLI `--config <json>` for `build`/`install` and initial `--output json`.
 - [x] Add CLI `pipeline`/`run` command + polymorphic JSON segment deserialization.
 - [x] Migrate configuration cmdlets away from `OrderedDictionary` to typed models + enums (legacy adapters allowed).
+- [x] Move project text analysis into `PowerForge` (typed reports for encoding/line-endings/consistency; cmdlets no longer emit `OrderedDictionary`).
 - [x] Replace legacy PowerShell build pipeline scripts with C# services (build/install) and delete the scripts (`Module/Private/New-PrepareStructure.ps1`, `Start-ModuleBuilding.ps1`, `Start-*`).
 - [x] Remove remaining `Module/Private/*.ps1` helpers and port test-suite steps to C# (`PowerForge.ModuleDependencyInstaller`, `Invoke-ModuleTestSuite`).
 - [ ] Restore parity for removed build-script features (PowerForge services + CLI commands):
   - [x] Artefacts/pack (C# `ArtefactBuilder` + pipeline `ConfigurationArtefactSegment` support)
-  - [ ] Docs orchestration
-  - [ ] Publish orchestration
+  - [x] Docs orchestration
+  - [x] Publish orchestration
 - [ ] Refactor “fat cmdlets” into `PowerForge` services + `partial` cmdlets (enforce ~600–700 LOC budget).
 - [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
 - [ ] Finish docs engine MVP and remove PlatyPS/HelpOut.
