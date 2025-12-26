@@ -41,17 +41,6 @@ Locale: en-US
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
 {{ Fill in the Description }}
 
-### [Initialize-PortableModule](Initialize-PortableModule.md)
-{{ Fill in the Description }}
-
-### [Initialize-PortableScript](Initialize-PortableScript.md)
-{{ Fill in the Description }}
-
-### [Initialize-ProjectManager](Initialize-ProjectManager.md)
-{{ Fill in the Description }}
-
-{{ Fill in the Description }}
-
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
 {{ Fill in the Description }}
 
