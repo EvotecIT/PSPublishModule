@@ -1,5 +1,5 @@
-using System.Collections.Specialized;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -18,17 +18,13 @@ public sealed class NewConfigurationCommandCommand : PSCmdlet
     /// <summary>Emits a configuration object for command references.</summary>
     protected override void ProcessRecord()
     {
-        var cfg = new OrderedDictionary
+        WriteObject(new ConfigurationCommandSegment
         {
-            ["Type"] = "Command",
-            ["Configuration"] = new OrderedDictionary
+            Configuration = new CommandConfiguration
             {
-                ["ModuleName"] = ModuleName,
-                ["CommandName"] = CommandName
+                ModuleName = ModuleName,
+                CommandName = CommandName
             }
-        };
-
-        WriteObject(cfg);
+        });
     }
 }
-

@@ -1,6 +1,7 @@
+using System;
 using System.Collections;
-using System.Collections.Specialized;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -29,28 +30,35 @@ public sealed class NewConfigurationPlaceHolderCommand : PSCmdlet
         {
             foreach (var repl in CustomReplacement)
             {
-                var cfg = new OrderedDictionary
-                {
-                    ["Type"] = "PlaceHolder",
-                    ["Configuration"] = repl
-                };
-                WriteObject(cfg);
+                var replacement = TryParseReplacement(repl);
+                if (replacement is null)
+                    throw new PSArgumentException("CustomReplacement entries must contain two keys: Find and Replace.");
+
+                WriteObject(new ConfigurationPlaceHolderSegment { Configuration = replacement });
             }
         }
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Find)) && MyInvocation.BoundParameters.ContainsKey(nameof(Replace)))
         {
-            var cfg = new OrderedDictionary
+            WriteObject(new ConfigurationPlaceHolderSegment
             {
-                ["Type"] = "PlaceHolder",
-                ["Configuration"] = new Hashtable
+                Configuration = new PlaceHolderReplacement
                 {
-                    ["Find"] = Find,
-                    ["Replace"] = Replace
+                    Find = Find ?? string.Empty,
+                    Replace = Replace ?? string.Empty
                 }
-            };
-            WriteObject(cfg);
+            });
         }
     }
-}
 
+    private static PlaceHolderReplacement? TryParseReplacement(IDictionary input)
+    {
+        if (input is null) return null;
+
+        var find = input["Find"]?.ToString();
+        var replace = input["Replace"]?.ToString();
+        if (string.IsNullOrWhiteSpace(find) || replace is null) return null;
+
+        return new PlaceHolderReplacement { Find = find!, Replace = replace };
+    }
+}

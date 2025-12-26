@@ -1,6 +1,9 @@
-using System.Collections.Specialized;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
-using PSPublishModule.Services;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -46,29 +49,49 @@ public sealed class NewConfigurationInformationCommand : PSCmdlet
     /// <summary>Emits information configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var configuration = new OrderedDictionary
+        var configuration = new InformationConfiguration
         {
-            ["FunctionsToExportFolder"] = FunctionsToExportFolder,
-            ["AliasesToExportFolder"] = AliasesToExportFolder,
-            ["ExcludeFromPackage"] = ExcludeFromPackage,
-            ["IncludeRoot"] = IncludeRoot,
-            ["IncludePS1"] = IncludePS1,
-            ["IncludeAll"] = IncludeAll,
-            ["IncludeCustomCode"] = IncludeCustomCode,
-            ["IncludeToArray"] = IncludeToArray,
-            ["LibrariesCore"] = LibrariesCore,
-            ["LibrariesDefault"] = LibrariesDefault,
-            ["LibrariesStandard"] = LibrariesStandard
-        };
-        EmptyValuePruner.RemoveEmptyValues(configuration);
-
-        var cfg = new OrderedDictionary
-        {
-            ["Type"] = "Information",
-            ["Configuration"] = configuration
+            FunctionsToExportFolder = FunctionsToExportFolder,
+            AliasesToExportFolder = AliasesToExportFolder,
+            ExcludeFromPackage = ExcludeFromPackage,
+            IncludeRoot = IncludeRoot,
+            IncludePS1 = IncludePS1,
+            IncludeAll = IncludeAll,
+            IncludeCustomCode = IncludeCustomCode?.ToString(),
+            IncludeToArray = NormalizeIncludeToArray(IncludeToArray),
+            LibrariesCore = LibrariesCore,
+            LibrariesDefault = LibrariesDefault,
+            LibrariesStandard = LibrariesStandard
         };
 
-        WriteObject(cfg);
+        WriteObject(new ConfigurationInformationSegment { Configuration = configuration });
+    }
+
+    private static IncludeToArrayEntry[]? NormalizeIncludeToArray(IDictionary? input)
+    {
+        if (input is null || input.Count == 0) return null;
+
+        var output = new List<IncludeToArrayEntry>();
+        foreach (DictionaryEntry entry in input)
+        {
+            var key = entry.Key?.ToString();
+            if (string.IsNullOrWhiteSpace(key)) continue;
+
+            var values = entry.Value switch
+            {
+                null => Array.Empty<string>(),
+                string s => new[] { s },
+                IEnumerable e => e.Cast<object?>()
+                    .Select(v => v?.ToString())
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Select(v => v!)
+                    .ToArray(),
+                _ => new[] { entry.Value.ToString() ?? string.Empty }
+            };
+
+            output.Add(new IncludeToArrayEntry { Key = key!, Values = values });
+        }
+
+        return output.Count == 0 ? null : output.ToArray();
     }
 }
-

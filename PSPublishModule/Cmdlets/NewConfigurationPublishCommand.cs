@@ -1,6 +1,5 @@
-using System.Collections.Specialized;
 using System.Management.Automation;
-using PSPublishModule.Services;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -13,7 +12,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     /// <summary>Choose between PowerShellGallery and GitHub.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiKey")]
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
-    public PublishDestination Type { get; set; }
+    public PowerForge.PublishDestination Type { get; set; }
 
     /// <summary>API key to be used for publishing in clear text in a file.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "ApiFromFile")]
@@ -65,34 +64,28 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             ? System.IO.File.ReadAllText(FilePath).Trim()
             : ApiKey;
 
-        var typeString = Type == PublishDestination.PowerShellGallery ? "PowerShellGallery" : "GitHub";
-        var typeToUse = Type == PublishDestination.PowerShellGallery ? "GalleryNuget" : "GitHubNuget";
-
-        if (Type == PublishDestination.GitHub && string.IsNullOrWhiteSpace(UserName))
+        if (Type == PowerForge.PublishDestination.GitHub && string.IsNullOrWhiteSpace(UserName))
             throw new PSArgumentException("UserName is required for GitHub. Please fix New-ConfigurationPublish and provide UserName");
 
-        var inner = new OrderedDictionary
+        var publish = new PublishConfiguration
         {
-            ["Type"] = typeString,
-            ["ApiKey"] = apiKeyToUse,
-            ["ID"] = ID,
-            ["Enabled"] = Enabled.IsPresent,
-            ["UserName"] = UserName,
-            ["RepositoryName"] = RepositoryName,
-            ["Force"] = Force.IsPresent,
-            ["OverwriteTagName"] = OverwriteTagName,
-            ["DoNotMarkAsPreRelease"] = DoNotMarkAsPreRelease.IsPresent,
-            ["Verbose"] = MyInvocation.BoundParameters.ContainsKey("Verbose")
+            Destination = Type,
+            ApiKey = apiKeyToUse,
+            ID = ID,
+            Enabled = Enabled.IsPresent,
+            UserName = UserName,
+            RepositoryName = RepositoryName,
+            Force = Force.IsPresent,
+            OverwriteTagName = OverwriteTagName,
+            DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
+            Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
         };
 
-        var settings = new OrderedDictionary
+        var settings = new ConfigurationPublishSegment
         {
-            ["Type"] = typeToUse,
-            ["Configuration"] = inner
+            Configuration = publish
         };
 
-        EmptyValuePruner.RemoveEmptyValues(settings, recursive: true, rerun: 2);
         WriteObject(settings);
     }
 }
-

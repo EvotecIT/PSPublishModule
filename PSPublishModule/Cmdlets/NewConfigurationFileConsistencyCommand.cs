@@ -1,5 +1,6 @@
-using System.Collections.Specialized;
+using System;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -16,10 +17,10 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
     [Parameter] public SwitchParameter FailOnInconsistency { get; set; }
 
     /// <summary>Required file encoding.</summary>
-    [Parameter] public FileConsistencyEncoding RequiredEncoding { get; set; } = FileConsistencyEncoding.UTF8BOM;
+    [Parameter] public PowerForge.FileConsistencyEncoding RequiredEncoding { get; set; } = PowerForge.FileConsistencyEncoding.UTF8BOM;
 
     /// <summary>Required line ending style.</summary>
-    [Parameter] public FileConsistencyLineEnding RequiredLineEnding { get; set; } = FileConsistencyLineEnding.CRLF;
+    [Parameter] public PowerForge.FileConsistencyLineEnding RequiredLineEnding { get; set; } = PowerForge.FileConsistencyLineEnding.CRLF;
 
     /// <summary>Automatically fix encoding and line ending issues during build.</summary>
     [Parameter] public SwitchParameter AutoFix { get; set; }
@@ -48,29 +49,27 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
     /// <summary>Emits file-consistency configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var settings = new OrderedDictionary
+        var settings = new FileConsistencySettings
         {
-            ["Enable"] = Enable.IsPresent,
-            ["FailOnInconsistency"] = FailOnInconsistency.IsPresent,
-            ["RequiredEncoding"] = RequiredEncoding.ToString(),
-            ["RequiredLineEnding"] = RequiredLineEnding.ToString(),
-            ["AutoFix"] = AutoFix.IsPresent,
-            ["CreateBackups"] = CreateBackups.IsPresent,
-            ["MaxInconsistencyPercentage"] = MaxInconsistencyPercentage,
-            ["ExcludeDirectories"] = ExcludeDirectories,
-            ["ExportReport"] = ExportReport.IsPresent,
-            ["ReportFileName"] = ReportFileName,
-            ["CheckMixedLineEndings"] = CheckMixedLineEndings.IsPresent,
-            ["CheckMissingFinalNewline"] = CheckMissingFinalNewline.IsPresent
+            Enable = Enable.IsPresent,
+            FailOnInconsistency = FailOnInconsistency.IsPresent,
+            RequiredEncoding = RequiredEncoding,
+            RequiredLineEnding = RequiredLineEnding,
+            AutoFix = AutoFix.IsPresent,
+            CreateBackups = CreateBackups.IsPresent,
+            MaxInconsistencyPercentage = MaxInconsistencyPercentage,
+            ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
+            ExportReport = ExportReport.IsPresent,
+            ReportFileName = ReportFileName,
+            CheckMixedLineEndings = CheckMixedLineEndings.IsPresent,
+            CheckMissingFinalNewline = CheckMissingFinalNewline.IsPresent
         };
 
-        var cfg = new OrderedDictionary
+        var cfg = new ConfigurationFileConsistencySegment
         {
-            ["Type"] = "FileConsistency",
-            ["Settings"] = settings
+            Settings = settings
         };
 
         WriteObject(cfg);
     }
 }
-

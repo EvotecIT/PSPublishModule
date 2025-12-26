@@ -1,5 +1,6 @@
-using System.Collections.Specialized;
+using System;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -39,26 +40,24 @@ public sealed class NewConfigurationCompatibilityCommand : PSCmdlet
     /// <summary>Emits compatibility-check configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var settings = new OrderedDictionary
+        var settings = new CompatibilitySettings
         {
-            ["Enable"] = Enable.IsPresent,
-            ["FailOnIncompatibility"] = FailOnIncompatibility.IsPresent,
-            ["RequirePS51Compatibility"] = RequirePS51Compatibility.IsPresent,
-            ["RequirePS7Compatibility"] = RequirePS7Compatibility.IsPresent,
-            ["RequireCrossCompatibility"] = RequireCrossCompatibility.IsPresent,
-            ["MinimumCompatibilityPercentage"] = MinimumCompatibilityPercentage,
-            ["ExcludeDirectories"] = ExcludeDirectories,
-            ["ExportReport"] = ExportReport.IsPresent,
-            ["ReportFileName"] = ReportFileName
+            Enable = Enable.IsPresent,
+            FailOnIncompatibility = FailOnIncompatibility.IsPresent,
+            RequirePS51Compatibility = RequirePS51Compatibility.IsPresent,
+            RequirePS7Compatibility = RequirePS7Compatibility.IsPresent,
+            RequireCrossCompatibility = RequireCrossCompatibility.IsPresent,
+            MinimumCompatibilityPercentage = MinimumCompatibilityPercentage,
+            ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
+            ExportReport = ExportReport.IsPresent,
+            ReportFileName = ReportFileName
         };
 
-        var cfg = new OrderedDictionary
+        var cfg = new ConfigurationCompatibilitySegment
         {
-            ["Type"] = "Compatibility",
-            ["Settings"] = settings
+            Settings = settings
         };
 
         WriteObject(cfg);
     }
 }
-

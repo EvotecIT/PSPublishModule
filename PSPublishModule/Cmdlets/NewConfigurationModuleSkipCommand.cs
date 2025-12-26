@@ -1,6 +1,5 @@
-using System.Collections.Specialized;
 using System.Management.Automation;
-using PSPublishModule.Services;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -22,21 +21,13 @@ public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
     /// <summary>Emits module-skip configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var inner = new OrderedDictionary
+        var inner = new ModuleSkipConfiguration
         {
-            ["IgnoreModuleName"] = IgnoreModuleName,
-            ["IgnoreFunctionName"] = IgnoreFunctionName,
-            ["Force"] = Force.IsPresent
-        };
-        EmptyValuePruner.RemoveEmptyValues(inner);
-
-        var cfg = new OrderedDictionary
-        {
-            ["Type"] = "ModuleSkip",
-            ["Configuration"] = inner
+            IgnoreModuleName = IgnoreModuleName,
+            IgnoreFunctionName = IgnoreFunctionName,
+            Force = Force.IsPresent
         };
 
-        WriteObject(cfg);
+        WriteObject(new ConfigurationModuleSkipSegment { Configuration = inner });
     }
 }
-

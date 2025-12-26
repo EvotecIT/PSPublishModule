@@ -1,5 +1,5 @@
-using System.Collections.Specialized;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -18,21 +18,13 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
     /// <summary>Emits import configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var importModules = new OrderedDictionary();
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ImportSelf)))
-            importModules["Self"] = ImportSelf.IsPresent;
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(ImportRequiredModules)))
-            importModules["RequiredModules"] = ImportRequiredModules.IsPresent;
-        if (MyInvocation.BoundParameters.ContainsKey("Verbose"))
-            importModules["Verbose"] = true;
-
-        var cfg = new OrderedDictionary
+        var importModules = new ImportModulesConfiguration
         {
-            ["Type"] = "ImportModules",
-            ["ImportModules"] = importModules
+            Self = MyInvocation.BoundParameters.ContainsKey(nameof(ImportSelf)) ? ImportSelf.IsPresent : null,
+            RequiredModules = MyInvocation.BoundParameters.ContainsKey(nameof(ImportRequiredModules)) ? ImportRequiredModules.IsPresent : null,
+            Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose") ? true : null
         };
 
-        WriteObject(cfg);
+        WriteObject(new ConfigurationImportModulesSegment { ImportModules = importModules });
     }
 }
-

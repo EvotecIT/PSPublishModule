@@ -1,5 +1,5 @@
-using System.Collections.Specialized;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -25,12 +25,12 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     [Parameter(Mandatory = true)] public string PathReadme { get; set; } = string.Empty;
 
     /// <summary>Tool to use for documentation generation.</summary>
-    [Parameter] public DocumentationTool Tool { get; set; } = DocumentationTool.PlatyPS;
+    [Parameter] public PowerForge.DocumentationTool Tool { get; set; } = PowerForge.DocumentationTool.PlatyPS;
 
     /// <summary>Emits documentation configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var toolModule = Tool == DocumentationTool.PlatyPS ? "PlatyPS" : "HelpOut";
+        var toolModule = Tool == PowerForge.DocumentationTool.PlatyPS ? "PlatyPS" : "HelpOut";
         var modules = InvokeCommand.InvokeScript($"Get-Module -Name '{toolModule}' -ListAvailable");
         if (modules is null || modules.Count == 0)
         {
@@ -38,32 +38,27 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
             return;
         }
 
-        var option = new OrderedDictionary
+        WriteObject(new ConfigurationDocumentationSegment
         {
-            ["Type"] = "Documentation",
-            ["Configuration"] = new OrderedDictionary
+            Configuration = new DocumentationConfiguration
             {
-                ["Path"] = Path,
-                ["PathReadme"] = PathReadme
+                Path = Path,
+                PathReadme = PathReadme
             }
-        };
-        WriteObject(option);
+        });
 
         if (Enable.IsPresent || StartClean.IsPresent || UpdateWhenNew.IsPresent)
         {
-            var build = new OrderedDictionary
+            WriteObject(new ConfigurationBuildDocumentationSegment
             {
-                ["Type"] = "BuildDocumentation",
-                ["Configuration"] = new OrderedDictionary
+                Configuration = new BuildDocumentationConfiguration
                 {
-                    ["Enable"] = Enable.IsPresent,
-                    ["StartClean"] = StartClean.IsPresent,
-                    ["UpdateWhenNew"] = UpdateWhenNew.IsPresent,
-                    ["Tool"] = Tool.ToString()
+                    Enable = Enable.IsPresent,
+                    StartClean = StartClean.IsPresent,
+                    UpdateWhenNew = UpdateWhenNew.IsPresent,
+                    Tool = Tool
                 }
-            };
-            WriteObject(build);
+            });
         }
     }
 }
-

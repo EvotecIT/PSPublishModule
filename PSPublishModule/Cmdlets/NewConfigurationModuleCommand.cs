@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Specialized;
 using System.Management.Automation;
+using PowerForge;
 using PSPublishModule.Services;
 
 namespace PSPublishModule;
@@ -12,7 +12,7 @@ namespace PSPublishModule;
 public sealed class NewConfigurationModuleCommand : PSCmdlet
 {
     /// <summary>Choose between RequiredModule, ExternalModule and ApprovedModule.</summary>
-    [Parameter] public ModuleDependencyKind Type { get; set; } = ModuleDependencyKind.RequiredModule;
+    [Parameter] public PowerForge.ModuleDependencyKind Type { get; set; } = PowerForge.ModuleDependencyKind.RequiredModule;
 
     /// <summary>Name of the PowerShell module(s) that your module depends on.</summary>
     [Parameter(Mandatory = true)] public string[] Name { get; set; } = Array.Empty<string>();
@@ -38,32 +38,16 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
 
         foreach (var n in Name)
         {
-            object configuration;
-            if (Type == ModuleDependencyKind.ApprovedModule)
+            var cfg = new ConfigurationModuleSegment
             {
-                configuration = n;
-            }
-            else
-            {
-                var moduleInfo = new OrderedDictionary
+                Kind = Type,
+                Configuration = new ModuleDependencyConfiguration
                 {
-                    ["ModuleName"] = n,
-                    ["ModuleVersion"] = Version,
-                    ["RequiredVersion"] = RequiredVersion,
-                    ["Guid"] = Guid
-                };
-                EmptyValuePruner.RemoveEmptyValues(moduleInfo);
-
-                if (moduleInfo.Count == 1 && moduleInfo.Contains("ModuleName"))
-                    configuration = n;
-                else
-                    configuration = moduleInfo;
-            }
-
-            var cfg = new OrderedDictionary
-            {
-                ["Type"] = Type.ToString(),
-                ["Configuration"] = configuration
+                    ModuleName = n,
+                    ModuleVersion = Version,
+                    RequiredVersion = RequiredVersion,
+                    Guid = Guid
+                }
             };
 
             WriteObject(cfg);

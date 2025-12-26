@@ -1,7 +1,6 @@
-using System.Collections.Specialized;
 using System.Management.Automation;
 using System.Runtime.InteropServices;
-using PSPublishModule.Services;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -29,18 +28,14 @@ public sealed class NewConfigurationTestCommand : PSCmdlet
             ? TestsPath.Replace('/', '\\')
             : TestsPath.Replace('\\', '/');
 
-        var cfg = new OrderedDictionary
+        WriteObject(new ConfigurationTestSegment
         {
-            ["Type"] = "TestsAfterMerge",
-            ["Configuration"] = new OrderedDictionary
+            Configuration = new TestConfiguration
             {
-                ["When"] = "AfterMerge",
-                ["TestsPath"] = normalized,
-                ["Force"] = Force.IsPresent
+                When = TestExecutionWhen.AfterMerge,
+                TestsPath = normalized,
+                Force = Force.IsPresent
             }
-        };
-        EmptyValuePruner.RemoveEmptyValues((OrderedDictionary)cfg["Configuration"]!);
-        WriteObject(cfg);
+        });
     }
 }
-

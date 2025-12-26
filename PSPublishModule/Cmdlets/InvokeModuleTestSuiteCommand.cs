@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -133,14 +134,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             if (!SkipDependencies.IsPresent)
             {
                 HostWriteLineSafe("Step 2: Checking and installing required modules...", ConsoleColor.Yellow);
-                InvokePrivateFunction("Test-RequiredModules",
-                    new Dictionary<string, object?>
-                    {
-                        ["ModuleInformation"] = moduleInfo,
-                        ["AdditionalModules"] = AdditionalModules,
-                        ["SkipModules"] = SkipModules,
-                        ["Force"] = Force.IsPresent
-                    });
+                EnsureDependencies(moduleName, requiredModules);
                 HostWriteLineSafe(string.Empty);
             }
             else
@@ -152,13 +146,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             if (!SkipImport.IsPresent)
             {
                 HostWriteLineSafe("Step 3: Importing module under test...", ConsoleColor.Yellow);
-                InvokePrivateFunction("Test-ModuleImport",
-                    new Dictionary<string, object?>
-                    {
-                        ["ModuleInformation"] = moduleInfo,
-                        ["Force"] = Force.IsPresent,
-                        ["ShowInformation"] = true
-                    });
+                ImportModuleUnderTest(moduleInfo, force: Force.IsPresent, showInformation: true);
                 HostWriteLineSafe(string.Empty);
             }
             else
@@ -394,23 +382,134 @@ if ($useV5) {
         return results[0].BaseObject ?? results[0];
     }
 
-    private void InvokePrivateFunction(string functionName, Dictionary<string, object?> parameters)
+    private void EnsureDependencies(string moduleName, List<object?> requiredModules)
     {
-        var module = MyInvocation?.MyCommand?.Module;
-        if (module is null)
-            throw new InvalidOperationException("PSPublishModule module is not loaded. Cannot access internal functions.");
+        var deps = new List<ModuleDependency>();
 
-        var sb = ScriptBlock.Create(@"
-param($fn, $params)
-& $fn @params
-");
-
-        var res = module.Invoke(sb, functionName, parameters);
-
-        if (res is IEnumerable enumerable && res is not string)
+        foreach (var name in AdditionalModules ?? Array.Empty<string>())
         {
-            foreach (var item in enumerable)
-                WriteVerbose(item?.ToString());
+            if (!string.IsNullOrWhiteSpace(name))
+                deps.Add(new ModuleDependency(name));
+        }
+
+        foreach (var m in requiredModules)
+        {
+            if (m is IDictionary dict)
+            {
+                var name = dict.Contains("ModuleName") ? dict["ModuleName"]?.ToString() : null;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                var min = dict.Contains("ModuleVersion") ? dict["ModuleVersion"]?.ToString() : null;
+                var req = dict.Contains("RequiredVersion") ? dict["RequiredVersion"]?.ToString() : null;
+                var max = dict.Contains("MaximumVersion") ? dict["MaximumVersion"]?.ToString() : null;
+                deps.Add(new ModuleDependency(name.Trim(), requiredVersion: req, minimumVersion: min, maximumVersion: max));
+            }
+            else if (m is string s && !string.IsNullOrWhiteSpace(s))
+            {
+                deps.Add(new ModuleDependency(s));
+            }
+        }
+
+        if (deps.Count == 0)
+        {
+            WriteWarning($"No required modules specified for module '{moduleName}'");
+            return;
+        }
+
+        HostWriteLineSafe($"Checking required modules for: {moduleName}", ConsoleColor.Yellow);
+
+        var logger = new NullLogger { IsVerbose = MyInvocation.BoundParameters.ContainsKey("Verbose") };
+        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), logger);
+        var results = installer.EnsureInstalled(dependencies: deps, skipModules: SkipModules, force: Force.IsPresent);
+
+        var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
+        foreach (var r in results)
+        {
+            switch (r.Status)
+            {
+                case ModuleDependencyInstallStatus.Skipped:
+                    HostWriteLineSafe($"  [-] Skipping: {r.Name}", ConsoleColor.Gray);
+                    break;
+                case ModuleDependencyInstallStatus.Satisfied:
+                    HostWriteLineSafe($"  [+] {r.Name} OK (installed: {r.InstalledVersion ?? "unknown"})", ConsoleColor.Green);
+                    break;
+                case ModuleDependencyInstallStatus.Installed:
+                case ModuleDependencyInstallStatus.Updated:
+                    HostWriteLineSafe($"  [>] {r.Name} {r.Status} via {r.Installer ?? "installer"} (resolved: {r.ResolvedVersion ?? "unknown"})", ConsoleColor.Green);
+                    break;
+                case ModuleDependencyInstallStatus.Failed:
+                    HostWriteLineSafe($"  [e] {r.Name}: {r.Message}", ConsoleColor.Red);
+                    break;
+            }
+        }
+
+        if (failures.Length > 0)
+            throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+
+        HostWriteLineSafe("Module dependency check completed successfully", ConsoleColor.Green);
+    }
+
+    private void ImportModuleUnderTest(Hashtable moduleInfo, bool force, bool showInformation)
+    {
+        var displayName = GetString(moduleInfo, "ModuleName");
+        var manifestPath = GetString(moduleInfo, "ManifestPath");
+        var importPath = !string.IsNullOrWhiteSpace(manifestPath) ? manifestPath : displayName;
+
+        HostWriteLineSafe($"Importing module: {displayName}", ConsoleColor.Yellow);
+        WriteVerbose($"Import path: {importPath}");
+
+        using (var ps = PowerShell.Create(RunspaceMode.CurrentRunspace))
+        {
+            ps.AddCommand("Import-Module")
+                .AddParameter("Name", importPath)
+                .AddParameter("Force", force)
+                .AddParameter("ErrorAction", "Stop");
+
+            ps.Invoke();
+            if (ps.HadErrors)
+            {
+                var msg = string.Join("; ", ps.Streams.Error.Select(e => e.Exception?.Message ?? e.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)));
+                if (string.IsNullOrWhiteSpace(msg)) msg = "Import-Module failed";
+                throw new InvalidOperationException(msg);
+            }
+        }
+
+        HostWriteLineSafe($"  Successfully imported module: {displayName}", ConsoleColor.Green);
+
+        if (!showInformation)
+            return;
+
+        using (var ps = PowerShell.Create(RunspaceMode.CurrentRunspace))
+        {
+            ps.AddCommand("Get-Module").AddParameter("Name", displayName);
+
+            var results = ps.Invoke();
+            if (ps.HadErrors)
+                return;
+
+            var mod = results.FirstOrDefault();
+            if (mod is null)
+                return;
+
+            var m = PSObject.AsPSObject(mod.BaseObject ?? mod);
+            HostWriteLineSafe("Module Information:", ConsoleColor.Cyan);
+            HostWriteLineSafe($"  Name: {m.Properties["Name"]?.Value}");
+            HostWriteLineSafe($"  Version: {m.Properties["Version"]?.Value}");
+            HostWriteLineSafe($"  Path: {m.Properties["Path"]?.Value}");
+
+            try
+            {
+                var exportedFunctions = m.Properties["ExportedFunctions"]?.Value as IDictionary;
+                var exportedCmdlets = m.Properties["ExportedCmdlets"]?.Value as IDictionary;
+                var exportedAliases = m.Properties["ExportedAliases"]?.Value as IDictionary;
+                if (exportedFunctions is not null) HostWriteLineSafe($"  Exported Functions: {exportedFunctions.Count}");
+                if (exportedCmdlets is not null) HostWriteLineSafe($"  Exported Cmdlets: {exportedCmdlets.Count}");
+                if (exportedAliases is not null) HostWriteLineSafe($"  Exported Aliases: {exportedAliases.Count}");
+            }
+            catch
+            {
+                // ignore shape differences across editions
+            }
         }
     }
 

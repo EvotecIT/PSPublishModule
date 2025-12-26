@@ -1,6 +1,6 @@
-using System.Collections.Specialized;
+using System;
 using System.Management.Automation;
-using PSPublishModule.Services;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -74,37 +74,30 @@ public sealed class NewConfigurationManifestCommand : PSCmdlet
     /// <summary>Emits manifest configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var manifest = new OrderedDictionary
+        WriteObject(new ConfigurationManifestSegment
         {
-            ["ModuleVersion"] = ModuleVersion,
-            ["CompatiblePSEditions"] = CompatiblePSEditions,
-            ["GUID"] = Guid,
-            ["Author"] = Author,
-            ["CompanyName"] = CompanyName,
-            ["Copyright"] = Copyright,
-            ["Description"] = Description,
-            ["PowerShellVersion"] = PowerShellVersion,
-            ["Tags"] = Tags,
-            ["IconUri"] = IconUri,
-            ["ProjectUri"] = ProjectUri,
-            ["DotNetFrameworkVersion"] = DotNetFrameworkVersion,
-            ["LicenseUri"] = LicenseUri,
-            ["RequireLicenseAcceptance"] = RequireLicenseAcceptance.IsPresent,
-            ["Prerelease"] = Prerelease,
-            ["FunctionsToExport"] = FunctionsToExport,
-            ["CmdletsToExport"] = CmdletsToExport,
-            ["AliasesToExport"] = AliasesToExport,
-            ["FormatsToProcess"] = FormatsToProcess
-        };
-        EmptyValuePruner.RemoveEmptyValues(manifest);
-
-        var cfg = new OrderedDictionary
-        {
-            ["Type"] = "Manifest",
-            ["Configuration"] = manifest
-        };
-
-        WriteObject(cfg);
+            Configuration = new ManifestConfiguration
+            {
+                ModuleVersion = ModuleVersion,
+                CompatiblePSEditions = CompatiblePSEditions ?? Array.Empty<string>(),
+                Guid = Guid,
+                Author = Author,
+                CompanyName = CompanyName,
+                Copyright = Copyright,
+                Description = Description,
+                PowerShellVersion = PowerShellVersion,
+                Tags = Tags,
+                IconUri = IconUri,
+                ProjectUri = ProjectUri,
+                DotNetFrameworkVersion = DotNetFrameworkVersion,
+                LicenseUri = LicenseUri,
+                RequireLicenseAcceptance = RequireLicenseAcceptance.IsPresent,
+                Prerelease = Prerelease,
+                FunctionsToExport = FunctionsToExport,
+                CmdletsToExport = CmdletsToExport,
+                AliasesToExport = AliasesToExport,
+                FormatsToProcess = FormatsToProcess
+            }
+        });
     }
 }
-

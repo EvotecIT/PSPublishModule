@@ -1,6 +1,8 @@
+using System;
 using System.Collections;
-using System.Collections.Specialized;
+using System.Collections.Generic;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -26,13 +28,13 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     [Parameter] public SwitchParameter IncludeRootLicense { get; set; }
 
     /// <summary>Where to bundle README.* within the built module.</summary>
-    [Parameter] public DeliveryBundleDestination ReadmeDestination { get; set; } = DeliveryBundleDestination.Internals;
+    [Parameter] public PowerForge.DeliveryBundleDestination ReadmeDestination { get; set; } = PowerForge.DeliveryBundleDestination.Internals;
 
     /// <summary>Where to bundle CHANGELOG.* within the built module.</summary>
-    [Parameter] public DeliveryBundleDestination ChangelogDestination { get; set; } = DeliveryBundleDestination.Internals;
+    [Parameter] public PowerForge.DeliveryBundleDestination ChangelogDestination { get; set; } = PowerForge.DeliveryBundleDestination.Internals;
 
     /// <summary>Where to bundle LICENSE.* within the built module.</summary>
-    [Parameter] public DeliveryBundleDestination LicenseDestination { get; set; } = DeliveryBundleDestination.Internals;
+    [Parameter] public PowerForge.DeliveryBundleDestination LicenseDestination { get; set; } = PowerForge.DeliveryBundleDestination.Internals;
 
     /// <summary>One or more key/value pairs that represent important links (Title/Url).</summary>
     [Parameter] public IDictionary[]? ImportantLinks { get; set; }
@@ -63,37 +65,53 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     {
         if (!Enable.IsPresent) return;
 
-        var delivery = new OrderedDictionary
+        var delivery = new DeliveryOptionsConfiguration
         {
-            ["Enable"] = true,
-            ["InternalsPath"] = InternalsPath,
-            ["IncludeRootReadme"] = IncludeRootReadme.IsPresent,
-            ["IncludeRootChangelog"] = IncludeRootChangelog.IsPresent,
-            ["ReadmeDestination"] = ReadmeDestination.ToString(),
-            ["ChangelogDestination"] = ChangelogDestination.ToString(),
-            ["LicenseDestination"] = LicenseDestination.ToString(),
-            ["IncludeRootLicense"] = IncludeRootLicense.IsPresent,
-            ["ImportantLinks"] = ImportantLinks,
-            ["IntroText"] = IntroText,
-            ["UpgradeText"] = UpgradeText,
-            ["IntroFile"] = IntroFile,
-            ["UpgradeFile"] = UpgradeFile,
-            ["RepositoryPaths"] = RepositoryPaths,
-            ["RepositoryBranch"] = RepositoryBranch,
-            ["DocumentationOrder"] = DocumentationOrder,
-            ["Schema"] = "1.3"
+            Enable = true,
+            InternalsPath = InternalsPath,
+            IncludeRootReadme = IncludeRootReadme.IsPresent,
+            IncludeRootChangelog = IncludeRootChangelog.IsPresent,
+            IncludeRootLicense = IncludeRootLicense.IsPresent,
+            ReadmeDestination = ReadmeDestination,
+            ChangelogDestination = ChangelogDestination,
+            LicenseDestination = LicenseDestination,
+            ImportantLinks = NormalizeImportantLinks(ImportantLinks),
+            IntroText = IntroText,
+            UpgradeText = UpgradeText,
+            IntroFile = IntroFile,
+            UpgradeFile = UpgradeFile,
+            RepositoryPaths = RepositoryPaths,
+            RepositoryBranch = RepositoryBranch,
+            DocumentationOrder = DocumentationOrder,
+            Schema = "1.3"
         };
 
-        var cfg = new OrderedDictionary
+        WriteObject(new ConfigurationOptionsSegment
         {
-            ["Type"] = "Options",
-            ["Options"] = new OrderedDictionary
+            Options = new ConfigurationOptions
             {
-                ["Delivery"] = delivery
+                Delivery = delivery
             }
-        };
+        });
+    }
 
-        WriteObject(cfg);
+    private static DeliveryImportantLink[]? NormalizeImportantLinks(IDictionary[]? links)
+    {
+        if (links is null || links.Length == 0) return null;
+
+        var output = new List<DeliveryImportantLink>();
+        foreach (var dict in links)
+        {
+            if (dict is null) continue;
+
+            var title = dict["Title"]?.ToString();
+            var url = dict["Url"]?.ToString();
+            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(url))
+                continue;
+
+            output.Add(new DeliveryImportantLink { Title = title!, Url = url! });
+        }
+
+        return output.Count == 0 ? null : output.ToArray();
     }
 }
-

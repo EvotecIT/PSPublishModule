@@ -1,11 +1,12 @@
 using System;
 using System.Collections;
-using System.Collections.Specialized;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Runtime.InteropServices;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -25,7 +26,7 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
 
     /// <summary>Artefact type to generate.</summary>
     [Parameter(Mandatory = true)]
-    public ArtefactType Type { get; set; }
+    public PowerForge.ArtefactType Type { get; set; }
 
     /// <summary>Enable artefact creation. By default artefact creation is disabled.</summary>
     [Parameter]
@@ -96,82 +97,76 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     /// <summary>Emits an artefact configuration object for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var typeString = Type.ToString();
-
-        var requiredModules = new OrderedDictionary();
-        var configuration = new OrderedDictionary
+        var artefact = new ConfigurationArtefactSegment
         {
-            ["Type"] = typeString,
-            ["RequiredModules"] = requiredModules
-        };
-
-        var artefact = new OrderedDictionary
-        {
-            ["Type"] = typeString,
-            ["Configuration"] = configuration
+            ArtefactType = Type,
+            Configuration = new ArtefactConfiguration
+            {
+                RequiredModules = new ArtefactRequiredModulesConfiguration()
+            }
         };
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Enable)))
-            configuration["Enabled"] = Enable.IsPresent;
+            artefact.Configuration.Enabled = Enable.IsPresent;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(IncludeTagName)))
-            configuration["IncludeTagName"] = IncludeTagName.IsPresent;
+            artefact.Configuration.IncludeTagName = IncludeTagName.IsPresent;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Path)) && Path is not null)
-            configuration["Path"] = NormalizePath(Path);
+            artefact.Configuration.Path = NormalizePath(Path);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesPath)) && RequiredModulesPath is not null)
-            requiredModules["Path"] = NormalizePath(RequiredModulesPath);
+            artefact.Configuration.RequiredModules.Path = NormalizePath(RequiredModulesPath);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(AddRequiredModules)))
-            requiredModules["Enabled"] = true;
+            artefact.Configuration.RequiredModules.Enabled = true;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(ModulesPath)) && ModulesPath is not null)
-            requiredModules["ModulesPath"] = NormalizePath(ModulesPath);
+            artefact.Configuration.RequiredModules.ModulesPath = NormalizePath(ModulesPath);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectories)) && CopyDirectories is not null)
-            configuration["DirectoryOutput"] = NormalizeDictionaryValues(CopyDirectories);
+            artefact.Configuration.DirectoryOutput = NormalizeDictionaryValues(CopyDirectories);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectoriesRelative)))
-            configuration["DestinationDirectoriesRelative"] = CopyDirectoriesRelative.IsPresent;
+            artefact.Configuration.DestinationDirectoriesRelative = CopyDirectoriesRelative.IsPresent;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyFiles)) && CopyFiles is not null)
-            configuration["FilesOutput"] = NormalizeDictionaryValues(CopyFiles);
+            artefact.Configuration.FilesOutput = NormalizeDictionaryValues(CopyFiles);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyFilesRelative)))
-            configuration["DestinationFilesRelative"] = CopyFilesRelative.IsPresent;
+            artefact.Configuration.DestinationFilesRelative = CopyFilesRelative.IsPresent;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(DoNotClear)))
-            configuration["DoNotClear"] = DoNotClear.IsPresent;
+            artefact.Configuration.DoNotClear = DoNotClear.IsPresent;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(ArtefactName)))
-            configuration["ArtefactName"] = ArtefactName;
+            artefact.Configuration.ArtefactName = ArtefactName;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(ScriptName)))
-            configuration["ScriptName"] = ScriptName;
+            artefact.Configuration.ScriptName = ScriptName;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(PreScriptMerge)) && PreScriptMerge is not null)
-            configuration["PreScriptMerge"] = TryFormatScript(PreScriptMerge.ToString());
+            artefact.Configuration.PreScriptMerge = TryFormatScript(PreScriptMerge.ToString());
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(PostScriptMerge)) && PostScriptMerge is not null)
-            configuration["PostScriptMerge"] = TryFormatScript(PostScriptMerge.ToString());
+            artefact.Configuration.PostScriptMerge = TryFormatScript(PostScriptMerge.ToString());
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(PreScriptMergePath)) && !string.IsNullOrWhiteSpace(PreScriptMergePath))
         {
             var scriptContent = File.ReadAllText(PreScriptMergePath!);
             if (!string.IsNullOrWhiteSpace(scriptContent))
-                configuration["PreScriptMerge"] = TryFormatScript(scriptContent);
+                artefact.Configuration.PreScriptMerge = TryFormatScript(scriptContent);
         }
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(PostScriptMergePath)) && !string.IsNullOrWhiteSpace(PostScriptMergePath))
         {
             var scriptContent = File.ReadAllText(PostScriptMergePath!);
             if (!string.IsNullOrWhiteSpace(scriptContent))
-                configuration["PostScriptMerge"] = TryFormatScript(scriptContent);
+                artefact.Configuration.PostScriptMerge = TryFormatScript(scriptContent);
         }
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(ID)))
-            configuration["ID"] = ID;
+            artefact.Configuration.ID = ID;
 
         WriteObject(artefact);
     }
@@ -183,17 +178,24 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
             : value.Replace('\\', '/');
     }
 
-    private static IDictionary NormalizeDictionaryValues(IDictionary input)
+    private static ArtefactCopyMapping[] NormalizeDictionaryValues(IDictionary input)
     {
-        var normalized = new OrderedDictionary();
+        var mappings = new List<ArtefactCopyMapping>();
         foreach (DictionaryEntry entry in input)
         {
-            var v = entry.Value;
-            if (v is string s) v = NormalizePath(s);
-            normalized[entry.Key] = v;
+            var source = entry.Key?.ToString();
+            var destination = entry.Value?.ToString();
+            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination))
+                continue;
+
+            mappings.Add(new ArtefactCopyMapping
+            {
+                Source = NormalizePath(source!),
+                Destination = NormalizePath(destination!)
+            });
         }
 
-        return normalized;
+        return mappings.ToArray();
     }
 
     private string TryFormatScript(string scriptDefinition)

@@ -697,6 +697,9 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
             if (segment is PSObject pso)
                 segment = pso.BaseObject;
 
+            if (TryApplyTypedSegment(segment))
+                return;
+
             if (segment is not IDictionary dict)
                 return;
 
@@ -747,6 +750,102 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
             {
                 AddRequiredModules(GetValue(dict, "Configuration"));
             }
+        }
+
+        private bool TryApplyTypedSegment(object segment)
+        {
+            switch (segment)
+            {
+                case ConfigurationManifestSegment manifest:
+                    ApplyManifest(manifest.Configuration);
+                    return true;
+                case ConfigurationBuildSegment build:
+                    ApplyBuild(build.BuildModule);
+                    return true;
+                case ConfigurationBuildLibrariesSegment buildLibraries:
+                    ApplyBuildLibraries(buildLibraries.BuildLibraries);
+                    return true;
+                case ConfigurationModuleSegment module:
+                    if (module.Kind == PowerForge.ModuleDependencyKind.RequiredModule)
+                        AddRequiredModule(module.Configuration);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void ApplyManifest(ManifestConfiguration? config)
+        {
+            if (config is null) return;
+
+            if (!string.IsNullOrWhiteSpace(config.ModuleVersion))
+                ModuleVersion = config.ModuleVersion;
+
+            if (config.CompatiblePSEditions is { Length: > 0 })
+                CompatiblePSEditions = config.CompatiblePSEditions;
+
+            if (!string.IsNullOrWhiteSpace(config.Author))
+                Author = config.Author;
+
+            if (!string.IsNullOrWhiteSpace(config.CompanyName))
+                CompanyName = config.CompanyName;
+
+            if (!string.IsNullOrWhiteSpace(config.Description))
+                Description = config.Description;
+
+            if (config.Tags is { Length: > 0 })
+                Tags = config.Tags;
+
+            if (!string.IsNullOrWhiteSpace(config.IconUri))
+                IconUri = config.IconUri;
+
+            if (!string.IsNullOrWhiteSpace(config.ProjectUri))
+                ProjectUri = config.ProjectUri;
+        }
+
+        private void ApplyBuild(BuildModuleConfiguration? config)
+        {
+            if (config is null) return;
+
+            if (config.LocalVersion.HasValue)
+                LocalVersioning = config.LocalVersion.Value;
+
+            if (config.VersionedInstallStrategy.HasValue)
+                InstallStrategy = config.VersionedInstallStrategy.Value;
+
+            if (config.VersionedInstallKeep.HasValue)
+                KeepVersions = config.VersionedInstallKeep.Value;
+        }
+
+        private void ApplyBuildLibraries(BuildLibrariesConfiguration? config)
+        {
+            if (config is null) return;
+
+            if (!string.IsNullOrWhiteSpace(config.Configuration))
+                DotNetConfiguration = config.Configuration;
+
+            if (config.Framework is { Length: > 0 })
+                DotNetFrameworks = config.Framework;
+
+            if (!string.IsNullOrWhiteSpace(config.ProjectName))
+                NetProjectName = config.ProjectName;
+
+            if (!string.IsNullOrWhiteSpace(config.NETProjectPath))
+                NetProjectPath = config.NETProjectPath;
+        }
+
+        private void AddRequiredModule(ModuleDependencyConfiguration? module)
+        {
+            if (module is null) return;
+
+            var name = module.ModuleName;
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            RequiredModules.Add(new ManifestEditor.RequiredModule(
+                name.Trim(),
+                module.ModuleVersion,
+                module.RequiredVersion,
+                module.Guid));
         }
 
         private void AddRequiredModules(object? value)
