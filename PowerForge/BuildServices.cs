@@ -194,8 +194,9 @@ public static class BuildServices
                 var name = d.Contains("ModuleName") ? d["ModuleName"]?.ToString() : d.Contains("Module") ? d["Module"]?.ToString() : null;
                 if (string.IsNullOrWhiteSpace(name)) continue;
                 var ver = d.Contains("ModuleVersion") ? d["ModuleVersion"]?.ToString() : null;
-                var guid = d.Contains("Guid") ? d["Guid"]?.ToString() : null;
-                list.Add(new ManifestEditor.RequiredModule(name!, ver, guid));
+                var req = d.Contains("RequiredVersion") ? d["RequiredVersion"]?.ToString() : null;
+                var guid = d.Contains("Guid") ? d["Guid"]?.ToString() : null;   
+                list.Add(new ManifestEditor.RequiredModule(name!, moduleVersion: ver, requiredVersion: req, guid: guid));
             }
             else if (obj is string s && !string.IsNullOrWhiteSpace(s))
             {
@@ -206,7 +207,34 @@ public static class BuildServices
     }
 
     /// <summary>
-    /// Finds PowerShell resources using PSResourceGet (out-of-process).
+    /// Replaces common PSPublishModule path tokens (e.g., <c>&lt;ModuleName&gt;</c>, <c>&lt;ModuleVersion&gt;</c>, <c>&lt;TagName&gt;</c>).
+    /// Intended for legacy PowerShell build scripts.
+    /// </summary>
+    public static string ReplacePathTokens(string replacementPath, string moduleName, string moduleVersion, string? preRelease = null)
+    {
+        if (replacementPath is null) return string.Empty;
+
+        moduleName ??= string.Empty;
+        moduleVersion ??= string.Empty;
+
+        var tagName = "v" + moduleVersion;
+        var moduleVersionWithPreRelease = string.IsNullOrWhiteSpace(preRelease)
+            ? moduleVersion
+            : moduleVersion + "-" + preRelease;
+        var tagModuleVersionWithPreRelease = "v" + moduleVersionWithPreRelease;
+
+        var path = replacementPath;
+        path = path.Replace("<TagName>", tagName).Replace("{TagName}", tagName);
+        path = path.Replace("<ModuleVersion>", moduleVersion).Replace("{ModuleVersion}", moduleVersion);
+        path = path.Replace("<ModuleVersionWithPreRelease>", moduleVersionWithPreRelease).Replace("{ModuleVersionWithPreRelease}", moduleVersionWithPreRelease);
+        path = path.Replace("<TagModuleVersionWithPreRelease>", tagModuleVersionWithPreRelease).Replace("{TagModuleVersionWithPreRelease}", tagModuleVersionWithPreRelease);
+        path = path.Replace("<ModuleName>", moduleName).Replace("{ModuleName}", moduleName);
+
+        return path;
+    }
+
+    /// <summary>
+    /// Finds PowerShell resources using PSResourceGet (out-of-process).  
     /// </summary>
     /// <param name="names">Resource names to search for.</param>
     /// <param name="version">Version constraint string (PSResourceGet -Version value).</param>
