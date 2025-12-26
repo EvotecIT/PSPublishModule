@@ -30,10 +30,13 @@
         [switch] $DoNotClear
     )
 
-    $DestinationMainModule = Initialize-ReplacePath -ReplacementPath $DestinationMainModule -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
-    $DestinationRequiredModules = Initialize-ReplacePath -ReplacementPath $DestinationRequiredModules -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
-    $DestinationZip = Initialize-ReplacePath -ReplacementPath $DestinationZip -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
-    $Destination = Initialize-ReplacePath -ReplacementPath $Destination -ModuleName $ModuleName -ModuleVersion $ModuleVersion -Configuration $Configuration
+    $PreRelease = $null
+    try { $PreRelease = [string]$Configuration.CurrentSettings.PreRelease } catch { }
+
+    $DestinationMainModule = [PowerForge.BuildServices]::ReplacePathTokens(([string]$DestinationMainModule), ([string]$ModuleName), ([string]$ModuleVersion), $PreRelease)
+    $DestinationRequiredModules = [PowerForge.BuildServices]::ReplacePathTokens(([string]$DestinationRequiredModules), ([string]$ModuleName), ([string]$ModuleVersion), $PreRelease)
+    $DestinationZip = [PowerForge.BuildServices]::ReplacePathTokens(([string]$DestinationZip), ([string]$ModuleName), ([string]$ModuleVersion), $PreRelease)
+    $Destination = [PowerForge.BuildServices]::ReplacePathTokens(([string]$Destination), ([string]$ModuleName), ([string]$ModuleVersion), $PreRelease)
 
     $ResolvedDestination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
     if (-not $DoNotClear) {
