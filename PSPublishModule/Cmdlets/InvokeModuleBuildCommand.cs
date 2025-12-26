@@ -16,7 +16,7 @@ namespace PSPublishModule;
 /// </summary>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
 [Alias("New-PrepareModule", "Build-Module", "Invoke-ModuleBuilder")]
-public sealed class InvokeModuleBuildCommand : PSCmdlet
+public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 {
     private const string ParameterSetModern = "Modern";
     private const string ParameterSetConfiguration = "Configuration";
@@ -196,172 +196,62 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
             ParameterSetName == ParameterSetConfiguration ||
             Settings is not null;
 
-        if (!useLegacy)
+#pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
+        var success = false;
+        try
         {
-            try
-            {
-                var version = ResolveModuleVersion(projectRoot, moduleName);
-                var logger = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-                var pipeline = new ModuleBuildPipeline(logger);
+            var logger = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+            if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
+                logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
 
-                var stagingWasGenerated = string.IsNullOrWhiteSpace(StagingPath);
-                var buildSpec = new ModuleBuildSpec
+            var segments = useLegacy
+                ? (ParameterSetName == ParameterSetConfiguration
+                    ? LegacySegmentAdapter.CollectFromLegacyConfiguration(Configuration)
+                    : LegacySegmentAdapter.CollectFromSettings(Settings))
+                : Array.Empty<IConfigurationSegment>();
+
+            var baseVersion = ResolveModuleVersion(projectRoot, moduleName);
+            var frameworks = useLegacy && !MyInvocation.BoundParameters.ContainsKey(nameof(DotNetFramework))
+                ? Array.Empty<string>()
+                : DotNetFramework;
+
+            var pipelineSpec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
                 {
                     Name = moduleName,
                     SourcePath = projectRoot,
                     StagingPath = StagingPath,
                     CsprojPath = CsprojPath,
-                    Version = version,
+                    Version = baseVersion,
                     Configuration = DotNetConfiguration,
-                    Frameworks = DotNetFramework ?? Array.Empty<string>(),
+                    Frameworks = frameworks,
                     KeepStaging = KeepStaging.IsPresent,
-                };
-
-                var buildResult = pipeline.BuildToStaging(buildSpec);
-
-                if (!SkipInstall.IsPresent)
+                },
+                Install = new ModulePipelineInstallOptions
                 {
-                    var installSpec = new ModuleInstallSpec
-                    {
-                        Name = moduleName,
-                        Version = version,
-                        StagingPath = buildResult.StagingPath,
-                        Strategy = InstallStrategy,
-                        KeepVersions = KeepVersions,
-                        Roots = InstallRoots ?? Array.Empty<string>(),
-                    };
-
-                    var installResult = pipeline.InstallFromStaging(installSpec);
-                    logger.Success($"Installed {moduleName} {installResult.Version}");
-                }
-
-                if (!KeepStaging.IsPresent && stagingWasGenerated)
-                {
-                    try { Directory.Delete(buildResult.StagingPath, recursive: true); }
-                    catch { /* best effort */ }
-                }
-
-                var elapsedPf = sw.Elapsed;
-                var elapsedTextPf =
-                    $"{elapsedPf.Days} days, {elapsedPf.Hours} hours, {elapsedPf.Minutes} minutes, {elapsedPf.Seconds} seconds, {elapsedPf.Milliseconds} milliseconds";
-
-                WriteHostMessage("[i] Module Build Completed ", ConsoleColor.Green, noNewLine: true);
-                WriteHostMessage($"[Time Total: {elapsedTextPf}]", ConsoleColor.Green);
-                if (ExitCode.IsPresent) Host.SetShouldExit(0);
-                return;
-            }
-            catch (Exception ex)
-            {
-                WriteError(new ErrorRecord(ex, "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
-                if (ExitCode.IsPresent) Host.SetShouldExit(1);
-                return;
-            }
-        }
-
-        var success = false;
-        try
-        {
-            var loggerDsl = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-            if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
-                loggerDsl.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
-
-            var dsl = ParameterSetName == ParameterSetConfiguration
-                ? DslBuildData.FromLegacyConfiguration(Configuration)
-                : DslBuildData.FromSettings(Settings);
-
-            var expectedVersion = !string.IsNullOrWhiteSpace(dsl.ModuleVersion)
-                ? dsl.ModuleVersion!
-                : ResolveModuleVersion(projectRoot, moduleName);
-
-            var localPsd1 = dsl.LocalVersioning
-                ? System.IO.Path.Combine(projectRoot, $"{moduleName}.psd1")
-                : null;
-
-            var stepper = new ModuleVersionStepper(loggerDsl);
-            var version = stepper.Step(expectedVersion, moduleName, localPsd1Path: localPsd1).Version;
-
-            var dotnetConfig = MyInvocation.BoundParameters.ContainsKey(nameof(DotNetConfiguration))
-                ? DotNetConfiguration
-                : (dsl.DotNetConfiguration ?? "Release");
-
-            var frameworks = MyInvocation.BoundParameters.ContainsKey(nameof(DotNetFramework))
-                ? (DotNetFramework ?? Array.Empty<string>())
-                : (dsl.DotNetFrameworks ?? Array.Empty<string>());
-
-            var csproj = !string.IsNullOrWhiteSpace(CsprojPath)
-                ? CsprojPath
-                : dsl.TryResolveCsprojPath(projectRoot, moduleName);
-
-            var stagingWasGenerated = string.IsNullOrWhiteSpace(StagingPath);
-            var pipeline = new ModuleBuildPipeline(loggerDsl);
-
-            var buildSpec = new ModuleBuildSpec
-            {
-                Name = moduleName,
-                SourcePath = projectRoot,
-                StagingPath = StagingPath,
-                CsprojPath = csproj,
-                Version = version,
-                Configuration = dotnetConfig,
-                Frameworks = frameworks,
-                Author = dsl.Author,
-                CompanyName = dsl.CompanyName,
-                Description = dsl.Description,
-                Tags = dsl.Tags ?? Array.Empty<string>(),
-                IconUri = dsl.IconUri,
-                ProjectUri = dsl.ProjectUri,
-                KeepStaging = KeepStaging.IsPresent,
+                    Enabled = !SkipInstall.IsPresent,
+                    Strategy = MyInvocation.BoundParameters.ContainsKey(nameof(InstallStrategy)) ? InstallStrategy : null,
+                    KeepVersions = MyInvocation.BoundParameters.ContainsKey(nameof(KeepVersions)) ? KeepVersions : null,
+                    Roots = MyInvocation.BoundParameters.ContainsKey(nameof(InstallRoots)) ? (InstallRoots ?? Array.Empty<string>()) : null,
+                },
+                Segments = segments,
             };
 
-            var buildResult = pipeline.BuildToStaging(buildSpec);
-
-            if (dsl.CompatiblePSEditions is { Length: > 0 })
-                ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", dsl.CompatiblePSEditions);
-
-            if (dsl.RequiredModules.Count > 0)
-                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, dsl.RequiredModules.ToArray());
-
-            if (!SkipInstall.IsPresent)
-            {
-                var strategy = InstallStrategy;
-                if (!MyInvocation.BoundParameters.ContainsKey(nameof(InstallStrategy)) && dsl.InstallStrategy.HasValue)
-                    strategy = dsl.InstallStrategy.Value;
-
-                var keep = KeepVersions;
-                if (!MyInvocation.BoundParameters.ContainsKey(nameof(KeepVersions)) && dsl.KeepVersions.HasValue)
-                    keep = dsl.KeepVersions.Value;
-
-                var roots = InstallRoots ?? Array.Empty<string>();
-                if (!MyInvocation.BoundParameters.ContainsKey(nameof(InstallRoots)) && dsl.CompatiblePSEditions is { Length: > 0 })
-                    roots = dsl.ResolveInstallRootsFromCompatiblePSEditions();
-
-                var installSpec = new ModuleInstallSpec
-                {
-                    Name = moduleName,
-                    Version = version,
-                    StagingPath = buildResult.StagingPath,
-                    Strategy = strategy,
-                    KeepVersions = keep,
-                    Roots = roots,
-                };
-
-                var installResult = pipeline.InstallFromStaging(installSpec);
-                loggerDsl.Success($"Installed {moduleName} {installResult.Version}");
-            }
-
-            if (!KeepStaging.IsPresent && stagingWasGenerated)
-            {
-                try { Directory.Delete(buildResult.StagingPath, recursive: true); }
-                catch { /* best effort */ }
-            }
+            var runner = new ModulePipelineRunner(logger);
+            var result = runner.Run(pipelineSpec);
+            if (result.InstallResult is not null)
+                logger.Success($"Installed {moduleName} {result.InstallResult.Version}");
 
             success = true;
         }
         catch (Exception ex)
         {
-            WriteError(new ErrorRecord(ex, "InvokeModuleBuildDslFailed", ErrorCategory.NotSpecified, null));
+            WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
             success = false;
         }
+#pragma warning restore CA1031
+
         var elapsed = sw.Elapsed;
         var elapsedText =
             $"{elapsed.Days} days, {elapsed.Hours} hours, {elapsed.Minutes} minutes, {elapsed.Seconds} seconds, {elapsed.Milliseconds} milliseconds";
@@ -378,6 +268,8 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
             WriteHostMessage($"[Time Total: {elapsedText}]", ConsoleColor.Red);
             if (ExitCode.IsPresent) Host.SetShouldExit(1);
         }
+
+        return;
     }
 
     private (string ProjectRoot, string? BasePathForScaffold) ResolveProjectPaths(string moduleName)
@@ -543,443 +435,6 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
         {
             if (!IsVerbose) return;
             _cmdlet.WriteHostMessage("[v] " + message, ConsoleColor.DarkGray);  
-        }
-    }
-
-    private sealed class DslBuildData
-    {
-        public string? ModuleVersion { get; private set; }
-        public string[]? CompatiblePSEditions { get; private set; }
-
-        public string? Author { get; private set; }
-        public string? CompanyName { get; private set; }
-        public string? Description { get; private set; }
-        public string[]? Tags { get; private set; }
-        public string? IconUri { get; private set; }
-        public string? ProjectUri { get; private set; }
-
-        public bool LocalVersioning { get; private set; }
-        public InstallationStrategy? InstallStrategy { get; private set; }
-        public int? KeepVersions { get; private set; }
-
-        public string? DotNetConfiguration { get; private set; }
-        public string[]? DotNetFrameworks { get; private set; }
-        public string? NetProjectName { get; private set; }
-        public string? NetProjectPath { get; private set; }
-
-        public List<ManifestEditor.RequiredModule> RequiredModules { get; } = new();
-
-        public static DslBuildData FromSettings(ScriptBlock? settings)
-        {
-            var data = new DslBuildData();
-            if (settings is null) return data;
-
-            var output = settings.Invoke();
-            foreach (var obj in output)
-            {
-                var baseObj = obj?.BaseObject;
-                if (baseObj is null) continue;
-                data.ApplySegment(baseObj);
-            }
-
-            return data;
-        }
-
-        public static DslBuildData FromLegacyConfiguration(IDictionary configuration)
-        {
-            var data = new DslBuildData();
-            if (configuration is null) return data;
-
-            var info = GetDictionary(configuration, "Information");
-            var manifest = info is null ? null : GetDictionary(info, "Manifest");
-            if (manifest is not null)
-            {
-                data.ModuleVersion = GetString(manifest, "ModuleVersion");
-                data.CompatiblePSEditions = GetStringArray(manifest, "CompatiblePSEditions");
-
-                data.Author = GetString(manifest, "Author");
-                data.CompanyName = GetString(manifest, "CompanyName");
-                data.Description = GetString(manifest, "Description");
-
-                // Prefer explicit top-level keys from config cmdlets, then fall back to PrivateData.PSData.
-                data.Tags = GetStringArray(manifest, "Tags") ?? GetNestedStringArray(manifest, "PrivateData", "PSData", "Tags");
-                data.IconUri = GetString(manifest, "IconUri") ?? GetNestedString(manifest, "PrivateData", "PSData", "IconUri");
-                data.ProjectUri = GetString(manifest, "ProjectUri") ?? GetNestedString(manifest, "PrivateData", "PSData", "ProjectUri");
-
-                data.AddRequiredModules(GetValue(manifest, "RequiredModules"));
-            }
-
-            var steps = GetDictionary(configuration, "Steps");
-            if (steps is not null)
-            {
-                var buildModule = GetDictionary(steps, "BuildModule");
-                if (buildModule is not null)
-                {
-                    data.LocalVersioning = GetBool(buildModule, "LocalVersion");
-                    data.InstallStrategy = TryParseInstallationStrategy(GetString(buildModule, "VersionedInstallStrategy"));
-                    data.KeepVersions = GetInt(buildModule, "VersionedInstallKeep");
-                }
-
-                var buildLibraries = GetDictionary(steps, "BuildLibraries");
-                if (buildLibraries is not null)
-                {
-                    data.DotNetConfiguration = GetString(buildLibraries, "Configuration");
-                    data.DotNetFrameworks = GetStringArray(buildLibraries, "Framework");
-                    data.NetProjectName = GetString(buildLibraries, "ProjectName");
-                    data.NetProjectPath = GetString(buildLibraries, "NETProjectPath");
-                }
-            }
-
-            return data;
-        }
-
-        public string? TryResolveCsprojPath(string projectRoot, string moduleName)
-        {
-            if (string.IsNullOrWhiteSpace(NetProjectPath))
-                return null;
-
-            var projectName = string.IsNullOrWhiteSpace(NetProjectName) ? moduleName : NetProjectName!.Trim();
-            var rawPath = NetProjectPath!.Trim().Trim('"');
-
-            var basePath = System.IO.Path.IsPathRooted(rawPath)
-                ? System.IO.Path.GetFullPath(rawPath)
-                : System.IO.Path.GetFullPath(System.IO.Path.Combine(projectRoot, rawPath));
-
-            if (basePath.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
-                return basePath;
-
-            return System.IO.Path.Combine(basePath, projectName + ".csproj");
-        }
-
-        public string[] ResolveInstallRootsFromCompatiblePSEditions()
-        {
-            var compatible = CompatiblePSEditions ?? Array.Empty<string>();
-            if (compatible.Length == 0) return Array.Empty<string>();
-
-            var hasDesktop = compatible.Any(s => string.Equals(s, "Desktop", StringComparison.OrdinalIgnoreCase));
-            var hasCore = compatible.Any(s => string.Equals(s, "Core", StringComparison.OrdinalIgnoreCase));
-
-            var roots = new List<string>();
-            if (System.IO.Path.DirectorySeparatorChar == '\\')
-            {
-                var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                if (string.IsNullOrWhiteSpace(docs))
-                    docs = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-                if (!string.IsNullOrWhiteSpace(docs))
-                {
-                    if (hasCore) roots.Add(System.IO.Path.Combine(docs, "PowerShell", "Modules"));
-                    if (hasDesktop) roots.Add(System.IO.Path.Combine(docs, "WindowsPowerShell", "Modules"));
-                }
-            }
-            else
-            {
-                var home = Environment.GetEnvironmentVariable("HOME");
-                if (string.IsNullOrWhiteSpace(home))
-                    home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-                var xdgDataHome = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
-                var dataHome = !string.IsNullOrWhiteSpace(xdgDataHome)
-                    ? xdgDataHome
-                    : (!string.IsNullOrWhiteSpace(home)
-                        ? System.IO.Path.Combine(home!, ".local", "share")
-                        : null);
-
-                if (!string.IsNullOrWhiteSpace(dataHome))
-                    roots.Add(System.IO.Path.Combine(dataHome!, "powershell", "Modules"));
-            }
-
-            return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        }
-
-        private void ApplySegment(object segment)
-        {
-            if (segment is PSObject pso)
-                segment = pso.BaseObject;
-
-            if (TryApplyTypedSegment(segment))
-                return;
-
-            if (segment is not IDictionary dict)
-                return;
-
-            var type = GetString(dict, "Type");
-            if (string.IsNullOrWhiteSpace(type))
-                return;
-
-            if (string.Equals(type, "Manifest", StringComparison.OrdinalIgnoreCase))
-            {
-                var conf = GetDictionary(dict, "Configuration");
-                if (conf is null) return;
-
-                ModuleVersion = GetString(conf, "ModuleVersion") ?? ModuleVersion;
-                CompatiblePSEditions = GetStringArray(conf, "CompatiblePSEditions") ?? CompatiblePSEditions;
-                Author = GetString(conf, "Author") ?? Author;
-                CompanyName = GetString(conf, "CompanyName") ?? CompanyName;
-                Description = GetString(conf, "Description") ?? Description;
-                Tags = GetStringArray(conf, "Tags") ?? Tags;
-                IconUri = GetString(conf, "IconUri") ?? IconUri;
-                ProjectUri = GetString(conf, "ProjectUri") ?? ProjectUri;
-                return;
-            }
-
-            if (string.Equals(type, "Build", StringComparison.OrdinalIgnoreCase))
-            {
-                var conf = GetDictionary(dict, "BuildModule");
-                if (conf is null) return;
-
-                LocalVersioning = GetBool(conf, "LocalVersion");
-                InstallStrategy = TryParseInstallationStrategy(GetString(conf, "VersionedInstallStrategy")) ?? InstallStrategy;
-                KeepVersions = GetInt(conf, "VersionedInstallKeep") ?? KeepVersions;
-                return;
-            }
-
-            if (string.Equals(type, "BuildLibraries", StringComparison.OrdinalIgnoreCase))
-            {
-                var conf = GetDictionary(dict, "BuildLibraries");
-                if (conf is null) return;
-
-                DotNetConfiguration = GetString(conf, "Configuration") ?? DotNetConfiguration;
-                DotNetFrameworks = GetStringArray(conf, "Framework") ?? DotNetFrameworks;
-                NetProjectName = GetString(conf, "ProjectName") ?? NetProjectName;
-                NetProjectPath = GetString(conf, "NETProjectPath") ?? NetProjectPath;
-                return;
-            }
-
-            if (string.Equals(type, "RequiredModule", StringComparison.OrdinalIgnoreCase))
-            {
-                AddRequiredModules(GetValue(dict, "Configuration"));
-            }
-        }
-
-        private bool TryApplyTypedSegment(object segment)
-        {
-            switch (segment)
-            {
-                case ConfigurationManifestSegment manifest:
-                    ApplyManifest(manifest.Configuration);
-                    return true;
-                case ConfigurationBuildSegment build:
-                    ApplyBuild(build.BuildModule);
-                    return true;
-                case ConfigurationBuildLibrariesSegment buildLibraries:
-                    ApplyBuildLibraries(buildLibraries.BuildLibraries);
-                    return true;
-                case ConfigurationModuleSegment module:
-                    if (module.Kind == PowerForge.ModuleDependencyKind.RequiredModule)
-                        AddRequiredModule(module.Configuration);
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
-        private void ApplyManifest(ManifestConfiguration? config)
-        {
-            if (config is null) return;
-
-            if (!string.IsNullOrWhiteSpace(config.ModuleVersion))
-                ModuleVersion = config.ModuleVersion;
-
-            if (config.CompatiblePSEditions is { Length: > 0 })
-                CompatiblePSEditions = config.CompatiblePSEditions;
-
-            if (!string.IsNullOrWhiteSpace(config.Author))
-                Author = config.Author;
-
-            if (!string.IsNullOrWhiteSpace(config.CompanyName))
-                CompanyName = config.CompanyName;
-
-            if (!string.IsNullOrWhiteSpace(config.Description))
-                Description = config.Description;
-
-            if (config.Tags is { Length: > 0 })
-                Tags = config.Tags;
-
-            if (!string.IsNullOrWhiteSpace(config.IconUri))
-                IconUri = config.IconUri;
-
-            if (!string.IsNullOrWhiteSpace(config.ProjectUri))
-                ProjectUri = config.ProjectUri;
-        }
-
-        private void ApplyBuild(BuildModuleConfiguration? config)
-        {
-            if (config is null) return;
-
-            if (config.LocalVersion.HasValue)
-                LocalVersioning = config.LocalVersion.Value;
-
-            if (config.VersionedInstallStrategy.HasValue)
-                InstallStrategy = config.VersionedInstallStrategy.Value;
-
-            if (config.VersionedInstallKeep.HasValue)
-                KeepVersions = config.VersionedInstallKeep.Value;
-        }
-
-        private void ApplyBuildLibraries(BuildLibrariesConfiguration? config)
-        {
-            if (config is null) return;
-
-            if (!string.IsNullOrWhiteSpace(config.Configuration))
-                DotNetConfiguration = config.Configuration;
-
-            if (config.Framework is { Length: > 0 })
-                DotNetFrameworks = config.Framework;
-
-            if (!string.IsNullOrWhiteSpace(config.ProjectName))
-                NetProjectName = config.ProjectName;
-
-            if (!string.IsNullOrWhiteSpace(config.NETProjectPath))
-                NetProjectPath = config.NETProjectPath;
-        }
-
-        private void AddRequiredModule(ModuleDependencyConfiguration? module)
-        {
-            if (module is null) return;
-
-            var name = module.ModuleName;
-            if (string.IsNullOrWhiteSpace(name)) return;
-
-            RequiredModules.Add(new ManifestEditor.RequiredModule(
-                name.Trim(),
-                module.ModuleVersion,
-                module.RequiredVersion,
-                module.Guid));
-        }
-
-        private void AddRequiredModules(object? value)
-        {
-            if (value is null) return;
-
-            if (value is PSObject pso)
-                value = pso.BaseObject;
-
-            if (value is string s && !string.IsNullOrWhiteSpace(s))
-            {
-                RequiredModules.Add(new ManifestEditor.RequiredModule(s.Trim()));
-                return;
-            }
-
-            if (value is IDictionary d)
-            {
-                var name = GetString(d, "ModuleName") ?? GetString(d, "Module");
-                if (string.IsNullOrWhiteSpace(name)) return;
-
-                var moduleVersion = GetString(d, "ModuleVersion");
-                var requiredVersion = GetString(d, "RequiredVersion");
-                var guid = GetString(d, "Guid");
-                RequiredModules.Add(new ManifestEditor.RequiredModule(name.Trim(), moduleVersion, requiredVersion, guid));
-                return;
-            }
-
-            if (value is IEnumerable e && value is not string)
-            {
-                foreach (var item in e)
-                    AddRequiredModules(item);
-            }
-        }
-
-        private static InstallationStrategy? TryParseInstallationStrategy(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value)) return null;
-            return Enum.TryParse<InstallationStrategy>(value.Trim(), ignoreCase: true, out var parsed)
-                ? parsed
-                : null;
-        }
-
-        private static IDictionary? GetDictionary(IDictionary dict, string key)
-        {
-            var v = GetValue(dict, key);
-            if (v is PSObject pso) v = pso.BaseObject;
-            return v as IDictionary;
-        }
-
-        private static object? GetValue(IDictionary dict, string key)
-        {
-            if (dict is null || string.IsNullOrWhiteSpace(key)) return null;
-
-            if (dict.Contains(key))
-            {
-                try { return dict[key]; } catch { return null; }
-            }
-
-            foreach (DictionaryEntry entry in dict)
-            {
-                var k = entry.Key?.ToString();
-                if (k is null) continue;
-                if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
-                    return entry.Value;
-            }
-
-            return null;
-        }
-
-        private static string? GetString(IDictionary dict, string key)
-        {
-            var v = GetValue(dict, key);
-            if (v is PSObject pso) v = pso.BaseObject;
-            return v?.ToString();
-        }
-
-        private static bool GetBool(IDictionary dict, string key)
-        {
-            var v = GetValue(dict, key);
-            if (v is PSObject pso) v = pso.BaseObject;
-
-            if (v is bool b) return b;
-            if (v is SwitchParameter sp) return sp.IsPresent;
-            if (v is string s && bool.TryParse(s, out var parsed)) return parsed;
-            return false;
-        }
-
-        private static int? GetInt(IDictionary dict, string key)
-        {
-            var v = GetValue(dict, key);
-            if (v is PSObject pso) v = pso.BaseObject;
-
-            if (v is int i) return i;
-            if (v is long l) return checked((int)l);
-            if (v is string s && int.TryParse(s, out var parsed)) return parsed;
-            return null;
-        }
-
-        private static string[]? GetStringArray(IDictionary dict, string key)
-        {
-            var v = GetValue(dict, key);
-            if (v is PSObject pso) v = pso.BaseObject;
-
-            if (v is null) return null;
-            if (v is string s) return new[] { s };
-            if (v is string[] sa) return sa;
-
-            if (v is IEnumerable e)
-            {
-                var list = new List<string>();
-                foreach (var item in e)
-                {
-                    if (item is null) continue;
-                    if (item is PSObject pp) list.Add(pp.BaseObject?.ToString() ?? string.Empty);
-                    else list.Add(item.ToString() ?? string.Empty);
-                }
-                return list.Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
-            }
-
-            return null;
-        }
-
-        private static string? GetNestedString(IDictionary root, string key1, string key2, string key3)
-        {
-            var d1 = GetDictionary(root, key1);
-            var d2 = d1 is null ? null : GetDictionary(d1, key2);
-            return d2 is null ? null : GetString(d2, key3);
-        }
-
-        private static string[]? GetNestedStringArray(IDictionary root, string key1, string key2, string key3)
-        {
-            var d1 = GetDictionary(root, key1);
-            var d2 = d1 is null ? null : GetDictionary(d1, key2);
-            return d2 is null ? null : GetStringArray(d2, key3);
         }
     }
 
