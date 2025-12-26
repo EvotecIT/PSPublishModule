@@ -38,5 +38,5 @@
             ModuleVersion = '1.1.1'
         }, 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')
     RootModule             = 'PSPublishModule.psm1'
-    NestedModules          = @('PSPublishModule.dll')
+    NestedModules          = @()
 }
