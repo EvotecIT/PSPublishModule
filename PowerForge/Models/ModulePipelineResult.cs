@@ -21,6 +21,16 @@ public sealed class ModulePipelineResult
     public ModuleInstallerResult? InstallResult { get; }
 
     /// <summary>
+    /// Documentation result when documentation generation was enabled; otherwise null.
+    /// </summary>
+    public DocumentationBuildResult? DocumentationResult { get; }
+
+    /// <summary>
+    /// Publish results produced during the run.
+    /// </summary>
+    public ModulePublishResult[] PublishResults { get; }
+
+    /// <summary>
     /// Artefact results produced during the run.
     /// </summary>
     public ArtefactBuildResult[] ArtefactResults { get; }
@@ -32,11 +42,15 @@ public sealed class ModulePipelineResult
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         ModuleInstallerResult? installResult,
+        DocumentationBuildResult? documentationResult,
+        ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults)
     {
         Plan = plan;
         BuildResult = buildResult;
         InstallResult = installResult;
+        DocumentationResult = documentationResult;
+        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
     }
 }

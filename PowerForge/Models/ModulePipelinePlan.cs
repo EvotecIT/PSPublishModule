@@ -56,6 +56,21 @@ public sealed class ModulePipelinePlan
     public InformationConfiguration? Information { get; }
 
     /// <summary>
+    /// Optional documentation configuration (docs folder + readme path).
+    /// </summary>
+    public DocumentationConfiguration? Documentation { get; }
+
+    /// <summary>
+    /// Optional documentation build configuration (enable/clean/tool).
+    /// </summary>
+    public BuildDocumentationConfiguration? DocumentationBuild { get; }
+
+    /// <summary>
+    /// Publish configuration segments enabled for this pipeline run.
+    /// </summary>
+    public ConfigurationPublishSegment[] Publishes { get; }
+
+    /// <summary>
     /// Artefact configuration segments enabled for this pipeline run.
     /// </summary>
     public ConfigurationArtefactSegment[] Artefacts { get; }
@@ -104,6 +119,9 @@ public sealed class ModulePipelinePlan
         ManifestEditor.RequiredModule[] requiredModules,
         ManifestEditor.RequiredModule[] requiredModulesForPackaging,
         InformationConfiguration? information,
+        DocumentationConfiguration? documentation,
+        BuildDocumentationConfiguration? documentationBuild,
+        ConfigurationPublishSegment[] publishes,
         ConfigurationArtefactSegment[] artefacts,
         bool installEnabled,
         InstallationStrategy installStrategy,
@@ -122,6 +140,9 @@ public sealed class ModulePipelinePlan
         RequiredModules = requiredModules;
         RequiredModulesForPackaging = requiredModulesForPackaging;
         Information = information;
+        Documentation = documentation;
+        DocumentationBuild = documentationBuild;
+        Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();
         Artefacts = artefacts;
         InstallEnabled = installEnabled;
         InstallStrategy = installStrategy;
