@@ -104,6 +104,52 @@ public sealed class PSResourcePublishOptions
 }
 
 /// <summary>
+/// Options for <c>Install-PSResource</c>.
+/// </summary>
+public sealed class PSResourceInstallOptions
+{
+    /// <summary>Resource name to install.</summary>
+    public string Name { get; }
+    /// <summary>Version constraint string (PSResourceGet -Version value).</summary>
+    public string? Version { get; }
+    /// <summary>Repository to install from (optional).</summary>
+    public string? Repository { get; }
+    /// <summary>Install scope (CurrentUser/AllUsers). Default: CurrentUser.</summary>
+    public string Scope { get; }
+    /// <summary>Whether to include prerelease versions.</summary>
+    public bool Prerelease { get; }
+    /// <summary>Whether to reinstall even if already installed.</summary>
+    public bool Reinstall { get; }
+    /// <summary>Whether to trust repository (avoid prompts).</summary>
+    public bool TrustRepository { get; }
+    /// <summary>Whether to skip dependency checks.</summary>
+    public bool SkipDependencyCheck { get; }
+
+    /// <summary>
+    /// Creates a new options instance.
+    /// </summary>
+    public PSResourceInstallOptions(
+        string name,
+        string? version = null,
+        string? repository = null,
+        string scope = "CurrentUser",
+        bool prerelease = false,
+        bool reinstall = false,
+        bool trustRepository = true,
+        bool skipDependencyCheck = false)
+    {
+        Name = name;
+        Version = version;
+        Repository = repository;
+        Scope = string.IsNullOrWhiteSpace(scope) ? "CurrentUser" : scope;
+        Prerelease = prerelease;
+        Reinstall = reinstall;
+        TrustRepository = trustRepository;
+        SkipDependencyCheck = skipDependencyCheck;
+    }
+}
+
+/// <summary>
 /// Out-of-process wrapper for PSResourceGet (Find-PSResource / Publish-PSResource).
 /// </summary>
 public sealed class PSResourceGetClient
@@ -193,6 +239,41 @@ public sealed class PSResourceGetClient
             _logger.Error(full);
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            throw new InvalidOperationException(full);
+        }
+    }
+
+    /// <summary>
+    /// Installs a PowerShell resource using PSResourceGet.
+    /// </summary>
+    public void Install(PSResourceInstallOptions options, TimeSpan? timeout = null)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(options.Name)) throw new ArgumentException("Name is required.", nameof(options));
+
+        var script = BuildInstallScript();
+        var args = new List<string>(8)
+        {
+            options.Name,
+            options.Version ?? string.Empty,
+            options.Repository ?? string.Empty,
+            options.Scope ?? string.Empty,
+            options.Prerelease ? "1" : "0",
+            options.Reinstall ? "1" : "0",
+            options.TrustRepository ? "1" : "0",
+            options.SkipDependencyCheck ? "1" : "0"
+        };
+
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        if (result.ExitCode != 0)
+        {
+            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Install-PSResource failed (exit {result.ExitCode}). {message}".Trim();
+            _logger.Error(full);
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut))
+                _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr))
+                _logger.Verbose(result.StdErr.Trim());
             throw new InvalidOperationException(full);
         }
     }
@@ -361,6 +442,54 @@ try {
 } catch {
   $msg = $_.Exception.Message
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 1
+}
+";
+    }
+
+    private static string BuildInstallScript()
+    {
+        return @"
+param(
+  [string]$Name,
+  [string]$Version,
+  [string]$Repository,
+  [string]$Scope,
+  [string]$PrereleaseFlag,
+  [string]$ReinstallFlag,
+  [string]$TrustRepositoryFlag,
+  [string]$SkipDependencyFlag
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+try {
+  Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'Microsoft.PowerShell.PSResourceGet not available: ' + $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 3
+}
+
+$params = @{ ErrorAction = 'Stop' }
+$params.Name = $Name
+if (-not [string]::IsNullOrWhiteSpace($Version)) { $params.Version = $Version }
+if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
+if (-not [string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = $Scope }
+if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
+if ($ReinstallFlag -eq '1') { $params.Reinstall = $true }
+if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }
+if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
+
+try {
+  Install-PSResource @params | Out-Null
+  Write-Output 'PFPSRG::INSTALL::OK'
+  exit 0
+} catch {
+  $msg = $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
   Write-Output ('PFPSRG::ERROR::' + $b64)
   exit 1
 }
