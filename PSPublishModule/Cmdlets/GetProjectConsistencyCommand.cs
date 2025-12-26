@@ -67,7 +67,7 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         var recommendedEncoding = ResolveRecommendedEncoding(ProjectType, RecommendedEncoding);
         var recommendedLineEnding = ResolveRecommendedLineEnding(RecommendedLineEnding);
 
-        HostWriteLineSafe("🔍 Analyzing project consistency...", ConsoleColor.Cyan);
+        HostWriteLineSafe("[i] Analyzing project consistency...", ConsoleColor.Cyan);
         HostWriteLineSafe($"Project: {root}");
         HostWriteLineSafe($"Type: {ProjectType}");
         HostWriteLineSafe($"Target encoding: {recommendedEncoding}");
@@ -91,9 +91,9 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         }
 
         HostWriteLineSafe("");
-        HostWriteLineSafe("📝 Analyzing file encodings...", ConsoleColor.Yellow);
-        HostWriteLineSafe("📏 Analyzing line endings...", ConsoleColor.Yellow);
-        HostWriteLineSafe("🔄 Combining analysis...", ConsoleColor.Yellow);
+        HostWriteLineSafe("[i] Analyzing file encodings...", ConsoleColor.Yellow);
+        HostWriteLineSafe("[i] Analyzing line endings...", ConsoleColor.Yellow);
+        HostWriteLineSafe("[i] Combining analysis...", ConsoleColor.Yellow);
 
         var finalNewlineExtensions = new HashSet<string>(new[]
         {
@@ -241,20 +241,20 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
 
         // Display summary (preserve existing UX: always prints to host).
         HostWriteLineSafe("");
-        HostWriteLineSafe("📊 Project Consistency Summary:", ConsoleColor.Cyan);
+        HostWriteLineSafe("Project Consistency Summary:", ConsoleColor.Cyan);
         HostWriteLineSafe($"  Total files analyzed: {totalFiles}");
         HostWriteLineSafe($"  Files compliant with standards: {filesCompliant} ({compliancePercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)",
             compliancePercentage >= 90 ? ConsoleColor.Green : compliancePercentage >= 70 ? ConsoleColor.Yellow : ConsoleColor.Red);
         HostWriteLineSafe($"  Files needing attention: {filesWithIssues}", filesWithIssues == 0 ? ConsoleColor.Green : ConsoleColor.Red);
 
         HostWriteLineSafe("");
-        HostWriteLineSafe("📝 Encoding Issues:", ConsoleColor.Cyan);
+        HostWriteLineSafe("Encoding Issues:", ConsoleColor.Cyan);
         HostWriteLineSafe($"  Files needing encoding conversion: {filesNeedingEncodingConversion}",
             filesNeedingEncodingConversion == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
         HostWriteLineSafe($"  Target encoding: {recommendedEncoding}");
 
         HostWriteLineSafe("");
-        HostWriteLineSafe("📏 Line Ending Issues:", ConsoleColor.Cyan);
+        HostWriteLineSafe("Line Ending Issues:", ConsoleColor.Cyan);
         HostWriteLineSafe($"  Files needing line ending conversion: {filesNeedingLineEndingConversion}",
             filesNeedingLineEndingConversion == 0 ? ConsoleColor.Green : ConsoleColor.Yellow);
         HostWriteLineSafe($"  Files with mixed line endings: {filesWithMixedLineEndings}",
@@ -266,7 +266,7 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         if (extensionIssues.Count > 0)
         {
             HostWriteLineSafe("");
-            HostWriteLineSafe("⚠️  Extensions with Issues:", ConsoleColor.Yellow);
+            HostWriteLineSafe("Extensions with Issues:", ConsoleColor.Yellow);
             var orderedIssues = extensionIssues
                 .Cast<DictionaryEntry>()
                 .Select(de => new { Ext = de.Key as string, Stats = de.Value as Hashtable })

@@ -233,23 +233,23 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
             HostWriteLineSafe($"  Most common line ending: {mostCommonLineEnding} ({(lineEndingStats.TryGetValue(mostCommonLineEnding, out var c) ? c : 0)} files)", ConsoleColor.Green);
 
             if (problemFiles.Count > 0)
-                HostWriteLineSafe($"  ⚠️  Files with mixed line endings: {problemFiles.Count}", ConsoleColor.Red);
+                HostWriteLineSafe($"  Files with mixed line endings: {problemFiles.Count}", ConsoleColor.Red);
 
             if (filesWithoutFinalNewline.Count > 0)
-                HostWriteLineSafe($"  ⚠️  Files without final newline: {filesWithoutFinalNewline.Count}", ConsoleColor.Yellow);
+                HostWriteLineSafe($"  Files without final newline: {filesWithoutFinalNewline.Count}", ConsoleColor.Yellow);
             else
-                HostWriteLineSafe("  ✅ All files end with proper newlines", ConsoleColor.Green);
+                HostWriteLineSafe("  All files end with proper newlines", ConsoleColor.Green);
 
             if (inconsistentExtensions.Length > 0)
-                HostWriteLineSafe($"  ⚠️  Extensions with mixed line endings: {string.Join(", ", inconsistentExtensions)}", ConsoleColor.Yellow);
+                HostWriteLineSafe($"  Extensions with mixed line endings: {string.Join(", ", inconsistentExtensions)}", ConsoleColor.Yellow);
             else
-                HostWriteLineSafe("  ✅ All file extensions have consistent line endings", ConsoleColor.Green);
+                HostWriteLineSafe("  All file extensions have consistent line endings", ConsoleColor.Green);
 
             if (recommendations.Length > 0)
             {
                 HostWriteLineSafe("");
-                HostWriteLineSafe("💡 Recommendations:", ConsoleColor.Cyan);
-                foreach (var r in recommendations) HostWriteLineSafe($"  • {r}", ConsoleColor.Yellow);
+                HostWriteLineSafe("Recommendations:", ConsoleColor.Cyan);
+                foreach (var r in recommendations) HostWriteLineSafe($"  - {r}", ConsoleColor.Yellow);
             }
 
             HostWriteLineSafe("");

@@ -383,31 +383,31 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
         HostWriteLineSafe($"Source: {analysis.Source}", ConsoleColor.DarkGray);
         HostWriteLineSafe(string.Empty);
 
-        HostWriteLineSafe("📊 Test Statistics:", ConsoleColor.Yellow);
+        HostWriteLineSafe("Test Statistics:", ConsoleColor.Yellow);
         HostWriteLineSafe($"   Total Tests: {analysis.TotalCount}");
-        HostWriteLineSafe($"   ✅ Passed: {analysis.PassedCount}", ConsoleColor.Green);
-        HostWriteLineSafe($"   ❌ Failed: {analysis.FailedCount}", analysis.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green);
+        HostWriteLineSafe($"   Passed: {analysis.PassedCount}", ConsoleColor.Green);
+        HostWriteLineSafe($"   Failed: {analysis.FailedCount}", analysis.FailedCount > 0 ? ConsoleColor.Red : ConsoleColor.Green);
         if (analysis.SkippedCount > 0)
-            HostWriteLineSafe($"   ⏭️  Skipped: {analysis.SkippedCount}", ConsoleColor.Yellow);
+            HostWriteLineSafe($"   Skipped: {analysis.SkippedCount}", ConsoleColor.Yellow);
 
         if (analysis.TotalCount > 0)
         {
             var rate = Math.Round((double)analysis.PassedCount / analysis.TotalCount * 100, 1);
             var color = rate == 100 ? ConsoleColor.Green : (rate >= 80 ? ConsoleColor.Yellow : ConsoleColor.Red);
-            HostWriteLineSafe($"   📈 Success Rate: {rate.ToString("0.0", CultureInfo.InvariantCulture)}%", color);
+            HostWriteLineSafe($"   Success Rate: {rate.ToString("0.0", CultureInfo.InvariantCulture)}%", color);
         }
 
         HostWriteLineSafe(string.Empty);
         if (analysis.FailedCount > 0)
         {
-            HostWriteLineSafe("❌ Failed Tests:", ConsoleColor.Red);
+            HostWriteLineSafe("Failed Tests:", ConsoleColor.Red);
             foreach (var f in analysis.FailedTests)
-                HostWriteLineSafe($"   • {f.Name}", ConsoleColor.Red);
+                HostWriteLineSafe($"   - {f.Name}", ConsoleColor.Red);
             HostWriteLineSafe(string.Empty);
         }
         else if (showSuccessful && analysis.PassedCount > 0)
         {
-            HostWriteLineSafe("✅ All tests passed successfully!", ConsoleColor.Green);
+            HostWriteLineSafe("All tests passed successfully!", ConsoleColor.Green);
         }
     }
 
@@ -420,37 +420,37 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
 
         if (analysis.TotalCount == 0)
         {
-            HostWriteLineSafe("⚠️  No test results found", ConsoleColor.Yellow);
+            HostWriteLineSafe("No test results found", ConsoleColor.Yellow);
             return;
         }
 
         var color = analysis.FailedCount == 0 ? ConsoleColor.Green : ConsoleColor.Yellow;
-        HostWriteLineSafe($"📊 Summary: {analysis.PassedCount}/{analysis.TotalCount} tests passed", color);
+        HostWriteLineSafe($"Summary: {analysis.PassedCount}/{analysis.TotalCount} tests passed", color);
         HostWriteLineSafe(string.Empty);
 
         if (analysis.FailedCount == 0)
         {
-            HostWriteLineSafe("🎉 All tests passed successfully!", ConsoleColor.Green);
+            HostWriteLineSafe("All tests passed successfully!", ConsoleColor.Green);
             return;
         }
 
-        HostWriteLineSafe($"❌ Failed Tests ({analysis.FailedCount}):", ConsoleColor.Red);
+        HostWriteLineSafe($"Failed Tests ({analysis.FailedCount}):", ConsoleColor.Red);
         HostWriteLineSafe(string.Empty);
 
         foreach (var f in analysis.FailedTests)
         {
-            HostWriteLineSafe($"🔴 {f.Name}", ConsoleColor.Red);
+            HostWriteLineSafe($"- {f.Name}", ConsoleColor.Red);
             if (!string.IsNullOrWhiteSpace(f.ErrorMessage) && !string.Equals(f.ErrorMessage, "No error message available", StringComparison.Ordinal))
             {
                 foreach (var line in f.ErrorMessage.Split(new[] { '\n' }, StringSplitOptions.None))
                 {
                     var trimmed = line.Trim();
                     if (trimmed.Length > 0)
-                        HostWriteLineSafe($"   💬 {trimmed}", ConsoleColor.Yellow);
+                        HostWriteLineSafe($"   {trimmed}", ConsoleColor.Yellow);
                 }
             }
             if (f.Duration.HasValue)
-                HostWriteLineSafe($"   ⏱️  Duration: {f.Duration.Value}", ConsoleColor.DarkGray);
+                HostWriteLineSafe($"   Duration: {f.Duration.Value}", ConsoleColor.DarkGray);
             HostWriteLineSafe(string.Empty);
         }
 

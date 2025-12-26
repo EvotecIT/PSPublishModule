@@ -93,7 +93,7 @@ public sealed class ConvertProjectEncodingCommand : PSCmdlet
             Host.UI.WriteLine($"  Skipped: {res.Skipped}");
             Host.UI.WriteLine($"  Errors: {res.Errors}");
             var targetLabel = TargetEncoding?.ToString() ?? (ProjectType == ProjectKind.PowerShell ? nameof(TextEncodingKind.UTF8BOM) : nameof(TextEncodingKind.UTF8));
-            Host.UI.WriteLine($"  Encoding: {SourceEncoding} → {targetLabel}");
+            Host.UI.WriteLine($"  Encoding: {SourceEncoding} -> {targetLabel}");
         }
     }
 }

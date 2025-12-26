@@ -174,11 +174,11 @@ public sealed class GetProjectEncodingCommand : PSCmdlet
 
         if (inconsistentExtensions.Length > 0)
         {
-            HostWriteLineSafe($"  ⚠️  Extensions with mixed encodings: {string.Join(", ", inconsistentExtensions)}", ConsoleColor.Yellow);
+            HostWriteLineSafe($"  Extensions with mixed encodings: {string.Join(", ", inconsistentExtensions)}", ConsoleColor.Yellow);
         }
         else
         {
-            HostWriteLineSafe("  ✅ All file extensions have consistent encodings", ConsoleColor.Green);
+            HostWriteLineSafe("  All file extensions have consistent encodings", ConsoleColor.Green);
         }
 
         HostWriteLineSafe("");
