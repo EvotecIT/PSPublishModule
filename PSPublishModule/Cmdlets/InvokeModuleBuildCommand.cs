@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Text;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -112,6 +113,50 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
     public string LibrariesStandard { get; set; } = System.IO.Path.Combine("Lib", "Standard");
 
     /// <summary>
+    /// Forces the legacy PowerShell build pipeline (<c>New-PrepareStructure</c>).
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public SwitchParameter Legacy { get; set; }
+
+    /// <summary>Staging directory for the PowerForge pipeline. When omitted, a temporary folder is generated.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public string? StagingPath { get; set; }
+
+    /// <summary>Optional path to a .NET project (.csproj) to publish into the module.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public string? CsprojPath { get; set; }
+
+    /// <summary>Build configuration for publishing the .NET project (Release or Debug).</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [ValidateSet("Release", "Debug")]
+    public string DotNetConfiguration { get; set; } = "Release";
+
+    /// <summary>Target frameworks to publish (e.g., net472, net8.0).</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public string[] DotNetFramework { get; set; } = { "net472", "net8.0" };
+
+    /// <summary>Skips installing the module after build.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public SwitchParameter SkipInstall { get; set; }
+
+    /// <summary>Installation strategy used when installing the module.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public InstallationStrategy InstallStrategy { get; set; } = InstallationStrategy.AutoRevision;
+
+    /// <summary>Number of versions to keep per module root when installing.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public int KeepVersions { get; set; } = 3;
+
+    /// <summary>Destination module roots for install. When omitted, defaults are used.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public string[]? InstallRoots { get; set; }
+
+    /// <summary>Keep staging directory after build/install.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public SwitchParameter KeepStaging { get; set; }
+
+    /// <summary>
     /// When specified, requests the host to exit with code 0 on success and 1 on failure.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -143,6 +188,73 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
             }
 
             EnsureModuleScaffold(basePathForScaffold, projectRoot, moduleName);
+        }
+
+        var useLegacy =
+            Legacy.IsPresent ||
+            ParameterSetName == ParameterSetConfiguration ||
+            Settings is not null;
+
+        if (!useLegacy)
+        {
+            try
+            {
+                var version = ResolveModuleVersion(projectRoot, moduleName);
+                var logger = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+                var pipeline = new ModuleBuildPipeline(logger);
+
+                var stagingWasGenerated = string.IsNullOrWhiteSpace(StagingPath);
+                var buildSpec = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = projectRoot,
+                    StagingPath = StagingPath,
+                    CsprojPath = CsprojPath,
+                    Version = version,
+                    Configuration = DotNetConfiguration,
+                    Frameworks = DotNetFramework ?? Array.Empty<string>(),
+                    KeepStaging = KeepStaging.IsPresent,
+                };
+
+                var buildResult = pipeline.BuildToStaging(buildSpec);
+
+                if (!SkipInstall.IsPresent)
+                {
+                    var installSpec = new ModuleInstallSpec
+                    {
+                        Name = moduleName,
+                        Version = version,
+                        StagingPath = buildResult.StagingPath,
+                        Strategy = InstallStrategy,
+                        KeepVersions = KeepVersions,
+                        Roots = InstallRoots ?? Array.Empty<string>(),
+                    };
+
+                    var installResult = pipeline.InstallFromStaging(installSpec);
+                    logger.Success($"Installed {moduleName} {installResult.Version}");
+                }
+
+                if (!KeepStaging.IsPresent && stagingWasGenerated)
+                {
+                    try { Directory.Delete(buildResult.StagingPath, recursive: true); }
+                    catch { /* best effort */ }
+                }
+
+                var elapsedPf = sw.Elapsed;
+                var elapsedTextPf =
+                    $"{elapsedPf.Days} days, {elapsedPf.Hours} hours, {elapsedPf.Minutes} minutes, {elapsedPf.Seconds} seconds, {elapsedPf.Milliseconds} milliseconds";
+
+                WriteHostMessage("[i] Module Build Completed ", ConsoleColor.Green, noNewLine: true);
+                WriteHostMessage($"[Time Total: {elapsedTextPf}]", ConsoleColor.Green);
+                if (ExitCode.IsPresent) Host.SetShouldExit(0);
+                return;
+            }
+            catch (Exception ex)
+            {
+                WriteError(new ErrorRecord(ex, "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
+                if (ExitCode.IsPresent) Host.SetShouldExit(1);
+                return;
+            }
         }
 
         var newPrepareStructureSplat = new OrderedDictionary
@@ -312,6 +424,41 @@ public sealed class InvokeModuleBuildCommand : PSCmdlet
         var content = File.ReadAllText(filePath);
         content = content.Replace("`$GUID", guid).Replace("`$ModuleName", moduleName);
         File.WriteAllText(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private static string ResolveModuleVersion(string projectRoot, string moduleName)
+    {
+        var psd1 = System.IO.Path.Combine(projectRoot, $"{moduleName}.psd1");
+        if (File.Exists(psd1) &&
+            ManifestEditor.TryGetTopLevelString(psd1, "ModuleVersion", out var version) &&
+            !string.IsNullOrWhiteSpace(version))
+        {
+            return version!;
+        }
+        return "1.0.0";
+    }
+
+    private sealed class HostLogger : ILogger
+    {
+        private readonly InvokeModuleBuildCommand _cmdlet;
+
+        public bool IsVerbose { get; set; }
+
+        public HostLogger(InvokeModuleBuildCommand cmdlet, bool isVerbose)
+        {
+            _cmdlet = cmdlet;
+            IsVerbose = isVerbose;
+        }
+
+        public void Info(string message) => _cmdlet.WriteHostMessage("[i] " + message, ConsoleColor.DarkGray);
+        public void Success(string message) => _cmdlet.WriteHostMessage("[+] " + message, ConsoleColor.Green);
+        public void Warn(string message) => _cmdlet.WriteHostMessage("[-] " + message, ConsoleColor.Yellow);
+        public void Error(string message) => _cmdlet.WriteHostMessage("[e] " + message, ConsoleColor.Red);
+        public void Verbose(string message)
+        {
+            if (!IsVerbose) return;
+            _cmdlet.WriteHostMessage("[v] " + message, ConsoleColor.DarkGray);
+        }
     }
 
     private bool InvokeNewPrepareStructure(IDictionary splat)
