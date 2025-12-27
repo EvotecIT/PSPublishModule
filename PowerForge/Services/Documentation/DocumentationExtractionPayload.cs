@@ -62,7 +62,49 @@ internal sealed class DocumentationCommandHelp
 
     /// <summary>Examples.</summary>
     [DataMember(Name = "examples")]
-    public List<DocumentationExampleHelp> Examples { get; set; } = new();
+    public List<DocumentationExampleHelp> Examples { get; set; } = new();       
+
+    /// <summary>Input types (from Get-Help).</summary>
+    [DataMember(Name = "inputs")]
+    public List<DocumentationTypeHelp> Inputs { get; set; } = new();
+
+    /// <summary>Return/output types (from Get-Help).</summary>
+    [DataMember(Name = "outputs")]
+    public List<DocumentationTypeHelp> Outputs { get; set; } = new();
+
+    /// <summary>Related links (from Get-Help).</summary>
+    [DataMember(Name = "relatedLinks")]
+    public List<DocumentationLinkHelp> RelatedLinks { get; set; } = new();
+}
+
+/// <summary>
+/// Extracted input/output type help entry.
+/// </summary>
+[DataContract]
+internal sealed class DocumentationTypeHelp
+{
+    /// <summary>Type name.</summary>
+    [DataMember(Name = "name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Type description.</summary>
+    [DataMember(Name = "description")]
+    public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Extracted related link (text + uri).
+/// </summary>
+[DataContract]
+internal sealed class DocumentationLinkHelp
+{
+    /// <summary>Link text.</summary>
+    [DataMember(Name = "text")]
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>Link URI.</summary>
+    [DataMember(Name = "uri")]
+    public string Uri { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -149,4 +191,3 @@ internal sealed class DocumentationExampleHelp
     [DataMember(Name = "remarks")]
     public string Remarks { get; set; } = string.Empty;
 }
-

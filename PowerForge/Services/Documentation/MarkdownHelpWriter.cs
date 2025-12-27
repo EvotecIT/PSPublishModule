@@ -174,12 +174,52 @@ internal sealed class MarkdownHelpWriter
 
         sb.AppendLine("## INPUTS");
         sb.AppendLine();
+        var inputs = (cmd.Inputs ?? Enumerable.Empty<DocumentationTypeHelp>())
+            .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
+            .ToArray();
+        foreach (var i in inputs)
+        {
+            var name = string.IsNullOrWhiteSpace(i.Name) ? "None" : i.Name.Trim();
+            var desc = (i.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
+            sb.AppendLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
+        }
+        sb.AppendLine();
+
         sb.AppendLine("## OUTPUTS");
         sb.AppendLine();
+        var outputs = (cmd.Outputs ?? Enumerable.Empty<DocumentationTypeHelp>())
+            .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
+            .ToArray();
+        foreach (var o in outputs)
+        {
+            var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name.Trim();
+            var desc = (o.Description ?? string.Empty).Replace("\r\n", "\n").Replace("\n", " ").Trim();
+            sb.AppendLine(string.IsNullOrWhiteSpace(desc) ? $"- `{name}`" : $"- `{name}` — {desc}");
+        }
+        sb.AppendLine();
+
         sb.AppendLine("## NOTES");
         sb.AppendLine("General notes");
         sb.AppendLine();
+
         sb.AppendLine("## RELATED LINKS");
+        sb.AppendLine();
+        var links = (cmd.RelatedLinks ?? Enumerable.Empty<DocumentationLinkHelp>())
+            .Where(l => l is not null && (!string.IsNullOrWhiteSpace(l.Text) || !string.IsNullOrWhiteSpace(l.Uri)))
+            .ToArray();
+        foreach (var l in links)
+        {
+            var text = string.IsNullOrWhiteSpace(l.Text) ? l.Uri.Trim() : l.Text.Trim();
+            if (string.IsNullOrWhiteSpace(l.Uri))
+            {
+                sb.AppendLine($"- {text}");
+            }
+            else
+            {
+                var uri = l.Uri.Trim();
+                sb.AppendLine($"- [{text}]({uri})");
+            }
+        }
         sb.AppendLine();
 
         return sb.ToString();
