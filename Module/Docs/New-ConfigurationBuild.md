@@ -318,7 +318,7 @@ Accept wildcard characters: False
 
 ### -VersionedInstallStrategy
 Controls how the module is installed into user Module roots after build.
-- Exact: installs to \<Modules\>\Name\\\<ModuleVersion\> (fails if it already exists)
+- Exact: installs to \<Modules\>\Name\\\<ModuleVersion\> (overwrites existing contents if it already exists)
 - AutoRevision: installs to \<Modules\>\Name\\\<ModuleVersion\>.\<n\> choosing the next free revision.
 Recommended for development iterations to avoid folder-in-use issues.
 
