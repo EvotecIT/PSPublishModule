@@ -50,6 +50,7 @@ public sealed class DocumentationEngine
                 succeeded: true,
                 exitCode: 0,
                 markdownFiles: 0,
+                externalHelpFilePath: string.Empty,
                 errorMessage: null);
         }
 
@@ -78,6 +79,19 @@ public sealed class DocumentationEngine
             if (!string.IsNullOrWhiteSpace(readmePath))
                 writer.WriteModuleReadme(extracted, moduleName, readmePath, docsPath);
 
+            var externalHelpFile = string.Empty;
+            if (buildDocumentation.GenerateExternalHelp)
+            {
+                var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
+                var externalHelpDir = Path.Combine(stagingPath, culture);
+                var fileName = string.IsNullOrWhiteSpace(buildDocumentation.ExternalHelpFileName)
+                    ? null
+                    : Path.GetFileName(buildDocumentation.ExternalHelpFileName.Trim());
+
+                var mamlWriter = new MamlHelpWriter();
+                externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+            }
+
             return new DocumentationBuildResult(
                 enabled: true,
                 tool: DocumentationTool.PowerForge,
@@ -86,6 +100,7 @@ public sealed class DocumentationEngine
                 succeeded: true,
                 exitCode: 0,
                 markdownFiles: CountMarkdownFiles(docsPath),
+                externalHelpFilePath: externalHelpFile,
                 errorMessage: null);
         }
         catch (Exception ex)
@@ -100,6 +115,7 @@ public sealed class DocumentationEngine
                 succeeded: false,
                 exitCode: 1,
                 markdownFiles: CountMarkdownFiles(docsPath),
+                externalHelpFilePath: string.Empty,
                 errorMessage: string.IsNullOrWhiteSpace(ex.Message) ? "Documentation generation failed." : ex.Message.Trim());
         }
     }
@@ -154,9 +170,24 @@ public sealed class DocumentationEngine
     private static string ResolvePath(string baseDir, string path)
     {
         var p = (path ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(p)) return Path.GetFullPath(baseDir);
+        if (string.IsNullOrWhiteSpace(p)) return Path.GetFullPath(baseDir);     
         if (Path.IsPathRooted(p)) return Path.GetFullPath(p);
         return Path.GetFullPath(Path.Combine(baseDir, p));
+    }
+
+    private static string NormalizeExternalHelpCulture(string? culture)
+    {
+        var value = (culture ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(value)) value = "en-US";
+
+        // Avoid path traversal and invalid characters; culture should be a folder name like "en-US".
+        value = value.Replace(Path.DirectorySeparatorChar, '_').Replace(Path.AltDirectorySeparatorChar, '_');
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            value = value.Replace(c, '_');
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? "en-US" : value;
     }
 
     private static int CountMarkdownFiles(string docsPath)
@@ -333,6 +364,57 @@ try {
       if ($t) { if ($descMain) { $descMain += ""`n`n"" }; $descMain += $t }
     }
 
+    $inputs = @()
+    try {
+      foreach ($it in @($help.InputTypes.InputType)) {
+        $typeName = ''
+        try { $typeName = [string]$it.Type.Name } catch { $typeName = '' }
+        if (-not $typeName) { try { $typeName = [string]$it.Type } catch { $typeName = '' } }
+
+        $typeDesc = ''
+        try {
+          foreach ($d in @($it.Description)) {
+            $t = (GetText $d).Trim()
+            if ($t) { if ($typeDesc) { $typeDesc += ""`n`n"" }; $typeDesc += $t }
+          }
+        } catch { }
+
+        $inputs += [ordered]@{ name = $typeName; description = $typeDesc }
+      }
+    } catch { }
+
+    $outputs = @()
+    try {
+      foreach ($rv in @($help.ReturnValues.ReturnValue)) {
+        $typeName = ''
+        try { $typeName = [string]$rv.Type.Name } catch { $typeName = '' }
+        if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
+
+        $typeDesc = ''
+        try {
+          foreach ($d in @($rv.Description)) {
+            $t = (GetText $d).Trim()
+            if ($t) { if ($typeDesc) { $typeDesc += ""`n`n"" }; $typeDesc += $t }
+          }
+        } catch { }
+
+        $outputs += [ordered]@{ name = $typeName; description = $typeDesc }
+      }
+    } catch { }
+
+    $links = @()
+    try {
+      foreach ($l in @($help.RelatedLinks.NavigationLink)) {
+        $text = ''
+        $uri = ''
+        try { $text = (GetText $l.LinkText).Trim() } catch { $text = '' }
+        try { $uri = (GetText $l.Uri).Trim() } catch { $uri = '' }
+        if ($text -or $uri) {
+          $links += [ordered]@{ text = $text; uri = $uri }
+        }
+      }
+    } catch { }
+
     $result.commands += [ordered]@{
       name = [string]$c.Name
       commandType = [string]$c.CommandType
@@ -342,6 +424,9 @@ try {
       syntax = @($syntax)
       parameters = @($parameters)
       examples = @($examples)
+      inputs = @($inputs)
+      outputs = @($outputs)
+      relatedLinks = @($links)
     }
   }
 
