@@ -1,10 +1,10 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using PowerForge;
 
 namespace PSPublishModule;
 
@@ -42,8 +42,9 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var inputPath = System.IO.Path.GetFullPath(Path.Trim().Trim('"'));
-        if (!File.Exists(inputPath) && !Directory.Exists(inputPath))
-            throw new FileNotFoundException($"Path not found: {inputPath}", inputPath);
+        var exportPath = string.IsNullOrWhiteSpace(ExportPath)
+            ? null
+            : System.IO.Path.GetFullPath(ExportPath!.Trim().Trim('"'));
 
         if (!Internal.IsPresent)
         {
@@ -60,8 +61,35 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
             WriteVerbose($"Analyzing PowerShell compatibility for: {inputPath}");
         }
 
-        var files = GetFilesToAnalyze(inputPath);
-        if (files.Count == 0)
+        var logger = new CmdletLogger(
+            this,
+            isVerbose: MyInvocation.BoundParameters.ContainsKey("Verbose"),
+            warningsAsVerbose: Internal.IsPresent);
+
+        var analyzer = new PowerShellCompatibilityAnalyzer(logger);
+        var spec = new PowerShellCompatibilitySpec(inputPath, Recurse.IsPresent, ExcludeDirectories);
+
+        var report = analyzer.Analyze(
+            spec,
+            progress: !Internal.IsPresent
+                ? p =>
+                {
+                    var percent = p.Total == 0
+                        ? 0
+                        : (int)Math.Round((p.Current / (double)p.Total) * 100.0, 0);
+
+                    WriteProgress(new ProgressRecord(1, "Analyzing PowerShell Compatibility", $"Processing {System.IO.Path.GetFileName(p.FilePath)}")
+                    {
+                        PercentComplete = percent
+                    });
+                }
+                : null,
+            exportPath: exportPath);
+
+        if (!Internal.IsPresent && report.Files.Length > 0)
+            WriteProgress(new ProgressRecord(1, "Analyzing PowerShell Compatibility", "Completed") { RecordType = ProgressRecordType.Completed });
+
+        if (report.Files.Length == 0)
         {
             if (!Internal.IsPresent) WriteWarning("No PowerShell files found in the specified path.");
             else WriteVerbose("No PowerShell files found in the specified path.");
@@ -69,142 +97,25 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
         }
 
         if (!Internal.IsPresent)
-            HostWriteLineSafe($"[i] Found {files.Count} PowerShell files to analyze", ConsoleColor.Yellow);
+            HostWriteLineSafe($"[i] Found {report.Files.Length} PowerShell files to analyze", ConsoleColor.Yellow);
         else
-            WriteVerbose($"Found {files.Count} PowerShell files to analyze");
+            WriteVerbose($"Found {report.Files.Length} PowerShell files to analyze");
 
-        var baseDir = Directory.Exists(inputPath)
-            ? inputPath
-            : (System.IO.Path.GetDirectoryName(inputPath) ?? Directory.GetCurrentDirectory());
+        WriteSummaryToHost(report.Summary);
+        WriteDetailsToHost(report.Files);
+        WriteExportToHostIfRequested(exportPath);
 
-        var results = new List<object>(capacity: files.Count);
-
-        for (var i = 0; i < files.Count; i++)
-        {
-            var f = files[i];
-            if (!Internal.IsPresent)
-            {
-                var percent = (int)Math.Round(((i + 1) / (double)files.Count) * 100.0, 0);
-                WriteProgress(new ProgressRecord(1, "Analyzing PowerShell Compatibility", $"Processing {System.IO.Path.GetFileName(f)}")
-                {
-                    PercentComplete = percent
-                });
-            }
-
-            results.Add(PowerShellCompatibilityAnalyzer.AnalyzeFile(f, baseDir));
-        }
-
-        if (!Internal.IsPresent)
-            WriteProgress(new ProgressRecord(1, "Analyzing PowerShell Compatibility", "Completed") { RecordType = ProgressRecordType.Completed });
-
-        var totalFiles = results.Count;
-        var ps51Compatible = results.Count(r => GetBool(r, "PowerShell51Compatible"));
-        var ps7Compatible = results.Count(r => GetBool(r, "PowerShell7Compatible"));
-        var crossCompatible = results.Count(r => GetBool(r, "PowerShell51Compatible") && GetBool(r, "PowerShell7Compatible"));
-        var filesWithIssues = results.Count(r => GetIssuesCount(r) > 0);
-
-        var crossCompatibilityPercentage = totalFiles == 0 ? 0.0 : Math.Round((crossCompatible / (double)totalFiles) * 100.0, 1);
-        var status = filesWithIssues == 0 ? "Pass" : crossCompatibilityPercentage >= 90.0 ? "Warning" : "Fail";
-
-        var message = status switch
-        {
-            "Pass" => $"All {totalFiles} files are cross-compatible",
-            "Warning" => $"{filesWithIssues} files have compatibility issues but {crossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture)}% are cross-compatible",
-            _ => $"{filesWithIssues} files have compatibility issues, only {crossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture)}% are cross-compatible"
-        };
-
-        var recommendations = filesWithIssues > 0
-            ? new[]
-            {
-                "Review files with compatibility issues",
-                "Consider using UTF8BOM encoding for Windows PowerShell 5.1 support",
-                "Replace deprecated cmdlets with modern alternatives",
-                "Test code in both Windows PowerShell 5.1 and PowerShell 7 environments"
-            }
-            : Array.Empty<string>();
-
-        var summary = NewPsCustomObject();
-        summary.Properties.Add(new PSNoteProperty("Status", status));
-        summary.Properties.Add(new PSNoteProperty("AnalysisDate", DateTime.Now));
-        summary.Properties.Add(new PSNoteProperty("TotalFiles", totalFiles));
-        summary.Properties.Add(new PSNoteProperty("PowerShell51Compatible", ps51Compatible));
-        summary.Properties.Add(new PSNoteProperty("PowerShell7Compatible", ps7Compatible));
-        summary.Properties.Add(new PSNoteProperty("CrossCompatible", crossCompatible));
-        summary.Properties.Add(new PSNoteProperty("FilesWithIssues", filesWithIssues));
-        summary.Properties.Add(new PSNoteProperty("CrossCompatibilityPercentage", crossCompatibilityPercentage));
-        summary.Properties.Add(new PSNoteProperty("Message", message));
-        summary.Properties.Add(new PSNoteProperty("Recommendations", recommendations));
-
-        WriteSummaryToHost(summary);
-        WriteDetailsToHost(results);
-        ExportCsvIfRequested(results);
-
-        var output = NewPsCustomObject();
-        output.Properties.Add(new PSNoteProperty("Summary", summary));
-        output.Properties.Add(new PSNoteProperty("Files", results.ToArray()));
-        WriteObject(output, enumerateCollection: false);
+        WriteObject(report, enumerateCollection: false);
     }
 
-    private List<string> GetFilesToAnalyze(string inputPath)
-    {
-        var list = new List<string>();
-        if (File.Exists(inputPath))
-        {
-            var ext = System.IO.Path.GetExtension(inputPath) ?? string.Empty;
-            if (!string.Equals(ext, ".ps1", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(ext, ".psm1", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(ext, ".psd1", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("File must be a PowerShell file (.ps1, .psm1, or .psd1)");
-            }
-
-            list.Add(inputPath);
-            return list;
-        }
-
-        if (!Directory.Exists(inputPath))
-            return list;
-
-        var searchOption = Recurse.IsPresent ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        foreach (var pattern in new[] { "*.ps1", "*.psm1", "*.psd1" })
-        {
-            IEnumerable<string> files;
-            try { files = Directory.EnumerateFiles(inputPath, pattern, searchOption); }
-            catch { continue; }
-
-            foreach (var f in files)
-            {
-                if (IsExcluded(f))
-                    continue;
-                list.Add(f);
-            }
-        }
-
-        return list;
-    }
-
-    private bool IsExcluded(string filePath)
-    {
-        var dir = System.IO.Path.GetDirectoryName(filePath) ?? string.Empty;
-        foreach (var ex in ExcludeDirectories)
-        {
-            if (string.IsNullOrWhiteSpace(ex))
-                continue;
-            if (dir.IndexOf(ex, StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
-        }
-        return false;
-    }
-
-    private void WriteSummaryToHost(PSObject summary)
+    private void WriteSummaryToHost(PowerShellCompatibilitySummary summary)
     {
         if (Internal.IsPresent)
         {
-            WriteVerbose($"PowerShell Compatibility: {summary.Properties["Status"]?.Value} - {summary.Properties["Message"]?.Value}");
-            var rec = summary.Properties["Recommendations"]?.Value as IEnumerable;
-            if (rec != null)
+            WriteVerbose($"PowerShell Compatibility: {summary.Status} - {summary.Message}");
+            if (summary.Recommendations.Length > 0)
             {
-                var joined = string.Join("; ", rec.Cast<object>().Select(o => o?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)));
+                var joined = string.Join("; ", summary.Recommendations.Where(s => !string.IsNullOrWhiteSpace(s)));
                 if (!string.IsNullOrWhiteSpace(joined))
                     WriteVerbose($"Recommendations: {joined}");
             }
@@ -212,49 +123,51 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
         }
 
         HostWriteLineSafe(string.Empty);
-        var status = summary.Properties["Status"]?.Value?.ToString() ?? string.Empty;
-        var message = summary.Properties["Message"]?.Value?.ToString() ?? string.Empty;
 
-        var color = status switch
+        var color = summary.Status switch
         {
-            "Pass" => ConsoleColor.Green,
-            "Warning" => ConsoleColor.Yellow,
+            CheckStatus.Pass => ConsoleColor.Green,
+            CheckStatus.Warning => ConsoleColor.Yellow,
             _ => ConsoleColor.Red
         };
 
-        HostWriteLineSafe($"[i] Status: {status}", color);
-        HostWriteLineSafe($"[i] {message}", ConsoleColor.White);
-        HostWriteLineSafe($"[i] PS 5.1 compatible: {summary.Properties["PowerShell51Compatible"]?.Value}/{summary.Properties["TotalFiles"]?.Value}", ConsoleColor.White);
-        HostWriteLineSafe($"[i] PS 7 compatible:   {summary.Properties["PowerShell7Compatible"]?.Value}/{summary.Properties["TotalFiles"]?.Value}", ConsoleColor.White);
-        HostWriteLineSafe($"[i] Cross-compatible: {summary.Properties["CrossCompatible"]?.Value}/{summary.Properties["TotalFiles"]?.Value} ({summary.Properties["CrossCompatibilityPercentage"]?.Value}%)", ConsoleColor.White);
+        HostWriteLineSafe($"[i] Status: {summary.Status}", color);
+        HostWriteLineSafe($"[i] {summary.Message}", ConsoleColor.White);
+        HostWriteLineSafe($"[i] PS 5.1 compatible: {summary.PowerShell51Compatible}/{summary.TotalFiles}", ConsoleColor.White);
+        HostWriteLineSafe($"[i] PS 7 compatible:   {summary.PowerShell7Compatible}/{summary.TotalFiles}", ConsoleColor.White);
+        HostWriteLineSafe($"[i] Cross-compatible: {summary.CrossCompatible}/{summary.TotalFiles} ({summary.CrossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)", ConsoleColor.White);
 
-        var recs = summary.Properties["Recommendations"]?.Value as IEnumerable;
-        if (recs != null)
+        if (summary.Recommendations.Length > 0)
         {
-            var list = recs.Cast<object>().Select(o => o?.ToString()).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
-            if (list.Length > 0)
-            {
-                HostWriteLineSafe(string.Empty);
-                HostWriteLineSafe("Recommendations:", ConsoleColor.Cyan);
-                foreach (var r in list) HostWriteLineSafe($"- {r}", ConsoleColor.White);
-            }
+            HostWriteLineSafe(string.Empty);
+            HostWriteLineSafe("Recommendations:", ConsoleColor.Cyan);
+            foreach (var r in summary.Recommendations.Where(s => !string.IsNullOrWhiteSpace(s)))
+                HostWriteLineSafe($"- {r}", ConsoleColor.White);
         }
     }
 
-    private void WriteDetailsToHost(List<object> results)
+    private void WriteDetailsToHost(PowerShellCompatibilityFileResult[] results)
     {
         if (!ShowDetails.IsPresent)
             return;
 
-        if (results.Count == 0)
+        if (results.Length == 0)
             return;
 
         if (Internal.IsPresent)
         {
             foreach (var r in results)
             {
-                if (GetIssuesCount(r) > 0)
-                    WriteVerbose($"Issues in {GetString(r, "RelativePath")}: {GetIssueTypesJoined(r)}");
+                if (r.Issues.Length > 0)
+                {
+                    var issueTypes = string.Join(
+                        ", ",
+                        r.Issues.Select(i => i.Type.ToString())
+                            .Where(s => !string.IsNullOrWhiteSpace(s))
+                            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+                    WriteVerbose($"Issues in {r.RelativePath}: {issueTypes}");
+                }
             }
             return;
         }
@@ -265,144 +178,42 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
         foreach (var r in results)
         {
             HostWriteLineSafe(string.Empty);
-            HostWriteLineSafe($"{GetString(r, "RelativePath")}", ConsoleColor.White);
+            HostWriteLineSafe($"{r.RelativePath}", ConsoleColor.White);
 
-            var ps51 = GetBool(r, "PowerShell51Compatible");
-            var ps7 = GetBool(r, "PowerShell7Compatible");
-            HostWriteLineSafe($"  PS 5.1: {(ps51 ? "Compatible" : "Not compatible")}", ps51 ? ConsoleColor.Green : ConsoleColor.Red);
-            HostWriteLineSafe($"  PS 7:   {(ps7 ? "Compatible" : "Not compatible")}", ps7 ? ConsoleColor.Green : ConsoleColor.Red);
+            HostWriteLineSafe($"  PS 5.1: {(r.PowerShell51Compatible ? "Compatible" : "Not compatible")}", r.PowerShell51Compatible ? ConsoleColor.Green : ConsoleColor.Red);
+            HostWriteLineSafe($"  PS 7:   {(r.PowerShell7Compatible ? "Compatible" : "Not compatible")}", r.PowerShell7Compatible ? ConsoleColor.Green : ConsoleColor.Red);
 
-            var issues = GetIssues(r);
-            if (issues.Count == 0)
+            if (r.Issues.Length == 0)
                 continue;
 
             HostWriteLineSafe("  Issues:", ConsoleColor.Yellow);
-            foreach (var issue in issues)
+            foreach (var issue in r.Issues)
             {
-                var issueType = GetString(issue, "Type");
-                var desc = GetString(issue, "Description");
-                var rec = GetString(issue, "Recommendation");
-
-                HostWriteLineSafe($"    - {issueType}: {desc}", ConsoleColor.Red);
-                if (!string.IsNullOrWhiteSpace(rec))
-                    HostWriteLineSafe($"      - {rec}", ConsoleColor.Cyan);
+                HostWriteLineSafe($"    - {issue.Type}: {issue.Description}", ConsoleColor.Red);
+                if (!string.IsNullOrWhiteSpace(issue.Recommendation))
+                    HostWriteLineSafe($"      - {issue.Recommendation}", ConsoleColor.Cyan);
             }
         }
     }
 
-    private void ExportCsvIfRequested(List<object> results)
+    private void WriteExportToHostIfRequested(string? exportPath)
     {
-        if (string.IsNullOrWhiteSpace(ExportPath))
+        if (string.IsNullOrWhiteSpace(exportPath))
             return;
 
-        var path = System.IO.Path.GetFullPath(ExportPath!.Trim().Trim('"'));
-        var script = @"
-param($results, $exportPath)
-$exportData = $results | Select-Object RelativePath, FullPath, PowerShell51Compatible, PowerShell7Compatible, Encoding, @{
-    Name = 'IssueCount'; Expression = { $_.Issues.Count }
-}, @{
-    Name = 'IssueTypes'; Expression = { ($_.Issues.Type -join ', ') }
-}, @{
-    Name = 'IssueDescriptions'; Expression = { ($_.Issues.Description -join '; ') }
-}
-$exportData | Export-Csv -Path $exportPath -NoTypeInformation -Encoding UTF8
-";
-        InvokeCommand.InvokeScript(script, new object[] { results.ToArray(), path });
+        if (!File.Exists(exportPath))
+        {
+            if (Internal.IsPresent)
+                WriteVerbose($"Failed to export detailed report to: {exportPath}");
+            else
+                HostWriteLineSafe($"[e] Failed to export detailed report to: {exportPath}", ConsoleColor.Red);
+            return;
+        }
 
         if (Internal.IsPresent)
-            WriteVerbose($"Detailed report exported to: {path}");
+            WriteVerbose($"Detailed report exported to: {exportPath}");
         else
-            HostWriteLineSafe($"[i] Detailed report exported to: {path}", ConsoleColor.Green);
-    }
-
-    private static bool GetBool(object obj, string name)
-    {
-        try
-        {
-            var ps = PSObject.AsPSObject(obj);
-            var v = ps.Properties[name]?.Value;
-            return v is bool b && b;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static int GetIssuesCount(object obj)
-    {
-        try
-        {
-            var ps = PSObject.AsPSObject(obj);
-            var v = ps.Properties["Issues"]?.Value;
-            if (v is ICollection c) return c.Count;
-            if (v is IEnumerable e) return e.Cast<object>().Count();
-            return 0;
-        }
-        catch
-        {
-            return 0;
-        }
-    }
-
-    private static List<object> GetIssues(object obj)
-    {
-        var list = new List<object>();
-        try
-        {
-            var ps = PSObject.AsPSObject(obj);
-            var v = ps.Properties["Issues"]?.Value;
-            if (v is null) return list;
-            if (v is string) return list;
-            if (v is IEnumerable e)
-            {
-                foreach (var it in e) if (it != null) list.Add(it);
-                return list;
-            }
-            list.Add(v);
-            return list;
-        }
-        catch
-        {
-            return list;
-        }
-    }
-
-    private static string GetIssueTypesJoined(object obj)
-    {
-        try
-        {
-            var issues = GetIssues(obj);
-            var types = issues.Select(i => GetString(i, "Type")).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase);
-            return string.Join(", ", types);
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private static string GetString(object obj, string name)
-    {
-        try
-        {
-            var ps = PSObject.AsPSObject(obj);
-            return ps.Properties[name]?.Value?.ToString() ?? string.Empty;
-        }
-        catch
-        {
-            return string.Empty;
-        }
-    }
-
-    private static PSObject NewPsCustomObject()
-    {
-        var t = typeof(PSObject).Assembly.GetType("System.Management.Automation.PSCustomObject");
-        if (t is null)
-            return new PSObject();
-
-        var inst = Activator.CreateInstance(t, nonPublic: true);
-        return inst is PSObject pso ? pso : PSObject.AsPSObject(inst);
+            HostWriteLineSafe($"[i] Detailed report exported to: {exportPath}", ConsoleColor.Green);
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
@@ -425,4 +236,3 @@ $exportData | Export-Csv -Path $exportPath -NoTypeInformation -Encoding UTF8
         }
     }
 }
-

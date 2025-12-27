@@ -161,155 +161,128 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Emits one or more configuration objects for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
+        var bound = MyInvocation.BoundParameters;
+
+        BuildModuleConfiguration? buildModule = null;
+        void EnsureBuildModule() => buildModule ??= new BuildModuleConfiguration();
+
         // BuildModule
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(Enable)))
-            WriteObject(BuildModule(bm => bm.Enable = Enable.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(DeleteTargetModuleBeforeBuild)))
-            WriteObject(BuildModule(bm => bm.DeleteBefore = DeleteTargetModuleBeforeBuild.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(MergeModuleOnBuild)))
-            WriteObject(BuildModule(bm => bm.Merge = MergeModuleOnBuild.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(MergeFunctionsFromApprovedModules)))
-            WriteObject(BuildModule(bm => bm.MergeMissing = MergeFunctionsFromApprovedModules.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(SignModule)))
-            WriteObject(BuildModule(bm => bm.SignMerged = SignModule.IsPresent));
+        if (bound.ContainsKey(nameof(Enable))) { EnsureBuildModule(); buildModule!.Enable = Enable.IsPresent; }
+        if (bound.ContainsKey(nameof(DeleteTargetModuleBeforeBuild))) { EnsureBuildModule(); buildModule!.DeleteBefore = DeleteTargetModuleBeforeBuild.IsPresent; }
+        if (bound.ContainsKey(nameof(MergeModuleOnBuild))) { EnsureBuildModule(); buildModule!.Merge = MergeModuleOnBuild.IsPresent; }
+        if (bound.ContainsKey(nameof(MergeFunctionsFromApprovedModules))) { EnsureBuildModule(); buildModule!.MergeMissing = MergeFunctionsFromApprovedModules.IsPresent; }
+        if (bound.ContainsKey(nameof(SignModule))) { EnsureBuildModule(); buildModule!.SignMerged = SignModule.IsPresent; }
+        if (bound.ContainsKey(nameof(DotSourceClasses))) { EnsureBuildModule(); buildModule!.ClassesDotSource = DotSourceClasses.IsPresent; }
+        if (bound.ContainsKey(nameof(DotSourceLibraries))) { EnsureBuildModule(); buildModule!.LibraryDotSource = DotSourceLibraries.IsPresent; }
+        if (bound.ContainsKey(nameof(SeparateFileLibraries))) { EnsureBuildModule(); buildModule!.LibrarySeparateFile = SeparateFileLibraries.IsPresent; }
+        if (bound.ContainsKey(nameof(RefreshPSD1Only))) { EnsureBuildModule(); buildModule!.RefreshPSD1Only = RefreshPSD1Only.IsPresent; }
+        if (bound.ContainsKey(nameof(UseWildcardForFunctions))) { EnsureBuildModule(); buildModule!.UseWildcardForFunctions = UseWildcardForFunctions.IsPresent; }
+        if (bound.ContainsKey(nameof(LocalVersioning))) { EnsureBuildModule(); buildModule!.LocalVersion = LocalVersioning.IsPresent; }
+
+        if (bound.ContainsKey(nameof(VersionedInstallStrategy))) { EnsureBuildModule(); buildModule!.VersionedInstallStrategy = VersionedInstallStrategy; }
+        if (bound.ContainsKey(nameof(VersionedInstallKeep))) { EnsureBuildModule(); buildModule!.VersionedInstallKeep = VersionedInstallKeep; }
+
+        if (bound.ContainsKey(nameof(DoNotAttemptToFixRelativePaths))) { EnsureBuildModule(); buildModule!.DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent; }
+        if (bound.ContainsKey(nameof(NETMergeLibraryDebugging))) { EnsureBuildModule(); buildModule!.DebugDLL = NETMergeLibraryDebugging.IsPresent; }
+        if (bound.ContainsKey(nameof(KillLockersBeforeInstall))) { EnsureBuildModule(); buildModule!.KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent; }
+        if (bound.ContainsKey(nameof(KillLockersForce))) { EnsureBuildModule(); buildModule!.KillLockersForce = KillLockersForce.IsPresent; }
+        if (bound.ContainsKey(nameof(AutoSwitchExactOnPublish))) { EnsureBuildModule(); buildModule!.AutoSwitchExactOnPublish = AutoSwitchExactOnPublish.IsPresent; }
+
+        if (bound.ContainsKey(nameof(NETResolveBinaryConflictsName)))
+        {
+            EnsureBuildModule();
+            buildModule!.ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration { ProjectName = NETResolveBinaryConflictsName };
+        }
+        else if (bound.ContainsKey(nameof(NETResolveBinaryConflicts)))
+        {
+            EnsureBuildModule();
+            buildModule!.ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration { Enabled = NETResolveBinaryConflicts.IsPresent };
+        }
+
+        if (buildModule is not null)
+            WriteObject(new ConfigurationBuildSegment { BuildModule = buildModule });
 
         // Signing options
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(SignIncludeInternals)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(SignIncludeBinaries)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(SignIncludeExe)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(SignCustomInclude)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(SignExcludePaths)))
-        {
-            WriteObject(Signing(signing =>
-            {
-                signing.IncludeInternals = SignIncludeInternals.IsPresent;
-                signing.IncludeBinaries = SignIncludeBinaries.IsPresent;
-                signing.IncludeExe = SignIncludeExe.IsPresent;
-                signing.Include = SignCustomInclude;
-                signing.ExcludePaths = SignExcludePaths;
-            }));
-        }
+        SigningOptionsConfiguration? signing = null;
+        void EnsureSigning() => signing ??= new SigningOptionsConfiguration();
 
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(DotSourceClasses)))
-            WriteObject(BuildModule(bm => bm.ClassesDotSource = DotSourceClasses.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(DotSourceLibraries)))
-            WriteObject(BuildModule(bm => bm.LibraryDotSource = DotSourceLibraries.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(SeparateFileLibraries)))
-            WriteObject(BuildModule(bm => bm.LibrarySeparateFile = SeparateFileLibraries.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(RefreshPSD1Only)))
-            WriteObject(BuildModule(bm => bm.RefreshPSD1Only = RefreshPSD1Only.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(UseWildcardForFunctions)))
-            WriteObject(BuildModule(bm => bm.UseWildcardForFunctions = UseWildcardForFunctions.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(LocalVersioning)))
-            WriteObject(BuildModule(bm => bm.LocalVersion = LocalVersioning.IsPresent));
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(VersionedInstallStrategy)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(VersionedInstallKeep)))
-        {
-            WriteObject(BuildModule(bm =>
-            {
-                bm.VersionedInstallStrategy = VersionedInstallStrategy;
-                bm.VersionedInstallKeep = MyInvocation.BoundParameters.ContainsKey(nameof(VersionedInstallKeep))
-                    ? VersionedInstallKeep
-                    : null;
-            }));
-        }
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(DoNotAttemptToFixRelativePaths)))
-            WriteObject(BuildModule(bm => bm.DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent));
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETMergeLibraryDebugging)))
-            WriteObject(BuildModule(bm => bm.DebugDLL = NETMergeLibraryDebugging.IsPresent));
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(KillLockersBeforeInstall)) ||
-            MyInvocation.BoundParameters.ContainsKey(nameof(KillLockersForce)))
-        {
-            WriteObject(BuildModule(bm =>
-            {
-                bm.KillLockersBeforeInstall = KillLockersBeforeInstall.IsPresent;
-                bm.KillLockersForce = KillLockersForce.IsPresent;
-            }));
-        }
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(AutoSwitchExactOnPublish)))
-            WriteObject(BuildModule(bm => bm.AutoSwitchExactOnPublish = AutoSwitchExactOnPublish.IsPresent));
-
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETResolveBinaryConflictsName)))
-        {
-            WriteObject(BuildModule(bm => bm.ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration
-            {
-                ProjectName = NETResolveBinaryConflictsName
-            }));
-        }
-        else if (MyInvocation.BoundParameters.ContainsKey(nameof(NETResolveBinaryConflicts)))
-        {
-            WriteObject(BuildModule(bm => bm.ResolveBinaryConflicts = new ResolveBinaryConflictsConfiguration
-            {
-                Enabled = NETResolveBinaryConflicts.IsPresent
-            }));
-        }
+        if (bound.ContainsKey(nameof(SignIncludeInternals))) { EnsureSigning(); signing!.IncludeInternals = SignIncludeInternals.IsPresent; }
+        if (bound.ContainsKey(nameof(SignIncludeBinaries))) { EnsureSigning(); signing!.IncludeBinaries = SignIncludeBinaries.IsPresent; }
+        if (bound.ContainsKey(nameof(SignIncludeExe))) { EnsureSigning(); signing!.IncludeExe = SignIncludeExe.IsPresent; }
+        if (bound.ContainsKey(nameof(SignCustomInclude))) { EnsureSigning(); signing!.Include = SignCustomInclude; }
+        if (bound.ContainsKey(nameof(SignExcludePaths))) { EnsureSigning(); signing!.ExcludePaths = SignExcludePaths; }
 
         // Certificate selection (single branch)
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(CertificateThumbprint)))
+        if (bound.ContainsKey(nameof(CertificateThumbprint)))
         {
-            WriteObject(Signing(signing => signing.CertificateThumbprint = CertificateThumbprint));
+            EnsureSigning();
+            signing!.CertificateThumbprint = CertificateThumbprint;
         }
-        else if (MyInvocation.BoundParameters.ContainsKey(nameof(CertificatePFXPath)))
+        else if (bound.ContainsKey(nameof(CertificatePFXPath)))
         {
-            if (!MyInvocation.BoundParameters.ContainsKey(nameof(CertificatePFXPassword)))
+            if (!bound.ContainsKey(nameof(CertificatePFXPassword)))
                 throw new PSArgumentException("CertificatePFXPassword is required when using CertificatePFXPath");
 
-            WriteObject(Signing(signing =>
-            {
-                signing.CertificatePFXPath = CertificatePFXPath;
-                signing.CertificatePFXPassword = CertificatePFXPassword;
-            }));
+            EnsureSigning();
+            signing!.CertificatePFXPath = CertificatePFXPath;
+            signing.CertificatePFXPassword = CertificatePFXPassword;
         }
-        else if (MyInvocation.BoundParameters.ContainsKey(nameof(CertificatePFXBase64)))
+        else if (bound.ContainsKey(nameof(CertificatePFXBase64)))
         {
-            if (!MyInvocation.BoundParameters.ContainsKey(nameof(CertificatePFXPassword)))
+            if (!bound.ContainsKey(nameof(CertificatePFXPassword)))
                 throw new PSArgumentException("CertificatePFXPassword is required when using CertificatePFXBase64");
 
-            WriteObject(Signing(signing =>
+            EnsureSigning();
+            signing!.CertificatePFXBase64 = CertificatePFXBase64;
+            signing.CertificatePFXPassword = CertificatePFXPassword;
+        }
+
+        if (signing is not null)
+        {
+            WriteObject(new ConfigurationOptionsSegment
             {
-                signing.CertificatePFXBase64 = CertificatePFXBase64;
-                signing.CertificatePFXPassword = CertificatePFXPassword;
-            }));
+                Options = new ConfigurationOptions { Signing = signing }
+            });
         }
 
         // BuildLibraries
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETConfiguration)))
-            WriteObject(BuildLibraries(bl => bl.Configuration = NETConfiguration, enable: true));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETFramework)))
-            WriteObject(BuildLibraries(bl => bl.Framework = NETFramework, enable: true));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETProjectName)))
-            WriteObject(BuildLibraries(bl => bl.ProjectName = NETProjectName));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETExcludeMainLibrary)))
-            WriteObject(BuildLibraries(bl => bl.ExcludeMainLibrary = NETExcludeMainLibrary.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETExcludeLibraryFilter)))
-            WriteObject(BuildLibraries(bl => bl.ExcludeLibraryFilter = NETExcludeLibraryFilter));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETIgnoreLibraryOnLoad)))
-            WriteObject(BuildLibraries(bl => bl.IgnoreLibraryOnLoad = NETIgnoreLibraryOnLoad));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETBinaryModule)))
-            WriteObject(BuildLibraries(bl => bl.BinaryModule = NETBinaryModule));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETHandleAssemblyWithSameName)))
-            WriteObject(BuildLibraries(bl => bl.HandleAssemblyWithSameName = NETHandleAssemblyWithSameName.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETLineByLineAddType)))
-            WriteObject(BuildLibraries(bl => bl.NETLineByLineAddType = NETLineByLineAddType.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETProjectPath)))
-            WriteObject(BuildLibraries(bl => bl.NETProjectPath = NETProjectPath));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETBinaryModuleCmdletScanDisabled)))
-            WriteObject(BuildLibraries(bl => bl.BinaryModuleCmdletScanDisabled = NETBinaryModuleCmdletScanDisabled.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETSearchClass)))
-            WriteObject(BuildLibraries(bl => bl.SearchClass = NETSearchClass));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETBinaryModuleDocumentation)))
-            WriteObject(BuildLibraries(bl => bl.NETBinaryModuleDocumentation = NETBinaryModuleDocumentation.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETHandleRuntimes)))
-            WriteObject(BuildLibraries(bl => bl.HandleRuntimes = NETHandleRuntimes.IsPresent));
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(NETDoNotCopyLibrariesRecursively)))
-            WriteObject(BuildLibraries(bl => bl.NETDoNotCopyLibrariesRecursively = NETDoNotCopyLibrariesRecursively.IsPresent));
+        BuildLibrariesConfiguration? buildLibraries = null;
+        bool enableBuildLibraries = false;
+        void EnsureBuildLibraries() => buildLibraries ??= new BuildLibrariesConfiguration();
 
-        if (MyInvocation.BoundParameters.ContainsKey(nameof(SkipBuiltinReplacements)))
+        if (bound.ContainsKey(nameof(NETConfiguration)))
+        {
+            EnsureBuildLibraries();
+            buildLibraries!.Configuration = NETConfiguration;
+            enableBuildLibraries = true;
+        }
+        if (bound.ContainsKey(nameof(NETFramework)))
+        {
+            EnsureBuildLibraries();
+            buildLibraries!.Framework = NETFramework;
+            enableBuildLibraries = true;
+        }
+        if (bound.ContainsKey(nameof(NETProjectName))) { EnsureBuildLibraries(); buildLibraries!.ProjectName = NETProjectName; }
+        if (bound.ContainsKey(nameof(NETExcludeMainLibrary))) { EnsureBuildLibraries(); buildLibraries!.ExcludeMainLibrary = NETExcludeMainLibrary.IsPresent; }
+        if (bound.ContainsKey(nameof(NETExcludeLibraryFilter))) { EnsureBuildLibraries(); buildLibraries!.ExcludeLibraryFilter = NETExcludeLibraryFilter; }
+        if (bound.ContainsKey(nameof(NETIgnoreLibraryOnLoad))) { EnsureBuildLibraries(); buildLibraries!.IgnoreLibraryOnLoad = NETIgnoreLibraryOnLoad; }
+        if (bound.ContainsKey(nameof(NETBinaryModule))) { EnsureBuildLibraries(); buildLibraries!.BinaryModule = NETBinaryModule; }
+        if (bound.ContainsKey(nameof(NETHandleAssemblyWithSameName))) { EnsureBuildLibraries(); buildLibraries!.HandleAssemblyWithSameName = NETHandleAssemblyWithSameName.IsPresent; }
+        if (bound.ContainsKey(nameof(NETLineByLineAddType))) { EnsureBuildLibraries(); buildLibraries!.NETLineByLineAddType = NETLineByLineAddType.IsPresent; }
+        if (bound.ContainsKey(nameof(NETProjectPath))) { EnsureBuildLibraries(); buildLibraries!.NETProjectPath = NETProjectPath; }
+        if (bound.ContainsKey(nameof(NETBinaryModuleCmdletScanDisabled))) { EnsureBuildLibraries(); buildLibraries!.BinaryModuleCmdletScanDisabled = NETBinaryModuleCmdletScanDisabled.IsPresent; }
+        if (bound.ContainsKey(nameof(NETSearchClass))) { EnsureBuildLibraries(); buildLibraries!.SearchClass = NETSearchClass; }
+        if (bound.ContainsKey(nameof(NETBinaryModuleDocumentation))) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = NETBinaryModuleDocumentation.IsPresent; }
+        if (bound.ContainsKey(nameof(NETHandleRuntimes))) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = NETHandleRuntimes.IsPresent; }
+        if (bound.ContainsKey(nameof(NETDoNotCopyLibrariesRecursively))) { EnsureBuildLibraries(); buildLibraries!.NETDoNotCopyLibrariesRecursively = NETDoNotCopyLibrariesRecursively.IsPresent; }
+
+        if (buildLibraries is not null)
+        {
+            if (enableBuildLibraries) buildLibraries.Enable = true;
+            WriteObject(new ConfigurationBuildLibrariesSegment { BuildLibraries = buildLibraries });
+        }
+
+        if (bound.ContainsKey(nameof(SkipBuiltinReplacements)) && SkipBuiltinReplacements.IsPresent)
         {
             WriteObject(new ConfigurationPlaceHolderOptionSegment
             {
@@ -319,27 +292,5 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
                 }
             });
         }
-    }
-
-    private static ConfigurationBuildSegment BuildModule(Action<BuildModuleConfiguration> apply)
-    {
-        var bm = new BuildModuleConfiguration();
-        apply(bm);
-        return new ConfigurationBuildSegment { BuildModule = bm };
-    }
-
-    private static ConfigurationOptionsSegment Signing(Action<SigningOptionsConfiguration> apply)
-    {
-        var signing = new SigningOptionsConfiguration();
-        apply(signing);
-        return new ConfigurationOptionsSegment { Options = new ConfigurationOptions { Signing = signing } };
-    }
-
-    private static ConfigurationBuildLibrariesSegment BuildLibraries(Action<BuildLibrariesConfiguration> apply, bool enable = false)
-    {
-        var bl = new BuildLibrariesConfiguration();
-        apply(bl);
-        if (enable) bl.Enable = true;
-        return new ConfigurationBuildLibrariesSegment { BuildLibraries = bl };
     }
 }
