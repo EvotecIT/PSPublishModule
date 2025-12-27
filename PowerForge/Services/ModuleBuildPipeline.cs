@@ -69,16 +69,15 @@ public sealed class ModuleBuildPipeline
             Tags = spec.Tags ?? Array.Empty<string>(),
             IconUri = spec.IconUri,
             ProjectUri = spec.ProjectUri,
+            ExportAssemblies = spec.ExportAssemblies ?? Array.Empty<string>(),
+            DisableBinaryCmdletScan = spec.DisableBinaryCmdletScan,
         });
 
         var psd1 = Path.Combine(staging, $"{spec.Name}.psd1");
-        var exports = BuildServices.ComputeExports(
-            publicFolderPath: Path.Combine(staging, "Public"),
-            assemblies: Directory.EnumerateFiles(staging, $"{spec.Name}.dll", SearchOption.AllDirectories));
-
         if (!File.Exists(psd1))
             throw new FileNotFoundException($"Manifest not found after build: {psd1}");
 
+        var exports = ReadExportsFromManifest(psd1);
         return new ModuleBuildResult(staging, psd1, exports);
     }
 
@@ -168,5 +167,19 @@ public sealed class ModuleBuildPipeline
         var parent = Path.GetFullPath(parentPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var child = Path.GetFullPath(candidateChildPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         return child.StartsWith(parent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ExportSet ReadExportsFromManifest(string psd1Path)
+        => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
+            ReadStringOrArray(psd1Path, "CmdletsToExport"),
+            ReadStringOrArray(psd1Path, "AliasesToExport"));
+
+    private static string[] ReadStringOrArray(string psd1Path, string key)
+    {
+        if (ManifestEditor.TryGetTopLevelStringArray(psd1Path, key, out var values) && values is not null)
+            return values;
+        if (ManifestEditor.TryGetTopLevelString(psd1Path, key, out var value) && !string.IsNullOrWhiteSpace(value))
+            return new[] { value! };
+        return Array.Empty<string>();
     }
 }

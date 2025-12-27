@@ -71,6 +71,8 @@ public sealed class ModulePipelineRunner
         string[]? dotnetFrameworksFromSegments = null;
         string? netProjectName = null;
         string? netProjectPath = null;
+        string[]? exportAssembliesFromSegments = null;
+        bool? disableBinaryCmdletScanFromSegments = null;
 
         InformationConfiguration? information = null;
         DocumentationConfiguration? documentation = null;
@@ -117,6 +119,8 @@ public sealed class ModulePipelineRunner
                     if (bl.Framework is { Length: > 0 }) dotnetFrameworksFromSegments = bl.Framework;
                     if (!string.IsNullOrWhiteSpace(bl.ProjectName)) netProjectName = bl.ProjectName;
                     if (!string.IsNullOrWhiteSpace(bl.NETProjectPath)) netProjectPath = bl.NETProjectPath;
+                    if (bl.BinaryModule is { Length: > 0 }) exportAssembliesFromSegments = bl.BinaryModule;
+                    if (bl.BinaryModuleCmdletScanDisabled.HasValue) disableBinaryCmdletScanFromSegments = bl.BinaryModuleCmdletScanDisabled.Value;
                     break;
                 }
                 case ConfigurationModuleSegment moduleSeg:
@@ -218,6 +222,9 @@ public sealed class ModulePipelineRunner
             IconUri = iconUri ?? spec.Build.IconUri,
             ProjectUri = projectUri ?? spec.Build.ProjectUri,
             ExcludeDirectories = spec.Build.ExcludeDirectories ?? Array.Empty<string>(),
+            ExcludeFiles = spec.Build.ExcludeFiles ?? Array.Empty<string>(),
+            ExportAssemblies = exportAssembliesFromSegments ?? spec.Build.ExportAssemblies ?? Array.Empty<string>(),
+            DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             KeepStaging = spec.Build.KeepStaging
         };
 

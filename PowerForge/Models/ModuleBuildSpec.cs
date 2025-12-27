@@ -62,6 +62,17 @@ public sealed class ModuleBuildSpec
     public string[] ExcludeFiles { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Optional assembly file names (for example: <c>My.Module.dll</c>) to scan for cmdlets/aliases when updating manifest exports.
+    /// When empty, defaults to <c>&lt;Name&gt;.dll</c>.
+    /// </summary>
+    public string[] ExportAssemblies { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true, skips binary cmdlet/alias scanning and keeps existing manifest <c>CmdletsToExport</c>/<c>AliasesToExport</c> values.
+    /// </summary>
+    public bool DisableBinaryCmdletScan { get; set; }
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }

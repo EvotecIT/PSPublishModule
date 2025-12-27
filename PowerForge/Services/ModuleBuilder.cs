@@ -57,6 +57,15 @@ public sealed class ModuleBuilder
         public string? IconUri { get; set; }
         /// <summary>ProjectUri written to the manifest PrivateData.PSData.</summary>
         public string? ProjectUri { get; set; }
+        /// <summary>
+        /// Optional assembly file names (for example: <c>My.Module.dll</c>) to scan for cmdlets/aliases when updating manifest exports.
+        /// When empty, defaults to <c>&lt;ModuleName&gt;.dll</c>.
+        /// </summary>
+        public IReadOnlyList<string> ExportAssemblies { get; set; } = Array.Empty<string>();
+        /// <summary>
+        /// When true, skips binary cmdlet/alias scanning and keeps existing manifest <c>CmdletsToExport</c>/<c>AliasesToExport</c> values.
+        /// </summary>
+        public bool DisableBinaryCmdletScan { get; set; }
     }
 
     /// <summary>
@@ -135,11 +144,33 @@ public sealed class ModuleBuilder
         if (!string.IsNullOrWhiteSpace(opts.ProjectUri)) BuildServices.SetPsDataString(psd1, "ProjectUri", opts.ProjectUri!);
 
         // 3) Exports
-        var moduleDlls = Directory.EnumerateFiles(opts.ProjectRoot, $"{opts.ModuleName}.dll", SearchOption.AllDirectories).ToArray();
-        if (moduleDlls.Length == 0)
-            _logger.Warn($"No '{opts.ModuleName}.dll' found under staging; binary cmdlet export detection will be skipped.");
-        var exports = BuildServices.ComputeExports(publicFolderPath: Path.Combine(opts.ProjectRoot, "Public"), assemblies: moduleDlls);
-        BuildServices.SetManifestExports(psd1, functions: exports.Functions, cmdlets: exports.Cmdlets, aliases: exports.Aliases);
+        IEnumerable<string>? functionsToSet = null;
+        var publicFolder = Path.Combine(opts.ProjectRoot, "Public");
+        if (Directory.Exists(publicFolder))
+        {
+            string[] scripts;
+            try { scripts = Directory.EnumerateFiles(publicFolder, "*.ps1", SearchOption.AllDirectories).ToArray(); }
+            catch { scripts = Array.Empty<string>(); }
+            functionsToSet = ExportDetector.DetectScriptFunctions(scripts);
+        }
+
+        IEnumerable<string>? cmdletsToSet = null;
+        IEnumerable<string>? aliasesToSet = null;
+        if (!opts.DisableBinaryCmdletScan)
+        {
+            var exportDlls = ResolveExportAssemblies(opts.ProjectRoot, opts.ModuleName, opts.ExportAssemblies);
+            if (exportDlls.Length == 0)
+            {
+                _logger.Warn($"No export assemblies found for '{opts.ModuleName}' under staging; keeping existing CmdletsToExport/AliasesToExport.");
+            }
+            else
+            {
+                cmdletsToSet = ExportDetector.DetectBinaryCmdlets(exportDlls);
+                aliasesToSet = ExportDetector.DetectBinaryAliases(exportDlls);
+            }
+        }
+
+        BuildServices.SetManifestExports(psd1, functions: functionsToSet, cmdlets: cmdletsToSet, aliases: aliasesToSet);
     }
 
     /// <summary>
@@ -189,4 +220,42 @@ public sealed class ModuleBuilder
 
     private static string AppendDirectorySeparatorChar(string path)
         => path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? path : path + Path.DirectorySeparatorChar;
+
+    private static string[] ResolveExportAssemblies(string projectRoot, string moduleName, IReadOnlyList<string>? exportAssemblies)
+    {
+        var list = new List<string>();
+
+        var specified = (exportAssemblies ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim().Trim('"'))
+            .ToArray();
+
+        var patterns = specified.Length > 0 ? specified : new[] { moduleName + ".dll" };
+        foreach (var p in patterns)
+        {
+            if (string.IsNullOrWhiteSpace(p)) continue;
+            var name = p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? p : p + ".dll";
+
+            try
+            {
+                if (Path.IsPathRooted(name))
+                {
+                    if (File.Exists(name)) list.Add(Path.GetFullPath(name));
+                    continue;
+                }
+
+                if (name.Contains(Path.DirectorySeparatorChar) || name.Contains(Path.AltDirectorySeparatorChar))
+                {
+                    var rel = Path.GetFullPath(Path.Combine(projectRoot, name));
+                    if (File.Exists(rel)) list.Add(rel);
+                    continue;
+                }
+
+                list.AddRange(Directory.EnumerateFiles(projectRoot, name, SearchOption.AllDirectories));
+            }
+            catch { }
+        }
+
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
 }
