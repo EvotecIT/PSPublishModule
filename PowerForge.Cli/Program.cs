@@ -36,30 +36,111 @@ switch (cmd)
     case "build":
     {
         var argv = filteredArgs.Skip(1).ToArray();
-        var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 
-        ModuleBuildSpec spec;
-        if (!string.IsNullOrWhiteSpace(configPath))
+        var configPath = TryGetOptionValue(argv, "--config");
+        var parsed = string.IsNullOrWhiteSpace(configPath) ? ParseBuildArgs(argv) : null;
+
+        try
         {
-            spec = LoadJson<ModuleBuildSpec>(configPath);
-        }
-        else
-        {
-            var parsed = ParseBuildArgs(argv);
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+
+            // 1) Prefer explicit --config. If omitted and args are invalid, try default config discovery.
+            var configToUse = configPath;
+            if (string.IsNullOrWhiteSpace(configToUse) && parsed is null)
+            {
+                var baseDir = TryGetProjectRoot(argv);
+                if (!string.IsNullOrWhiteSpace(baseDir))
+                    baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+                else
+                    baseDir = Directory.GetCurrentDirectory();
+
+                configToUse = FindDefaultBuildConfig(baseDir);
+            }
+
+            // 2) If config is present, load either a BuildSpec or PipelineSpec.
+            if (!string.IsNullOrWhiteSpace(configToUse))
+            {
+                var (_, fullPath) = LoadJsonWithPath<JsonElement>(configToUse);
+                var fullConfigPath = fullPath;
+
+                if (LooksLikePipelineSpec(fullConfigPath))
+                {
+                    var (spec, specPath) = LoadJsonWithPath<ModulePipelineSpec>(fullConfigPath);
+                    ResolvePipelineSpecPaths(spec, specPath);
+
+                    var runner = new ModulePipelineRunner(cmdLogger);
+                    var plan = runner.Plan(spec);
+
+                    var pipeline = new ModuleBuildPipeline(cmdLogger);
+                    var res = RunWithStatus(outputJson, cli, $"Building {plan.ModuleName} {plan.ResolvedVersion}", () => pipeline.BuildToStaging(plan.BuildSpec));
+
+                    if (outputJson)
+                    {
+                        WriteJson(new
+                        {
+                            schemaVersion = OutputSchemaVersion,
+                            command = "build",
+                            success = true,
+                            exitCode = 0,
+                            config = "pipeline",
+                            configPath = specPath,
+                            spec,
+                            plan,
+                            result = res,
+                            logs = logBuffer?.Entries
+                        });
+                        return 0;
+                    }
+
+                    logger.Success($"Built staging for {plan.ModuleName} {plan.ResolvedVersion} at {res.StagingPath}");
+                    return 0;
+                }
+                else
+                {
+                    var (spec, specPath) = LoadJsonWithPath<ModuleBuildSpec>(fullConfigPath);
+                    ResolveBuildSpecPaths(spec, specPath);
+
+                    var pipeline = new ModuleBuildPipeline(cmdLogger);
+                    var res = RunWithStatus(outputJson, cli, $"Building {spec.Name} {spec.Version}", () => pipeline.BuildToStaging(spec));
+
+                    if (outputJson)
+                    {
+                        WriteJson(new
+                        {
+                            schemaVersion = OutputSchemaVersion,
+                            command = "build",
+                            success = true,
+                            exitCode = 0,
+                            config = "build",
+                            configPath = specPath,
+                            spec,
+                            result = res,
+                            logs = logBuffer?.Entries
+                        });
+                        return 0;
+                    }
+
+                    logger.Success($"Built staging for {spec.Name} {spec.Version} at {res.StagingPath}");
+                    return 0;
+                }
+            }
+
+            // 3) No config => use explicit arguments.
             if (parsed is null)
             {
                 if (outputJson)
                 {
-                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 2, error = "Invalid arguments." });
+                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 2, error = "Invalid arguments (missing --config and no default config found)." });
                     return 2;
                 }
 
                 PrintHelp();
                 return 2;
             }
+
             var p = parsed.Value;
-            spec = new ModuleBuildSpec
+            var specFromArgs = new ModuleBuildSpec
             {
                 Name = p.Name,
                 SourcePath = p.Source,
@@ -75,13 +156,9 @@ switch (cmd)
                 IconUri = p.IconUri,
                 ProjectUri = p.ProjectUri,
             };
-        }
 
-        try
-        {
-            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
-            var pipeline = new ModuleBuildPipeline(cmdLogger);
-            var res = RunWithStatus(outputJson, cli, $"Building {spec.Name} {spec.Version}", () => pipeline.BuildToStaging(spec));
+            var pipelineFromArgs = new ModuleBuildPipeline(cmdLogger);
+            var resFromArgs = RunWithStatus(outputJson, cli, $"Building {specFromArgs.Name} {specFromArgs.Version}", () => pipelineFromArgs.BuildToStaging(specFromArgs));
 
             if (outputJson)
             {
@@ -91,14 +168,15 @@ switch (cmd)
                     command = "build",
                     success = true,
                     exitCode = 0,
-                    spec,
-                    result = res,
+                    config = "args",
+                    spec = specFromArgs,
+                    result = resFromArgs,
                     logs = logBuffer?.Entries
                 });
                 return 0;
             }
 
-            logger.Success($"Built staging for {spec.Name} {spec.Version} at {res.StagingPath}");
+            logger.Success($"Built staging for {specFromArgs.Name} {specFromArgs.Version} at {resFromArgs.StagingPath}");
             return 0;
         }
         catch (Exception ex)
@@ -106,6 +184,245 @@ switch (cmd)
             if (outputJson)
             {
                 WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 1, error = ex.Message });
+                return 1;
+            }
+
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
+    case "docs":
+    {
+        var argv = filteredArgs.Skip(1).ToArray();
+        var configPath = TryGetOptionValue(argv, "--config");
+        var outputJson = IsJsonOutput(argv);
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            var baseDir = TryGetProjectRoot(argv);
+            if (!string.IsNullOrWhiteSpace(baseDir))
+                baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+            else
+                baseDir = Directory.GetCurrentDirectory();
+
+            configPath = FindDefaultPipelineConfig(baseDir);
+        }
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 2, error = "Missing --config and no default pipeline config found." });
+                return 2;
+            }
+
+            Console.WriteLine("Usage: powerforge docs [--config <Pipeline.json>] [--output json]");
+            return 2;
+        }
+
+        ModulePipelineSpec spec;
+        try
+        {
+            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            spec = loaded.Value;
+            ResolvePipelineSpecPaths(spec, loaded.FullPath);
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 2, error = ex.Message });
+                return 2;
+            }
+
+            logger.Error(ex.Message);
+            return 2;
+        }
+
+        // Ensure docs-only run: no install, no publish, no artefacts.
+        spec.Install ??= new ModulePipelineInstallOptions();
+        spec.Install.Enabled = false;
+        spec.Segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .Where(s => s is not ConfigurationArtefactSegment && s is not ConfigurationPublishSegment)
+            .ToArray();
+
+        try
+        {
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var runner = new ModulePipelineRunner(cmdLogger);
+
+            var plan = RunWithStatus(outputJson, cli, "Planning docs", () => runner.Plan(spec));
+            if (plan.DocumentationBuild?.Enable != true || plan.Documentation is null)
+            {
+                const string msg = "Docs are not enabled in the pipeline config. Add Documentation + BuildDocumentation segments (Enable=true).";
+                if (outputJson)
+                {
+                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 2, error = msg, plan, logs = logBuffer?.Entries });
+                    return 2;
+                }
+
+                logger.Error(msg);
+                return 2;
+            }
+
+            var res = RunWithStatus(outputJson, cli, "Generating docs", () => runner.Run(spec));
+
+            if (outputJson)
+            {
+                WriteJson(new
+                {
+                    schemaVersion = OutputSchemaVersion,
+                    command = "docs",
+                    success = true,
+                    exitCode = 0,
+                    spec,
+                    plan = res.Plan,
+                    result = res.DocumentationResult,
+                    logs = logBuffer?.Entries
+                });
+                return 0;
+            }
+
+            logger.Success($"Docs generated for {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
+            if (res.DocumentationResult is not null)
+            {
+                logger.Info($"Docs: {res.DocumentationResult.DocsPath}");
+                logger.Info($"Readme: {res.DocumentationResult.ReadmePath}");
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 1, error = ex.Message });
+                return 1;
+            }
+
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
+    case "pack":
+    {
+        var argv = filteredArgs.Skip(1).ToArray();
+        var configPath = TryGetOptionValue(argv, "--config");
+        var outPath = TryGetOptionValue(argv, "--out") ?? TryGetOptionValue(argv, "--out-path") ?? TryGetOptionValue(argv, "--output-path");
+        var outputJson = IsJsonOutput(argv);
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            var baseDir = TryGetProjectRoot(argv);
+            if (!string.IsNullOrWhiteSpace(baseDir))
+                baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+            else
+                baseDir = Directory.GetCurrentDirectory();
+
+            configPath = FindDefaultPipelineConfig(baseDir);
+        }
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 2, error = "Missing --config and no default pipeline config found." });
+                return 2;
+            }
+
+            Console.WriteLine("Usage: powerforge pack [--config <Pipeline.json>] [--out <path>] [--output json]");
+            return 2;
+        }
+
+        ModulePipelineSpec spec;
+        try
+        {
+            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            spec = loaded.Value;
+            ResolvePipelineSpecPaths(spec, loaded.FullPath);
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 2, error = ex.Message });
+                return 2;
+            }
+
+            logger.Error(ex.Message);
+            return 2;
+        }
+
+        // Ensure pack-only run: no install, no publish, no docs.
+        spec.Install ??= new ModulePipelineInstallOptions();
+        spec.Install.Enabled = false;
+        spec.Segments = (spec.Segments ?? Array.Empty<IConfigurationSegment>())
+            .Where(s => s is not ConfigurationDocumentationSegment && s is not ConfigurationBuildDocumentationSegment && s is not ConfigurationPublishSegment)
+            .ToArray();
+
+        if (!string.IsNullOrWhiteSpace(outPath))
+        {
+            var enabled = spec.Segments.OfType<ConfigurationArtefactSegment>()
+                .Where(a => a.Configuration?.Enabled == true)
+                .ToArray();
+
+            foreach (var a in enabled)
+            {
+                a.Configuration ??= new ArtefactConfiguration();
+                a.Configuration.Path = enabled.Length <= 1
+                    ? outPath
+                    : Path.Combine(outPath, a.ArtefactType.ToString());
+            }
+        }
+
+        try
+        {
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var runner = new ModulePipelineRunner(cmdLogger);
+
+            var plan = RunWithStatus(outputJson, cli, "Planning pack", () => runner.Plan(spec));
+            if (plan.Artefacts.Length == 0)
+            {
+                const string msg = "No enabled artefact segments found in the pipeline config.";
+                if (outputJson)
+                {
+                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 2, error = msg, plan, logs = logBuffer?.Entries });
+                    return 2;
+                }
+
+                logger.Error(msg);
+                return 2;
+            }
+
+            var res = RunWithStatus(outputJson, cli, "Packing artefacts", () => runner.Run(spec));
+
+            if (outputJson)
+            {
+                WriteJson(new
+                {
+                    schemaVersion = OutputSchemaVersion,
+                    command = "pack",
+                    success = true,
+                    exitCode = 0,
+                    spec,
+                    plan = res.Plan,
+                    artefacts = res.ArtefactResults,
+                    logs = logBuffer?.Entries
+                });
+                return 0;
+            }
+
+            logger.Success($"Packed artefacts for {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
+            foreach (var a in res.ArtefactResults)
+            {
+                if (!string.IsNullOrWhiteSpace(a.OutputPath)) logger.Info($" → {a.OutputPath}");
+            }
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -191,7 +508,9 @@ switch (cmd)
         ModuleInstallSpec spec;
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            spec = LoadJson<ModuleInstallSpec>(configPath);
+            var loaded = LoadJsonWithPath<ModuleInstallSpec>(configPath);
+            ResolveInstallSpecPaths(loaded.Value, loaded.FullPath);
+            spec = loaded.Value;
         }
         else
         {
@@ -266,7 +585,9 @@ switch (cmd)
         ModuleTestSuiteSpec spec;
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            spec = LoadJson<ModuleTestSuiteSpec>(configPath);
+            var loaded = LoadJsonWithPath<ModuleTestSuiteSpec>(configPath);
+            ResolveTestSpecPaths(loaded.Value, loaded.FullPath);
+            spec = loaded.Value;
         }
         else
         {
@@ -352,6 +673,17 @@ switch (cmd)
 
         if (string.IsNullOrWhiteSpace(configPath))
         {
+            var baseDir = TryGetProjectRoot(argv);
+            if (!string.IsNullOrWhiteSpace(baseDir))
+                baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+            else
+                baseDir = Directory.GetCurrentDirectory();
+
+            configPath = FindDefaultPipelineConfig(baseDir);
+        }
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
             if (outputJson)
             {
                 WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 2, error = "Missing required --config." });
@@ -365,7 +697,9 @@ switch (cmd)
         ModulePipelineSpec spec;
         try
         {
-            spec = LoadJson<ModulePipelineSpec>(configPath);
+            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            spec = loaded.Value;
+            ResolvePipelineSpecPaths(spec, loaded.FullPath);
         }
         catch (Exception ex)
         {
@@ -429,6 +763,17 @@ switch (cmd)
 
         if (string.IsNullOrWhiteSpace(configPath))
         {
+            var baseDir = TryGetProjectRoot(argv);
+            if (!string.IsNullOrWhiteSpace(baseDir))
+                baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+            else
+                baseDir = Directory.GetCurrentDirectory();
+
+            configPath = FindDefaultPipelineConfig(baseDir);
+        }
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
             if (outputJson)
             {
                 WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 2, error = "Missing required --config." });
@@ -442,7 +787,9 @@ switch (cmd)
         ModulePipelineSpec spec;
         try
         {
-            spec = LoadJson<ModulePipelineSpec>(configPath);
+            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            spec = loaded.Value;
+            ResolvePipelineSpecPaths(spec, loaded.FullPath);
         }
         catch (Exception ex)
         {
@@ -637,8 +984,10 @@ static void PrintHelp()
 {
     Console.WriteLine(@"PowerForge CLI
 Usage:
-  powerforge build --name <ModuleName> --project-root <path> --version <X.Y.Z> [--csproj <path>] [--staging <path>] [--configuration Release] [--framework <tfm>]* [--author <name>] [--company <name>] [--description <text>] [--tag <tag>]*
-  powerforge build --config <BuildSpec.json>
+  powerforge build --name <ModuleName> --project-root <path> --version <X.Y.Z> [--csproj <path>] [--staging <path>] [--configuration Release] [--framework <tfm>]* [--author <name>] [--company <name>] [--description <text>] [--tag <tag>]* [--output json]
+  powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
+  powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]
+  powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
   powerforge normalize <files...>   Normalize encodings and line endings [--output json]
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
   powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
@@ -646,8 +995,8 @@ Usage:
   powerforge test --config <TestSpec.json>
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
   powerforge install --config <InstallSpec.json>
-  powerforge pipeline --config <Pipeline.json>
-  powerforge plan --config <Pipeline.json> [--output json]
+  powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--output json]
+  powerforge plan [--config <Pipeline.json>] [--project-root <path>] [--output json]
   powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
   powerforge publish --path <Path> [--repo <Repo>] [--tool auto|psresourceget|powershellget] [--apikey <Key>] [--nupkg]
                    [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
@@ -660,6 +1009,10 @@ Usage:
   --no-color                       Disable ANSI colors
   --view auto|standard|ansi        Console rendering mode (default: auto)
   --output json                    Emit machine-readable JSON output      
+
+Default config discovery (when --config is omitted):
+  Searches for powerforge.json / powerforge.pipeline.json / .powerforge/pipeline.json
+  in the current directory and parent directories.
 ");
 }
 
@@ -1026,12 +1379,173 @@ static string? TryGetOptionValue(string[] argv, string optionName)
     return null;
 }
 
-static T LoadJson<T>(string path)
-{
-    var full = Path.GetFullPath(path.Trim().Trim('"'));
-    if (!File.Exists(full)) throw new FileNotFoundException($"Config file not found: {full}");
+static string? TryGetProjectRoot(string[] argv)
+    => TryGetOptionValue(argv, "--project-root")
+       ?? TryGetOptionValue(argv, "--project")
+       ?? TryGetOptionValue(argv, "--path");
 
-    var json = File.ReadAllText(full);
+static string ResolvePathFromBase(string baseDir, string path)
+{
+    var raw = (path ?? string.Empty).Trim().Trim('"');
+    if (string.IsNullOrWhiteSpace(raw))
+        throw new ArgumentException("Path is empty.", nameof(path));
+
+    return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(baseDir, raw));
+}
+
+static string? ResolvePathFromBaseNullable(string baseDir, string? path)
+{
+    if (string.IsNullOrWhiteSpace(path)) return null;
+    var raw = path.Trim().Trim('"');
+    return Path.GetFullPath(Path.IsPathRooted(raw) ? raw : Path.Combine(baseDir, raw));
+}
+
+static void ResolveBuildSpecPaths(ModuleBuildSpec spec, string configFullPath)
+{
+    if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+    var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
+    if (!string.IsNullOrWhiteSpace(spec.SourcePath))
+        spec.SourcePath = ResolvePathFromBase(baseDir, spec.SourcePath);
+    spec.StagingPath = ResolvePathFromBaseNullable(baseDir, spec.StagingPath);
+    spec.CsprojPath = ResolvePathFromBaseNullable(baseDir, spec.CsprojPath);
+}
+
+static void ResolveInstallSpecPaths(ModuleInstallSpec spec, string configFullPath)
+{
+    if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+    var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
+    if (!string.IsNullOrWhiteSpace(spec.StagingPath))
+        spec.StagingPath = ResolvePathFromBase(baseDir, spec.StagingPath);
+}
+
+static void ResolveTestSpecPaths(ModuleTestSuiteSpec spec, string configFullPath)
+{
+    if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+    var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
+    if (!string.IsNullOrWhiteSpace(spec.ProjectPath))
+        spec.ProjectPath = ResolvePathFromBase(baseDir, spec.ProjectPath);
+    spec.TestPath = ResolvePathFromBaseNullable(baseDir, spec.TestPath);
+}
+
+static void ResolvePipelineSpecPaths(ModulePipelineSpec spec, string configFullPath)
+{
+    if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+    var baseDir = Path.GetDirectoryName(configFullPath) ?? Directory.GetCurrentDirectory();
+    if (spec.Build is null) return;
+
+    if (!string.IsNullOrWhiteSpace(spec.Build.SourcePath))
+        spec.Build.SourcePath = ResolvePathFromBase(baseDir, spec.Build.SourcePath);
+    spec.Build.StagingPath = ResolvePathFromBaseNullable(baseDir, spec.Build.StagingPath);
+    spec.Build.CsprojPath = ResolvePathFromBaseNullable(baseDir, spec.Build.CsprojPath);
+}
+
+static string? FindDefaultPipelineConfig(string baseDir)
+{
+    var candidates = new[]
+    {
+        "powerforge.json",
+        "powerforge.pipeline.json",
+        Path.Combine(".powerforge", "powerforge.json"),
+        Path.Combine(".powerforge", "pipeline.json"),
+    };
+
+    foreach (var dir in EnumerateSelfAndParents(baseDir))
+    {
+        foreach (var rel in candidates)
+        {
+            try
+            {
+                var full = Path.GetFullPath(Path.Combine(dir, rel));
+                if (File.Exists(full)) return full;
+            }
+            catch { /* ignore */ }
+        }
+    }
+
+    return null;
+}
+
+static string? FindDefaultBuildConfig(string baseDir)
+{
+    var candidates = new[]
+    {
+        "powerforge.build.json",
+        Path.Combine(".powerforge", "build.json"),
+    };
+
+    foreach (var dir in EnumerateSelfAndParents(baseDir))
+    {
+        foreach (var rel in candidates)
+        {
+            try
+            {
+                var full = Path.GetFullPath(Path.Combine(dir, rel));
+                if (File.Exists(full)) return full;
+            }
+            catch { /* ignore */ }
+        }
+    }
+
+    return FindDefaultPipelineConfig(baseDir);
+}
+
+static IEnumerable<string> EnumerateSelfAndParents(string? baseDir)
+{
+    string current;
+    try
+    {
+        current = Path.GetFullPath(string.IsNullOrWhiteSpace(baseDir)
+            ? Directory.GetCurrentDirectory()
+            : baseDir.Trim().Trim('"'));
+    }
+    catch
+    {
+        current = Directory.GetCurrentDirectory();
+    }
+
+    while (true)
+    {
+        yield return current;
+
+        try
+        {
+            var parent = Directory.GetParent(current)?.FullName;
+            if (string.IsNullOrWhiteSpace(parent)) yield break;
+            if (string.Equals(parent, current, StringComparison.OrdinalIgnoreCase)) yield break;
+            current = parent;
+        }
+        catch
+        {
+            yield break;
+        }
+    }
+}
+
+static bool LooksLikePipelineSpec(string fullConfigPath)
+{
+    try
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(fullConfigPath), new JsonDocumentOptions
+        {
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip
+        });
+
+        var root = doc.RootElement;
+        return root.TryGetProperty("Build", out _) || root.TryGetProperty("Segments", out _) || root.TryGetProperty("Install", out _);
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static JsonSerializerOptions CreateJsonOptions()
+{
     var options = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true,
@@ -1040,10 +1554,18 @@ static T LoadJson<T>(string path)
     };
     options.Converters.Add(new JsonStringEnumConverter());
     options.Converters.Add(new ConfigurationSegmentJsonConverter());
+    return options;
+}
 
-    var obj = JsonSerializer.Deserialize<T>(json, options);
+static (T Value, string FullPath) LoadJsonWithPath<T>(string path)
+{
+    var full = Path.GetFullPath(path.Trim().Trim('"'));
+    if (!File.Exists(full)) throw new FileNotFoundException($"Config file not found: {full}");
+
+    var json = File.ReadAllText(full);
+    var obj = JsonSerializer.Deserialize<T>(json, CreateJsonOptions());
     if (obj is null) throw new InvalidOperationException($"Failed to deserialize config file: {full}");
-    return obj;
+    return (obj, full);
 }
 
 static (string[] Names, string? Version, bool Prerelease, string[] Repositories)? ParseFindArgs(string[] argv)
