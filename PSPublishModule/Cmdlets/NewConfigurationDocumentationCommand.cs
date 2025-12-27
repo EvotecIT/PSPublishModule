@@ -4,7 +4,7 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Enables or disables creation of documentation from the module using PlatyPS or HelpOut.
+/// Enables or disables creation of documentation from the module using PowerForge.
 /// </summary>
 [Cmdlet(VerbsCommon.New, "ConfigurationDocumentation")]
 public sealed class NewConfigurationDocumentationCommand : PSCmdlet
@@ -15,7 +15,7 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Removes all files from the documentation folder before creating new documentation.</summary>
     [Parameter] public SwitchParameter StartClean { get; set; }
 
-    /// <summary>Updates the documentation right after running New-MarkdownHelp due to PlatyPS bugs.</summary>
+    /// <summary>Legacy compatibility switch; ignored by the PowerForge generator.</summary>
     [Parameter] public SwitchParameter UpdateWhenNew { get; set; }
 
     /// <summary>Path to the folder where documentation will be created.</summary>
@@ -24,20 +24,12 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Path to the readme file that will be used for the documentation.</summary>
     [Parameter(Mandatory = true)] public string PathReadme { get; set; } = string.Empty;
 
-    /// <summary>Tool to use for documentation generation.</summary>
-    [Parameter] public PowerForge.DocumentationTool Tool { get; set; } = PowerForge.DocumentationTool.PlatyPS;
+    /// <summary>Documentation engine (legacy parameter; kept for compatibility).</summary>
+    [Parameter(DontShow = true)] public PowerForge.DocumentationTool Tool { get; set; } = PowerForge.DocumentationTool.PowerForge;
 
     /// <summary>Emits documentation configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
-        var toolModule = Tool == PowerForge.DocumentationTool.PlatyPS ? "PlatyPS" : "HelpOut";
-        var modules = InvokeCommand.InvokeScript($"Get-Module -Name '{toolModule}' -ListAvailable");
-        if (modules is null || modules.Count == 0)
-        {
-            WriteWarning($"Module {toolModule} is not installed. Please install it ussing Install-Module {toolModule} -Force -Verbose");
-            return;
-        }
-
         WriteObject(new ConfigurationDocumentationSegment
         {
             Configuration = new DocumentationConfiguration
@@ -56,7 +48,7 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
                     Enable = Enable.IsPresent,
                     StartClean = StartClean.IsPresent,
                     UpdateWhenNew = UpdateWhenNew.IsPresent,
-                    Tool = Tool
+                    Tool = PowerForge.DocumentationTool.PowerForge
                 }
             });
         }
