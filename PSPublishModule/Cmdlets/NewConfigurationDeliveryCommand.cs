@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
@@ -36,8 +35,10 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     /// <summary>Where to bundle LICENSE.* within the built module.</summary>
     [Parameter] public PowerForge.DeliveryBundleDestination LicenseDestination { get; set; } = PowerForge.DeliveryBundleDestination.Internals;
 
-    /// <summary>One or more key/value pairs that represent important links (Title/Url).</summary>
-    [Parameter] public IDictionary[]? ImportantLinks { get; set; }
+    /// <summary>Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url='..' }) or <see cref="DeliveryImportantLink"/>[].</summary>
+    [Parameter]
+    [DeliveryImportantLinksTransformation]
+    public DeliveryImportantLink[]? ImportantLinks { get; set; }
 
     /// <summary>Text lines shown to users after Install-ModuleDocumentation completes.</summary>
     [Parameter] public string[]? IntroText { get; set; }
@@ -95,21 +96,18 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
         });
     }
 
-    private static DeliveryImportantLink[]? NormalizeImportantLinks(IDictionary[]? links)
+    private static DeliveryImportantLink[]? NormalizeImportantLinks(DeliveryImportantLink[]? links)
     {
         if (links is null || links.Length == 0) return null;
 
         var output = new List<DeliveryImportantLink>();
-        foreach (var dict in links)
+        foreach (var link in links)
         {
-            if (dict is null) continue;
-
-            var title = dict["Title"]?.ToString();
-            var url = dict["Url"]?.ToString();
-            if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(url))
+            if (link is null) continue;
+            if (string.IsNullOrWhiteSpace(link.Title) || string.IsNullOrWhiteSpace(link.Url))
                 continue;
 
-            output.Add(new DeliveryImportantLink { Title = title!, Url = url! });
+            output.Add(new DeliveryImportantLink { Title = link.Title.Trim(), Url = link.Url.Trim() });
         }
 
         return output.Count == 0 ? null : output.ToArray();

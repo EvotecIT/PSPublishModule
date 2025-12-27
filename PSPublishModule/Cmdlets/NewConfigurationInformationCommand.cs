@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
@@ -34,8 +33,10 @@ public sealed class NewConfigurationInformationCommand : PSCmdlet
     /// <summary>Scriptblock executed during staging to add custom files/folders.</summary>
     [Parameter] public ScriptBlock? IncludeCustomCode { get; set; }
 
-    /// <summary>Advanced form to pass IncludeRoot/IncludePS1/IncludeAll as a single hashtable.</summary>
-    [Parameter] public System.Collections.IDictionary? IncludeToArray { get; set; }
+    /// <summary>Advanced include rules. Accepts legacy hashtable (Key=&gt;Values) or <see cref="IncludeToArrayEntry"/>[].</summary>
+    [Parameter]
+    [IncludeToArrayEntriesTransformation]
+    public IncludeToArrayEntry[]? IncludeToArray { get; set; }
 
     /// <summary>Relative path to libraries compiled for Core (default 'Lib/Core').</summary>
     [Parameter] public string? LibrariesCore { get; set; }
@@ -67,29 +68,23 @@ public sealed class NewConfigurationInformationCommand : PSCmdlet
         WriteObject(new ConfigurationInformationSegment { Configuration = configuration });
     }
 
-    private static IncludeToArrayEntry[]? NormalizeIncludeToArray(IDictionary? input)
+    private static IncludeToArrayEntry[]? NormalizeIncludeToArray(IncludeToArrayEntry[]? input)
     {
-        if (input is null || input.Count == 0) return null;
+        if (input is null || input.Length == 0) return null;
 
         var output = new List<IncludeToArrayEntry>();
-        foreach (DictionaryEntry entry in input)
+        foreach (var entry in input)
         {
-            var key = entry.Key?.ToString();
-            if (string.IsNullOrWhiteSpace(key)) continue;
+            if (entry is null) continue;
+            if (string.IsNullOrWhiteSpace(entry.Key)) continue;
 
-            var values = entry.Value switch
-            {
-                null => Array.Empty<string>(),
-                string s => new[] { s },
-                IEnumerable e => e.Cast<object?>()
-                    .Select(v => v?.ToString())
-                    .Where(v => !string.IsNullOrWhiteSpace(v))
-                    .Select(v => v!)
-                    .ToArray(),
-                _ => new[] { entry.Value.ToString() ?? string.Empty }
-            };
+            var values = (entry.Values ?? Array.Empty<string>())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v.Trim())
+                .ToArray();
+            if (values.Length == 0) continue;
 
-            output.Add(new IncludeToArrayEntry { Key = key!, Values = values });
+            output.Add(new IncludeToArrayEntry { Key = entry.Key.Trim(), Values = values });
         }
 
         return output.Count == 0 ? null : output.ToArray();

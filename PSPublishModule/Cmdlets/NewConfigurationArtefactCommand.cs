@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -53,13 +52,15 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     [Parameter]
     public string? RequiredModulesPath { get; set; }
 
-    /// <summary>Hashtable of directories to copy to artefact (key: source, value: destination).</summary>
+    /// <summary>Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=&gt;destination) or <see cref="ArtefactCopyMapping"/>[]</summary>
     [Parameter]
-    public IDictionary? CopyDirectories { get; set; }
+    [ArtefactCopyMappingsTransformation]
+    public ArtefactCopyMapping[]? CopyDirectories { get; set; }
 
-    /// <summary>Hashtable of files to copy to artefact (key: source, value: destination).</summary>
+    /// <summary>Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source=&gt;destination) or <see cref="ArtefactCopyMapping"/>[]</summary>
     [Parameter]
-    public IDictionary? CopyFiles { get; set; }
+    [ArtefactCopyMappingsTransformation]
+    public ArtefactCopyMapping[]? CopyFiles { get; set; }
 
     /// <summary>Define if destination directories should be relative to artefact root.</summary>
     [Parameter]
@@ -125,13 +126,13 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
             artefact.Configuration.RequiredModules.ModulesPath = NormalizePath(ModulesPath);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectories)) && CopyDirectories is not null)
-            artefact.Configuration.DirectoryOutput = NormalizeDictionaryValues(CopyDirectories);
+            artefact.Configuration.DirectoryOutput = NormalizeMappings(CopyDirectories);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyDirectoriesRelative)))
             artefact.Configuration.DestinationDirectoriesRelative = CopyDirectoriesRelative.IsPresent;
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyFiles)) && CopyFiles is not null)
-            artefact.Configuration.FilesOutput = NormalizeDictionaryValues(CopyFiles);
+            artefact.Configuration.FilesOutput = NormalizeMappings(CopyFiles);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(CopyFilesRelative)))
             artefact.Configuration.DestinationFilesRelative = CopyFilesRelative.IsPresent;
@@ -178,24 +179,25 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
             : value.Replace('\\', '/');
     }
 
-    private static ArtefactCopyMapping[] NormalizeDictionaryValues(IDictionary input)
+    private static ArtefactCopyMapping[]? NormalizeMappings(ArtefactCopyMapping[]? input)
     {
+        if (input is null || input.Length == 0) return null;
+
         var mappings = new List<ArtefactCopyMapping>();
-        foreach (DictionaryEntry entry in input)
+        foreach (var entry in input)
         {
-            var source = entry.Key?.ToString();
-            var destination = entry.Value?.ToString();
-            if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination))
+            if (entry is null) continue;
+            if (string.IsNullOrWhiteSpace(entry.Source) || string.IsNullOrWhiteSpace(entry.Destination))
                 continue;
 
             mappings.Add(new ArtefactCopyMapping
             {
-                Source = NormalizePath(source!),
-                Destination = NormalizePath(destination!)
+                Source = NormalizePath(entry.Source),
+                Destination = NormalizePath(entry.Destination)
             });
         }
 
-        return mappings.ToArray();
+        return mappings.Count == 0 ? null : mappings.ToArray();
     }
 
     private string TryFormatScript(string scriptDefinition)

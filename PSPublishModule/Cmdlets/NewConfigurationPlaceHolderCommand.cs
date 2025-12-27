@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Management.Automation;
 using PowerForge;
 
@@ -11,9 +10,10 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.New, "ConfigurationPlaceHolder", DefaultParameterSetName = "FindAndReplace")]
 public sealed class NewConfigurationPlaceHolderCommand : PSCmdlet
 {
-    /// <summary>Hashtable array with custom placeholders to replace.</summary>
+    /// <summary>Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; Replace='..' }) or <see cref="PlaceHolderReplacement"/>[].</summary>
     [Parameter(Mandatory = true, ParameterSetName = "CustomReplacement")]
-    public IDictionary[]? CustomReplacement { get; set; }
+    [PlaceHolderReplacementsTransformation]
+    public PlaceHolderReplacement[]? CustomReplacement { get; set; }
 
     /// <summary>The string to find in the script or module content.</summary>
     [Parameter(Mandatory = true, ParameterSetName = "FindAndReplace")]
@@ -30,11 +30,10 @@ public sealed class NewConfigurationPlaceHolderCommand : PSCmdlet
         {
             foreach (var repl in CustomReplacement)
             {
-                var replacement = TryParseReplacement(repl);
-                if (replacement is null)
+                if (repl is null || string.IsNullOrWhiteSpace(repl.Find) || repl.Replace is null)
                     throw new PSArgumentException("CustomReplacement entries must contain two keys: Find and Replace.");
 
-                WriteObject(new ConfigurationPlaceHolderSegment { Configuration = replacement });
+                WriteObject(new ConfigurationPlaceHolderSegment { Configuration = repl });
             }
         }
 
@@ -51,14 +50,4 @@ public sealed class NewConfigurationPlaceHolderCommand : PSCmdlet
         }
     }
 
-    private static PlaceHolderReplacement? TryParseReplacement(IDictionary input)
-    {
-        if (input is null) return null;
-
-        var find = input["Find"]?.ToString();
-        var replace = input["Replace"]?.ToString();
-        if (string.IsNullOrWhiteSpace(find) || replace is null) return null;
-
-        return new PlaceHolderReplacement { Find = find!, Replace = replace };
-    }
 }
