@@ -18,12 +18,12 @@ if ($results) {
         TotalTests  = $results.TotalCount
         PassedTests = $results.PassedCount
         FailedTests = $results.FailedCount
-        Duration    = $results.Time
+        Duration    = $results.Duration
         Timestamp   = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     }
 
-    if ($results.CodeCoverage) {
-        $summary.CodeCoveragePercent = [math]::Round(($results.CodeCoverage.NumberOfCommandsExecuted / $results.CodeCoverage.NumberOfCommandsAnalyzed) * 100, 2)
+    if ($null -ne $results.CoveragePercent) {
+        $summary.CodeCoveragePercent = [math]::Round($results.CoveragePercent, 2)
     }
 
     $summary | ConvertTo-Json | Out-File -FilePath $ResultsFile -Encoding UTF8

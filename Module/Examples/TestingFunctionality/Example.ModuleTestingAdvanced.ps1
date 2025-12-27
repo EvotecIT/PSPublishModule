@@ -19,7 +19,7 @@ $testResults = Invoke-ModuleTestSuite @invokeModuleTestSuiteSplat
 # Optional: Process the results further if needed
 if ($testResults) {
     Write-Host "`nAdditional Test Information:" -ForegroundColor Cyan
-    Write-Host "  Execution Time: $($testResults.Time)" -ForegroundColor White
+    Write-Host "  Execution Time: $($testResults.Duration)" -ForegroundColor White
     Write-Host "  Test Cases: $($testResults.TotalCount)" -ForegroundColor White
 
     if ($testResults.TotalCount -gt 0) {
@@ -27,9 +27,8 @@ if ($testResults) {
         Write-Host "  Success Rate: $successRate%" -ForegroundColor White
     }
 
-    if ($testResults.CodeCoverage) {
-        $coveragePercent = [math]::Round(($testResults.CodeCoverage.NumberOfCommandsExecuted / $testResults.CodeCoverage.NumberOfCommandsAnalyzed) * 100, 2)
-        Write-Host "  Code Coverage: $coveragePercent%" -ForegroundColor White
+    if ($null -ne $testResults.CoveragePercent) {
+        Write-Host "  Code Coverage: $([math]::Round($testResults.CoveragePercent, 2))%" -ForegroundColor White
     }
 }
 

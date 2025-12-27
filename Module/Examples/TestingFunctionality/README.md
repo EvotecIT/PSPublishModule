@@ -22,7 +22,6 @@ Invoke-ModuleTestSuite -CICD -EnableCodeCoverage
 2. **Example.ModuleTestingAdvanced.ps1** - Custom options but still one command
 3. **Example.ModuleTestingCICD.ps1** - Simple CI/CD integration
 4. **Example.ModuleTestingCICDAdvanced.ps1** - CI/CD with custom result processing
-5. **Example.ModuleTestingIndividualFunctions.ps1** - Using individual functions for maximum control
 
 ## Which Example Should I Use?
 
@@ -30,7 +29,6 @@ Invoke-ModuleTestSuite -CICD -EnableCodeCoverage
 - **Need custom modules/settings**: Use `Example.ModuleTestingAdvanced.ps1`
 - **CI/CD pipeline**: Use `Example.ModuleTestingCICD.ps1`
 - **Advanced CI/CD**: Use `Example.ModuleTestingCICDAdvanced.ps1`
-- **Need maximum control**: Use `Example.ModuleTestingIndividualFunctions.ps1`
 
 ## Key Point
 
@@ -41,4 +39,4 @@ The main function `Invoke-ModuleTestSuite` does everything automatically:
 - Runs all tests
 - Shows results
 
-You only need the individual functions (`Get-ModuleInformation`, `Test-RequiredModules`, etc.) if you want to customize each step separately.
+For deeper troubleshooting, use `Get-ModuleInformation` to inspect the manifest data, then rerun `Invoke-ModuleTestSuite` with different switches/paths.
