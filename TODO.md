@@ -164,6 +164,7 @@
 - [x] Add CLI `pipeline`/`run` command + polymorphic JSON segment deserialization.
 - [x] Add CLI `plan` command to preview `pipeline` without running it.
 - [x] Migrate configuration cmdlets away from `OrderedDictionary` to typed models + enums (legacy adapters allowed).
+  - [x] Collapse `New-ConfigurationBuild` to emit one segment per config group (Build/Options/BuildLibraries/PlaceHolderOption) instead of many tiny segments.
 - [x] Move project text analysis into `PowerForge` (typed reports for encoding/line-endings/consistency; cmdlets no longer emit `OrderedDictionary`).
 - [x] Replace legacy PowerShell build pipeline scripts with C# services (build/install) and delete the scripts (`Module/Private/New-PrepareStructure.ps1`, `Start-ModuleBuilding.ps1`, `Start-*`).
 - [x] Remove remaining `Module/Private/*.ps1` helpers and port test-suite steps to C# (`PowerForge.ModuleDependencyInstaller`, `Invoke-ModuleTestSuite`).
@@ -176,6 +177,8 @@
   - [x] `Get-ModuleTestFailures` → `PowerForge.ModuleTestFailureAnalyzer` (typed `PowerForge.ModuleTestFailureAnalysis` on `-PassThru`)
   - [x] `Invoke-ModuleTestSuite` → `PowerForge` test runner service (for future CLI + VSCode usage)
   - [x] `Invoke-ModuleBuild` → `PowerForge.ModuleScaffoldService` + `PowerForge.LegacySegmentAdapter` (cmdlet only maps params and invokes the PowerForge pipeline)
+  - [x] `Invoke-DotNetReleaseBuild` → `PowerForge.DotNetReleaseBuildService` (cmdlet only handles `ShouldProcess` + optional `Register-Certificate` hook)
+  - [x] `Get-PowerShellCompatibility` → `PowerForge.PowerShellCompatibilityAnalyzer` (typed report + C# CSV export; cmdlet only handles host/progress output)
 - [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
   - [x] Include `schemaVersion` in all CLI JSON outputs.
   - [x] Serialize enums as strings in CLI JSON output.
