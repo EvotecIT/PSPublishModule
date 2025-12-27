@@ -57,8 +57,12 @@ public sealed class ModuleBuildSpec
     };
 
     /// <summary>
+    /// File names excluded from staging copy (matched by file name, not by path).
+    /// </summary>
+    public string[] ExcludeFiles { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }
 }
-

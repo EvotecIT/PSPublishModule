@@ -46,8 +46,12 @@ public sealed class ModuleBuildPipeline
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .Select(s => s.Trim()), StringComparer.OrdinalIgnoreCase);
 
+        var excludedFiles = new HashSet<string>((spec.ExcludeFiles ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim()), StringComparer.OrdinalIgnoreCase);
+
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
-        CopyDirectoryFiltered(source, staging, excluded);
+        CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
 
         var builder = new ModuleBuilder(_logger);
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };
@@ -106,7 +110,7 @@ public sealed class ModuleBuildPipeline
         return installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
-    private static void CopyDirectoryFiltered(string sourceDir, string destDir, ISet<string> excludedDirectoryNames)
+    private static void CopyDirectoryFiltered(string sourceDir, string destDir, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
     {
         var sourceFull = Path.GetFullPath(sourceDir);
         var destFull = Path.GetFullPath(destDir);
@@ -123,7 +127,9 @@ public sealed class ModuleBuildPipeline
 
             foreach (var file in Directory.EnumerateFiles(current, "*", SearchOption.TopDirectoryOnly))
             {
-                var destFile = Path.Combine(targetDir, Path.GetFileName(file));
+                var fileName = Path.GetFileName(file);
+                if (!string.IsNullOrEmpty(fileName) && excludedFileNames.Contains(fileName)) continue;
+                var destFile = Path.Combine(targetDir, fileName);
                 File.Copy(file, destFile, overwrite: true);
             }
 
