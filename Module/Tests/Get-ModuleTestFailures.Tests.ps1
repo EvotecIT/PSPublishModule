@@ -126,13 +126,46 @@
         It "Should return analysis object with PassThru" {
             $result = Get-ModuleTestFailures -TestResults $mockTestResults -PassThru
 
-            $result | Should -BeOfType [PSCustomObject]
+            $result | Should -BeOfType [PowerForge.ModuleTestFailureAnalysis]
             $result.Source | Should -Be 'PesterResults'
             $result.Timestamp | Should -BeOfType [DateTime]
         }
     }
 
     Context "File Processing" {
+        It "Should parse NUnit XML results (Pester v5 style)" {
+            $xml = @'
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results total="2" errors="0" failures="1" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2025-12-26" time="21:00:00">
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Failure" success="False" time="0.1234" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="Dummy" executed="True" result="Failure" success="False" time="0.1234" asserts="0" description="Dummy">
+        <results>
+          <test-case name="Passing.Test" time="0.0100" asserts="0" success="True" result="Success" executed="True" />
+          <test-case name="Failing.Test" time="0.0200" asserts="0" success="False" result="Failure" executed="True">
+            <failure>
+              <message>boom</message>
+              <stack-trace>at line 1</stack-trace>
+            </failure>
+          </test-case>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>
+'@
+
+            $path = Join-Path -Path $TestDrive -ChildPath 'TestResults.xml'
+            $xml | Set-Content -Path $path -Encoding UTF8
+
+            $result = Get-ModuleTestFailures -Path $path -PassThru
+            $result.TotalCount | Should -Be 2
+            $result.FailedCount | Should -Be 1
+            $result.FailedTests.Count | Should -Be 1
+            $result.FailedTests[0].Name | Should -Be 'Failing.Test'
+            $result.FailedTests[0].ErrorMessage | Should -Be 'boom'
+        }
+
         It "Should handle missing test results file gracefully" {
             $nonExistentPath = "C:\NonExistent\TestResults.xml"
             { Get-ModuleTestFailures -Path $nonExistentPath } | Should -Not -Throw

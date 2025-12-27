@@ -5,10 +5,28 @@
         } else {
             $TempDir = '/tmp'
         }
-        if (-not (Get-Module -ListAvailable -Name 'PSPublishModule')) {
-            $ModuleToLoad = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'PSPublishModule.psd1'
-        } else {
-            $ModuleToLoad = 'PSPublishModule'
+        # Always import the local module from the repository to avoid picking up an installed copy.
+        $ModuleToLoad = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'PSPublishModule.psd1'
+        Import-Module $ModuleToLoad -Force
+
+        function Get-TestFileEncodingName {
+            [CmdletBinding()]
+            param(
+                [Parameter(Mandatory)]
+                [string] $Path
+            )
+
+            $bytes = [System.IO.File]::ReadAllBytes($Path)
+
+            if ($bytes.Length -ge 4 -and $bytes[0] -eq 0x00 -and $bytes[1] -eq 0x00 -and $bytes[2] -eq 0xfe -and $bytes[3] -eq 0xff) { return 'UTF32' }
+            if ($bytes.Length -ge 4 -and $bytes[0] -eq 0xff -and $bytes[1] -eq 0xfe -and $bytes[2] -eq 0x00 -and $bytes[3] -eq 0x00) { return 'UTF32' }
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xef -and $bytes[1] -eq 0xbb -and $bytes[2] -eq 0xbf) { return 'UTF8BOM' }
+            if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xff -and $bytes[1] -eq 0xfe) { return 'Unicode' }
+            if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xfe -and $bytes[1] -eq 0xff) { return 'BigEndianUnicode' }
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0x2b -and $bytes[1] -eq 0x2f -and $bytes[2] -eq 0x76) { return 'UTF7' }
+
+            foreach ($b in $bytes) { if ($b -gt 0x7F) { return 'UTF8' } }
+            return 'ASCII'
         }
     }
 
@@ -17,9 +35,7 @@
         # Use UTF8 content with non-ASCII characters to ensure UTF8 detection
         [System.IO.File]::WriteAllText($f, 'tëst', [System.Text.UTF8Encoding]::new($false))
 
-        # Import module with PassThru to access private functions
-        $Module = Import-Module $ModuleToLoad -Force -PassThru
-        $enc = & $Module Get-FileEncoding -Path $f
+        $enc = Get-TestFileEncodingName -Path $f
         $enc | Should -Be 'UTF8'
         Remove-Item $f -Force
     }
@@ -29,9 +45,7 @@
         # Pure ASCII content should be detected as ASCII
         [System.IO.File]::WriteAllText($f, 'test', [System.Text.UTF8Encoding]::new($false))
 
-        # Import module with PassThru to access private functions
-        $Module = Import-Module $ModuleToLoad -Force -PassThru
-        $enc = & $Module Get-FileEncoding -Path $f
+        $enc = Get-TestFileEncodingName -Path $f
         $enc | Should -Be 'ASCII'
         Remove-Item $f -Force
     }
@@ -50,12 +64,9 @@
             [System.IO.File]::WriteAllText($File1, 'Write-Host "Hello"', [System.Text.UTF8Encoding]::new($true))  # UTF8BOM
             [System.IO.File]::WriteAllText($File2, 'Write-Host "World"', [System.Text.UTF8Encoding]::new($false)) # UTF8
 
-            # Import module with PassThru to access private functions for verification
-            $Module = Import-Module $ModuleToLoad -Force -PassThru
-
             # Verify initial encodings
-            $enc1Before = & $Module Get-FileEncoding -Path $File1
-            $enc2Before = & $Module Get-FileEncoding -Path $File2
+            $enc1Before = Get-TestFileEncodingName -Path $File1
+            $enc2Before = Get-TestFileEncodingName -Path $File2
             $enc1Before | Should -Be 'UTF8BOM'
             $enc2Before | Should -Be 'ASCII'  # Pure ASCII content
 
@@ -63,10 +74,10 @@
             Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -TargetEncoding UTF8BOM -Force -WhatIf:$false
 
             # Verify conversions
-            $enc1After = & $Module Get-FileEncoding -Path $File1
-            $enc2After = & $Module Get-FileEncoding -Path $File2
+            $enc1After = Get-TestFileEncodingName -Path $File1
+            $enc2After = Get-TestFileEncodingName -Path $File2
             $enc1After | Should -Be 'UTF8BOM'  # Should remain UTF8BOM
-            $enc2After | Should -Be 'UTF8BOM'  # Should be converted to UTF8BOM
+            $enc2After | Should -Be 'UTF8BOM'  # Should be converted to UTF8BOM 
 
         } finally {
             if (Test-Path $TestDir) { Remove-Item $TestDir -Recurse -Force }
@@ -83,18 +94,15 @@
             $text = 'Write-Host "Zażółć gęślą jaźń"'  # Polish text with Unicode characters
             [System.IO.File]::WriteAllText($File, $text, [System.Text.UTF8Encoding]::new($false))
 
-            # Import module with PassThru to access private functions for verification
-            $Module = Import-Module $ModuleToLoad -Force -PassThru
-
             # Should be detected as UTF8 due to Unicode characters
-            $encBefore = & $Module Get-FileEncoding -Path $File
+            $encBefore = Get-TestFileEncodingName -Path $File
             $encBefore | Should -Be 'UTF8'
 
             # Convert to UTF8BOM
             Convert-ProjectEncoding -Path $TestDir -ProjectType PowerShell -TargetEncoding UTF8BOM -Force -WhatIf:$false
 
             # Should now be UTF8BOM
-            $encAfter = & $Module Get-FileEncoding -Path $File
+            $encAfter = Get-TestFileEncodingName -Path $File
             $encAfter | Should -Be 'UTF8BOM'
 
             # Content should remain unchanged

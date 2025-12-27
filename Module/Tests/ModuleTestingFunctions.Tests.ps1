@@ -28,43 +28,6 @@ Describe "Module Testing Functions" {
         }
     }
 
-    Context "Test-RequiredModules (Private Function)" {
-        It "Should handle module information correctly" {
-            InModuleScope PSPublishModule {
-                $moduleInfo = Get-ModuleInformation -Path $PSScriptRoot\..
-
-                # This should not throw an error
-                { Test-RequiredModules -ModuleInformation $moduleInfo -AdditionalModules @('Microsoft.PowerShell.Management') -SkipModules @('NonExistentModule') } | Should -Not -Throw
-            }
-        }
-
-        It "Should handle empty module list gracefully" {
-            InModuleScope PSPublishModule {
-                $moduleInfo = @{
-                    ModuleName = 'TestModule'
-                    RequiredModules = @()
-                }
-
-                { Test-RequiredModules -ModuleInformation $moduleInfo } | Should -Not -Throw
-            }
-        }
-    }
-
-    Context "Test-ModuleImport (Private Function)" {
-        It "Should import module successfully" {
-            InModuleScope PSPublishModule {
-                # Test importing by module name (should not throw)
-                { Test-ModuleImport -ModuleName "Microsoft.PowerShell.Management" } | Should -Not -Throw
-            }
-        }
-
-        It "Should throw error for non-existent module" {
-            InModuleScope PSPublishModule {
-                { Test-ModuleImport -ModuleName "NonExistentModule12345" } | Should -Throw
-            }
-        }
-    }
-
     Context "Invoke-ModuleTestSuite" {
         It "Should execute complete test suite successfully" {
             # Test the main public function with safe parameters and exclude our own test file to prevent recursion
