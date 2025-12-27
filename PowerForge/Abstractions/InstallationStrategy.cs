@@ -6,7 +6,7 @@ namespace PowerForge;
 public enum InstallationStrategy
 {
     /// <summary>
-    /// Install strictly into the requested version. Fail if it already exists.
+    /// Install strictly into the requested version. If it already exists, overwrite its contents to match the new build.
     /// </summary>
     Exact,
     /// <summary>
