@@ -12,17 +12,19 @@
 - All non-trivial logic lives in `PowerForge` (C#) and is reusable from cmdlets + CLI + future VSCode extension.
 - `PSPublishModule` cmdlets are thin wrappers: parameter binding + `ShouldProcess` + call a service + emit typed result.
 - Keep code typed: POCOs/records + enums + typed results; avoid `Hashtable`/`OrderedDictionary`/`IDictionary` in new public surfaces (allowed only in legacy adapters).
-- Cmdlet size budget: keep each cmdlet file ~600–700 LOC max; if it grows, move logic to services and/or split into `partial` (parameters vs execution).
+- Cmdlets must be small: no orchestration, no business logic. If a cmdlet grows past “parameter mapping + ShouldProcess + call service”, move the logic into `PowerForge` and keep the cmdlet as a thin wrapper (partials for parameters vs execution are allowed).
+- `PowerForge` file size budget: if a service grows past ~600–700 LOC, split into smaller services and/or `partial` to keep it maintainable.
 - Do not expose low-level PSResourceGet cmdlets (or “PSPublishResource” cmdlets); use PSResourceGet internally from configuration/publish workflows (like we do with PowerShellGet).
-- Must remain `net472` compatible (Windows PowerShell 5.1), plus `net8.0`, and plan for `net10.0` (when available).
+- Must remain `net472` compatible (Windows PowerShell 5.1), plus `net8.0` and `net10.0`.
 - CLI must be machine-friendly (stable JSON output + exit codes + no-color mode) and AOT/trim-friendly for VSCode scenarios.
 
-**Current status (as of 2025-12-26)**
+**Current status (as of 2025-12-27)**
 - PSPublishModule is now primarily a binary module: `Module/Public` and `Module/Private` contain no shipped `.ps1` functions (bootstrap `Module/PSPublishModule.psm1` remains, plus `Module/Build/Build-Module.ps1` for compatibility).
 - `PowerForge` has typed build/install models + a staging-first build pipeline to avoid self-build file locking.
+- `PowerForge` build/export detection supports explicit binary assembly names (`ExportAssemblies`) and will not clobber existing manifest exports when binaries are missing (`DisableBinaryCmdletScan` + safe fallback).
 - `New-Configuration*` cmdlets now emit typed `PowerForge` configuration segment objects (no `OrderedDictionary`/`Hashtable` outputs); the legacy DSL parser accepts both typed segments and legacy dictionaries.
-- `PowerForge.Cli` supports `build`/`install` via `--config <json>` and initial machine output via `--output json`, plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options).
-- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (PlatyPS out-of-proc), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc), and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
+- `PowerForge.Cli` supports `build`/`install` via `--config <json>` and machine output via `--output json` (includes `schemaVersion` and string enums), plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options), and `plan` to preview the pipeline without running it.
+- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (PowerForge docs generator; no PlatyPS/HelpOut), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc), and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
 - `Invoke-ModuleBuild` routes both the simple build path and the legacy DSL (`-Settings {}` / `Build-Module {}`) through the PowerForge pipeline (C#); the legacy PowerShell `Start-*` build scripts were removed.
 - `Module/Build/Build-Module.ps1` defaults to CLI staging build; `-Legacy` runs the DSL build path (still C#) for compatibility.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
@@ -96,10 +98,10 @@
 
 **Phase 3 — Docs Engine (replace PlatyPS/HelpOut)**
 - `DocumentationEngine` service:
-  - Source: manifest + script files + XML doc from binary cmdlets.
-  - Emit: MAML XML for external help, `about_*.help.txt`, and Markdown (README/CHANGELOG synthesis if desired).
-  - Examples: support `<example>` in XML docs and comment-based help; honor ProseFirst/CodeFirst/CodeOnly modes.
-- Drop PlatyPS/HelpOut once parity is validated on PSPublishModule itself.
+  - Source (MVP): out-of-proc `Get-Command` + `Get-Help` (no PlatyPS/HelpOut) for script + cmdlet parity.
+  - Emit (MVP): Markdown help files + module page (Readme.md).
+  - Keep legacy knobs (`Tool`, `UpdateWhenNew`) as no-ops for compatibility.
+- PlatyPS/HelpOut usage removed (legacy enum values remain for compatibility).
 
 **Phase 4 — CLI + GitHub Actions + VSCode**
 - `PowerForge.Cli` tool commands (all backed by `PowerForge` services):
@@ -112,10 +114,9 @@
   - `--config <json>`: run build/publish/test from a typed JSON config (extension-friendly).
   - `--output json`: stable schema for every command (VSCode can parse results).
   - `--no-color`, `--quiet`, `--diagnostics`, consistent exit codes.
-- GitHub Actions integration (`/mnt/c/Support/Github/github-actions`):
-  - Add composite action `pspub-build`: setup-dotnet → cache → `dotnet tool restore` → `powerforge build` → `powerforge docs` → `powerforge pack`
-  - Add composite action `pspub-install` for runner import sanity.
-  - Optional publishing action `pspub-publish`.
+- GitHub Actions integration (`C:\\Support\\GitHub\\github-actions`):
+  - (done) Add composite action `.github/actions/powerforge-run` to install `PowerForge.Cli` (dotnet tool) and run `powerforge` commands.
+  - (optional) Add higher-level wrappers once the tool is published broadly (e.g., `pspub-build`, `pspub-publish`).
 
 **Phase 5 — Replace Script Functions with C#**
 - Replace incrementally while keeping cmdlet names/parameters:
@@ -130,11 +131,12 @@
 
 **Phase 6 — AOT + Trimming (CLI)**
 - Ensure `PowerForge` paths used by the CLI are trim-safe (avoid reflection-heavy/dynamic usage).
-- Add `net10.0` target (when available) and validate `dotnet publish -p:PublishAot=true` for `PowerForge.Cli`.
+- (done) Add `net10.0` target for `PowerForge`, `PSPublishModule`, and `PowerForge.Cli`.
+- Validate `dotnet publish -p:PublishAot=true` for `PowerForge.Cli`.
 - Keep PowerShell module multi-targeting (`net472` + modern) without blocking CLI AOT.
 
 **Deprecations To Remove (when parity reached)**
-- PlatyPS and HelpOut usage.
+- PlatyPS and HelpOut usage (done: replaced by PowerForge docs generator; legacy enum values remain for compatibility).
 - In-proc PSScriptAnalyzer formatting.
 - Unversioned installs to `...\\Modules\\Name\\`.
 - Scripted `Publish-Module` flow; prefer `PowerForge` publishers or out-of-proc PSResourceGet wrapper only when requested.
@@ -146,11 +148,21 @@
   - `Import-Module` sanity + minimal cmdlet invocation
 - Golden files for generated MAML/about_*.help.txt.
 
+**Real-module beta testing (start here)**
+- Status: ready to start testing builds on real modules as of 2025-12-27 (staging build + pipeline + test suite are C#-backed).
+- Safest workflow (no install): use staging + keep it for inspection.
+  - Prefer `--config <BuildSpec.json>` so you can set `ExcludeDirectories`/`ExcludeFiles` for a clean staged module.
+  - `dotnet run --project .\PowerForge.Cli\PowerForge.Cli.csproj -c Release -- build --config <BuildSpec.json> --output json`
+- For binary modules where the cmdlet assembly name differs from the module name, set `ExportAssemblies` (JSON) or `-NETBinaryModule` (PowerShell DSL) so exports are detected from the right `.dll`.
+- Legacy workflow (existing module `Build\Build-Module.ps1`): should continue to work; it routes through `Invoke-ModuleBuild` (C# pipeline).
+- When using JSON pipelines: run `powerforge plan --config <Pipeline.json> --output json` first, then `powerforge pipeline --config <Pipeline.json> --output json`.
+
 **Action Items (Checklist)**
 - [x] Add typed build/install models + staging-first build pipeline (PowerForge).
 - [x] Use staging build by default for self-build (`Module/Build/Build-Module.ps1`).
 - [x] Add CLI `--config <json>` for `build`/`install` and initial `--output json`.
 - [x] Add CLI `pipeline`/`run` command + polymorphic JSON segment deserialization.
+- [x] Add CLI `plan` command to preview `pipeline` without running it.
 - [x] Migrate configuration cmdlets away from `OrderedDictionary` to typed models + enums (legacy adapters allowed).
 - [x] Move project text analysis into `PowerForge` (typed reports for encoding/line-endings/consistency; cmdlets no longer emit `OrderedDictionary`).
 - [x] Replace legacy PowerShell build pipeline scripts with C# services (build/install) and delete the scripts (`Module/Private/New-PrepareStructure.ps1`, `Start-ModuleBuilding.ps1`, `Start-*`).
@@ -159,16 +171,20 @@
   - [x] Artefacts/pack (C# `ArtefactBuilder` + pipeline `ConfigurationArtefactSegment` support)
   - [x] Docs orchestration
   - [x] Publish orchestration
-- [ ] Refactor “fat cmdlets” into `PowerForge` services + `partial` cmdlets (enforce ~600–700 LOC budget).
+- [ ] Refactor “fat cmdlets” into `PowerForge` services and keep cmdlets truly thin (parameter binding + `ShouldProcess` + call service + typed output; `partial` is OK for parameters vs execution).
   - [x] `Remove-ProjectFiles` → `PowerForge.ProjectCleanupService` (typed spec/results; cmdlet is a thin wrapper)
   - [x] `Get-ModuleTestFailures` → `PowerForge.ModuleTestFailureAnalyzer` (typed `PowerForge.ModuleTestFailureAnalysis` on `-PassThru`)
   - [x] `Invoke-ModuleTestSuite` → `PowerForge` test runner service (for future CLI + VSCode usage)
 - [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
-- [ ] Finish docs engine MVP and remove PlatyPS/HelpOut.
-- [ ] Add GitHub composite actions calling the CLI.
-- [ ] Plan `net10.0` + AOT publish for CLI (validate trim/AOT paths).
+  - [x] Include `schemaVersion` in all CLI JSON outputs.
+  - [x] Serialize enums as strings in CLI JSON output.
+  - [x] Add `--quiet` and `--diagnostics` (keep stdout pure when `--output json` is used).
+  - [ ] Document the JSON schema (VSCode extension baseline).
+- [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
+- [x] Add GitHub composite actions calling the CLI.
+- [ ] Validate AOT publish for CLI (validate trim/AOT paths).
 - [ ] Expand tests (service unit tests + CLI integration).
-- [ ] PSResourceGet support: repository management + publish/find logic (internal; no standalone cmdlets).
+- [x] Repository publishing: PSResourceGet + PowerShellGet support (tool selection + repo registration + publish/find/version check logic; internal; no standalone cmdlets).
 
 **Sample GitHub Workflow (sketch)**
 ```
