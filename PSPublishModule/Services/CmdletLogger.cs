@@ -1,3 +1,4 @@
+using System;
 using System.Management.Automation;
 using PowerForge;
 
@@ -22,7 +23,22 @@ internal sealed class CmdletLogger : ILogger
         if (_warningsAsVerbose) _cmdlet.WriteVerbose(message);
         else _cmdlet.WriteWarning(message);
     }
-    public void Error(string message) => _cmdlet.WriteVerbose(message);
+    public void Error(string message)
+    {
+        try
+        {
+            _cmdlet.WriteError(new ErrorRecord(
+                exception: new InvalidOperationException(message),
+                errorId: "PowerForgeError",
+                errorCategory: ErrorCategory.NotSpecified,
+                targetObject: null));
+        }
+        catch
+        {
+            // Best effort fallbacks; never throw from logging.
+            try { _cmdlet.WriteWarning(message); } catch { }
+        }
+    }
     public void Verbose(string message)
     {
         if (!IsVerbose) return;
