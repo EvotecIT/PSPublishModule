@@ -26,6 +26,12 @@ public sealed class DocumentationBuildResult
     /// <summary>Number of markdown files found under <see cref="DocsPath"/> after generation.</summary>
     public int MarkdownFiles { get; }
 
+    /// <summary>
+    /// Full path to the generated external help MAML XML file (e.g. <c>en-US\ModuleName-help.xml</c>).
+    /// Empty when external help was not generated.
+    /// </summary>
+    public string ExternalHelpFilePath { get; }
+
     /// <summary>Optional error message when <see cref="Succeeded"/> is false.</summary>
     public string? ErrorMessage { get; }
 
@@ -40,6 +46,7 @@ public sealed class DocumentationBuildResult
         bool succeeded,
         int exitCode,
         int markdownFiles,
+        string externalHelpFilePath,
         string? errorMessage)
     {
         Enabled = enabled;
@@ -49,7 +56,7 @@ public sealed class DocumentationBuildResult
         Succeeded = succeeded;
         ExitCode = exitCode;
         MarkdownFiles = markdownFiles;
+        ExternalHelpFilePath = externalHelpFilePath ?? string.Empty;
         ErrorMessage = errorMessage;
     }
 }
-

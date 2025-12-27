@@ -52,4 +52,19 @@ public sealed class BuildDocumentationConfiguration
 
     /// <summary>Documentation tool selection.</summary>
     public DocumentationTool Tool { get; set; } = DocumentationTool.PowerForge;
+
+    /// <summary>
+    /// When enabled, generates external help in MAML XML format (for Get-Help) under a culture folder (default: <c>en-US</c>).
+    /// </summary>
+    public bool GenerateExternalHelp { get; set; } = true;
+
+    /// <summary>
+    /// Culture folder name used for external help output (default: <c>en-US</c>).
+    /// </summary>
+    public string ExternalHelpCulture { get; set; } = "en-US";
+
+    /// <summary>
+    /// Optional external help file name override. When empty, defaults to <c>&lt;ModuleName&gt;-help.xml</c>.
+    /// </summary>
+    public string ExternalHelpFileName { get; set; } = string.Empty;
 }
