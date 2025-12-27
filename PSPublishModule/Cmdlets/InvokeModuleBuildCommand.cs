@@ -1,12 +1,9 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Management.Automation;
-using System.Text;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -172,7 +169,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         var sw = Stopwatch.StartNew();
 
         var moduleName = ParameterSetName == ParameterSetConfiguration
-            ? ResolveModuleNameFromConfiguration(Configuration)
+            ? LegacySegmentAdapter.ResolveModuleNameFromLegacyConfiguration(Configuration)
             : ModuleName;
 
         if (string.IsNullOrWhiteSpace(moduleName))
@@ -188,7 +185,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 return;
             }
 
-            EnsureModuleScaffold(basePathForScaffold, projectRoot, moduleName);
+            var scaffoldLogger = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+            var scaffolder = new ModuleScaffoldService(scaffoldLogger);
+            scaffolder.EnsureScaffold(new ModuleScaffoldSpec { ProjectRoot = projectRoot, ModuleName = moduleName });
         }
 
         var useLegacy =
@@ -210,7 +209,14 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     : LegacySegmentAdapter.CollectFromSettings(Settings))
                 : Array.Empty<IConfigurationSegment>();
 
-            var baseVersion = ResolveModuleVersion(projectRoot, moduleName);
+            var baseVersion = "1.0.0";
+            var psd1 = System.IO.Path.Combine(projectRoot, $"{moduleName}.psd1");
+            if (File.Exists(psd1) &&
+                ManifestEditor.TryGetTopLevelString(psd1, "ModuleVersion", out var version) &&
+                !string.IsNullOrWhiteSpace(version))
+            {
+                baseVersion = version!;
+            }
             var frameworks = useLegacy && !MyInvocation.BoundParameters.ContainsKey(nameof(DotNetFramework))
                 ? Array.Empty<string>()
                 : DotNetFramework;
@@ -293,126 +299,6 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
 
         return (rootToUse, null);
-    }
-
-    private static string ResolveModuleNameFromConfiguration(IDictionary configuration)
-    {
-        if (configuration is null) return string.Empty;
-
-        object? info = null;
-        if (configuration.Contains("Information"))
-        {
-            info = configuration["Information"];
-        }
-
-        var moduleName = TryGetValue(info, "ModuleName");
-        if (string.IsNullOrWhiteSpace(moduleName))
-            throw new PSArgumentException("Configuration.Information.ModuleName is required.");
-
-        return moduleName;
-    }
-
-    private static string? TryGetValue(object? obj, string key)
-    {
-        if (obj is null) return null;
-
-        if (obj is IDictionary d && d.Contains(key))
-        {
-            try { return d[key]?.ToString(); } catch { return null; }
-        }
-
-        if (obj is PSObject pso)
-        {
-            var prop = pso.Properties[key];
-            return prop?.Value?.ToString();
-        }
-
-        var t = obj.GetType();
-        var pi = t.GetProperty(key);
-        return pi?.GetValue(obj)?.ToString();
-    }
-
-    private void EnsureModuleScaffold(string basePath, string fullProjectPath, string moduleName)
-    {
-        if (Directory.Exists(fullProjectPath))
-        {
-            WriteHostMessage($"[i] Module {moduleName} ({fullProjectPath}) already exists. Skipping initial steps", ConsoleColor.DarkGray);
-            return;
-        }
-
-        WriteHostMessage($"[i] Preparing module structure for {moduleName} in {basePath}", ConsoleColor.DarkGray);
-
-        Directory.CreateDirectory(fullProjectPath);
-        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build" })
-        {
-            Directory.CreateDirectory(System.IO.Path.Combine(fullProjectPath, folder));
-        }
-
-        var dataDir = ResolveDataDirectory();
-        var filesToCopy = new (string Source, string Dest, bool Patch)[]
-        {
-            (System.IO.Path.Combine(dataDir, "Example-Gitignore.txt"), System.IO.Path.Combine(fullProjectPath, ".gitignore"), false),
-            (System.IO.Path.Combine(dataDir, "Example-CHANGELOG.MD"), System.IO.Path.Combine(fullProjectPath, "CHANGELOG.MD"), false),
-            (System.IO.Path.Combine(dataDir, "Example-README.MD"), System.IO.Path.Combine(fullProjectPath, "README.MD"), false),
-            (System.IO.Path.Combine(dataDir, "Example-LicenseMIT.txt"), System.IO.Path.Combine(fullProjectPath, "LICENSE"), false),
-            (System.IO.Path.Combine(dataDir, "Example-ModuleBuilder.txt"), System.IO.Path.Combine(fullProjectPath, "Build", "Build-Module.ps1"), true),
-            (System.IO.Path.Combine(dataDir, "Example-ModulePSM1.txt"), System.IO.Path.Combine(fullProjectPath, $"{moduleName}.psm1"), false),
-            (System.IO.Path.Combine(dataDir, "Example-ModulePSD1.txt"), System.IO.Path.Combine(fullProjectPath, $"{moduleName}.psd1"), true),
-        };
-
-        var guid = Guid.NewGuid().ToString();
-
-        foreach (var f in filesToCopy)
-        {
-            if (File.Exists(f.Dest)) continue;
-
-            WriteHostMessage($"   [+] Copying '{System.IO.Path.GetFileName(f.Dest)}' file ({f.Source})", ConsoleColor.DarkGray);
-            File.Copy(f.Source, f.Dest, overwrite: false);
-
-            if (f.Patch)
-            {
-                PatchInitialModuleTemplate(f.Dest, moduleName, guid);
-            }
-        }
-
-        WriteHostMessage($"[i] Preparing module structure for {moduleName} in {basePath}. Completed.", ConsoleColor.DarkGray);
-    }
-
-    private string ResolveDataDirectory()
-    {
-        var moduleBase = MyInvocation.MyCommand?.Module?.ModuleBase;
-        if (!string.IsNullOrWhiteSpace(moduleBase))
-        {
-            var direct = System.IO.Path.Combine(moduleBase, "Data");
-            if (Directory.Exists(direct)) return direct;
-
-            var parent = System.IO.Path.GetFullPath(System.IO.Path.Combine(moduleBase, "..", "Data"));
-            if (Directory.Exists(parent)) return parent;
-        }
-
-        var fallback = System.IO.Path.Combine(SessionState.Path.CurrentFileSystemLocation.Path, "Data");
-        if (Directory.Exists(fallback)) return fallback;
-
-        throw new DirectoryNotFoundException("Module Data directory not found (expected 'Data' next to the module).");
-    }
-
-    private static void PatchInitialModuleTemplate(string filePath, string moduleName, string guid)
-    {
-        var content = File.ReadAllText(filePath);
-        content = content.Replace("`$GUID", guid).Replace("`$ModuleName", moduleName);
-        File.WriteAllText(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-    }
-
-    private static string ResolveModuleVersion(string projectRoot, string moduleName)
-    {
-        var psd1 = System.IO.Path.Combine(projectRoot, $"{moduleName}.psd1");
-        if (File.Exists(psd1) &&
-            ManifestEditor.TryGetTopLevelString(psd1, "ModuleVersion", out var version) &&
-            !string.IsNullOrWhiteSpace(version))
-        {
-            return version!;
-        }
-        return "1.0.0";
     }
 
     private sealed class HostLogger : ILogger

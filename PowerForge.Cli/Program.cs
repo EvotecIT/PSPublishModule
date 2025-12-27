@@ -3,12 +3,26 @@ using PowerForge.Cli;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-var cli = ParseCliOptions(args);
+const int OutputSchemaVersion = 1;
+
+var cli = ParseCliOptions(args, out var cliParseError);
+if (!string.IsNullOrWhiteSpace(cliParseError))
+{
+    if (IsJsonOutput(args ?? Array.Empty<string>()))
+    {
+        WriteJson(new { schemaVersion = OutputSchemaVersion, command = "cli", success = false, exitCode = 2, error = cliParseError });
+        return 2;
+    }
+
+    Console.WriteLine(cliParseError);
+    PrintHelp();
+    return 2;
+}
+
 var filteredArgs = StripGlobalArgs(args);
 
 ILogger logger = CreateTextLogger(cli);
 var forge = new PowerForgeFacade(logger);
-const int OutputSchemaVersion = 1;
 
 if (filteredArgs.Length == 0 || filteredArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || filteredArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
 {
@@ -644,21 +658,26 @@ Usage:
   --diagnostics                    Include logs in JSON output
   --quiet, -q                      Suppress non-essential output
   --no-color                       Disable ANSI colors
-  --output json                    Emit machine-readable JSON output     
+  --view auto|standard|ansi        Console rendering mode (default: auto)
+  --output json                    Emit machine-readable JSON output      
 ");
 }
 
-static CliOptions ParseCliOptions(string[] args)
+static CliOptions ParseCliOptions(string[]? args, out string? error)
 {
-    if (args is null) return new CliOptions(verbose: false, quiet: false, diagnostics: false, noColor: false);
+    error = null;
+    if (args is null) return new CliOptions(verbose: false, quiet: false, diagnostics: false, noColor: false, view: ConsoleView.Auto);
 
     bool verbose = false;
     bool quiet = false;
     bool diagnostics = false;
     bool noColor = false;
+    ConsoleView view = ConsoleView.Auto;
+    bool viewExplicit = false;
 
-    foreach (var a in args)
+    for (int i = 0; i < args.Length; i++)
     {
+        var a = args[i];
         if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
         {
             verbose = true;
@@ -682,9 +701,36 @@ static CliOptions ParseCliOptions(string[] args)
             noColor = true;
             continue;
         }
+
+        if (a.Equals("--view", StringComparison.OrdinalIgnoreCase))
+        {
+            viewExplicit = true;
+            if (++i >= args.Length)
+            {
+                error = "Missing value for --view. Expected: auto|standard|ansi.";
+                return new CliOptions(verbose, quiet, diagnostics, noColor, view);
+            }
+
+            if (!TryParseConsoleView(args[i], out view))
+            {
+                error = $"Invalid value for --view: '{args[i]}'. Expected: auto|standard|ansi.";
+                return new CliOptions(verbose, quiet, diagnostics, noColor, view);
+            }
+
+            continue;
+        }
     }
 
-    return new CliOptions(verbose, quiet, diagnostics, noColor);
+    if (!viewExplicit)
+    {
+        var envView = Environment.GetEnvironmentVariable("POWERFORGE_VIEW");
+        if (!string.IsNullOrWhiteSpace(envView) && TryParseConsoleView(envView, out var parsed))
+        {
+            view = parsed;
+        }
+    }
+
+    return new CliOptions(verbose, quiet, diagnostics, noColor, view);
 }
 
 static string[] StripGlobalArgs(string[] args)
@@ -692,9 +738,17 @@ static string[] StripGlobalArgs(string[] args)
     if (args is null || args.Length == 0) return Array.Empty<string>();
 
     var list = new List<string>(args.Length);
-    foreach (var a in args)
+    for (int i = 0; i < args.Length; i++)
     {
+        var a = args[i];
         if (IsGlobalArg(a)) continue;
+
+        if (a.Equals("--view", StringComparison.OrdinalIgnoreCase))
+        {
+            i++; // skip value
+            continue;
+        }
+
         list.Add(a);
     }
     return list.ToArray();
@@ -743,9 +797,49 @@ static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Fu
     if (outputJson || cli.Quiet || cli.NoColor)
         return action();
 
+    var view = ResolveConsoleView(cli.View);
+    if (view != ConsoleView.Standard)
+        return action();
+
+    if (ConsoleEnvironment.IsCI || !Spectre.Console.AnsiConsole.Profile.Capabilities.Interactive)
+        return action();
+
     T? result = default;
     Spectre.Console.AnsiConsole.Status().Start(statusText, _ => { result = action(); });
     return result!;
+}
+
+static ConsoleView ResolveConsoleView(ConsoleView requested)
+{
+    if (requested != ConsoleView.Auto) return requested;
+
+    var interactive = Spectre.Console.AnsiConsole.Profile.Capabilities.Interactive
+        && !ConsoleEnvironment.IsCI;
+
+    return interactive ? ConsoleView.Standard : ConsoleView.Ansi;
+}
+
+static bool TryParseConsoleView(string? value, out ConsoleView view)
+{
+    view = ConsoleView.Auto;
+    if (string.IsNullOrWhiteSpace(value)) return false;
+
+    switch (value.Trim().ToLowerInvariant())
+    {
+        case "auto":
+            view = ConsoleView.Auto;
+            return true;
+        case "standard":
+        case "interactive":
+            view = ConsoleView.Standard;
+            return true;
+        case "ansi":
+        case "plain":
+            view = ConsoleView.Ansi;
+            return true;
+        default:
+            return false;
+    }
 }
 
 static (string Name, string Source, string? Staging, string? Csproj, string Version, string Configuration, string[] Frameworks, string? Author, string? CompanyName, string? Description, string[] Tags, string? IconUri, string? ProjectUri)? ParseBuildArgs(string[] argv)
@@ -1302,13 +1396,15 @@ sealed class CliOptions
     public bool Quiet { get; }
     public bool Diagnostics { get; }
     public bool NoColor { get; }
+    public ConsoleView View { get; }
 
-    public CliOptions(bool verbose, bool quiet, bool diagnostics, bool noColor)
+    public CliOptions(bool verbose, bool quiet, bool diagnostics, bool noColor, ConsoleView view)
     {
         Verbose = verbose;
         Quiet = quiet;
         Diagnostics = diagnostics;
         NoColor = noColor;
+        View = view;
     }
 }
 

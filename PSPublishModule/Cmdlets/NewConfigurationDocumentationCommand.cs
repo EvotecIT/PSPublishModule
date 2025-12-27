@@ -18,6 +18,15 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Legacy compatibility switch; ignored by the PowerForge generator.</summary>
     [Parameter] public SwitchParameter UpdateWhenNew { get; set; }
 
+    /// <summary>Disable external help (MAML) generation.</summary>
+    [Parameter] public SwitchParameter SkipExternalHelp { get; set; }
+
+    /// <summary>Culture folder for generated external help (default: en-US).</summary>
+    [Parameter] public string ExternalHelpCulture { get; set; } = "en-US";
+
+    /// <summary>Optional file name override for external help (default: &lt;ModuleName&gt;-help.xml).</summary>
+    [Parameter] public string ExternalHelpFileName { get; set; } = string.Empty;
+
     /// <summary>Path to the folder where documentation will be created.</summary>
     [Parameter(Mandatory = true)] public string Path { get; set; } = string.Empty;
 
@@ -39,7 +48,15 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
             }
         });
 
-        if (Enable.IsPresent || StartClean.IsPresent || UpdateWhenNew.IsPresent)
+        var emitBuildSegment =
+            Enable.IsPresent ||
+            StartClean.IsPresent ||
+            UpdateWhenNew.IsPresent ||
+            SkipExternalHelp.IsPresent ||
+            MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpCulture)) ||
+            MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpFileName));
+
+        if (emitBuildSegment)
         {
             WriteObject(new ConfigurationBuildDocumentationSegment
             {
@@ -48,7 +65,10 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
                     Enable = Enable.IsPresent,
                     StartClean = StartClean.IsPresent,
                     UpdateWhenNew = UpdateWhenNew.IsPresent,
-                    Tool = PowerForge.DocumentationTool.PowerForge
+                    Tool = PowerForge.DocumentationTool.PowerForge,
+                    GenerateExternalHelp = !SkipExternalHelp.IsPresent,
+                    ExternalHelpCulture = ExternalHelpCulture,
+                    ExternalHelpFileName = ExternalHelpFileName
                 }
             });
         }
