@@ -8,17 +8,17 @@ schema: 2.0.0
 # New-ConfigurationDocumentation
 
 ## SYNOPSIS
-Enables or disables creation of documentation from the module using PlatyPS
+Enables or disables creation of documentation from the module using PowerForge
 
 ## SYNTAX
 
 ```
 New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [-Path] <String> [-PathReadme] <String>
- [[-Tool] <String>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+ [-ProgressAction <ActionPreference>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Enables or disables creation of documentation from the module using PlatyPS
+Enables or disables creation of documentation from the module using PowerForge
 
 ## EXAMPLES
 
@@ -67,7 +67,7 @@ Accept wildcard characters: False
 ```
 
 ### -UpdateWhenNew
-Updates the documentation right after running \`New-MarkdownHelp\` due to platyPS bugs.
+Legacy compatibility switch; ignored by the PowerForge generator.
 
 ```yaml
 Type: SwitchParameter
@@ -107,23 +107,6 @@ Aliases:
 Required: True
 Position: 2
 Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Tool
-Tool to use for documentation generation.
-By default \`HelpOut\` is used.
-Available options are \`PlatyPS\` and \`HelpOut\`.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
-Default value: PlatyPS
 Accept pipeline input: False
 Accept wildcard characters: False
 ```

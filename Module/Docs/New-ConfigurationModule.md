@@ -25,7 +25,6 @@ Provides a way to configure Required Modules or External Modules that will be us
 ### EXAMPLE 1
 ```
 # Add standard module dependencies (directly, but can be used with loop as well)
-New-ConfigurationModule -Type RequiredModule -Name 'platyPS' -Guid 'Auto' -Version 'Latest'
 New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
 New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
 ```

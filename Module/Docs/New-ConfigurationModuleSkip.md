@@ -27,7 +27,7 @@ This is useful for commands we know are not available on all systems, or we get 
 
 ### EXAMPLE 1
 ```
-New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module' -IgnoreModuleName 'platyPS'
+New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module'
 ```
 
 ## PARAMETERS
