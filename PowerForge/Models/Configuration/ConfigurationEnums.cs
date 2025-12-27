@@ -12,6 +12,34 @@ public enum PublishDestination
 }
 
 /// <summary>
+/// Publishing tool/provider used when publishing to a PowerShell repository.
+/// </summary>
+public enum PublishTool
+{
+    /// <summary>
+    /// Choose the best available tool at runtime (prefer PSResourceGet, fall back to PowerShellGet).
+    /// </summary>
+    Auto,
+    /// <summary>Use Microsoft.PowerShell.PSResourceGet.</summary>
+    PSResourceGet,
+    /// <summary>Use PowerShellGet (Publish-Module/Register-PSRepository).</summary>
+    PowerShellGet
+}
+
+/// <summary>
+/// API version for NuGet-compatible repository endpoints (v2/v3).
+/// </summary>
+public enum RepositoryApiVersion
+{
+    /// <summary>Automatic/default behavior (omit version unless required).</summary>
+    Auto,
+    /// <summary>NuGet v2 API.</summary>
+    V2,
+    /// <summary>NuGet v3 API.</summary>
+    V3
+}
+
+/// <summary>
 /// Dependency kind used by module dependency configuration segments.
 /// </summary>
 public enum ModuleDependencyKind

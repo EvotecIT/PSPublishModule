@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Configuration segment that describes publishing behavior (PSGallery/GitHub).
+/// Configuration segment that describes publishing behavior (PowerShell repositories/GitHub).
 /// </summary>
 public sealed class ConfigurationPublishSegment : IConfigurationSegment
 {
@@ -22,6 +22,11 @@ public sealed class PublishConfiguration
     /// <summary>Publish destination type.</summary>
     public PublishDestination Destination { get; set; } = PublishDestination.PowerShellGallery;
 
+    /// <summary>
+    /// Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.
+    /// </summary>
+    public PublishTool Tool { get; set; } = PublishTool.Auto;
+
     /// <summary>API key used for publishing.</summary>
     public string ApiKey { get; set; } = string.Empty;
 
@@ -37,6 +42,12 @@ public sealed class PublishConfiguration
     /// <summary>Repository name override (GitHub org/repo or PowerShell repository name).</summary>
     public string? RepositoryName { get; set; }
 
+    /// <summary>
+    /// Optional repository definition and registration settings (private feeds, custom URLs, credentials).
+    /// When <see cref="PublishRepositoryConfiguration.Name"/> is empty, <see cref="RepositoryName"/> is used.
+    /// </summary>
+    public PublishRepositoryConfiguration? Repository { get; set; }
+
     /// <summary>Allow publishing lower versions (legacy behavior).</summary>
     public bool Force { get; set; }
 
@@ -50,3 +61,58 @@ public sealed class PublishConfiguration
     public bool Verbose { get; set; }
 }
 
+/// <summary>
+/// Repository definition used for publishing and querying versions.
+/// </summary>
+public sealed class PublishRepositoryConfiguration
+{
+    /// <summary>Optional repository name (overrides <see cref="PublishConfiguration.RepositoryName"/> when provided).</summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Repository base URI. When set, this is used as both source and publish URI unless overridden.
+    /// </summary>
+    public string? Uri { get; set; }
+
+    /// <summary>
+    /// Repository source URI (PowerShellGet Register-PSRepository -SourceLocation).
+    /// When not set, <see cref="Uri"/> is used.
+    /// </summary>
+    public string? SourceUri { get; set; }
+
+    /// <summary>
+    /// Repository publish URI (PowerShellGet Register-PSRepository -PublishLocation).
+    /// When not set, <see cref="Uri"/> is used.
+    /// </summary>
+    public string? PublishUri { get; set; }
+
+    /// <summary>
+    /// When true, marks the repository as trusted (avoids prompts). Default: true.
+    /// </summary>
+    public bool Trusted { get; set; } = true;
+
+    /// <summary>
+    /// Repository priority for PSResourceGet (lower is higher priority).
+    /// </summary>
+    public int? Priority { get; set; }
+
+    /// <summary>
+    /// API version for PSResourceGet repository registration (v2/v3). Default: <see cref="RepositoryApiVersion.Auto"/>.
+    /// </summary>
+    public RepositoryApiVersion ApiVersion { get; set; } = RepositoryApiVersion.Auto;
+
+    /// <summary>
+    /// When true, ensures the repository is registered/updated before publishing. Default: true when any URI is set.
+    /// </summary>
+    public bool EnsureRegistered { get; set; } = true;
+
+    /// <summary>
+    /// When true, unregister the repository after publishing if it was created by this run.
+    /// </summary>
+    public bool UnregisterAfterUse { get; set; }
+
+    /// <summary>
+    /// Optional credential used for repository operations (Find/Publish).
+    /// </summary>
+    public RepositoryCredential? Credential { get; set; }
+}
