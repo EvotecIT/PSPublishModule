@@ -1,8 +1,4 @@
-﻿# please notice I may be using PSM1 here (not always), as the module may not be built or PSD1 may be broken
-# since PSD1 is not required for proper rebuilding, we use PSM1 for this module only
-# most modules should be run via PSD1 or by it's name (which in the background uses PD1)
-
-# This version is for local building
+﻿# This version is for local building
 # We need to remove library before we start, as it may contain old files, which will be in use once PSD1 loads
 # This is only required for PSPublisModule, as it's the only module that is being built by itself
 Remove-Item -Path "C:\Support\GitHub\PSPublishModule\Module\Lib" -Recurse -Force -ErrorAction SilentlyContinue
@@ -29,7 +25,6 @@ Build-Module -ModuleName 'PSPublishModule' {
     New-ConfigurationManifest @Manifest
 
     # Add standard module dependencies (directly, but can be used with loop as well)
-    # New-ConfigurationModule -Type RequiredModule -Name 'platyPS', 'HelpOut' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
     New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version Auto -Guid Auto
@@ -45,7 +40,7 @@ Build-Module -ModuleName 'PSPublishModule' {
     # Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
     New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
 
-    New-ConfigurationModuleSkip -IgnoreModuleName 'PKI', 'OpenAuthenticode', 'platyPS', 'HelpOut' -IgnoreFunctionName @(
+    New-ConfigurationModuleSkip -IgnoreModuleName 'PKI', 'OpenAuthenticode' -IgnoreFunctionName @(
         # ignore functions from OpenAuthenticode module when used during linux/macos build
         'Set-OpenAuthenticodeSignature'
         'Get-OpenAuthenticodeSignature'
@@ -54,9 +49,6 @@ Build-Module -ModuleName 'PSPublishModule' {
         'Set-AuthenticodeSignature'
         # ignore functions from PKI module when used during linux/macos build
         #'Import-PfxCertificate'
-        'Save-MarkdownHelp'
-        'New-MarkdownHelp'
-        'Update-MarkdownHelpModule'
         # seems to be windows only
         'New-FileCatalog'
     )
