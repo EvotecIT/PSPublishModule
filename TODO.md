@@ -107,6 +107,7 @@
   - `powerforge install`: versioned install from staging.
   - `powerforge docs`: generate external help and docs.
   - `powerforge pack`: create zip/nupkg artifacts for release.
+  - `powerforge test`: run out-of-proc Pester test suite (typed results + exit codes).
   - `powerforge publish`: publish to PSGallery/private feeds (NuGet APIs) or via a PSResourceGet wrapper.
   - `--config <json>`: run build/publish/test from a typed JSON config (extension-friendly).
   - `--output json`: stable schema for every command (VSCode can parse results).
@@ -159,6 +160,9 @@
   - [x] Docs orchestration
   - [x] Publish orchestration
 - [ ] Refactor “fat cmdlets” into `PowerForge` services + `partial` cmdlets (enforce ~600–700 LOC budget).
+  - [x] `Remove-ProjectFiles` → `PowerForge.ProjectCleanupService` (typed spec/results; cmdlet is a thin wrapper)
+  - [x] `Get-ModuleTestFailures` → `PowerForge.ModuleTestFailureAnalyzer` (typed `PowerForge.ModuleTestFailureAnalysis` on `-PassThru`)
+  - [x] `Invoke-ModuleTestSuite` → `PowerForge` test runner service (for future CLI + VSCode usage)
 - [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
 - [ ] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [ ] Add GitHub composite actions calling the CLI.
