@@ -37,7 +37,7 @@ Returns a list of functions used by the script.
 ```
 $sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }
 Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'
-Returns a hashtable with a summary and inlineable helper definitions sourced from approved modules.
+Returns a typed report (PowerForge.MissingFunctionsReport) with a summary and inlineable helper definitions sourced from approved modules.
 ```
 
 ## PARAMETERS
@@ -105,7 +105,7 @@ Accept wildcard characters: False
 ```
 
 ### -SummaryWithCommands
-Return a hashtable with Summary (names), SummaryFiltered (objects), and Functions (inlineable text).
+Return a typed report with Summary (objects), SummaryFiltered (objects), and Functions (inlineable text).
 
 ```yaml
 Type: SwitchParameter
@@ -172,6 +172,6 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## OUTPUTS
 
 ## NOTES
-Use with Initialize-PortableScript to emit a self-contained version of a script.
+Use this cmdlet to discover dependencies and build self-contained scripts.
 
 ## RELATED LINKS

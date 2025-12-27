@@ -85,7 +85,7 @@ Accept wildcard characters: False
 ```
 
 ### -TestResults
-Pester test results object from Invoke-Pester or Invoke-ModuleTestSuite.
+Pester test results object from Invoke-Pester, a PowerForge ModuleTestSuiteResult from Invoke-ModuleTestSuite, or a PowerForge ModuleTestFailureAnalysis.        
 
 ```yaml
 Type: Object
@@ -95,7 +95,7 @@ Aliases:
 Required: True
 Position: Named
 Default value: None
-Accept pipeline input: False
+Accept pipeline input: True
 Accept wildcard characters: False
 ```
 
@@ -184,6 +184,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## INPUTS
 
 ## OUTPUTS
+- `PowerForge.ModuleTestFailureAnalysis` when `-PassThru` is used.
+- `String` when `-OutputFormat Json` is used.
 
 ## NOTES
 This function integrates with the PSPublishModule testing framework and supports

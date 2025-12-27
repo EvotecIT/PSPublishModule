@@ -55,7 +55,7 @@ Invoke-ModuleTestSuite -CICD -EnableCodeCoverage
 ```
 # Get test results for further processing
 $results = Invoke-ModuleTestSuite -PassThru
-Write-Host "Test duration: $($results.Time)"
+Write-Host "Test duration: $($results.Duration)"
 ```
 
 ## PARAMETERS
