@@ -3,22 +3,25 @@ using PowerForge.Cli;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-var logger = new ConsoleLogger { IsVerbose = args.Contains("-Verbose", StringComparer.OrdinalIgnoreCase) };
+var cli = ParseCliOptions(args);
+var filteredArgs = StripGlobalArgs(args);
+
+ILogger logger = CreateTextLogger(cli);
 var forge = new PowerForgeFacade(logger);
 const int OutputSchemaVersion = 1;
 
-if (args.Length == 0 || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || args[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
+if (filteredArgs.Length == 0 || filteredArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || filteredArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
 {
     PrintHelp();
     return 0;
 }
 
-var cmd = args[0].ToLowerInvariant();
+var cmd = filteredArgs[0].ToLowerInvariant();
 switch (cmd)
 {
     case "build":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 
@@ -30,7 +33,17 @@ switch (cmd)
         else
         {
             var parsed = ParseBuildArgs(argv);
-            if (parsed is null) { PrintHelp(); return 2; }
+            if (parsed is null)
+            {
+                if (outputJson)
+                {
+                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 2, error = "Invalid arguments." });
+                    return 2;
+                }
+
+                PrintHelp();
+                return 2;
+            }
             var p = parsed.Value;
             spec = new ModuleBuildSpec
             {
@@ -52,9 +65,9 @@ switch (cmd)
 
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var pipeline = new ModuleBuildPipeline(cmdLogger);
-            var res = pipeline.BuildToStaging(spec);
+            var res = RunWithStatus(outputJson, cli, $"Building {spec.Name} {spec.Version}", () => pipeline.BuildToStaging(spec));
 
             if (outputJson)
             {
@@ -66,7 +79,7 @@ switch (cmd)
                     exitCode = 0,
                     spec,
                     result = res,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    logs = logBuffer?.Entries
                 });
                 return 0;
             }
@@ -88,11 +101,21 @@ switch (cmd)
     }
     case "normalize":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
-
+ 
         var targets = ParseTargets(argv);
-        if (targets.Length == 0) { Console.WriteLine("Usage: powerforge normalize <files...>"); return 2; }
+        if (targets.Length == 0)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "normalize", success = false, exitCode = 2, error = "At least one file is required." });
+                return 2;
+            }
+
+            Console.WriteLine("Usage: powerforge normalize <files...>");
+            return 2;
+        }
 
         if (outputJson)
         {
@@ -112,18 +135,28 @@ switch (cmd)
     }
     case "format":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
 
         var targets = ParseTargets(argv);
-        if (targets.Length == 0) { Console.WriteLine("Usage: powerforge format <files...>"); return 2; }
+        if (targets.Length == 0)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "format", success = false, exitCode = 2, error = "At least one file is required." });
+                return 2;
+            }
+
+            Console.WriteLine("Usage: powerforge format <files...>");
+            return 2;
+        }
 
         if (outputJson)
         {
-            var cmdLogger = new BufferingLogger { IsVerbose = logger.IsVerbose };
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var jsonForge = new PowerForgeFacade(cmdLogger);
             var jsonResults = jsonForge.Format(targets);
-            WriteJson(new { schemaVersion = OutputSchemaVersion, command = "format", success = true, exitCode = 0, results = jsonResults, logs = cmdLogger.Entries });
+            WriteJson(new { schemaVersion = OutputSchemaVersion, command = "format", success = true, exitCode = 0, results = jsonResults, logs = logBuffer?.Entries });
             return 0;
         }
 
@@ -137,7 +170,7 @@ switch (cmd)
     }
     case "install":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 
@@ -149,7 +182,17 @@ switch (cmd)
         else
         {
             var parsed = ParseInstallArgs(argv);
-            if (parsed is null) { PrintHelp(); return 2; }
+            if (parsed is null)
+            {
+                if (outputJson)
+                {
+                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "install", success = false, exitCode = 2, error = "Invalid arguments." });
+                    return 2;
+                }
+
+                PrintHelp();
+                return 2;
+            }
             var p = parsed.Value;
             spec = new ModuleInstallSpec
             {
@@ -164,9 +207,9 @@ switch (cmd)
 
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var pipeline = new ModuleBuildPipeline(cmdLogger);
-            var res = pipeline.InstallFromStaging(spec);
+            var res = RunWithStatus(outputJson, cli, $"Installing {spec.Name} {spec.Version}", () => pipeline.InstallFromStaging(spec));
 
             if (outputJson)
             {
@@ -178,7 +221,7 @@ switch (cmd)
                     exitCode = 0,
                     spec,
                     result = res,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    logs = logBuffer?.Entries
                 });
                 return 0;
             }
@@ -202,7 +245,7 @@ switch (cmd)
     }
     case "test":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 
@@ -214,15 +257,25 @@ switch (cmd)
         else
         {
             var parsed = ParseTestArgs(argv);
-            if (parsed is null) { PrintHelp(); return 2; }
+            if (parsed is null)
+            {
+                if (outputJson)
+                {
+                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "test", success = false, exitCode = 2, error = "Invalid arguments." });
+                    return 2;
+                }
+
+                PrintHelp();
+                return 2;
+            }
             spec = parsed;
         }
 
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var service = new ModuleTestSuiteService(new PowerShellRunner(), cmdLogger);
-            var res = service.Run(spec);
+            var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec));
 
             var success = res.FailedCount == 0;
             var exitCode = success ? 0 : 1;
@@ -237,7 +290,7 @@ switch (cmd)
                     exitCode,
                     spec,
                     result = res,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    logs = logBuffer?.Entries
                 });
                 return exitCode;
             }
@@ -279,12 +332,18 @@ switch (cmd)
     case "pipeline":
     case "run":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 
         if (string.IsNullOrWhiteSpace(configPath))
         {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 2, error = "Missing required --config." });
+                return 2;
+            }
+
             Console.WriteLine("Usage: powerforge pipeline --config <Pipeline.json> [--output json]");
             return 2;
         }
@@ -308,9 +367,9 @@ switch (cmd)
 
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
-            var res = runner.Run(spec);
+            var res = RunWithStatus(outputJson, cli, "Running pipeline", () => runner.Run(spec));
 
             if (outputJson)
             {
@@ -322,7 +381,7 @@ switch (cmd)
                     exitCode = 0,
                     spec,
                     result = res,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    logs = logBuffer?.Entries
                 });
                 return 0;
             }
@@ -350,12 +409,18 @@ switch (cmd)
     }
     case "plan":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 
         if (string.IsNullOrWhiteSpace(configPath))
         {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 2, error = "Missing required --config." });
+                return 2;
+            }
+
             Console.WriteLine("Usage: powerforge plan --config <Pipeline.json> [--output json]");
             return 2;
         }
@@ -379,9 +444,9 @@ switch (cmd)
 
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
-            var plan = runner.Plan(spec);
+            var plan = RunWithStatus(outputJson, cli, "Planning pipeline", () => runner.Plan(spec));
 
             if (outputJson)
             {
@@ -393,7 +458,7 @@ switch (cmd)
                     exitCode = 0,
                     spec,
                     plan,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    logs = logBuffer?.Entries
                 });
                 return 0;
             }
@@ -428,19 +493,29 @@ switch (cmd)
     }
     case "find":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
         var parsed = ParseFindArgs(argv);
-        if (parsed is null) { PrintHelp(); return 2; }
+        if (parsed is null)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "find", success = false, exitCode = 2, error = "Invalid arguments." });
+                return 2;
+            }
+
+            PrintHelp();
+            return 2;
+        }
         var p = parsed.Value;
 
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var runner = new PowerShellRunner();
             var client = new PSResourceGetClient(runner, cmdLogger);
             var opts = new PSResourceFindOptions(p.Names, p.Version, p.Prerelease, p.Repositories);
-            var results = client.Find(opts);
+            var results = RunWithStatus(outputJson, cli, "Finding resources", () => client.Find(opts));
 
             if (outputJson)
             {
@@ -451,7 +526,7 @@ switch (cmd)
                     success = true,
                     exitCode = 0,
                     results,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    logs = logBuffer?.Entries
                 });
                 return 0;
             }
@@ -476,26 +551,31 @@ switch (cmd)
     }
     case "publish":
     {
-        var argv = args.Skip(1).ToArray();
+        var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
-        var parsed = ParsePublishArgs(argv);
-        if (parsed is null) { PrintHelp(); return 2; }
-        var p = parsed.Value;
-
+        RepositoryPublishRequest request;
         try
         {
-            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
-            var runner = new PowerShellRunner();
-            var client = new PSResourceGetClient(runner, cmdLogger);
-            var opts = new PSResourcePublishOptions(
-                path: Path.GetFullPath(p.Path.Trim().Trim('"')),
-                isNupkg: p.IsNupkg,
-                repository: p.Repository,
-                apiKey: p.ApiKey,
-                destinationPath: p.DestinationPath,
-                skipDependenciesCheck: p.SkipDependenciesCheck,
-                skipModuleManifestValidate: p.SkipModuleManifestValidate);      
-            client.Publish(opts);
+            request = ParsePublishArgs(argv) ?? throw new InvalidOperationException("Missing required --path.");
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "publish", success = false, exitCode = 2, error = ex.Message });
+                return 2;
+            }
+
+            logger.Error(ex.Message);
+            PrintHelp();
+            return 2;
+        }
+ 
+        try
+        {
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var publisher = new RepositoryPublisher(cmdLogger);
+            var result = RunWithStatus(outputJson, cli, "Publishing", () => publisher.Publish(request));
 
             if (outputJson)
             {
@@ -505,18 +585,21 @@ switch (cmd)
                     command = "publish",
                     success = true,
                     exitCode = 0,
-                    path = opts.Path,
-                    isNupkg = opts.IsNupkg,
-                    repository = opts.Repository,
-                    destinationPath = opts.DestinationPath,
-                    skipDependenciesCheck = opts.SkipDependenciesCheck,
-                    skipModuleManifestValidate = opts.SkipModuleManifestValidate,
-                    logs = ((BufferingLogger)cmdLogger).Entries
+                    path = result.Path,
+                    isNupkg = result.IsNupkg,
+                    repository = result.RepositoryName,
+                    tool = result.Tool,
+                    destinationPath = request.DestinationPath,
+                    skipDependenciesCheck = request.SkipDependenciesCheck,
+                    skipModuleManifestValidate = request.SkipModuleManifestValidate,
+                    repositoryCreated = result.RepositoryCreated,
+                    repositoryUnregistered = result.RepositoryUnregistered,
+                    logs = logBuffer?.Entries
                 });
                 return 0;
             }
 
-            logger.Success($"Published {opts.Path}{(string.IsNullOrWhiteSpace(p.Repository) ? string.Empty : " to " + p.Repository)}");
+            logger.Success($"Published {result.Path} to {result.RepositoryName} ({result.Tool})");
             return 0;
         }
         catch (Exception ex)
@@ -552,10 +635,117 @@ Usage:
   powerforge pipeline --config <Pipeline.json>
   powerforge plan --config <Pipeline.json> [--output json]
   powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
-  powerforge publish --path <Path> [--repo <Repo>] [--apikey <Key>] [--nupkg] [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
-  powerforge -Verbose               Enable verbose diagnostics
-  --output json                     Emit machine-readable JSON output
+  powerforge publish --path <Path> [--repo <Repo>] [--tool auto|psresourceget|powershellget] [--apikey <Key>] [--nupkg]
+                   [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
+                   [--repo-uri <Uri>] [--repo-source-uri <Uri>] [--repo-publish-uri <Uri>] [--repo-priority <N>] [--repo-api-version auto|v2|v3]
+                   [--repo-trusted|--repo-untrusted] [--repo-ensure|--no-repo-ensure] [--repo-unregister-after-use]
+                   [--repo-credential-username <User>] [--repo-credential-secret <Secret>] [--repo-credential-secret-file <Path>]
+  --verbose, -Verbose              Enable verbose diagnostics
+  --diagnostics                    Include logs in JSON output
+  --quiet, -q                      Suppress non-essential output
+  --no-color                       Disable ANSI colors
+  --output json                    Emit machine-readable JSON output     
 ");
+}
+
+static CliOptions ParseCliOptions(string[] args)
+{
+    if (args is null) return new CliOptions(verbose: false, quiet: false, diagnostics: false, noColor: false);
+
+    bool verbose = false;
+    bool quiet = false;
+    bool diagnostics = false;
+    bool noColor = false;
+
+    foreach (var a in args)
+    {
+        if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
+        {
+            verbose = true;
+            continue;
+        }
+
+        if (a.Equals("--quiet", StringComparison.OrdinalIgnoreCase) || a.Equals("-q", StringComparison.OrdinalIgnoreCase))
+        {
+            quiet = true;
+            continue;
+        }
+
+        if (a.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase) || a.Equals("--diag", StringComparison.OrdinalIgnoreCase))
+        {
+            diagnostics = true;
+            continue;
+        }
+
+        if (a.Equals("--no-color", StringComparison.OrdinalIgnoreCase) || a.Equals("--nocolor", StringComparison.OrdinalIgnoreCase))
+        {
+            noColor = true;
+            continue;
+        }
+    }
+
+    return new CliOptions(verbose, quiet, diagnostics, noColor);
+}
+
+static string[] StripGlobalArgs(string[] args)
+{
+    if (args is null || args.Length == 0) return Array.Empty<string>();
+
+    var list = new List<string>(args.Length);
+    foreach (var a in args)
+    {
+        if (IsGlobalArg(a)) continue;
+        list.Add(a);
+    }
+    return list.ToArray();
+}
+
+static bool IsGlobalArg(string arg)
+{
+    if (string.IsNullOrWhiteSpace(arg)) return false;
+
+    return arg.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("--verbose", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("--quiet", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("-q", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("--diag", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("--no-color", StringComparison.OrdinalIgnoreCase) ||
+           arg.Equals("--nocolor", StringComparison.OrdinalIgnoreCase);
+}
+
+static ILogger CreateTextLogger(CliOptions cli)
+{
+    ILogger baseLogger = cli.NoColor
+        ? new ConsoleLogger { IsVerbose = cli.Verbose }
+        : new SpectreConsoleLogger { IsVerbose = cli.Verbose };
+
+    return cli.Quiet ? new QuietLogger(baseLogger) : baseLogger;
+}
+
+static (ILogger Logger, BufferingLogger? Buffer) CreateCommandLogger(bool outputJson, CliOptions cli, ILogger textLogger)
+{
+    if (!outputJson) return (textLogger, null);
+
+    if (cli.Diagnostics)
+    {
+        var buffer = new BufferingLogger { IsVerbose = cli.Verbose };
+        return (buffer, buffer);
+    }
+
+    return (new NullLogger { IsVerbose = cli.Verbose }, null);
+}
+
+static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Func<T> action)
+{
+    if (action is null) throw new ArgumentNullException(nameof(action));
+
+    if (outputJson || cli.Quiet || cli.NoColor)
+        return action();
+
+    T? result = default;
+    Spectre.Console.AnsiConsole.Status().Start(statusText, _ => { result = action(); });
+    return result!;
 }
 
 static (string Name, string Source, string? Staging, string? Csproj, string Version, string Configuration, string[] Frameworks, string? Author, string? CompanyName, string? Description, string[] Tags, string? IconUri, string? ProjectUri)? ParseBuildArgs(string[] argv)
@@ -807,10 +997,33 @@ static (string[] Names, string? Version, bool Prerelease, string[] Repositories)
     return (names.ToArray(), version, prerelease, repos.ToArray());
 }
 
-static (string Path, string? Repository, string? ApiKey, bool IsNupkg, string? DestinationPath, bool SkipDependenciesCheck, bool SkipModuleManifestValidate)? ParsePublishArgs(string[] argv)
+static RepositoryPublishRequest? ParsePublishArgs(string[] argv)
 {
-    string? path = null, repo = null, apiKey = null, destination = null;        
-    bool isNupkg = false, skipDeps = false, skipManifest = false;
+    string? path = null;
+    string? repositoryName = null;
+    string? apiKey = null;
+    string? destination = null;
+    bool isNupkg = false;
+    bool skipDeps = false;
+    bool skipManifest = false;
+
+    PublishTool tool = PublishTool.Auto;
+
+    string? repoUri = null;
+    string? repoSourceUri = null;
+    string? repoPublishUri = null;
+    bool repoTrusted = true;
+    bool repoTrustedProvided = false;
+    int? repoPriority = null;
+    RepositoryApiVersion repoApiVersion = RepositoryApiVersion.Auto;
+    bool repoApiVersionProvided = false;
+    bool ensureRepoRegistered = true;
+    bool ensureRepoProvided = false;
+    bool unregisterAfterUse = false;
+
+    string? repoCredUser = null;
+    string? repoCredSecret = null;
+    string? repoCredSecretFile = null;
 
     for (int i = 0; i < argv.Length; i++)
     {
@@ -831,7 +1044,10 @@ static (string Path, string? Repository, string? ApiKey, bool IsNupkg, string? D
                 break;
             case "--repo":
             case "--repository":
-                repo = ++i < argv.Length ? argv[i] : null;
+                repositoryName = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--tool":
+                tool = ParsePublishTool(++i < argv.Length ? argv[i] : null);
                 break;
             case "--apikey":
             case "--api-key":
@@ -851,11 +1067,154 @@ static (string Path, string? Repository, string? ApiKey, bool IsNupkg, string? D
             case "--skip-module-manifest-validate":
                 skipManifest = true;
                 break;
+
+            case "--repo-uri":
+                repoUri = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--repo-source-uri":
+                repoSourceUri = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--repo-publish-uri":
+                repoPublishUri = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--repo-trusted":
+                repoTrusted = true;
+                repoTrustedProvided = true;
+                break;
+            case "--repo-untrusted":
+                repoTrusted = false;
+                repoTrustedProvided = true;
+                break;
+            case "--repo-priority":
+                if (++i < argv.Length && int.TryParse(argv[i], out var p)) repoPriority = p;
+                break;
+            case "--repo-api-version":
+                repoApiVersion = ParseRepositoryApiVersion(++i < argv.Length ? argv[i] : null);
+                repoApiVersionProvided = true;
+                break;
+            case "--repo-ensure":
+                ensureRepoRegistered = true;
+                ensureRepoProvided = true;
+                break;
+            case "--no-repo-ensure":
+                ensureRepoRegistered = false;
+                ensureRepoProvided = true;
+                break;
+            case "--repo-unregister-after-use":
+                unregisterAfterUse = true;
+                break;
+
+            case "--repo-credential-username":
+                repoCredUser = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--repo-credential-secret":
+                repoCredSecret = ++i < argv.Length ? argv[i] : null;
+                break;
+            case "--repo-credential-secret-file":
+                repoCredSecretFile = ++i < argv.Length ? argv[i] : null;
+                break;
         }
     }
 
     if (string.IsNullOrWhiteSpace(path)) return null;
-    return (path!, repo, apiKey, isNupkg, destination, skipDeps, skipManifest);  
+
+    string? repositorySecret = null;
+    if (!string.IsNullOrWhiteSpace(repoCredSecretFile))
+    {
+        var full = Path.GetFullPath(repoCredSecretFile!.Trim().Trim('"'));
+        repositorySecret = File.ReadAllText(full).Trim();
+    }
+    else if (!string.IsNullOrWhiteSpace(repoCredSecret))
+    {
+        repositorySecret = repoCredSecret.Trim();
+    }
+
+    var anyRepositoryUriProvided =
+        !string.IsNullOrWhiteSpace(repoUri) ||
+        !string.IsNullOrWhiteSpace(repoSourceUri) ||
+        !string.IsNullOrWhiteSpace(repoPublishUri);
+
+    if (anyRepositoryUriProvided)
+    {
+        if (string.IsNullOrWhiteSpace(repositoryName))
+            throw new InvalidOperationException("Repository name is required when --repo-uri/--repo-source-uri/--repo-publish-uri is provided.");
+        if (string.Equals(repositoryName.Trim(), "PSGallery", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Repository name cannot be 'PSGallery' when --repo-uri/--repo-source-uri/--repo-publish-uri is provided.");
+    }
+
+    PublishRepositoryConfiguration? repoConfig = null;
+    var hasRepoCred = !string.IsNullOrWhiteSpace(repoCredUser) && !string.IsNullOrWhiteSpace(repositorySecret);
+    var hasRepoOptions =
+        anyRepositoryUriProvided ||
+        hasRepoCred ||
+        repoPriority.HasValue ||
+        repoApiVersionProvided ||
+        repoTrustedProvided ||
+        ensureRepoProvided ||
+        unregisterAfterUse;
+
+    if (hasRepoOptions)
+    {
+        repoConfig = new PublishRepositoryConfiguration
+        {
+            Name = string.IsNullOrWhiteSpace(repositoryName) ? null : repositoryName.Trim(),
+            Uri = string.IsNullOrWhiteSpace(repoUri) ? null : repoUri.Trim(),
+            SourceUri = string.IsNullOrWhiteSpace(repoSourceUri) ? null : repoSourceUri.Trim(),
+            PublishUri = string.IsNullOrWhiteSpace(repoPublishUri) ? null : repoPublishUri.Trim(),
+            Trusted = repoTrusted,
+            Priority = repoPriority,
+            ApiVersion = repoApiVersion,
+            EnsureRegistered = ensureRepoRegistered,
+            UnregisterAfterUse = unregisterAfterUse,
+            Credential = hasRepoCred
+                ? new RepositoryCredential { UserName = repoCredUser!.Trim(), Secret = repositorySecret }
+                : null
+        };
+    }
+
+    return new RepositoryPublishRequest
+    {
+        Path = path!,
+        IsNupkg = isNupkg,
+        RepositoryName = string.IsNullOrWhiteSpace(repositoryName) ? null : repositoryName.Trim(),
+        Tool = tool,
+        ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim(),
+        Repository = repoConfig,
+        DestinationPath = string.IsNullOrWhiteSpace(destination) ? null : destination.Trim(),
+        SkipDependenciesCheck = skipDeps,
+        SkipModuleManifestValidate = skipManifest
+    };
+}
+
+static PublishTool ParsePublishTool(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value)) return PublishTool.Auto;
+
+    var v = value.Trim();
+    if (v.Equals("auto", StringComparison.OrdinalIgnoreCase)) return PublishTool.Auto;
+    if (v.Equals("psresourceget", StringComparison.OrdinalIgnoreCase) ||
+        v.Equals("psresource", StringComparison.OrdinalIgnoreCase) ||
+        v.Equals("psrg", StringComparison.OrdinalIgnoreCase))
+        return PublishTool.PSResourceGet;
+    if (v.Equals("powershellget", StringComparison.OrdinalIgnoreCase) ||
+        v.Equals("psget", StringComparison.OrdinalIgnoreCase))
+        return PublishTool.PowerShellGet;
+
+    throw new InvalidOperationException($"Invalid value for --tool: '{value}'. Expected: auto|psresourceget|powershellget.");
+}
+
+static RepositoryApiVersion ParseRepositoryApiVersion(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value)) return RepositoryApiVersion.Auto;
+
+    var v = value.Trim();
+    if (v.Equals("auto", StringComparison.OrdinalIgnoreCase)) return RepositoryApiVersion.Auto;
+    if (v.Equals("v2", StringComparison.OrdinalIgnoreCase) || v.Equals("2", StringComparison.OrdinalIgnoreCase))
+        return RepositoryApiVersion.V2;
+    if (v.Equals("v3", StringComparison.OrdinalIgnoreCase) || v.Equals("3", StringComparison.OrdinalIgnoreCase))
+        return RepositoryApiVersion.V3;
+
+    throw new InvalidOperationException($"Invalid value for --repo-api-version: '{value}'. Expected: auto|v2|v3.");
 }
 
 static bool IsJsonOutput(string[] argv)
@@ -935,4 +1294,38 @@ sealed class BufferingLogger : ILogger
         if (!IsVerbose) return;
         Entries.Add(new LogEntry("verbose", message));
     }
+}
+
+sealed class CliOptions
+{
+    public bool Verbose { get; }
+    public bool Quiet { get; }
+    public bool Diagnostics { get; }
+    public bool NoColor { get; }
+
+    public CliOptions(bool verbose, bool quiet, bool diagnostics, bool noColor)
+    {
+        Verbose = verbose;
+        Quiet = quiet;
+        Diagnostics = diagnostics;
+        NoColor = noColor;
+    }
+}
+
+sealed class QuietLogger : ILogger
+{
+    private readonly ILogger _inner;
+
+    public QuietLogger(ILogger inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    }
+
+    public bool IsVerbose => _inner.IsVerbose;
+
+    public void Info(string message) { }
+    public void Success(string message) { }
+    public void Warn(string message) => _inner.Warn(message);
+    public void Error(string message) => _inner.Error(message);
+    public void Verbose(string message) { }
 }
