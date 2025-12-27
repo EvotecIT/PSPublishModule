@@ -51,6 +51,5 @@ public sealed class BuildDocumentationConfiguration
     public bool UpdateWhenNew { get; set; }
 
     /// <summary>Documentation tool selection.</summary>
-    public DocumentationTool Tool { get; set; } = DocumentationTool.PlatyPS;
+    public DocumentationTool Tool { get; set; } = DocumentationTool.PowerForge;
 }
-

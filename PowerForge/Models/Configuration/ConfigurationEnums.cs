@@ -76,10 +76,12 @@ public enum DeliveryBundleDestination
 /// </summary>
 public enum DocumentationTool
 {
-    /// <summary>Use PlatyPS to generate markdown help.</summary>
+    /// <summary>Legacy: Use PlatyPS to generate markdown help.</summary>
     PlatyPS,
-    /// <summary>Use HelpOut to generate markdown help.</summary>
-    HelpOut
+    /// <summary>Legacy: Use HelpOut to generate markdown help.</summary>
+    HelpOut,
+    /// <summary>Use PowerForge built-in generator.</summary>
+    PowerForge
 }
 
 /// <summary>
@@ -105,4 +107,3 @@ public enum TestExecutionWhen
     /// <summary>Execute tests after merge/build has produced the final module output.</summary>
     AfterMerge
 }
-
