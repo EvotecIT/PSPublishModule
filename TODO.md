@@ -99,7 +99,7 @@
 **Phase 3 — Docs Engine (replace PlatyPS/HelpOut)**
 - `DocumentationEngine` service:
   - Source (MVP): out-of-proc `Get-Command` + `Get-Help` (no PlatyPS/HelpOut) for script + cmdlet parity.
-  - Emit (MVP): Markdown help files + module page (Readme.md).
+  - Emit (MVP): PlatyPS-style Markdown help files + module page (Readme.md) + external help MAML (`<culture>\<ModuleName>-help.xml`).
   - Keep legacy knobs (`Tool`, `UpdateWhenNew`) as no-ops for compatibility.
 - PlatyPS/HelpOut usage removed (legacy enum values remain for compatibility).
 
@@ -113,7 +113,7 @@
   - `powerforge publish`: publish to PSGallery/private feeds (NuGet APIs) or via a PSResourceGet wrapper.
   - `--config <json>`: run build/publish/test from a typed JSON config (extension-friendly).
   - `--output json`: stable schema for every command (VSCode can parse results).
-  - `--no-color`, `--quiet`, `--diagnostics`, consistent exit codes.
+  - `--no-color`, `--quiet`, `--diagnostics`, `--view auto|standard|ansi`, consistent exit codes.
 - GitHub Actions integration (`C:\\Support\\GitHub\\github-actions`):
   - (done) Add composite action `.github/actions/powerforge-run` to install `PowerForge.Cli` (dotnet tool) and run `powerforge` commands.
   - (optional) Add higher-level wrappers once the tool is published broadly (e.g., `pspub-build`, `pspub-publish`).
@@ -175,10 +175,12 @@
   - [x] `Remove-ProjectFiles` → `PowerForge.ProjectCleanupService` (typed spec/results; cmdlet is a thin wrapper)
   - [x] `Get-ModuleTestFailures` → `PowerForge.ModuleTestFailureAnalyzer` (typed `PowerForge.ModuleTestFailureAnalysis` on `-PassThru`)
   - [x] `Invoke-ModuleTestSuite` → `PowerForge` test runner service (for future CLI + VSCode usage)
+  - [x] `Invoke-ModuleBuild` → `PowerForge.ModuleScaffoldService` + `PowerForge.LegacySegmentAdapter` (cmdlet only maps params and invokes the PowerForge pipeline)
 - [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
   - [x] Include `schemaVersion` in all CLI JSON outputs.
   - [x] Serialize enums as strings in CLI JSON output.
   - [x] Add `--quiet` and `--diagnostics` (keep stdout pure when `--output json` is used).
+  - [x] Add `--view auto|standard|ansi` (auto disables live UI in CI).
   - [ ] Document the JSON schema (VSCode extension baseline).
 - [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [x] Add GitHub composite actions calling the CLI.
