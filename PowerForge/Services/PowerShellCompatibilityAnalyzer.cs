@@ -1,15 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
 using System.Text;
 using System.Text.RegularExpressions;
-using PowerForge;
 
-namespace PSPublishModule;
+namespace PowerForge;
 
-internal static class PowerShellCompatibilityAnalyzer
+/// <summary>
+/// Analyzes PowerShell files and folders to determine compatibility with Windows PowerShell 5.1 and PowerShell 7+.
+/// </summary>
+public sealed class PowerShellCompatibilityAnalyzer
 {
     private sealed class Feature
     {
@@ -25,14 +27,189 @@ internal static class PowerShellCompatibilityAnalyzer
         internal string Description { get; }
     }
 
-    internal static PSObject AnalyzeFile(string filePath, string? baseDirectory)
+    private readonly ILogger _logger;
+
+    /// <summary>
+    /// Creates a new analyzer instance.
+    /// </summary>
+    public PowerShellCompatibilityAnalyzer(ILogger logger) => _logger = logger ?? new NullLogger();
+
+    /// <summary>
+    /// Analyzes the specified path and returns a typed compatibility report.
+    /// </summary>
+    public PowerShellCompatibilityReport Analyze(
+        PowerShellCompatibilitySpec spec,
+        Action<PowerShellCompatibilityProgress>? progress,
+        string? exportPath)
+    {
+        if (spec == null) throw new ArgumentNullException(nameof(spec));
+
+        if (!File.Exists(spec.Path) && !Directory.Exists(spec.Path))
+            throw new FileNotFoundException($"Path not found: {spec.Path}", spec.Path);
+
+        var files = GetFilesToAnalyze(spec.Path, spec.Recurse, spec.ExcludeDirectories);
+        var baseDir = Directory.Exists(spec.Path)
+            ? spec.Path
+            : (System.IO.Path.GetDirectoryName(spec.Path) ?? Directory.GetCurrentDirectory());
+
+        var results = new List<PowerShellCompatibilityFileResult>(files.Count);
+        for (var i = 0; i < files.Count; i++)
+        {
+            var f = files[i];
+            progress?.Invoke(new PowerShellCompatibilityProgress(current: i + 1, total: files.Count, filePath: f));
+            results.Add(AnalyzeFile(f, baseDir));
+        }
+
+        var summary = BuildSummary(results);
+
+        if (!string.IsNullOrWhiteSpace(exportPath) && results.Count > 0)
+        {
+            try
+            {
+                CsvWriter.Write(
+                    exportPath!,
+                    headers: new[]
+                    {
+                        "RelativePath", "FullPath", "PowerShell51Compatible", "PowerShell7Compatible",
+                        "Encoding", "IssueCount", "IssueTypes", "IssueDescriptions"
+                    },
+                    rows: results.Select(r => new[]
+                    {
+                        r.RelativePath,
+                        r.FullPath,
+                        r.PowerShell51Compatible.ToString(),
+                        r.PowerShell7Compatible.ToString(),
+                        r.Encoding?.ToString() ?? string.Empty,
+                        r.Issues.Length.ToString(CultureInfo.InvariantCulture),
+                        string.Join(", ", r.Issues.Select(i => i.Type.ToString())),
+                        string.Join("; ", r.Issues.Select(i => i.Description))
+                    }));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to export PowerShell compatibility report to {exportPath}: {ex.Message}");
+            }
+        }
+
+        return new PowerShellCompatibilityReport(
+            summary: summary,
+            files: results.ToArray(),
+            exportPath: exportPath);
+    }
+
+    private static PowerShellCompatibilitySummary BuildSummary(IReadOnlyList<PowerShellCompatibilityFileResult> results)
+    {
+        var totalFiles = results.Count;
+        var ps51Compatible = results.Count(r => r.PowerShell51Compatible);
+        var ps7Compatible = results.Count(r => r.PowerShell7Compatible);
+        var crossCompatible = results.Count(r => r.PowerShell51Compatible && r.PowerShell7Compatible);
+        var filesWithIssues = results.Count(r => r.Issues.Length > 0);
+
+        var crossCompatibilityPercentage = totalFiles == 0
+            ? 0.0
+            : Math.Round((crossCompatible / (double)totalFiles) * 100.0, 1);
+
+        var status = filesWithIssues == 0
+            ? CheckStatus.Pass
+            : crossCompatibilityPercentage >= 90.0
+                ? CheckStatus.Warning
+                : CheckStatus.Fail;
+
+        var percentageText = crossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture);
+        var message = status switch
+        {
+            CheckStatus.Pass => $"All {totalFiles} files are cross-compatible",
+            CheckStatus.Warning => $"{filesWithIssues} files have compatibility issues but {percentageText}% are cross-compatible",
+            _ => $"{filesWithIssues} files have compatibility issues, only {percentageText}% are cross-compatible"
+        };
+
+        var recommendations = filesWithIssues > 0
+            ? new[]
+            {
+                "Review files with compatibility issues",
+                "Consider using UTF8BOM encoding for Windows PowerShell 5.1 support",
+                "Replace deprecated cmdlets with modern alternatives",
+                "Test code in both Windows PowerShell 5.1 and PowerShell 7 environments"
+            }
+            : Array.Empty<string>();
+
+        return new PowerShellCompatibilitySummary(
+            status: status,
+            analysisDate: DateTime.Now,
+            totalFiles: totalFiles,
+            powerShell51Compatible: ps51Compatible,
+            powerShell7Compatible: ps7Compatible,
+            crossCompatible: crossCompatible,
+            filesWithIssues: filesWithIssues,
+            crossCompatibilityPercentage: crossCompatibilityPercentage,
+            message: message,
+            recommendations: recommendations);
+    }
+
+    private static List<string> GetFilesToAnalyze(string inputPath, bool recurse, IReadOnlyList<string> excludeDirectories)
+    {
+        var list = new List<string>();
+
+        if (File.Exists(inputPath))
+        {
+            var ext = System.IO.Path.GetExtension(inputPath) ?? string.Empty;
+            if (!string.Equals(ext, ".ps1", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(ext, ".psm1", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(ext, ".psd1", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("File must be a PowerShell file (.ps1, .psm1, or .psd1)");
+            }
+
+            list.Add(inputPath);
+            return list;
+        }
+
+        if (!Directory.Exists(inputPath))
+            return list;
+
+        var searchOption = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        foreach (var pattern in new[] { "*.ps1", "*.psm1", "*.psd1" })
+        {
+            IEnumerable<string> files;
+            try { files = Directory.EnumerateFiles(inputPath, pattern, searchOption); }
+            catch { continue; }
+
+            foreach (var f in files)
+            {
+                if (IsExcluded(f, excludeDirectories))
+                    continue;
+                list.Add(f);
+            }
+        }
+
+        return list
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsExcluded(string filePath, IReadOnlyList<string> excludeDirectories)
+    {
+        var dir = System.IO.Path.GetDirectoryName(filePath) ?? string.Empty;
+        foreach (var ex in excludeDirectories)
+        {
+            if (string.IsNullOrWhiteSpace(ex))
+                continue;
+            if (dir.IndexOf(ex, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    private static PowerShellCompatibilityFileResult AnalyzeFile(string filePath, string? baseDirectory)
     {
         var fullPath = System.IO.Path.GetFullPath(filePath.Trim().Trim('"'));
         var rel = ComputeRelativeOrFileName(baseDirectory, fullPath);
 
-        var issues = new List<PSObject>();
+        var issues = new List<PowerShellCompatibilityIssue>();
         var ps51Compatible = true;
         var ps7Compatible = true;
+        TextEncodingKind? encoding = null;
 
         try
         {
@@ -40,17 +217,19 @@ internal static class PowerShellCompatibilityAnalyzer
             {
                 AddIssue(
                     issues,
-                    type: "Error",
+                    type: PowerShellCompatibilityIssueType.Error,
                     description: $"File not found: {fullPath}",
                     recommendation: "Verify path and file existence",
-                    severity: "High");
+                    severity: PowerShellCompatibilitySeverity.High);
                 ps51Compatible = false;
                 ps7Compatible = false;
             }
             else
             {
-                var encodingName = ProjectTextInspection.DetectEncodingKind(fullPath).ToString();
-                AddEncodingIssues(fullPath, encodingName, issues);
+                try { encoding = ProjectTextInspection.DetectEncodingKind(fullPath); }
+                catch { encoding = null; }
+
+                AddEncodingIssues(fullPath, encoding, issues);
 
                 var content = ReadTextBestEffort(fullPath);
                 if (!string.IsNullOrEmpty(content))
@@ -76,10 +255,10 @@ internal static class PowerShellCompatibilityAnalyzer
                             ps51Compatible = false;
                             AddIssue(
                                 issues,
-                                type: "PowerShell7Feature",
+                                type: PowerShellCompatibilityIssueType.PowerShell7Feature,
                                 description: $"{feature.Name}: {feature.Description}",
                                 recommendation: "Consider using alternative syntax for PowerShell 5.1 compatibility",
-                                severity: "High");
+                                severity: PowerShellCompatibilitySeverity.High);
                         }
                     }
 
@@ -103,10 +282,10 @@ internal static class PowerShellCompatibilityAnalyzer
                             ps7Compatible = false;
                             AddIssue(
                                 issues,
-                                type: "PowerShell51Feature",
+                                type: PowerShellCompatibilityIssueType.PowerShell51Feature,
                                 description: $"{feature.Name}: {feature.Description}",
                                 recommendation: "Consider updating to PowerShell 7 compatible alternatives",
-                                severity: "High");
+                                severity: PowerShellCompatibilitySeverity.High);
                         }
                     }
 
@@ -126,10 +305,10 @@ internal static class PowerShellCompatibilityAnalyzer
                         {
                             AddIssue(
                                 issues,
-                                type: "PlatformSpecific",
+                                type: PowerShellCompatibilityIssueType.PlatformSpecific,
                                 description: $"{feature.Name}: {feature.Description}",
                                 recommendation: "Consider cross-platform alternatives or add platform checks",
-                                severity: "Medium");
+                                severity: PowerShellCompatibilitySeverity.Medium);
                         }
                     }
 
@@ -147,10 +326,10 @@ internal static class PowerShellCompatibilityAnalyzer
                         {
                             AddIssue(
                                 issues,
-                                type: "DotNetFramework",
+                                type: PowerShellCompatibilityIssueType.DotNetFramework,
                                 description: $"{assembly} assembly may not be available in PowerShell 7",
                                 recommendation: "Verify assembly availability or find .NET Core/.NET 5+ alternatives",
-                                severity: "Medium");
+                                severity: PowerShellCompatibilitySeverity.Medium);
                         }
                     }
 
@@ -161,10 +340,10 @@ internal static class PowerShellCompatibilityAnalyzer
                         {
                             AddIssue(
                                 issues,
-                                type: "ClassInheritance",
+                                type: PowerShellCompatibilityIssueType.ClassInheritance,
                                 description: "Class inheritance from System types may behave differently between versions",
                                 recommendation: "Test class behavior across PowerShell versions",
-                                severity: "Low");
+                                severity: PowerShellCompatibilitySeverity.Low);
                         }
                     }
 
@@ -174,10 +353,10 @@ internal static class PowerShellCompatibilityAnalyzer
                         ps7Compatible = false;
                         AddIssue(
                             issues,
-                            type: "Workflow",
+                            type: PowerShellCompatibilityIssueType.Workflow,
                             description: "PowerShell workflows are not supported in PowerShell 7",
                             recommendation: "Convert workflow to functions or use Windows PowerShell 5.1",
-                            severity: "High");
+                            severity: PowerShellCompatibilitySeverity.High);
                     }
 
                     // ISE-only features
@@ -187,10 +366,10 @@ internal static class PowerShellCompatibilityAnalyzer
                         ps7Compatible = false;
                         AddIssue(
                             issues,
-                            type: "ISE",
+                            type: PowerShellCompatibilityIssueType.ISE,
                             description: "PowerShell ISE is not available in PowerShell 7",
                             recommendation: "Use Visual Studio Code or other editors for PowerShell 7",
-                            severity: "Medium");
+                            severity: PowerShellCompatibilitySeverity.Medium);
                     }
                 }
             }
@@ -200,33 +379,21 @@ internal static class PowerShellCompatibilityAnalyzer
             issues.Clear();
             AddIssue(
                 issues,
-                type: "Error",
+                type: PowerShellCompatibilityIssueType.Error,
                 description: $"Error analyzing file: {ex.Message}",
                 recommendation: "Check file permissions and format",
-                severity: "High");
+                severity: PowerShellCompatibilitySeverity.High);
             ps51Compatible = false;
             ps7Compatible = false;
         }
 
-        var output = NewPsCustomObject();
-        output.Properties.Add(new PSNoteProperty("FullPath", fullPath));
-        output.Properties.Add(new PSNoteProperty("RelativePath", rel));
-        output.Properties.Add(new PSNoteProperty("PowerShell51Compatible", ps51Compatible));
-        output.Properties.Add(new PSNoteProperty("PowerShell7Compatible", ps7Compatible));
-        output.Properties.Add(new PSNoteProperty("Encoding", SafeDetectEncodingName(fullPath)));
-        output.Properties.Add(new PSNoteProperty("Issues", issues.ToArray()));
-        return output;
-    }
-
-    private static string SafeDetectEncodingName(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                return ProjectTextInspection.DetectEncodingKind(path).ToString();
-        }
-        catch { }
-        return string.Empty;
+        return new PowerShellCompatibilityFileResult(
+            fullPath: fullPath,
+            relativePath: rel,
+            powerShell51Compatible: ps51Compatible,
+            powerShell7Compatible: ps7Compatible,
+            encoding: encoding,
+            issues: issues.ToArray());
     }
 
     private static string ComputeRelativeOrFileName(string? baseDirectory, string fullPath)
@@ -267,32 +434,32 @@ internal static class PowerShellCompatibilityAnalyzer
         }
     }
 
-    private static void AddEncodingIssues(string fullPath, string encodingName, List<PSObject> issues)
+    private static void AddEncodingIssues(string fullPath, TextEncodingKind? encoding, List<PowerShellCompatibilityIssue> issues)
     {
-        if (!string.Equals(encodingName, "UTF8", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(encodingName, "ASCII", StringComparison.OrdinalIgnoreCase))
+        if (!encoding.HasValue) return;
+        if (encoding.Value != TextEncodingKind.UTF8 && encoding.Value != TextEncodingKind.Ascii)
             return;
 
         if (!HasNonAsciiBytes(fullPath))
             return;
 
-        if (string.Equals(encodingName, "UTF8", StringComparison.OrdinalIgnoreCase))
+        if (encoding.Value == TextEncodingKind.UTF8)
         {
             AddIssue(
                 issues,
-                type: "Encoding",
+                type: PowerShellCompatibilityIssueType.Encoding,
                 description: "UTF8 without BOM may cause issues in PowerShell 5.1 with special characters",
                 recommendation: "Consider using UTF8BOM encoding for cross-version compatibility",
-                severity: "Medium");
+                severity: PowerShellCompatibilitySeverity.Medium);
         }
-        else if (string.Equals(encodingName, "ASCII", StringComparison.OrdinalIgnoreCase))
+        else if (encoding.Value == TextEncodingKind.Ascii)
         {
             AddIssue(
                 issues,
-                type: "Encoding",
+                type: PowerShellCompatibilityIssueType.Encoding,
                 description: "ASCII encoding with special characters will cause issues in PowerShell 5.1",
                 recommendation: "Convert to UTF8BOM encoding to properly handle special characters",
-                severity: "High");
+                severity: PowerShellCompatibilitySeverity.High);
         }
     }
 
@@ -315,29 +482,26 @@ internal static class PowerShellCompatibilityAnalyzer
         return false;
     }
 
-    private static void AddIssue(List<PSObject> issues, string type, string description, string recommendation, string severity)
+    private static void AddIssue(
+        List<PowerShellCompatibilityIssue> issues,
+        PowerShellCompatibilityIssueType type,
+        string description,
+        string recommendation,
+        PowerShellCompatibilitySeverity severity)
     {
         // Avoid duplicates when multiple patterns overlap.
         if (issues.Any(i =>
-                string.Equals(i.Properties["Type"]?.Value?.ToString(), type, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(i.Properties["Description"]?.Value?.ToString(), description, StringComparison.OrdinalIgnoreCase)))
+                i.Type == type &&
+                string.Equals(i.Description, description, StringComparison.OrdinalIgnoreCase)))
+        {
             return;
+        }
 
-        var issue = NewPsCustomObject();
-        issue.Properties.Add(new PSNoteProperty("Type", type));
-        issue.Properties.Add(new PSNoteProperty("Description", description));
-        issue.Properties.Add(new PSNoteProperty("Recommendation", recommendation));
-        issue.Properties.Add(new PSNoteProperty("Severity", severity));
-        issues.Add(issue);
-    }
-
-    private static PSObject NewPsCustomObject()
-    {
-        var t = typeof(PSObject).Assembly.GetType("System.Management.Automation.PSCustomObject");
-        if (t is null)
-            return new PSObject();
-
-        var inst = Activator.CreateInstance(t, nonPublic: true);
-        return inst is PSObject pso ? pso : PSObject.AsPSObject(inst);
+        issues.Add(new PowerShellCompatibilityIssue(
+            type: type,
+            description: description,
+            recommendation: recommendation,
+            severity: severity));
     }
 }
+
