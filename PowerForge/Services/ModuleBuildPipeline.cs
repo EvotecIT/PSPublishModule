@@ -23,12 +23,17 @@ public sealed class ModuleBuildPipeline
     /// <returns>Build result including staging path and computed exports.</returns>
     public ModuleBuildResult BuildToStaging(ModuleBuildSpec spec)
     {
-        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.SourcePath)) throw new ArgumentException("SourcePath is required.", nameof(spec));
 
         var source = Path.GetFullPath(spec.SourcePath);
         if (!Directory.Exists(source)) throw new DirectoryNotFoundException($"Source directory not found: {source}");
+
+        spec.Version = ResolveModuleVersionFromManifestIfAuto(
+            version: spec.Version,
+            manifestPath: Path.Combine(source, $"{spec.Name}.psd1"),
+            fallbackVersion: "1.0.0");
 
         var staging = string.IsNullOrWhiteSpace(spec.StagingPath)
             ? Path.Combine(Path.GetTempPath(), "PowerForge", "build", $"{spec.Name}_{Guid.NewGuid():N}")
@@ -89,13 +94,17 @@ public sealed class ModuleBuildPipeline
     /// <returns>Installer result including resolved version and installed paths.</returns>
     public ModuleInstallerResult InstallFromStaging(ModuleInstallSpec spec, bool updateManifestToResolvedVersion = true)
     {
-        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
-        if (string.IsNullOrWhiteSpace(spec.Version)) throw new ArgumentException("Version is required.", nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.StagingPath)) throw new ArgumentException("StagingPath is required.", nameof(spec));
 
         var staging = Path.GetFullPath(spec.StagingPath);
         if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
+
+        spec.Version = ResolveModuleVersionFromManifestIfAuto(
+            version: spec.Version,
+            manifestPath: Path.Combine(staging, $"{spec.Name}.psd1"),
+            fallbackVersion: null);
 
         var resolved = ModuleInstaller.ResolveTargetVersion(spec.Roots, spec.Name, spec.Version, spec.Strategy);
         if (updateManifestToResolvedVersion)
@@ -108,6 +117,38 @@ public sealed class ModuleBuildPipeline
         var options = new ModuleInstallerOptions(spec.Roots, InstallationStrategy.Exact, spec.KeepVersions);
         return installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
+
+    private string ResolveModuleVersionFromManifestIfAuto(string? version, string manifestPath, string? fallbackVersion)
+    {
+        if (!IsAutoVersion(version)) return version ?? string.Empty;
+
+        try
+        {
+            if (File.Exists(manifestPath) &&
+                ManifestEditor.TryGetTopLevelString(manifestPath, "ModuleVersion", out var v) &&
+                !string.IsNullOrWhiteSpace(v))
+            {
+                _logger.Verbose($"Resolved ModuleVersion from manifest: {manifestPath} -> {v}");
+                return v!;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to read ModuleVersion from manifest: {manifestPath}. Error: {ex.Message}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(fallbackVersion))
+        {
+            _logger.Warn($"Version was 'auto' but ModuleVersion could not be read from: {manifestPath}. Falling back to {fallbackVersion}.");
+            return fallbackVersion!;
+        }
+
+        throw new InvalidOperationException($"Version was 'auto' but ModuleVersion could not be read from: {manifestPath}. Provide Version explicitly.");
+    }
+
+    private static bool IsAutoVersion(string? value)
+        => string.IsNullOrWhiteSpace(value) ||
+           value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
     private static void CopyDirectoryFiltered(string sourceDir, string destDir, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
     {

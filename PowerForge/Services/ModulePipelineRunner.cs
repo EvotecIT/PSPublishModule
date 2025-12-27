@@ -186,12 +186,35 @@ public sealed class ModulePipelineRunner
         }
 
         expectedVersion ??= spec.Build.Version;
-        if (string.IsNullOrWhiteSpace(expectedVersion))
-            expectedVersion = "1.0.0";
+        if (IsAutoVersion(expectedVersion))
+        {
+            var psd1 = Path.Combine(projectRoot, $"{moduleName}.psd1");
+            try
+            {
+                if (File.Exists(psd1) &&
+                    ManifestEditor.TryGetTopLevelString(psd1, "ModuleVersion", out var v) &&
+                    !string.IsNullOrWhiteSpace(v))
+                {
+                    expectedVersion = v;
+                }
+                else
+                {
+                    _logger.Warn($"Build.Version was 'auto' but ModuleVersion could not be read from: {psd1}. Falling back to 1.0.0.");
+                    expectedVersion = "1.0.0";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to read ModuleVersion from manifest: {psd1}. Falling back to 1.0.0. Error: {ex.Message}");
+                expectedVersion = "1.0.0";
+            }
+        }
+
+        var expectedVersionResolved = string.IsNullOrWhiteSpace(expectedVersion) ? "1.0.0" : expectedVersion!;
 
         var localPsd1 = localVersioning ? Path.Combine(projectRoot, $"{moduleName}.psd1") : null;
         var stepper = new ModuleVersionStepper(_logger);
-        var resolved = stepper.Step(expectedVersion, moduleName, localPsd1Path: localPsd1).Version;
+        var resolved = stepper.Step(expectedVersionResolved, moduleName, localPsd1Path: localPsd1).Version;
 
         // Resolve .csproj path: explicit build setting wins, otherwise derive from BuildLibraries NETProjectPath/ProjectName.
         var csproj = !string.IsNullOrWhiteSpace(spec.Build.CsprojPath)
@@ -260,7 +283,7 @@ public sealed class ModulePipelineRunner
         return new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,
-            expectedVersion: expectedVersion,
+            expectedVersion: expectedVersionResolved,
             resolvedVersion: resolved,
             preRelease: preRelease,
             buildSpec: buildSpec,
@@ -365,6 +388,10 @@ public sealed class ModulePipelineRunner
 
         return new ModulePipelineResult(plan, buildResult, installResult, documentationResult, publishResults.ToArray(), artefactResults.ToArray());
     }
+
+    private static bool IsAutoVersion(string? value)
+        => string.IsNullOrWhiteSpace(value) ||
+           value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
     private ManifestEditor.RequiredModule[] ResolveRequiredModules(IReadOnlyList<RequiredModuleDraft> drafts)
     {
