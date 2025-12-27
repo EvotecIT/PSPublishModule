@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using System.Text;
 
@@ -98,12 +99,27 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"nuget push {Quote(packagePath)} --api-key {Quote(apiKey)} --source {Quote(source)}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+#if NET472
+        psi.Arguments = BuildWindowsArgumentString(new[]
+        {
+            "nuget", "push", packagePath,
+            "--api-key", apiKey,
+            "--source", source
+        });
+#else
+        psi.ArgumentList.Add("nuget");
+        psi.ArgumentList.Add("push");
+        psi.ArgumentList.Add(packagePath);
+        psi.ArgumentList.Add("--api-key");
+        psi.ArgumentList.Add(apiKey);
+        psi.ArgumentList.Add("--source");
+        psi.ArgumentList.Add(source);
+#endif
 
         using var p = Process.Start(psi);
         if (p is null) return 1;
@@ -113,12 +129,55 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
         return p.ExitCode;
     }
 
-    private static string Quote(string value)
+#if NET472
+    private static string BuildWindowsArgumentString(IEnumerable<string> arguments)
+        => string.Join(" ", arguments.Select(EscapeWindowsArgument));
+
+    // Based on .NET's internal ProcessStartInfo quoting behavior for Windows CreateProcess.
+    private static string EscapeWindowsArgument(string arg)
     {
-        if (string.IsNullOrEmpty(value)) return "\"\"";
-        if (!value.Contains(" ") && !value.Contains("\"")) return value;
-        return "\"" + value.Replace("\"", "\\\"") + "\"";
+        if (arg is null) return "\"\"";
+        if (arg.Length == 0) return "\"\"";
+
+        bool needsQuotes = arg.Any(ch => char.IsWhiteSpace(ch) || ch == '"');
+        if (!needsQuotes) return arg;
+
+        var sb = new StringBuilder();
+        sb.Append('"');
+
+        int backslashCount = 0;
+        foreach (var ch in arg)
+        {
+            if (ch == '\\')
+            {
+                backslashCount++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                sb.Append('\\', backslashCount * 2 + 1);
+                sb.Append('"');
+                backslashCount = 0;
+                continue;
+            }
+
+            if (backslashCount > 0)
+            {
+                sb.Append('\\', backslashCount);
+                backslashCount = 0;
+            }
+
+            sb.Append(ch);
+        }
+
+        if (backslashCount > 0)
+            sb.Append('\\', backslashCount * 2);
+
+        sb.Append('"');
+        return sb.ToString();
     }
+#endif
 
     /// <summary>Result returned by <c>Publish-NugetPackage</c>.</summary>
     public sealed class PublishNugetPackageResult
