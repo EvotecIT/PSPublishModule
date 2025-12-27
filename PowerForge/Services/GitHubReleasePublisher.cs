@@ -89,8 +89,8 @@ public sealed class GitHubReleasePublisher
             Content = new StringContent(json, Encoding.UTF8, "application/vnd.github+json")
         };
 
-        var response = client.SendAsync(request).GetAwaiter().GetResult();
-        var responseText = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var response = client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
 
@@ -119,8 +119,8 @@ public sealed class GitHubReleasePublisher
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
             using var req = new HttpRequestMessage(HttpMethod.Post, target) { Content = content };
-            var resp = client.SendAsync(req).GetAwaiter().GetResult();
-            var respText = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var resp = client.SendAsync(req).ConfigureAwait(false).GetAwaiter().GetResult();
+            var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode)
                 throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
         }

@@ -67,18 +67,18 @@ public sealed class ModuleInstaller
                 // If target exists
                 if (Directory.Exists(finalPath))
                 {
-                    if (options.Strategy == InstallationStrategy.AutoRevision)
+                    if (options.Strategy == InstallationStrategy.AutoRevision)  
                     {
                         // Compute next revision
                         _logger.Warn($"Target exists, computing next revision for {finalPath}");
                         resolvedVersion = ResolveVersion(new[] { root }, moduleName, moduleVersion, InstallationStrategy.AutoRevision);
-                        finalPath = Path.Combine(moduleRoot, resolvedVersion);
+                        finalPath = Path.Combine(moduleRoot, resolvedVersion);  
                     }
                     else
                     {
                         // Exact: overwrite existing contents in place
                         _logger.Info($"Target exists; overwriting Exact version in-place at {finalPath}");
-                        CopyDirectory(tempPath, finalPath);
+                        SyncDirectoryToSource(tempPath, finalPath);
                         TryDeleteDirectory(tempPath);
                         installed.Add(finalPath);
                         var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, out var removedInExact);
@@ -227,6 +227,53 @@ public sealed class ModuleInstaller
             var name = Path.GetFileName(dir);
             var target = Path.Combine(destDir, name!);
             CopyDirectory(dir, target);
+        }
+    }
+
+    private void SyncDirectoryToSource(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+
+        // Remove stale files/dirs from dest so the installed module matches staging.
+        RemoveItemsNotInSource(sourceDir, destDir);
+        CopyDirectory(sourceDir, destDir);
+
+        void RemoveItemsNotInSource(string source, string dest)
+        {
+            foreach (var file in Directory.EnumerateFiles(dest, "*", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(file);
+                var sourcePath = Path.Combine(source, name!);
+                if (File.Exists(sourcePath)) continue;
+                TryDeleteFile(file);
+            }
+
+            foreach (var dir in Directory.EnumerateDirectories(dest, "*", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(dir);
+                var sourcePath = Path.Combine(source, name!);
+
+                if (!Directory.Exists(sourcePath))
+                {
+                    // source has no such directory (or has a file with this name); remove it.
+                    TryDeleteStaleDirectory(dir);
+                    continue;
+                }
+
+                RemoveItemsNotInSource(sourcePath, dir);
+            }
+        }
+
+        void TryDeleteFile(string path)
+        {
+            try { File.Delete(path); }
+            catch (Exception ex) { _logger.Warn($"Failed to delete stale file '{path}': {ex.Message}"); }
+        }
+
+        void TryDeleteStaleDirectory(string path)
+        {
+            try { Directory.Delete(path, recursive: true); }
+            catch (Exception ex) { _logger.Warn($"Failed to delete stale directory '{path}': {ex.Message}"); }
         }
     }
 

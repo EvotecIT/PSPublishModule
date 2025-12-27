@@ -192,7 +192,26 @@ public sealed class ModuleBuilder
     }
 
     private static bool IsCore(string tfm)
-        => tfm.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase) || tfm.StartsWith("net5", StringComparison.OrdinalIgnoreCase) || tfm.StartsWith("net6", StringComparison.OrdinalIgnoreCase) || tfm.StartsWith("net7", StringComparison.OrdinalIgnoreCase) || tfm.StartsWith("net8", StringComparison.OrdinalIgnoreCase) || tfm.StartsWith("net9", StringComparison.OrdinalIgnoreCase);
+    {
+        if (string.IsNullOrWhiteSpace(tfm)) return false;
+
+        var value = tfm.Trim();
+        if (value.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase)) return true;
+        if (value.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase)) return true;
+
+        // net472/net48/etc are .NET Framework TFMs and should be treated as "Default".
+        // Modern TFMs (net5.0+ and future) include a dot and should go to "Core".
+        if (!value.StartsWith("net", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!value.Contains('.')) return false;
+
+        var suffix = value.Substring(3);
+        int digits = 0;
+        while (digits < suffix.Length && char.IsDigit(suffix[digits])) digits++;
+        if (digits == 0) return false;
+
+        if (!int.TryParse(suffix.Substring(0, digits), out var major)) return false;
+        return major >= 5;
+    }
 
     private static void CopyFiltered(string sourceDir, string destDir, Func<string, bool> filePredicate)
     {
