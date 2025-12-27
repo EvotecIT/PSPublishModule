@@ -1,0 +1,750 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.segments.schema.json",
+  "title": "PowerForge Configuration Segments (schema v1)",
+  "$defs": {
+    "ManifestConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ModuleVersion": { "type": "string" },
+        "CompatiblePSEditions": { "type": "array", "items": { "type": "string" } },
+        "Guid": { "type": "string" },
+        "Author": { "type": "string" },
+        "CompanyName": { "type": ["string", "null"] },
+        "Copyright": { "type": ["string", "null"] },
+        "Description": { "type": ["string", "null"] },
+        "PowerShellVersion": { "type": "string" },
+        "Tags": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IconUri": { "type": ["string", "null"] },
+        "ProjectUri": { "type": ["string", "null"] },
+        "DotNetFrameworkVersion": { "type": ["string", "null"] },
+        "LicenseUri": { "type": ["string", "null"] },
+        "RequireLicenseAcceptance": { "type": "boolean" },
+        "Prerelease": { "type": ["string", "null"] },
+        "FunctionsToExport": { "type": ["array", "null"], "items": { "type": "string" } },
+        "CmdletsToExport": { "type": ["array", "null"], "items": { "type": "string" } },
+        "AliasesToExport": { "type": ["array", "null"], "items": { "type": "string" } },
+        "FormatsToProcess": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ResolveBinaryConflictsConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": ["boolean", "null"] },
+        "ProjectName": { "type": ["string", "null"] }
+      }
+    },
+
+    "BuildModuleConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": ["boolean", "null"] },
+        "DeleteBefore": { "type": ["boolean", "null"] },
+        "Merge": { "type": ["boolean", "null"] },
+        "MergeMissing": { "type": ["boolean", "null"] },
+        "SignMerged": { "type": ["boolean", "null"] },
+        "ClassesDotSource": { "type": ["boolean", "null"] },
+        "LibraryDotSource": { "type": ["boolean", "null"] },
+        "LibrarySeparateFile": { "type": ["boolean", "null"] },
+        "RefreshPSD1Only": { "type": ["boolean", "null"] },
+        "UseWildcardForFunctions": { "type": ["boolean", "null"] },
+        "LocalVersion": { "type": ["boolean", "null"] },
+        "VersionedInstallStrategy": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/InstallationStrategy" }, { "type": "null" }] },
+        "VersionedInstallKeep": { "type": ["integer", "null"], "minimum": 1 },
+        "DoNotAttemptToFixRelativePaths": { "type": ["boolean", "null"] },
+        "DebugDLL": { "type": ["boolean", "null"] },
+        "KillLockersBeforeInstall": { "type": ["boolean", "null"] },
+        "KillLockersForce": { "type": ["boolean", "null"] },
+        "AutoSwitchExactOnPublish": { "type": ["boolean", "null"] },
+        "ResolveBinaryConflicts": { "anyOf": [{ "$ref": "#/$defs/ResolveBinaryConflictsConfiguration" }, { "type": "null" }] }
+      }
+    },
+
+    "BuildLibrariesConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": ["boolean", "null"] },
+        "Configuration": { "type": ["string", "null"] },
+        "Framework": { "type": ["array", "null"], "items": { "type": "string" } },
+        "ProjectName": { "type": ["string", "null"] },
+        "ExcludeMainLibrary": { "type": ["boolean", "null"] },
+        "ExcludeLibraryFilter": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IgnoreLibraryOnLoad": { "type": ["array", "null"], "items": { "type": "string" } },
+        "BinaryModule": { "type": ["array", "null"], "items": { "type": "string" } },
+        "HandleAssemblyWithSameName": { "type": ["boolean", "null"] },
+        "NETLineByLineAddType": { "type": ["boolean", "null"] },
+        "NETProjectPath": { "type": ["string", "null"] },
+        "BinaryModuleCmdletScanDisabled": { "type": ["boolean", "null"] },
+        "SearchClass": { "type": ["string", "null"] },
+        "NETBinaryModuleDocumentation": { "type": ["boolean", "null"] },
+        "HandleRuntimes": { "type": ["boolean", "null"] },
+        "NETDoNotCopyLibrariesRecursively": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "DocumentationConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Path": { "type": "string" },
+        "PathReadme": { "type": "string" }
+      }
+    },
+
+    "BuildDocumentationConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": "boolean" },
+        "StartClean": { "type": "boolean" },
+        "UpdateWhenNew": { "type": "boolean" },
+        "Tool": { "$ref": "powerforge.common.schema.json#/$defs/DocumentationTool" },
+        "GenerateExternalHelp": { "type": "boolean" },
+        "ExternalHelpCulture": { "type": "string" },
+        "ExternalHelpFileName": { "type": "string" }
+      }
+    },
+
+    "PlaceHolderReplacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Find": { "type": "string" },
+        "Replace": { "type": "string" }
+      }
+    },
+
+    "PlaceHolderOptionConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SkipBuiltinReplacements": { "type": "boolean" }
+      }
+    },
+
+    "ImportModulesConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Self": { "type": ["boolean", "null"] },
+        "RequiredModules": { "type": ["boolean", "null"] },
+        "Verbose": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "ModuleSkipConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "IgnoreModuleName": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IgnoreFunctionName": { "type": ["array", "null"], "items": { "type": "string" } },
+        "Force": { "type": "boolean" }
+      }
+    },
+
+    "CommandConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ModuleName": { "type": ["string", "null"] },
+        "CommandName": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "IncludeToArrayEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Key": { "type": "string" },
+        "Values": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "InformationConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "FunctionsToExportFolder": { "type": ["string", "null"] },
+        "AliasesToExportFolder": { "type": ["string", "null"] },
+        "ExcludeFromPackage": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IncludeRoot": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IncludePS1": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IncludeAll": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IncludeCustomCode": { "type": ["string", "null"] },
+        "IncludeToArray": { "type": ["array", "null"], "items": { "$ref": "#/$defs/IncludeToArrayEntry" } },
+        "LibrariesCore": { "type": ["string", "null"] },
+        "LibrariesDefault": { "type": ["string", "null"] },
+        "LibrariesStandard": { "type": ["string", "null"] }
+      }
+    },
+
+    "ModuleDependencyConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ModuleName": { "type": "string" },
+        "ModuleVersion": { "type": ["string", "null"] },
+        "RequiredVersion": { "type": ["string", "null"] },
+        "Guid": { "type": ["string", "null"] }
+      }
+    },
+
+    "RepositoryCredential": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "UserName": { "type": ["string", "null"] },
+        "Secret": { "type": ["string", "null"] }
+      }
+    },
+
+    "PublishRepositoryConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": ["string", "null"] },
+        "Uri": { "type": ["string", "null"] },
+        "SourceUri": { "type": ["string", "null"] },
+        "PublishUri": { "type": ["string", "null"] },
+        "Trusted": { "type": "boolean" },
+        "Priority": { "type": ["integer", "null"] },
+        "ApiVersion": { "$ref": "powerforge.common.schema.json#/$defs/RepositoryApiVersion" },
+        "EnsureRegistered": { "type": "boolean" },
+        "UnregisterAfterUse": { "type": "boolean" },
+        "Credential": { "anyOf": [{ "$ref": "#/$defs/RepositoryCredential" }, { "type": "null" }] }
+      }
+    },
+
+    "PublishConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Destination": { "$ref": "powerforge.common.schema.json#/$defs/PublishDestination" },
+        "Tool": { "$ref": "powerforge.common.schema.json#/$defs/PublishTool" },
+        "ApiKey": { "type": "string" },
+        "ID": { "type": ["string", "null"] },
+        "Enabled": { "type": "boolean" },
+        "UserName": { "type": ["string", "null"] },
+        "RepositoryName": { "type": ["string", "null"] },
+        "Repository": { "anyOf": [{ "$ref": "#/$defs/PublishRepositoryConfiguration" }, { "type": "null" }] },
+        "Force": { "type": "boolean" },
+        "OverwriteTagName": { "type": ["string", "null"] },
+        "DoNotMarkAsPreRelease": { "type": "boolean" },
+        "Verbose": { "type": "boolean" }
+      }
+    },
+
+    "DeliveryImportantLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Title": { "type": "string" },
+        "Url": { "type": "string" }
+      }
+    },
+
+    "SigningOptionsConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "IncludeInternals": { "type": ["boolean", "null"] },
+        "IncludeBinaries": { "type": ["boolean", "null"] },
+        "IncludeExe": { "type": ["boolean", "null"] },
+        "Include": { "type": ["array", "null"], "items": { "type": "string" } },
+        "ExcludePaths": { "type": ["array", "null"], "items": { "type": "string" } },
+        "CertificateThumbprint": { "type": ["string", "null"] },
+        "CertificatePFXPath": { "type": ["string", "null"] },
+        "CertificatePFXBase64": { "type": ["string", "null"] },
+        "CertificatePFXPassword": { "type": ["string", "null"] }
+      }
+    },
+
+    "DeliveryOptionsConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": "boolean" },
+        "InternalsPath": { "type": "string" },
+        "IncludeRootReadme": { "type": "boolean" },
+        "IncludeRootChangelog": { "type": "boolean" },
+        "IncludeRootLicense": { "type": "boolean" },
+        "ReadmeDestination": { "$ref": "powerforge.common.schema.json#/$defs/DeliveryBundleDestination" },
+        "ChangelogDestination": { "$ref": "powerforge.common.schema.json#/$defs/DeliveryBundleDestination" },
+        "LicenseDestination": { "$ref": "powerforge.common.schema.json#/$defs/DeliveryBundleDestination" },
+        "ImportantLinks": { "type": ["array", "null"], "items": { "$ref": "#/$defs/DeliveryImportantLink" } },
+        "IntroText": { "type": ["array", "null"], "items": { "type": "string" } },
+        "UpgradeText": { "type": ["array", "null"], "items": { "type": "string" } },
+        "IntroFile": { "type": ["string", "null"] },
+        "UpgradeFile": { "type": ["string", "null"] },
+        "RepositoryPaths": { "type": ["array", "null"], "items": { "type": "string" } },
+        "RepositoryBranch": { "type": ["string", "null"] },
+        "DocumentationOrder": { "type": ["array", "null"], "items": { "type": "string" } },
+        "Schema": { "type": "string" }
+      }
+    },
+
+    "ConfigurationOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Signing": { "anyOf": [{ "$ref": "#/$defs/SigningOptionsConfiguration" }, { "type": "null" }] },
+        "Delivery": { "anyOf": [{ "$ref": "#/$defs/DeliveryOptionsConfiguration" }, { "type": "null" }] }
+      }
+    },
+
+    "EnableOnlyRuleOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": "boolean" }
+      }
+    },
+
+    "BraceRuleOptions": {
+      "allOf": [
+        { "$ref": "#/$defs/EnableOnlyRuleOptions" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "OnSameLine": { "type": "boolean" },
+            "NewLineAfter": { "type": "boolean" },
+            "IgnoreOneLineBlock": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+
+    "CloseBraceRuleOptions": {
+      "allOf": [
+        { "$ref": "#/$defs/EnableOnlyRuleOptions" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "NewLineAfter": { "type": "boolean" },
+            "IgnoreOneLineBlock": { "type": "boolean" },
+            "NoEmptyLineBefore": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+
+    "IndentationRuleOptions": {
+      "allOf": [
+        { "$ref": "#/$defs/EnableOnlyRuleOptions" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Kind": { "type": ["string", "null"] },
+            "PipelineIndentation": { "type": ["string", "null"] },
+            "IndentationSize": { "type": "integer" }
+          }
+        }
+      ]
+    },
+
+    "WhitespaceRuleOptions": {
+      "allOf": [
+        { "$ref": "#/$defs/EnableOnlyRuleOptions" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "CheckInnerBrace": { "type": "boolean" },
+            "CheckOpenBrace": { "type": "boolean" },
+            "CheckOpenParen": { "type": "boolean" },
+            "CheckOperator": { "type": "boolean" },
+            "CheckPipe": { "type": "boolean" },
+            "CheckSeparator": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+
+    "AlignAssignmentRuleOptions": {
+      "allOf": [
+        { "$ref": "#/$defs/EnableOnlyRuleOptions" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "CheckHashtable": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+
+    "FormatterRulesOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "PSPlaceOpenBrace": { "anyOf": [{ "$ref": "#/$defs/BraceRuleOptions" }, { "type": "null" }] },
+        "PSPlaceCloseBrace": { "anyOf": [{ "$ref": "#/$defs/CloseBraceRuleOptions" }, { "type": "null" }] },
+        "PSUseConsistentIndentation": { "anyOf": [{ "$ref": "#/$defs/IndentationRuleOptions" }, { "type": "null" }] },
+        "PSUseConsistentWhitespace": { "anyOf": [{ "$ref": "#/$defs/WhitespaceRuleOptions" }, { "type": "null" }] },
+        "PSAlignAssignmentStatement": { "anyOf": [{ "$ref": "#/$defs/AlignAssignmentRuleOptions" }, { "type": "null" }] },
+        "PSUseCorrectCasing": { "anyOf": [{ "$ref": "#/$defs/EnableOnlyRuleOptions" }, { "type": "null" }] }
+      }
+    },
+
+    "FormatterSettingsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "IncludeRules": { "type": ["array", "null"], "items": { "type": "string" } },
+        "Rules": { "$ref": "#/$defs/FormatterRulesOptions" }
+      }
+    },
+
+    "FormatCodeOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Sort": { "type": ["string", "null"] },
+        "RemoveComments": { "type": "boolean" },
+        "RemoveEmptyLines": { "type": "boolean" },
+        "RemoveAllEmptyLines": { "type": "boolean" },
+        "RemoveCommentsInParamBlock": { "type": "boolean" },
+        "RemoveCommentsBeforeParamBlock": { "type": "boolean" },
+        "FormatterSettings": { "anyOf": [{ "$ref": "#/$defs/FormatterSettingsOptions" }, { "type": "null" }] }
+      }
+    },
+
+    "FormattingStyleOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "PSD1": { "type": ["string", "null"] }
+      }
+    },
+
+    "FormattingTargetOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Style": { "anyOf": [{ "$ref": "#/$defs/FormattingStyleOptions" }, { "type": "null" }] },
+        "FormatCodePSM1": { "anyOf": [{ "$ref": "#/$defs/FormatCodeOptions" }, { "type": "null" }] },
+        "FormatCodePSD1": { "anyOf": [{ "$ref": "#/$defs/FormatCodeOptions" }, { "type": "null" }] }
+      }
+    },
+
+    "FormattingOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Merge": { "$ref": "#/$defs/FormattingTargetOptions" },
+        "Standard": { "$ref": "#/$defs/FormattingTargetOptions" }
+      }
+    },
+
+    "CompatibilitySettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": "boolean" },
+        "FailOnIncompatibility": { "type": "boolean" },
+        "RequirePS51Compatibility": { "type": "boolean" },
+        "RequirePS7Compatibility": { "type": "boolean" },
+        "RequireCrossCompatibility": { "type": "boolean" },
+        "MinimumCompatibilityPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "ExportReport": { "type": "boolean" },
+        "ReportFileName": { "type": "string" }
+      }
+    },
+
+    "FileConsistencySettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": "boolean" },
+        "FailOnInconsistency": { "type": "boolean" },
+        "RequiredEncoding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" },
+        "RequiredLineEnding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyLineEnding" },
+        "AutoFix": { "type": "boolean" },
+        "CreateBackups": { "type": "boolean" },
+        "MaxInconsistencyPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "ExportReport": { "type": "boolean" },
+        "ReportFileName": { "type": "string" },
+        "CheckMixedLineEndings": { "type": "boolean" },
+        "CheckMissingFinalNewline": { "type": "boolean" }
+      }
+    },
+
+    "TestConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "When": { "$ref": "powerforge.common.schema.json#/$defs/TestExecutionWhen" },
+        "TestsPath": { "type": "string" },
+        "Force": { "type": "boolean" }
+      }
+    },
+
+    "ArtefactRequiredModulesConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": ["boolean", "null"] },
+        "Path": { "type": ["string", "null"] },
+        "ModulesPath": { "type": ["string", "null"] }
+      }
+    },
+
+    "ArtefactCopyMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Source": { "type": "string" },
+        "Destination": { "type": "string" }
+      }
+    },
+
+    "ArtefactConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": ["boolean", "null"] },
+        "IncludeTagName": { "type": ["boolean", "null"] },
+        "Path": { "type": ["string", "null"] },
+        "RequiredModules": { "$ref": "#/$defs/ArtefactRequiredModulesConfiguration" },
+        "DirectoryOutput": { "type": ["array", "null"], "items": { "$ref": "#/$defs/ArtefactCopyMapping" } },
+        "DestinationDirectoriesRelative": { "type": ["boolean", "null"] },
+        "FilesOutput": { "type": ["array", "null"], "items": { "$ref": "#/$defs/ArtefactCopyMapping" } },
+        "DestinationFilesRelative": { "type": ["boolean", "null"] },
+        "DoNotClear": { "type": ["boolean", "null"] },
+        "ArtefactName": { "type": ["string", "null"] },
+        "ScriptName": { "type": ["string", "null"] },
+        "ID": { "type": ["string", "null"] },
+        "PreScriptMerge": { "type": ["string", "null"] },
+        "PostScriptMerge": { "type": ["string", "null"] }
+      }
+    },
+
+    "ManifestSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Manifest" },
+        "Configuration": { "$ref": "#/$defs/ManifestConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "BuildSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Build" },
+        "BuildModule": { "$ref": "#/$defs/BuildModuleConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "BuildLibrariesSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "BuildLibraries" },
+        "BuildLibraries": { "$ref": "#/$defs/BuildLibrariesConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "InformationSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Information" },
+        "Configuration": { "$ref": "#/$defs/InformationConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "OptionsSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Options" },
+        "Options": { "$ref": "#/$defs/ConfigurationOptions" }
+      },
+      "required": ["Type"]
+    },
+
+    "FormattingSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Formatting" },
+        "Options": { "$ref": "#/$defs/FormattingOptions" }
+      },
+      "required": ["Type"]
+    },
+
+    "DocumentationSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Documentation" },
+        "Configuration": { "$ref": "#/$defs/DocumentationConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "BuildDocumentationSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "BuildDocumentation" },
+        "Configuration": { "$ref": "#/$defs/BuildDocumentationConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "ImportModulesSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "ImportModules" },
+        "ImportModules": { "$ref": "#/$defs/ImportModulesConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "ModuleSkipSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "ModuleSkip" },
+        "Configuration": { "$ref": "#/$defs/ModuleSkipConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "CommandSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Command" },
+        "Configuration": { "$ref": "#/$defs/CommandConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "PlaceHolderSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "PlaceHolder" },
+        "Configuration": { "$ref": "#/$defs/PlaceHolderReplacement" }
+      },
+      "required": ["Type"]
+    },
+
+    "PlaceHolderOptionSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "PlaceHolderOption" },
+        "PlaceHolderOption": { "$ref": "#/$defs/PlaceHolderOptionConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "CompatibilitySegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Compatibility" },
+        "Settings": { "$ref": "#/$defs/CompatibilitySettings" }
+      },
+      "required": ["Type"]
+    },
+
+    "FileConsistencySegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "FileConsistency" },
+        "Settings": { "$ref": "#/$defs/FileConsistencySettings" }
+      },
+      "required": ["Type"]
+    },
+
+    "TestsAfterMergeSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "TestsAfterMerge" },
+        "Configuration": { "$ref": "#/$defs/TestConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "PublishSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "enum": ["GalleryNuget", "GitHubNuget"] },
+        "Configuration": { "$ref": "#/$defs/PublishConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "ArtefactSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "$ref": "powerforge.common.schema.json#/$defs/ArtefactType" },
+        "ArtefactType": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ArtefactType" }, { "type": "null" }] },
+        "Configuration": { "$ref": "#/$defs/ArtefactConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "ModuleDependencySegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "$ref": "powerforge.common.schema.json#/$defs/ModuleDependencyKind" },
+        "Kind": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ModuleDependencyKind" }, { "type": "null" }] },
+        "Configuration": { "$ref": "#/$defs/ModuleDependencyConfiguration" }
+      },
+      "required": ["Type"]
+    },
+
+    "ConfigurationSegment": {
+      "oneOf": [
+        { "$ref": "#/$defs/ManifestSegment" },
+        { "$ref": "#/$defs/BuildSegment" },
+        { "$ref": "#/$defs/BuildLibrariesSegment" },
+        { "$ref": "#/$defs/InformationSegment" },
+        { "$ref": "#/$defs/OptionsSegment" },
+        { "$ref": "#/$defs/FormattingSegment" },
+        { "$ref": "#/$defs/DocumentationSegment" },
+        { "$ref": "#/$defs/BuildDocumentationSegment" },
+        { "$ref": "#/$defs/ImportModulesSegment" },
+        { "$ref": "#/$defs/ModuleSkipSegment" },
+        { "$ref": "#/$defs/CommandSegment" },
+        { "$ref": "#/$defs/PlaceHolderSegment" },
+        { "$ref": "#/$defs/PlaceHolderOptionSegment" },
+        { "$ref": "#/$defs/CompatibilitySegment" },
+        { "$ref": "#/$defs/FileConsistencySegment" },
+        { "$ref": "#/$defs/TestsAfterMergeSegment" },
+        { "$ref": "#/$defs/PublishSegment" },
+        { "$ref": "#/$defs/ArtefactSegment" },
+        { "$ref": "#/$defs/ModuleDependencySegment" }
+      ]
+    }
+  }
+}
+

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.common.schema.json",
+  "title": "PowerForge Common Types (schema v1)",
+  "type": "object",
+  "$defs": {
+    "InstallationStrategy": {
+      "type": "string",
+      "enum": ["Exact", "AutoRevision"]
+    },
+    "ModuleTestSuiteOutputFormat": {
+      "type": "string",
+      "enum": ["Detailed", "Normal", "Minimal"]
+    },
+    "PublishDestination": {
+      "type": "string",
+      "enum": ["PowerShellGallery", "GitHub"]
+    },
+    "PublishTool": {
+      "type": "string",
+      "enum": ["Auto", "PSResourceGet", "PowerShellGet"]
+    },
+    "RepositoryApiVersion": {
+      "type": "string",
+      "enum": ["Auto", "V2", "V3"]
+    },
+    "ModuleDependencyKind": {
+      "type": "string",
+      "enum": ["RequiredModule", "ExternalModule", "ApprovedModule"]
+    },
+    "ArtefactType": {
+      "type": "string",
+      "enum": ["Unpacked", "Packed", "Script", "ScriptPacked"]
+    },
+    "FileConsistencyEncoding": {
+      "type": "string",
+      "enum": ["ASCII", "UTF8", "UTF8BOM", "Unicode", "BigEndianUnicode", "UTF7", "UTF32"]
+    },
+    "FileConsistencyLineEnding": {
+      "type": "string",
+      "enum": ["CRLF", "LF"]
+    },
+    "DeliveryBundleDestination": {
+      "type": "string",
+      "enum": ["Internals", "Root", "Both", "None"]
+    },
+    "DocumentationTool": {
+      "type": "string",
+      "enum": ["PlatyPS", "HelpOut", "PowerForge"]
+    },
+    "TestExecutionWhen": {
+      "type": "string",
+      "enum": ["AfterMerge"]
+    }
+  }
+}
+

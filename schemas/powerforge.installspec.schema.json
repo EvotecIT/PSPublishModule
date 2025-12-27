@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.installspec.schema.json",
+  "title": "PowerForge ModuleInstallSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "Name": { "type": "string", "minLength": 1 },
+    "Version": { "type": "string", "minLength": 1 },
+    "StagingPath": { "type": "string", "minLength": 1 },
+    "Strategy": { "$ref": "powerforge.common.schema.json#/$defs/InstallationStrategy" },
+    "KeepVersions": { "type": "integer", "minimum": 1 },
+    "Roots": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["Name", "Version", "StagingPath"]
+}
+

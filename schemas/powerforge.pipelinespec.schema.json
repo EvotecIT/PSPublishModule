@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.pipelinespec.schema.json",
+  "title": "PowerForge ModulePipelineSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Build": { "$ref": "powerforge.buildspec.schema.json" },
+    "Install": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Strategy": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/InstallationStrategy" }, { "type": "null" }] },
+        "KeepVersions": { "type": ["integer", "null"], "minimum": 1 },
+        "Roots": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+    "Segments": {
+      "type": "array",
+      "items": { "$ref": "powerforge.segments.schema.json#/$defs/ConfigurationSegment" }
+    }
+  },
+  "required": ["Build"]
+}
+

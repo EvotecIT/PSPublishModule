@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.testsuitespec.schema.json",
+  "title": "PowerForge ModuleTestSuiteSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "ProjectPath": { "type": "string", "minLength": 1 },
+    "TestPath": { "type": ["string", "null"] },
+    "AdditionalModules": { "type": "array", "items": { "type": "string" } },
+    "SkipModules": { "type": "array", "items": { "type": "string" } },
+    "OutputFormat": { "$ref": "powerforge.common.schema.json#/$defs/ModuleTestSuiteOutputFormat" },
+    "EnableCodeCoverage": { "type": "boolean" },
+    "Force": { "type": "boolean" },
+    "SkipDependencies": { "type": "boolean" },
+    "SkipImport": { "type": "boolean" },
+    "KeepResultsXml": { "type": "boolean" },
+    "PreferPwsh": { "type": "boolean" },
+    "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+  },
+  "required": ["ProjectPath"]
+}
+

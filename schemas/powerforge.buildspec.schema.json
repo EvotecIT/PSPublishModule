@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.buildspec.schema.json",
+  "title": "PowerForge ModuleBuildSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "Name": { "type": "string", "minLength": 1 },
+    "SourcePath": { "type": "string", "minLength": 1 },
+    "StagingPath": { "type": ["string", "null"] },
+    "CsprojPath": { "type": ["string", "null"] },
+
+    "Version": { "type": "string" },
+    "Configuration": { "type": "string" },
+    "Frameworks": { "type": "array", "items": { "type": "string" } },
+
+    "Author": { "type": ["string", "null"] },
+    "CompanyName": { "type": ["string", "null"] },
+    "Description": { "type": ["string", "null"] },
+    "Tags": { "type": "array", "items": { "type": "string" } },
+    "IconUri": { "type": ["string", "null"] },
+    "ProjectUri": { "type": ["string", "null"] },
+
+    "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+    "ExcludeFiles": { "type": "array", "items": { "type": "string" } },
+
+    "ExportAssemblies": { "type": "array", "items": { "type": "string" } },
+    "DisableBinaryCmdletScan": { "type": "boolean" },
+    "KeepStaging": { "type": "boolean" }
+  },
+  "required": ["Name", "SourcePath"]
+}
+
