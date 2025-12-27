@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 
 var logger = new ConsoleLogger { IsVerbose = args.Contains("-Verbose", StringComparer.OrdinalIgnoreCase) };
 var forge = new PowerForgeFacade(logger);
+const int OutputSchemaVersion = 1;
 
 if (args.Length == 0 || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || args[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
 {
@@ -59,6 +60,7 @@ switch (cmd)
             {
                 WriteJson(new
                 {
+                    schemaVersion = OutputSchemaVersion,
                     command = "build",
                     success = true,
                     exitCode = 0,
@@ -76,7 +78,7 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "build", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -96,7 +98,7 @@ switch (cmd)
         {
             var results = new List<NormalizationResult>();
             foreach (var f in targets) results.Add(forge.Normalize(f));
-            WriteJson(new { command = "normalize", success = true, exitCode = 0, results });
+            WriteJson(new { schemaVersion = OutputSchemaVersion, command = "normalize", success = true, exitCode = 0, results });
             return 0;
         }
 
@@ -121,7 +123,7 @@ switch (cmd)
             var cmdLogger = new BufferingLogger { IsVerbose = logger.IsVerbose };
             var jsonForge = new PowerForgeFacade(cmdLogger);
             var jsonResults = jsonForge.Format(targets);
-            WriteJson(new { command = "format", success = true, exitCode = 0, results = jsonResults, logs = cmdLogger.Entries });
+            WriteJson(new { schemaVersion = OutputSchemaVersion, command = "format", success = true, exitCode = 0, results = jsonResults, logs = cmdLogger.Entries });
             return 0;
         }
 
@@ -170,6 +172,7 @@ switch (cmd)
             {
                 WriteJson(new
                 {
+                    schemaVersion = OutputSchemaVersion,
                     command = "install",
                     success = true,
                     exitCode = 0,
@@ -189,7 +192,7 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "install", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "install", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -228,6 +231,7 @@ switch (cmd)
             {
                 WriteJson(new
                 {
+                    schemaVersion = OutputSchemaVersion,
                     command = "test",
                     success,
                     exitCode,
@@ -264,7 +268,7 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "test", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "test", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -294,7 +298,7 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "pipeline", success = false, exitCode = 2, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 2, error = ex.Message });
                 return 2;
             }
 
@@ -312,6 +316,7 @@ switch (cmd)
             {
                 WriteJson(new
                 {
+                    schemaVersion = OutputSchemaVersion,
                     command = "pipeline",
                     success = true,
                     exitCode = 0,
@@ -335,7 +340,85 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "pipeline", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 1, error = ex.Message });
+                return 1;
+            }
+
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
+    case "plan":
+    {
+        var argv = args.Skip(1).ToArray();
+        var configPath = TryGetOptionValue(argv, "--config");
+        var outputJson = IsJsonOutput(argv);
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            Console.WriteLine("Usage: powerforge plan --config <Pipeline.json> [--output json]");
+            return 2;
+        }
+
+        ModulePipelineSpec spec;
+        try
+        {
+            spec = LoadJson<ModulePipelineSpec>(configPath);
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 2, error = ex.Message });
+                return 2;
+            }
+
+            logger.Error(ex.Message);
+            return 2;
+        }
+
+        try
+        {
+            ILogger cmdLogger = outputJson ? new BufferingLogger { IsVerbose = logger.IsVerbose } : logger;
+            var runner = new ModulePipelineRunner(cmdLogger);
+            var plan = runner.Plan(spec);
+
+            if (outputJson)
+            {
+                WriteJson(new
+                {
+                    schemaVersion = OutputSchemaVersion,
+                    command = "plan",
+                    success = true,
+                    exitCode = 0,
+                    spec,
+                    plan,
+                    logs = ((BufferingLogger)cmdLogger).Entries
+                });
+                return 0;
+            }
+
+            logger.Success($"Plan: {plan.ModuleName} {plan.ResolvedVersion}");
+            logger.Info($"Project: {plan.ProjectRoot}");
+            logger.Info($"Staging: {plan.BuildSpec.StagingPath}");
+            logger.Info($"Install: {(plan.InstallEnabled ? "yes" : "no")} ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})");
+            foreach (var root in plan.InstallRoots) logger.Info($"Root: {root}");
+
+            if (plan.DocumentationBuild is not null && plan.DocumentationBuild.Enable)
+            {
+                logger.Info($"Docs: {plan.Documentation?.Path} ({plan.DocumentationBuild.Tool})");
+            }
+
+            if (plan.Artefacts.Length > 0) logger.Info($"Artefacts: {plan.Artefacts.Length}");
+            if (plan.Publishes.Length > 0) logger.Info($"Publishes: {plan.Publishes.Length}");
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -363,6 +446,7 @@ switch (cmd)
             {
                 WriteJson(new
                 {
+                    schemaVersion = OutputSchemaVersion,
                     command = "find",
                     success = true,
                     exitCode = 0,
@@ -382,7 +466,7 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "find", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "find", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -417,6 +501,7 @@ switch (cmd)
             {
                 WriteJson(new
                 {
+                    schemaVersion = OutputSchemaVersion,
                     command = "publish",
                     success = true,
                     exitCode = 0,
@@ -438,7 +523,7 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { command = "publish", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "publish", success = false, exitCode = 1, error = ex.Message });
                 return 1;
             }
 
@@ -465,6 +550,7 @@ Usage:
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
   powerforge install --config <InstallSpec.json>
   powerforge pipeline --config <Pipeline.json>
+  powerforge plan --config <Pipeline.json> [--output json]
   powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
   powerforge publish --path <Path> [--repo <Repo>] [--apikey <Key>] [--nupkg] [--destination <Path>] [--skip-dependencies-check] [--skip-manifest-validate]
   powerforge -Verbose               Enable verbose diagnostics
@@ -815,6 +901,7 @@ static void WriteJson(object obj)
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false
     };
+    options.Converters.Add(new JsonStringEnumConverter());
     options.Converters.Add(new ConfigurationSegmentJsonConverter());
 
     var json = JsonSerializer.Serialize(obj, options);
