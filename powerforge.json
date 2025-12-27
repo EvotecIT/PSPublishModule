@@ -1,0 +1,54 @@
+{
+  "$schema": "./schemas/powerforge.pipelinespec.schema.json",
+  "SchemaVersion": 1,
+  "Build": {
+    "Name": "PSPublishModule",
+    "SourcePath": "Module",
+    "CsprojPath": "PSPublishModule/PSPublishModule.csproj",
+    "Version": "auto",
+    "Configuration": "Release",
+    "Frameworks": ["net10.0", "net8.0", "net472"],
+    "ExcludeDirectories": [
+      ".git",
+      ".vs",
+      ".vscode",
+      "bin",
+      "obj",
+      "packages",
+      "node_modules",
+      "Artefacts",
+      "Build",
+      "Docs",
+      "Documentation",
+      "Examples",
+      "Ignore",
+      "Tests",
+      "Lib"
+    ],
+    "ExcludeFiles": [".gitignore", "PSPublishModule.Tests.ps1"]
+  },
+  "Install": {
+    "Enabled": true,
+    "Strategy": "AutoRevision",
+    "KeepVersions": 3
+  },
+  "Segments": [
+    {
+      "Type": "Documentation",
+      "Configuration": { "Path": "Docs", "PathReadme": "Docs/Readme.md" }
+    },
+    {
+      "Type": "BuildDocumentation",
+      "Configuration": {
+        "Enable": true,
+        "StartClean": true,
+        "UpdateWhenNew": true,
+        "Tool": "PowerForge",
+        "GenerateExternalHelp": true,
+        "ExternalHelpCulture": "en-US"
+      }
+    },
+    { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "Artefacts/Packed" } },
+    { "Type": "Unpacked", "Configuration": { "Enabled": true, "Path": "Artefacts/Unpacked" } }
+  ]
+}

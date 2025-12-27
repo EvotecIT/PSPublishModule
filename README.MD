@@ -96,6 +96,11 @@ PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Con
 
 ### Usage
 
+### CLI (PowerForge.Cli)
+
+This project includes a reusable C# core (`PowerForge`) and a CLI (`powerforge`) that can run builds/pipelines from JSON (CI/VSCode-friendly).
+See `JSON_SCHEMA.md` for the shipped schema files and example pipeline configs.
+
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
 
 ```powershell
