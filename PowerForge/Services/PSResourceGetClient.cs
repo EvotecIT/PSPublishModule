@@ -7,7 +7,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// A minimal representation of a PowerShell resource returned by PSResourceGet.
+/// A minimal representation of a PowerShell resource returned by repository queries (PSResourceGet/PowerShellGet).
 /// </summary>
 public sealed class PSResourceInfo
 {
@@ -48,6 +48,8 @@ public sealed class PSResourceFindOptions
     public bool Prerelease { get; }
     /// <summary>Repository names to search in.</summary>
     public IReadOnlyList<string> Repositories { get; }
+    /// <summary>Optional credential used for repository access.</summary>
+    public RepositoryCredential? Credential { get; }
 
     /// <summary>
     /// Creates a new options instance.
@@ -58,6 +60,19 @@ public sealed class PSResourceFindOptions
         Version = version;
         Prerelease = prerelease;
         Repositories = repositories ?? Array.Empty<string>();
+        Credential = null;
+    }
+
+    /// <summary>
+    /// Creates a new options instance.
+    /// </summary>
+    public PSResourceFindOptions(IReadOnlyList<string> names, string? version, bool prerelease, IReadOnlyList<string>? repositories, RepositoryCredential? credential)
+    {
+        Names = names ?? Array.Empty<string>();
+        Version = version;
+        Prerelease = prerelease;
+        Repositories = repositories ?? Array.Empty<string>();
+        Credential = credential;
     }
 }
 
@@ -80,6 +95,8 @@ public sealed class PSResourcePublishOptions
     public bool SkipDependenciesCheck { get; }
     /// <summary>Skip module manifest validation.</summary>
     public bool SkipModuleManifestValidate { get; }
+    /// <summary>Optional credential used for repository access.</summary>
+    public RepositoryCredential? Credential { get; }
 
     /// <summary>
     /// Creates a new options instance.
@@ -91,7 +108,8 @@ public sealed class PSResourcePublishOptions
         string? apiKey = null,
         string? destinationPath = null,
         bool skipDependenciesCheck = false,
-        bool skipModuleManifestValidate = false)
+        bool skipModuleManifestValidate = false,
+        RepositoryCredential? credential = null)
     {
         Path = path;
         IsNupkg = isNupkg;
@@ -100,6 +118,7 @@ public sealed class PSResourcePublishOptions
         DestinationPath = destinationPath;
         SkipDependenciesCheck = skipDependenciesCheck;
         SkipModuleManifestValidate = skipModuleManifestValidate;
+        Credential = credential;
     }
 }
 
@@ -124,6 +143,8 @@ public sealed class PSResourceInstallOptions
     public bool TrustRepository { get; }
     /// <summary>Whether to skip dependency checks.</summary>
     public bool SkipDependencyCheck { get; }
+    /// <summary>Optional credential used for repository access.</summary>
+    public RepositoryCredential? Credential { get; }
 
     /// <summary>
     /// Creates a new options instance.
@@ -136,7 +157,8 @@ public sealed class PSResourceInstallOptions
         bool prerelease = false,
         bool reinstall = false,
         bool trustRepository = true,
-        bool skipDependencyCheck = false)
+        bool skipDependencyCheck = false,
+        RepositoryCredential? credential = null)
     {
         Name = name;
         Version = version;
@@ -146,6 +168,7 @@ public sealed class PSResourceInstallOptions
         Reinstall = reinstall;
         TrustRepository = trustRepository;
         SkipDependencyCheck = skipDependencyCheck;
+        Credential = credential;
     }
 }
 
@@ -170,6 +193,8 @@ public sealed class PSResourceSaveOptions
     public bool SkipDependencyCheck { get; }
     /// <summary>Whether to accept license prompts.</summary>
     public bool AcceptLicense { get; }
+    /// <summary>Optional credential used for repository access.</summary>
+    public RepositoryCredential? Credential { get; }
 
     /// <summary>
     /// Creates a new options instance.
@@ -182,7 +207,8 @@ public sealed class PSResourceSaveOptions
         bool prerelease = false,
         bool trustRepository = true,
         bool skipDependencyCheck = true,
-        bool acceptLicense = true)
+        bool acceptLicense = true,
+        RepositoryCredential? credential = null)
     {
         Name = name;
         DestinationPath = destinationPath;
@@ -192,13 +218,14 @@ public sealed class PSResourceSaveOptions
         TrustRepository = trustRepository;
         SkipDependencyCheck = skipDependencyCheck;
         AcceptLicense = acceptLicense;
+        Credential = credential;
     }
 }
 
 /// <summary>
 /// Out-of-process wrapper for PSResourceGet (Find-PSResource / Publish-PSResource).
 /// </summary>
-public sealed class PSResourceGetClient
+public sealed partial class PSResourceGetClient
 {
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
@@ -233,12 +260,14 @@ public sealed class PSResourceGetClient
             .ToArray();
 
         var script = BuildFindScript();
-        var args = new List<string>(4)
+        var args = new List<string>(6)
         {
             EncodeLines(names),
             options.Version ?? string.Empty,
             EncodeLines(repos),
-            options.Prerelease ? "1" : "0"
+            options.Prerelease ? "1" : "0",
+            options.Credential?.UserName ?? string.Empty,
+            options.Credential?.Secret ?? string.Empty
         };
 
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
@@ -251,6 +280,8 @@ public sealed class PSResourceGetClient
             _logger.Error(full);
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
         }
 
@@ -266,7 +297,7 @@ public sealed class PSResourceGetClient
         if (string.IsNullOrWhiteSpace(options.Path)) throw new ArgumentException("Path is required.", nameof(options));
 
         var script = BuildPublishScript();
-        var args = new List<string>(7)
+        var args = new List<string>(9)
         {
             options.Path,
             options.IsNupkg ? "1" : "0",
@@ -274,7 +305,9 @@ public sealed class PSResourceGetClient
             options.ApiKey ?? string.Empty,
             options.DestinationPath ?? string.Empty,
             options.SkipDependenciesCheck ? "1" : "0",
-            options.SkipModuleManifestValidate ? "1" : "0"
+            options.SkipModuleManifestValidate ? "1" : "0",
+            options.Credential?.UserName ?? string.Empty,
+            options.Credential?.Secret ?? string.Empty
         };
 
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
@@ -285,6 +318,8 @@ public sealed class PSResourceGetClient
             _logger.Error(full);
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
         }
     }
@@ -298,7 +333,7 @@ public sealed class PSResourceGetClient
         if (string.IsNullOrWhiteSpace(options.Name)) throw new ArgumentException("Name is required.", nameof(options));
 
         var script = BuildInstallScript();
-        var args = new List<string>(8)
+        var args = new List<string>(10)
         {
             options.Name,
             options.Version ?? string.Empty,
@@ -307,7 +342,9 @@ public sealed class PSResourceGetClient
             options.Prerelease ? "1" : "0",
             options.Reinstall ? "1" : "0",
             options.TrustRepository ? "1" : "0",
-            options.SkipDependencyCheck ? "1" : "0"
+            options.SkipDependencyCheck ? "1" : "0",
+            options.Credential?.UserName ?? string.Empty,
+            options.Credential?.Secret ?? string.Empty
         };
 
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
@@ -320,6 +357,8 @@ public sealed class PSResourceGetClient
                 _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr))
                 _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
         }
     }
@@ -337,7 +376,7 @@ public sealed class PSResourceGetClient
         Directory.CreateDirectory(dest);
 
         var script = BuildSaveScript();
-        var args = new List<string>(8)
+        var args = new List<string>(10)
         {
             options.Name,
             options.Version ?? string.Empty,
@@ -346,7 +385,9 @@ public sealed class PSResourceGetClient
             options.Prerelease ? "1" : "0",
             options.TrustRepository ? "1" : "0",
             options.SkipDependencyCheck ? "1" : "0",
-            options.AcceptLicense ? "1" : "0"
+            options.AcceptLicense ? "1" : "0",
+            options.Credential?.UserName ?? string.Empty,
+            options.Credential?.Secret ?? string.Empty
         };
 
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
@@ -361,6 +402,8 @@ public sealed class PSResourceGetClient
                 _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr))
                 _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
         }
 
@@ -458,7 +501,9 @@ param(
   [string]$NamesB64,
   [string]$Version,
   [string]$ReposB64,
-  [string]$PrereleaseFlag
+  [string]$PrereleaseFlag,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -487,6 +532,10 @@ if ($names.Count -gt 0) { $params.Name = $names }
 if (-not [string]::IsNullOrWhiteSpace($Version)) { $params.Version = $Version }
 if ($repos.Count -gt 0) { $params.Repository = $repos }
 if ($prerelease) { $params.Prerelease = $true }
+if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+}
 
 try {
   $results = Find-PSResource @params
@@ -519,7 +568,9 @@ param(
   [string]$ApiKey,
   [string]$DestinationPath,
   [string]$SkipDependenciesFlag,
-  [string]$SkipManifestFlag
+  [string]$SkipManifestFlag,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -540,6 +591,10 @@ if (-not [string]::IsNullOrWhiteSpace($ApiKey)) { $params.ApiKey = $ApiKey }
 if (-not [string]::IsNullOrWhiteSpace($DestinationPath)) { $params.DestinationPath = $DestinationPath }
 if ($SkipDependenciesFlag -eq '1') { $params.SkipDependenciesCheck = $true }
 if ($SkipManifestFlag -eq '1') { $params.SkipModuleManifestValidate = $true }
+if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+}
 
 try {
   Publish-PSResource @params | Out-Null
@@ -565,7 +620,9 @@ param(
   [string]$PrereleaseFlag,
   [string]$ReinstallFlag,
   [string]$TrustRepositoryFlag,
-  [string]$SkipDependencyFlag
+  [string]$SkipDependencyFlag,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -588,6 +645,10 @@ if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
 if ($ReinstallFlag -eq '1') { $params.Reinstall = $true }
 if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }
 if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
+if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+}
 
 try {
   Install-PSResource @params | Out-Null
@@ -613,7 +674,9 @@ param(
   [string]$PrereleaseFlag,
   [string]$TrustRepositoryFlag,
   [string]$SkipDependencyFlag,
-  [string]$AcceptLicenseFlag
+  [string]$AcceptLicenseFlag,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -636,6 +699,10 @@ if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
 if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }
 if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
 if ($AcceptLicenseFlag -eq '1') { $params.AcceptLicense = $true }
+if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+}
 
 try {
   $saved = Save-PSResource @params -PassThru

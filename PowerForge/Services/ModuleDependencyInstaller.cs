@@ -175,9 +175,8 @@ public sealed class ModuleDependencyInstaller
             client.Install(opts, timeout);
             return "PSResourceGet";
         }
-        catch (InvalidOperationException ex) when (ex.Message.IndexOf("exit 3", StringComparison.OrdinalIgnoreCase) >= 0)
+        catch (PowerShellToolNotAvailableException)
         {
-            // exit 3 is used by PSResourceGetClient scripts to indicate "module not available".
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'.");
             InstallWithPowerShellGet(dep, repository, timeout);
             return "PowerShellGet";

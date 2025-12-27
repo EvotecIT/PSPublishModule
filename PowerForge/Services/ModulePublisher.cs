@@ -12,6 +12,7 @@ public sealed class ModulePublisher
 {
     private readonly ILogger _logger;
     private readonly PSResourceGetClient _psResourceGet;
+    private readonly PowerShellGetClient _powerShellGet;
     private readonly GitHubReleasePublisher _gitHub;
 
     /// <summary>
@@ -30,6 +31,7 @@ public sealed class ModulePublisher
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         if (runner is null) throw new ArgumentNullException(nameof(runner));
         _psResourceGet = new PSResourceGetClient(runner, _logger);
+        _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
     }
 
@@ -71,28 +73,102 @@ public sealed class ModulePublisher
 
     private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult)
     {
-        var repository = string.IsNullOrWhiteSpace(publish.RepositoryName) ? "PSGallery" : publish.RepositoryName!.Trim();
+        var (repositoryName, repoConfig) = ResolveRepository(publish);
+        var isPsGallery = string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase);
 
-        if (string.IsNullOrWhiteSpace(publish.ApiKey))
-            throw new InvalidOperationException("Publish API key is required for repository publishing.");
+        var credential = repoConfig?.Credential;
+        var hasCredential = credential is not null &&
+                            !string.IsNullOrWhiteSpace(credential.UserName) &&
+                            !string.IsNullOrWhiteSpace(credential.Secret);
 
-        if (!publish.Force)
-            EnsureVersionIsGreaterThanRepository(plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repository);
+        if (isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey))
+            throw new InvalidOperationException("Publish API key is required for repository publishing to PSGallery.");
 
-        _logger.Info($"Publishing {plan.ModuleName} {FormatSemVer(plan.ResolvedVersion, plan.PreRelease)} to repository '{repository}'");
+        if (!isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey) && !hasCredential)
+            throw new InvalidOperationException("Publish API key or credential is required for repository publishing.");
 
-        _psResourceGet.Publish(new PSResourcePublishOptions(
-            path: Path.GetFullPath(buildResult.StagingPath),
-            isNupkg: false,
-            repository: repository,
-            apiKey: publish.ApiKey,
-            destinationPath: null,
-            skipDependenciesCheck: false,
-            skipModuleManifestValidate: false));
+        var tool = publish.Tool;
+        if (tool == PublishTool.Auto)
+        {
+            try
+            {
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig);
+            }
+            catch (PowerShellToolNotAvailableException)
+            {
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig);
+            }
+        }
+
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig);
+    }
+
+    private ModulePublishResult PublishToRepositoryWithTool(
+        PublishTool tool,
+        PublishConfiguration publish,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        string repositoryName,
+        PublishRepositoryConfiguration? repoConfig)
+    {
+        var credential = repoConfig?.Credential;
+        bool createdRepository = false;
+
+        try
+        {
+            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
+            {
+                createdRepository = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+            }
+
+            if (!publish.Force)
+                EnsureVersionIsGreaterThanRepository(tool, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, repositoryName, credential);
+
+            _logger.Info($"Publishing {plan.ModuleName} {FormatSemVer(plan.ResolvedVersion, plan.PreRelease)} to repository '{repositoryName}' using {tool}");
+
+            var modulePath = Path.GetFullPath(buildResult.StagingPath);
+
+            if (tool == PublishTool.PowerShellGet)
+            {
+                _powerShellGet.Publish(
+                    new PowerShellGetPublishOptions(
+                        path: modulePath,
+                        repository: repositoryName,
+                        apiKey: string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
+                        credential: credential));
+            }
+            else
+            {
+                _psResourceGet.Publish(
+                    new PSResourcePublishOptions(
+                        path: modulePath,
+                        isNupkg: false,
+                        repository: repositoryName,
+                        apiKey: string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
+                        destinationPath: null,
+                        skipDependenciesCheck: false,
+                        skipModuleManifestValidate: false,
+                        credential: credential));
+            }
+        }
+        finally
+        {
+            if (createdRepository && repoConfig is not null && repoConfig.UnregisterAfterUse)
+            {
+                try
+                {
+                    UnregisterRepository(tool, repositoryName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"Failed to unregister repository '{repositoryName}': {ex.Message}");
+                }
+            }
+        }
 
         return new ModulePublishResult(
             destination: PublishDestination.PowerShellGallery,
-            repositoryName: repository,
+            repositoryName: repositoryName,
             userName: null,
             tagName: null,
             isPreRelease: false,
@@ -102,35 +178,125 @@ public sealed class ModulePublisher
             errorMessage: null);
     }
 
-    private void EnsureVersionIsGreaterThanRepository(string moduleName, string moduleVersion, string? preRelease, string repository)
+    private void EnsureVersionIsGreaterThanRepository(
+        PublishTool tool,
+        string moduleName,
+        string moduleVersion,
+        string? preRelease,
+        string repositoryName,
+        RepositoryCredential? credential)
     {
         var publishVersionText = FormatSemVer(moduleVersion, preRelease);
         if (!TryParseSemVer(publishVersionText, out var publishVersion))
             throw new InvalidOperationException($"Could not parse module version for publish: '{publishVersionText}'.");
 
-        IReadOnlyList<PSResourceInfo> found;
+        SemVer? current = null;
         try
         {
-            found = _psResourceGet.Find(
-                new PSResourceFindOptions(
-                    names: new[] { moduleName },
-                    version: null,
-                    prerelease: true,
-                    repositories: new[] { repository }),
-                timeout: TimeSpan.FromMinutes(2));
+            current = TryGetLatestRepositoryVersion(tool, moduleName, repositoryName, credential);
         }
         catch (Exception ex)
         {
-            throw new InvalidOperationException($"Failed to query repository version for {moduleName} on '{repository}'. Use -Force to publish without version check. {ex.Message}");
+            throw new InvalidOperationException($"Failed to query repository version for {moduleName} on '{repositoryName}'. Use -Force to publish without version check. {ex.Message}");
         }
 
-        var hit = found.FirstOrDefault(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase));
-        if (hit is null || string.IsNullOrWhiteSpace(hit.Version)) return;
-        if (!TryParseSemVer(hit.Version, out var current))
-            throw new InvalidOperationException($"Could not parse repository version '{hit.Version}' for module '{moduleName}'. Use -Force to publish without version check.");
+        if (current is null) return;
 
-        if (publishVersion.CompareTo(current) <= 0)
-            throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{hit.Version}' for '{moduleName}'. Use -Force to publish anyway.");
+        if (publishVersion.CompareTo(current.Value) <= 0)
+            throw new InvalidOperationException($"Module version '{publishVersionText}' is not greater than repository version '{FormatSemVer(current.Value.Version.ToString(), current.Value.PreRelease)}' for '{moduleName}'. Use -Force to publish anyway.");
+    }
+
+    private SemVer? TryGetLatestRepositoryVersion(PublishTool tool, string moduleName, string repositoryName, RepositoryCredential? credential)
+    {
+        var versions = tool == PublishTool.PowerShellGet
+            ? _powerShellGet.Find(
+                    new PowerShellGetFindOptions(
+                        names: new[] { moduleName },
+                        prerelease: true,
+                        repositories: new[] { repositoryName },
+                        credential: credential),
+                    timeout: TimeSpan.FromMinutes(2))
+                .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+                .Select(r => r.Version)
+            : _psResourceGet.Find(
+                    new PSResourceFindOptions(
+                        names: new[] { moduleName },
+                        version: null,
+                        prerelease: true,
+                        repositories: new[] { repositoryName },
+                        credential: credential),
+                    timeout: TimeSpan.FromMinutes(2))
+                .Where(r => string.Equals(r.Name, moduleName, StringComparison.OrdinalIgnoreCase))
+                .Select(r => r.Version);
+
+        SemVer? latest = null;
+        foreach (var v in versions)
+        {
+            if (!TryParseSemVer(v, out var parsed)) continue;
+            if (latest is null || parsed.CompareTo(latest.Value) > 0) latest = parsed;
+        }
+        return latest;
+    }
+
+    private static (string RepositoryName, PublishRepositoryConfiguration? Repository) ResolveRepository(PublishConfiguration publish)
+    {
+        var repoConfig = publish.Repository;
+
+        var name = repoConfig is not null && !string.IsNullOrWhiteSpace(repoConfig.Name)
+            ? repoConfig.Name!.Trim()
+            : (string.IsNullOrWhiteSpace(publish.RepositoryName) ? "PSGallery" : publish.RepositoryName!.Trim());
+
+        return (name, repoConfig);
+    }
+
+    private static bool HasRepositoryUris(PublishRepositoryConfiguration repo)
+        => repo is not null &&
+           (!string.IsNullOrWhiteSpace(repo.Uri) ||
+            !string.IsNullOrWhiteSpace(repo.SourceUri) ||
+            !string.IsNullOrWhiteSpace(repo.PublishUri));
+
+    private bool EnsureRepositoryRegistered(PublishTool tool, string repositoryName, PublishRepositoryConfiguration repo)
+    {
+        if (tool == PublishTool.PowerShellGet)
+        {
+            var sourceUri = string.IsNullOrWhiteSpace(repo.SourceUri)
+                ? (string.IsNullOrWhiteSpace(repo.Uri) ? repo.PublishUri : repo.Uri)
+                : repo.SourceUri;
+            var publishUri = string.IsNullOrWhiteSpace(repo.PublishUri)
+                ? (string.IsNullOrWhiteSpace(repo.Uri) ? repo.SourceUri : repo.Uri)
+                : repo.PublishUri;
+
+            if (string.IsNullOrWhiteSpace(sourceUri) || string.IsNullOrWhiteSpace(publishUri))
+                throw new InvalidOperationException($"Repository '{repositoryName}' is missing SourceUri/PublishUri/Uri for PowerShellGet registration.");
+
+            return _powerShellGet.EnsureRepositoryRegistered(repositoryName, sourceUri!, publishUri!, trusted: repo.Trusted, timeout: TimeSpan.FromMinutes(2));
+        }
+
+        var uri = string.IsNullOrWhiteSpace(repo.Uri)
+            ? (string.IsNullOrWhiteSpace(repo.PublishUri) ? repo.SourceUri : repo.PublishUri)
+            : repo.Uri;
+
+        if (string.IsNullOrWhiteSpace(uri))
+            throw new InvalidOperationException($"Repository '{repositoryName}' is missing Uri/PublishUri/SourceUri for PSResourceGet registration.");
+
+        return _psResourceGet.EnsureRepositoryRegistered(
+            name: repositoryName,
+            uri: uri!,
+            trusted: repo.Trusted,
+            priority: repo.Priority,
+            apiVersion: repo.ApiVersion,
+            timeout: TimeSpan.FromMinutes(2));
+    }
+
+    private void UnregisterRepository(PublishTool tool, string repositoryName)
+    {
+        if (tool == PublishTool.PowerShellGet)
+        {
+            _powerShellGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
+            return;
+        }
+
+        _psResourceGet.UnregisterRepository(repositoryName, timeout: TimeSpan.FromMinutes(2));
     }
 
     private ModulePublishResult PublishToGitHub(PublishConfiguration publish, ModulePipelinePlan plan, IReadOnlyList<ArtefactBuildResult> artefactResults)

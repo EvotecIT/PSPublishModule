@@ -1,0 +1,169 @@
+using System;
+using System.Collections.Generic;
+
+namespace PowerForge;
+
+/// <summary>
+/// Repository management helpers for PSResourceGet (out-of-process).
+/// </summary>
+public sealed partial class PSResourceGetClient
+{
+    /// <summary>
+    /// Ensures the given repository is registered with PSResourceGet and returns true when it was created by this call.
+    /// </summary>
+    public bool EnsureRepositoryRegistered(
+        string name,
+        string uri,
+        bool trusted = true,
+        int? priority = null,
+        RepositoryApiVersion apiVersion = RepositoryApiVersion.Auto,
+        TimeSpan? timeout = null)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
+        if (string.IsNullOrWhiteSpace(uri)) throw new ArgumentException("Uri is required.", nameof(uri));
+
+        var script = BuildEnsureRepositoryScript();
+        var args = new List<string>(5)
+        {
+            name.Trim(),
+            uri.Trim(),
+            trusted ? "1" : "0",
+            priority.HasValue ? priority.Value.ToString() : string.Empty,
+            apiVersion == RepositoryApiVersion.Auto ? string.Empty : apiVersion.ToString()
+        };
+
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
+        var created = ParseRepositoryCreated(result.StdOut);
+
+        if (result.ExitCode != 0)
+        {
+            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Register-PSResourceRepository failed (exit {result.ExitCode}). {message}".Trim();
+            _logger.Error(full);
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
+            throw new InvalidOperationException(full);
+        }
+
+        return created;
+    }
+
+    /// <summary>
+    /// Unregisters a PSResourceGet repository by name.
+    /// </summary>
+    public void UnregisterRepository(string name, TimeSpan? timeout = null)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
+
+        var script = BuildUnregisterRepositoryScript();
+        var args = new List<string>(1) { name.Trim() };
+
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
+        if (result.ExitCode != 0)
+        {
+            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Unregister-PSResourceRepository failed (exit {result.ExitCode}). {message}".Trim();
+            _logger.Error(full);
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PSResourceGet", full);
+            throw new InvalidOperationException(full);
+        }
+    }
+
+    private static bool ParseRepositoryCreated(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPSRG::REPO::CREATED::", StringComparison.Ordinal)) continue;
+            var flag = line.Substring("PFPSRG::REPO::CREATED::".Length);
+            return string.Equals(flag, "1", StringComparison.Ordinal);
+        }
+        return false;
+    }
+
+    private static string BuildEnsureRepositoryScript()
+    {
+        return @"
+param(
+  [string]$Name,
+  [string]$Uri,
+  [string]$TrustedFlag,
+  [string]$Priority,
+  [string]$ApiVersion
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+try {
+  Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'Microsoft.PowerShell.PSResourceGet not available: ' + $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 3
+}
+
+$existing = $null
+try { $existing = Get-PSResourceRepository -Name $Name -ErrorAction SilentlyContinue } catch { $existing = $null }
+
+$params = @{ ErrorAction = 'Stop' }
+$params.Name = $Name
+$params.Uri = $Uri
+if ($TrustedFlag -eq '1') { $params.Trusted = $true }
+if (-not [string]::IsNullOrWhiteSpace($Priority)) { $params.Priority = [int]$Priority }
+if (-not [string]::IsNullOrWhiteSpace($ApiVersion)) { $params.ApiVersion = $ApiVersion }
+
+try {
+  $created = $false
+  if ($existing) {
+    Set-PSResourceRepository @params | Out-Null
+  } else {
+    $created = $true
+    Register-PSResourceRepository @params -Force | Out-Null
+  }
+  Write-Output ('PFPSRG::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))
+  exit 0
+} catch {
+  $msg = $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 1
+}
+";
+    }
+
+    private static string BuildUnregisterRepositoryScript()
+    {
+        return @"
+param(
+  [string]$Name
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+try {
+  Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'Microsoft.PowerShell.PSResourceGet not available: ' + $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 3
+}
+
+try {
+  Unregister-PSResourceRepository -Name $Name -ErrorAction Stop | Out-Null
+  Write-Output 'PFPSRG::REPO::UNREGISTER::OK'
+  exit 0
+} catch {
+  $msg = $_.Exception.Message
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
+  Write-Output ('PFPSRG::ERROR::' + $b64)
+  exit 1
+}
+";
+    }
+}

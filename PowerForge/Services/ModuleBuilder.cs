@@ -33,7 +33,7 @@ public sealed class ModuleBuilder
         public string CsprojPath { get; set; } = string.Empty;
         /// <summary>Build configuration used for publishing (e.g., Release).</summary>
         public string Configuration { get; set; } = "Release";
-        /// <summary>Target frameworks to publish (e.g., net472, net8.0).</summary>
+        /// <summary>Target frameworks to publish (e.g., net472, net8.0, net10.0).</summary>
         public IReadOnlyList<string> Frameworks { get; set; } = Array.Empty<string>();
         /// <summary>Base module version to write to the manifest before install resolution.</summary>
         public string ModuleVersion { get; set; } = "1.0.0";

@@ -23,7 +23,7 @@ public sealed class DotnetPublisher
     /// </summary>
     /// <param name="projectPath">Path to the SDK-style project file to publish.</param>
     /// <param name="configuration">Build configuration (e.g., Release).</param>
-    /// <param name="frameworks">Target frameworks to publish (e.g., net472, net8.0).</param>
+    /// <param name="frameworks">Target frameworks to publish (e.g., net472, net8.0, net10.0).</param>
     /// <param name="version">Version to stamp into the published assemblies.</param>
     /// <returns>Dictionary mapping TFM to the publish output directory.</returns>
     public IReadOnlyDictionary<string, string> Publish(string projectPath, string configuration, IEnumerable<string> frameworks, string version)
