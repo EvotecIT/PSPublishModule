@@ -18,13 +18,13 @@
 - Must remain `net472` compatible (Windows PowerShell 5.1), plus `net8.0` and `net10.0`.
 - CLI must be machine-friendly (stable JSON output + exit codes + no-color mode) and AOT/trim-friendly for VSCode scenarios.
 
-**Current status (as of 2025-12-27)**
+**Current status (as of 2025-12-29)**
 - PSPublishModule is now primarily a binary module: `Module/Public` and `Module/Private` contain no shipped `.ps1` functions (bootstrap `Module/PSPublishModule.psm1` remains, plus `Module/Build/Build-Module.ps1` for legacy DSL compatibility, and `Module/Build/Build-ModuleSelf.ps1` for self-build via CLI pipeline).
 - `PowerForge` has typed build/install models + a staging-first build pipeline to avoid self-build file locking.
 - `PowerForge` build/export detection supports explicit binary assembly names (`ExportAssemblies`) and will not clobber existing manifest exports when binaries are missing (`DisableBinaryCmdletScan` + safe fallback).
 - `New-Configuration*` cmdlets now emit typed `PowerForge` configuration segment objects (no `OrderedDictionary`/`Hashtable` outputs); the legacy DSL parser accepts both typed segments and legacy dictionaries.
-- `PowerForge.Cli` supports `build`/`install` via `--config <json>` and machine output via `--output json` (includes `schemaVersion` and string enums), plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options), and `plan` to preview the pipeline without running it.
-- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (PowerForge docs generator; no PlatyPS/HelpOut), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc), and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
+- `PowerForge.Cli` supports `build`/`install` via `--config <json>` and machine output via `--output json` (stable envelope with `schemaVersion` + `command` + `success` + `exitCode` + payload; source-generated System.Text.Json for AOT/trim), plus `pipeline`/`run` to execute a full typed pipeline spec from JSON (segment array + build/install options), and `plan` to preview the pipeline without running it.
+- `ModulePipelineRunner` now executes `ConfigurationDocumentationSegment`/`ConfigurationBuildDocumentationSegment` (PowerForge docs generator; no PlatyPS/HelpOut), `ConfigurationArtefactSegment` (Packed/Unpacked) including optional required-module bundling via PSResourceGet `Save-PSResource` (out-of-proc) with PowerShellGet `Save-Module` fallback, and `ConfigurationPublishSegment` (PSResourceGet `Publish-PSResource` + GitHub releases), producing typed results.
 - `Invoke-ModuleBuild` routes both the simple build path and the legacy DSL (`-Settings {}` / `Build-Module {}`) through the PowerForge pipeline (C#); the legacy PowerShell `Start-*` build scripts were removed.
 - `Module/Build/Build-ModuleSelf.ps1` self-builds by building `PowerForge.Cli` and running the JSON pipeline (`powerforge.json`) so PSPublishModule can self-build without file locking.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
@@ -180,16 +180,17 @@
   - [x] `Invoke-ModuleBuild` → `PowerForge.ModuleScaffoldService` + `PowerForge.LegacySegmentAdapter` (cmdlet only maps params and invokes the PowerForge pipeline)
   - [x] `Invoke-DotNetReleaseBuild` → `PowerForge.DotNetReleaseBuildService` (cmdlet only handles `ShouldProcess` + optional `Register-Certificate` hook)
   - [x] `Get-PowerShellCompatibility` → `PowerForge.PowerShellCompatibilityAnalyzer` (typed report + C# CSV export; cmdlet only handles host/progress output)
-- [ ] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
+- [x] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
   - [x] Include `schemaVersion` in all CLI JSON outputs.
   - [x] Serialize enums as strings in CLI JSON output.
+  - [x] Use a stable JSON envelope (no anonymous-type serialization; AOT/trim-friendly).
   - [x] Add `--quiet` and `--diagnostics` (keep stdout pure when `--output json` is used).
   - [x] Add `--view auto|standard|ansi` (auto disables live UI in CI).
   - [x] Add interactive Spectre.Console progress for `docs`/`pack`/`pipeline` in Standard view (auto disables in CI and when `--output json`/`--no-color`/`--quiet`).
   - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `schemas/`.
 - [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [x] Add GitHub composite actions calling the CLI.
-- [ ] Validate AOT publish for CLI (validate trim/AOT paths; currently `PublishAot` fails with `NETSDK1207`, requires AOT-safe split).
+- [ ] Validate AOT publish for CLI (code is AOT/trim-friendly; verify end-to-end publish in CI with a native toolchain on Windows runners).
 - [ ] Expand tests (service unit tests + CLI integration).
   - [x] Add `PowerForge.Tests` (xUnit) with starter coverage for `PowerShellCompatibilityAnalyzer` and `ModuleBuilder` TFM routing.
 - [x] Repository publishing: PSResourceGet + PowerShellGet support (tool selection + repo registration + publish/find/version check logic; internal; no standalone cmdlets).
