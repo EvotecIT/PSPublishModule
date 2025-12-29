@@ -34,6 +34,31 @@ public sealed class DocumentationEngine
         BuildDocumentationConfiguration buildDocumentation,
         TimeSpan? timeout = null)
     {
+        return BuildWithProgress(
+            moduleName: moduleName,
+            stagingPath: stagingPath,
+            moduleManifestPath: moduleManifestPath,
+            documentation: documentation,
+            buildDocumentation: buildDocumentation,
+            timeout: timeout,
+            progress: null,
+            extractStep: null,
+            writeStep: null,
+            externalHelpStep: null);
+    }
+
+    internal DocumentationBuildResult BuildWithProgress(
+        string moduleName,
+        string stagingPath,
+        string moduleManifestPath,
+        DocumentationConfiguration documentation,
+        BuildDocumentationConfiguration buildDocumentation,
+        TimeSpan? timeout,
+        IModulePipelineProgressReporter? progress,
+        ModulePipelineStep? extractStep,
+        ModulePipelineStep? writeStep,
+        ModulePipelineStep? externalHelpStep)
+    {
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("ModuleName is required.", nameof(moduleName));
         if (string.IsNullOrWhiteSpace(stagingPath)) throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
         if (string.IsNullOrWhiteSpace(moduleManifestPath)) throw new ArgumentException("ModuleManifestPath is required.", nameof(moduleManifestPath));
@@ -58,6 +83,24 @@ public sealed class DocumentationEngine
         var readmePath = ResolvePath(stagingPath, documentation.PathReadme);
         var startClean = buildDocumentation.StartClean;
 
+        void SafeStart(ModulePipelineStep? step)
+        {
+            if (step is null || progress is null) return;
+            try { progress.StepStarting(step); } catch { /* best effort */ }
+        }
+
+        void SafeDone(ModulePipelineStep? step)
+        {
+            if (step is null || progress is null) return;
+            try { progress.StepCompleted(step); } catch { /* best effort */ }
+        }
+
+        void SafeFail(ModulePipelineStep? step, Exception ex)
+        {
+            if (step is null || progress is null) return;
+            try { progress.StepFailed(step, ex); } catch { /* best effort */ }
+        }
+
         try
         {
             if (startClean)
@@ -69,15 +112,36 @@ public sealed class DocumentationEngine
             if (!string.IsNullOrWhiteSpace(readmePath))
                 Directory.CreateDirectory(Path.GetDirectoryName(readmePath)!);
 
-            var extracted = ExtractHelpAsJson(
-                stagingPath: stagingPath,
-                moduleManifestPath: moduleManifestPath,
-                timeout: timeout ?? TimeSpan.FromMinutes(5));
+            DocumentationExtractionPayload extracted;
+            SafeStart(extractStep);
+            try
+            {
+                extracted = ExtractHelpAsJson(
+                    stagingPath: stagingPath,
+                    moduleManifestPath: moduleManifestPath,
+                    timeout: timeout ?? TimeSpan.FromMinutes(5));
+                SafeDone(extractStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(extractStep, ex);
+                throw;
+            }
 
             var writer = new MarkdownHelpWriter();
-            writer.WriteCommandHelpFiles(extracted, moduleName, docsPath);
-            if (!string.IsNullOrWhiteSpace(readmePath))
-                writer.WriteModuleReadme(extracted, moduleName, readmePath, docsPath);
+            SafeStart(writeStep);
+            try
+            {
+                writer.WriteCommandHelpFiles(extracted, moduleName, docsPath);
+                if (!string.IsNullOrWhiteSpace(readmePath))
+                    writer.WriteModuleReadme(extracted, moduleName, readmePath, docsPath);
+                SafeDone(writeStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(writeStep, ex);
+                throw;
+            }
 
             var externalHelpFile = string.Empty;
             if (buildDocumentation.GenerateExternalHelp)
@@ -89,7 +153,17 @@ public sealed class DocumentationEngine
                     : Path.GetFileName(buildDocumentation.ExternalHelpFileName.Trim());
 
                 var mamlWriter = new MamlHelpWriter();
-                externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+                SafeStart(externalHelpStep);
+                try
+                {
+                    externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+                    SafeDone(externalHelpStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(externalHelpStep, ex);
+                    throw;
+                }
             }
 
             return new DocumentationBuildResult(

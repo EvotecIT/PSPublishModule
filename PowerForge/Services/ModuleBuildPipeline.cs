@@ -16,6 +16,18 @@ public sealed class ModuleBuildPipeline
     /// </summary>
     public ModuleBuildPipeline(ILogger logger) => _logger = logger;
 
+    internal sealed class StagingResult
+    {
+        public string SourcePath { get; }
+        public string StagingPath { get; }
+
+        public StagingResult(string sourcePath, string stagingPath)
+        {
+            SourcePath = sourcePath;
+            StagingPath = stagingPath;
+        }
+    }
+
     /// <summary>
     /// Copies the module from <see cref="ModuleBuildSpec.SourcePath"/> into staging and builds it there.
     /// </summary>
@@ -23,7 +35,13 @@ public sealed class ModuleBuildPipeline
     /// <returns>Build result including staging path and computed exports.</returns>
     public ModuleBuildResult BuildToStaging(ModuleBuildSpec spec)
     {
-        if (spec is null) throw new ArgumentNullException(nameof(spec));        
+        var staged = StageToStaging(spec);
+        return BuildInStaging(spec, staged.StagingPath);
+    }
+
+    internal StagingResult StageToStaging(ModuleBuildSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.SourcePath)) throw new ArgumentException("SourcePath is required.", nameof(spec));
 
@@ -57,6 +75,18 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
+
+        return new StagingResult(source, staging);
+    }
+
+    internal ModuleBuildResult BuildInStaging(ModuleBuildSpec spec, string stagingPath)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
+        if (string.IsNullOrWhiteSpace(stagingPath)) throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
+
+        var staging = Path.GetFullPath(stagingPath);
+        if (!Directory.Exists(staging)) throw new DirectoryNotFoundException($"Staging directory not found: {staging}");
 
         var builder = new ModuleBuilder(_logger);
         var tfms = spec.Frameworks is { Length: > 0 } ? spec.Frameworks : new[] { "net472", "net8.0" };

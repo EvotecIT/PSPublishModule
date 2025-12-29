@@ -330,8 +330,13 @@ public sealed class ModulePipelineRunner
             .Where(s => s.PublishSegment is not null)
             .ToDictionary(s => s.PublishSegment!, s => s);
 
-        var buildStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Build);
-        var docsStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Documentation);
+        var stageStep = steps.FirstOrDefault(s => string.Equals(s.Key, "build:stage", StringComparison.OrdinalIgnoreCase));
+        var buildStep = steps.FirstOrDefault(s => string.Equals(s.Key, "build:build", StringComparison.OrdinalIgnoreCase));
+        var manifestStep = steps.FirstOrDefault(s => string.Equals(s.Key, "build:manifest", StringComparison.OrdinalIgnoreCase));
+
+        var docsExtractStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:extract", StringComparison.OrdinalIgnoreCase));
+        var docsWriteStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:write", StringComparison.OrdinalIgnoreCase));
+        var docsMamlStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:maml", StringComparison.OrdinalIgnoreCase));
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -355,11 +360,24 @@ public sealed class ModulePipelineRunner
 
         var pipeline = new ModuleBuildPipeline(_logger);
 
+        ModuleBuildPipeline.StagingResult staged;
+        SafeStart(stageStep);
+        try
+        {
+            staged = pipeline.StageToStaging(plan.BuildSpec);
+            SafeDone(stageStep);
+        }
+        catch (Exception ex)
+        {
+            SafeFail(stageStep, ex);
+            throw;
+        }
+
         ModuleBuildResult buildResult;
         SafeStart(buildStep);
         try
         {
-            buildResult = pipeline.BuildToStaging(plan.BuildSpec);
+            buildResult = pipeline.BuildInStaging(plan.BuildSpec, staged.StagingPath);
             SafeDone(buildStep);
         }
         catch (Exception ex)
@@ -368,37 +386,52 @@ public sealed class ModulePipelineRunner
             throw;
         }
 
-        if (plan.CompatiblePSEditions is { Length: > 0 })
-            ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
+        SafeStart(manifestStep);
+        try
+        {
+            if (plan.CompatiblePSEditions is { Length: > 0 })
+                ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
 
-        if (plan.RequiredModules is { Length: > 0 })
-            ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
+            if (plan.RequiredModules is { Length: > 0 })
+                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
 
-        if (!string.IsNullOrWhiteSpace(plan.PreRelease))
-            ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+            if (!string.IsNullOrWhiteSpace(plan.PreRelease))
+                ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+
+            SafeDone(manifestStep);
+        }
+        catch (Exception ex)
+        {
+            SafeFail(manifestStep, ex);
+            throw;
+        }
 
         DocumentationBuildResult? documentationResult = null;
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
         {
-            SafeStart(docsStep);
             try
             {
                 var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
-                documentationResult = engine.Build(
+                documentationResult = engine.BuildWithProgress(
                     moduleName: plan.ModuleName,
                     stagingPath: buildResult.StagingPath,
                     moduleManifestPath: buildResult.ManifestPath,
                     documentation: plan.Documentation,
-                    buildDocumentation: plan.DocumentationBuild!);
+                    buildDocumentation: plan.DocumentationBuild!,
+                    timeout: null,
+                    progress: reporter,
+                    extractStep: docsExtractStep,
+                    writeStep: docsWriteStep,
+                    externalHelpStep: docsMamlStep);
 
                 if (documentationResult is not null && !documentationResult.Succeeded)
                     throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
-
-                SafeDone(docsStep);
             }
             catch (Exception ex)
             {
-                SafeFail(docsStep, ex);
+                SafeFail(docsExtractStep, ex);
+                SafeFail(docsWriteStep, ex);
+                SafeFail(docsMamlStep, ex);
                 throw;
             }
         }
