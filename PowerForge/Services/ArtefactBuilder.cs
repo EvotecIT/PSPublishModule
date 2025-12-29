@@ -184,7 +184,9 @@ public sealed class ArtefactBuilder
             throw new ArgumentException("DestinationRoot is required.", nameof(destinationRoot));
 
         var name = requiredModule.ModuleName.Trim();
-        var versionArgument = NormalizeVersionArgument(requiredModule.RequiredVersion ?? requiredModule.ModuleVersion);
+        var minimumVersionArgument = NormalizeVersionArgument(requiredModule.ModuleVersion);
+        var requiredVersionArgument = NormalizeVersionArgument(requiredModule.RequiredVersion);
+        var versionArgument = requiredVersionArgument ?? minimumVersionArgument;
 
         Directory.CreateDirectory(destinationRoot);
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "saved", $"{name}_{Guid.NewGuid():N}");
@@ -193,8 +195,10 @@ public sealed class ArtefactBuilder
         try
         {
             var runner = new PowerShellRunner();
-            var client = new PSResourceGetClient(runner, _logger);
-            var opts = new PSResourceSaveOptions(
+            IReadOnlyList<PSResourceInfo> saved;
+
+            var psrg = new PSResourceGetClient(runner, _logger);
+            var psrgOpts = new PSResourceSaveOptions(
                 name: name,
                 destinationPath: tempRoot,
                 version: versionArgument,
@@ -204,13 +208,33 @@ public sealed class ArtefactBuilder
                 skipDependencyCheck: true,
                 acceptLicense: true);
 
-            var saved = client.Save(opts, timeout: TimeSpan.FromMinutes(10));
+            try
+            {
+                saved = psrg.Save(psrgOpts, timeout: TimeSpan.FromMinutes(10));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Save-PSResource failed for '{name}', falling back to Save-Module. {ex.Message}");
+
+                var psg = new PowerShellGetClient(runner, _logger);
+                var psgOpts = new PowerShellGetSaveOptions(
+                    name: name,
+                    destinationPath: tempRoot,
+                    minimumVersion: minimumVersionArgument,
+                    requiredVersion: requiredVersionArgument,
+                    repository: null,
+                    prerelease: false,
+                    acceptLicense: true,
+                    credential: null);
+
+                saved = psg.Save(psgOpts, timeout: TimeSpan.FromMinutes(10));
+            }
             var resolved = saved.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
             var resolvedVersion = resolved?.Version;
 
             var moduleRoot = Path.Combine(tempRoot, name);
             if (!Directory.Exists(moduleRoot))
-                throw new InvalidOperationException($"Save-PSResource did not create expected folder '{moduleRoot}'.");
+                throw new InvalidOperationException($"Save tool did not create expected folder '{moduleRoot}'.");
 
             string? versionFolder = null;
             if (!string.IsNullOrWhiteSpace(resolvedVersion))

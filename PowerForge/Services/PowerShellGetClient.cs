@@ -59,6 +59,59 @@ public sealed class PowerShellGetPublishOptions
 }
 
 /// <summary>
+/// Options for PowerShellGet <c>Save-Module</c>.
+/// </summary>
+public sealed class PowerShellGetSaveOptions
+{
+    /// <summary>Module name passed to <c>-Name</c>.</summary>
+    public string Name { get; }
+
+    /// <summary>Destination path passed to <c>-Path</c>.</summary>
+    public string DestinationPath { get; }
+
+    /// <summary>MinimumVersion passed to <c>-MinimumVersion</c> (optional).</summary>
+    public string? MinimumVersion { get; }
+
+    /// <summary>RequiredVersion passed to <c>-RequiredVersion</c> (optional).</summary>
+    public string? RequiredVersion { get; }
+
+    /// <summary>Repository name passed to <c>-Repository</c> (optional).</summary>
+    public string? Repository { get; }
+
+    /// <summary>Whether to allow prerelease versions when supported.</summary>
+    public bool Prerelease { get; }
+
+    /// <summary>Whether to accept license when supported.</summary>
+    public bool AcceptLicense { get; }
+
+    /// <summary>Optional credential used for repository access.</summary>
+    public RepositoryCredential? Credential { get; }
+
+    /// <summary>
+    /// Creates a new options instance.
+    /// </summary>
+    public PowerShellGetSaveOptions(
+        string name,
+        string destinationPath,
+        string? minimumVersion = null,
+        string? requiredVersion = null,
+        string? repository = null,
+        bool prerelease = false,
+        bool acceptLicense = true,
+        RepositoryCredential? credential = null)
+    {
+        Name = name;
+        DestinationPath = destinationPath;
+        MinimumVersion = minimumVersion;
+        RequiredVersion = requiredVersion;
+        Repository = repository;
+        Prerelease = prerelease;
+        AcceptLicense = acceptLicense;
+        Credential = credential;
+    }
+}
+
+/// <summary>
 /// Out-of-process wrapper for PowerShellGet (Find-Module / Publish-Module / Register-PSRepository).
 /// </summary>
 public sealed class PowerShellGetClient
@@ -153,6 +206,50 @@ public sealed class PowerShellGetClient
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
         }
+    }
+
+    /// <summary>
+    /// Saves a PowerShell module using PowerShellGet (<c>Save-Module</c>).
+    /// </summary>
+    public IReadOnlyList<PSResourceInfo> Save(PowerShellGetSaveOptions options, TimeSpan? timeout = null)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(options.Name)) throw new ArgumentException("Name is required.", nameof(options));
+        if (string.IsNullOrWhiteSpace(options.DestinationPath)) throw new ArgumentException("DestinationPath is required.", nameof(options));
+
+        var dest = Path.GetFullPath(options.DestinationPath);
+        Directory.CreateDirectory(dest);
+
+        var script = BuildSaveScript();
+        var args = new List<string>(9)
+        {
+            options.Name,
+            options.MinimumVersion ?? string.Empty,
+            options.RequiredVersion ?? string.Empty,
+            options.Repository ?? string.Empty,
+            dest,
+            options.Prerelease ? "1" : "0",
+            options.AcceptLicense ? "1" : "0",
+            options.Credential?.UserName ?? string.Empty,
+            options.Credential?.Secret ?? string.Empty
+        };
+
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        var items = ParseSaveOutput(result.StdOut);
+
+        if (result.ExitCode != 0)
+        {
+            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var full = $"Save-Module failed (exit {result.ExitCode}). {message}".Trim();
+            _logger.Error(full);
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            if (result.ExitCode == 3)
+                throw new PowerShellToolNotAvailableException("PowerShellGet", full);
+            throw new InvalidOperationException(full);
+        }
+
+        return items;
     }
 
     /// <summary>
@@ -289,6 +386,23 @@ public sealed class PowerShellGetClient
         return list;
     }
 
+    private static IReadOnlyList<PSResourceInfo> ParseSaveOutput(string stdout)
+    {
+        var list = new List<PSResourceInfo>();
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFPWSGET::SAVE::ITEM::", StringComparison.Ordinal)) continue;
+            var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
+            if (parts.Length < 5) continue;
+
+            var name = Decode(parts[3]);
+            var version = Decode(parts[4]);
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(version)) continue;
+            list.Add(new PSResourceInfo(name, version, repository: null, author: null, description: null));
+        }
+        return list;
+    }
+
     private static string BuildFindScript()
     {
         return @"
@@ -399,6 +513,76 @@ try {
 ";
     }
 
+    private static string BuildSaveScript()
+    {
+        return @"
+param(
+  [string]$Name,
+  [string]$MinimumVersion,
+  [string]$RequiredVersion,
+  [string]$Repository,
+  [string]$Path,
+  [string]$PrereleaseFlag,
+  [string]$AcceptLicenseFlag,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+
+function Enc([string]$s) {
+  return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
+}
+
+try {
+  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
+} catch {
+  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
+  $b64 = Enc $msg
+  Write-Output ('PFPWSGET::ERROR::' + $b64)
+  exit 3
+}
+
+$saveCmd = Get-Command Save-Module -ErrorAction Stop
+$params = @{ ErrorAction = 'Stop' }
+$params.Name = $Name
+$params.Path = $Path
+$params.Force = $true
+if (-not [string]::IsNullOrWhiteSpace($RequiredVersion) -and $saveCmd.Parameters.ContainsKey('RequiredVersion')) { $params.RequiredVersion = $RequiredVersion }
+elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion) -and $saveCmd.Parameters.ContainsKey('MinimumVersion')) { $params.MinimumVersion = $MinimumVersion }
+if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
+
+if ($PrereleaseFlag -eq '1' -and $saveCmd.Parameters.ContainsKey('AllowPrerelease')) { $params.AllowPrerelease = $true }
+if ($AcceptLicenseFlag -eq '1' -and $saveCmd.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }
+
+if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+}
+
+try {
+  Save-Module @params | Out-Null
+
+  $moduleRoot = Join-Path $Path $Name
+  $versionDirs = @()
+  try { $versionDirs = Get-ChildItem -Path $moduleRoot -Directory -ErrorAction SilentlyContinue } catch { $versionDirs = @() }
+
+  foreach ($d in @($versionDirs)) {
+    $n = Enc ([string]$Name)
+    $v = Enc ([string]$d.Name)
+    Write-Output ('PFPWSGET::SAVE::ITEM::' + $n + '::' + $v)
+  }
+
+  exit 0
+} catch {
+  $msg = $_.Exception.Message
+  $b64 = Enc $msg
+  Write-Output ('PFPWSGET::ERROR::' + $b64)
+  exit 1
+}
+";
+    }
+
     private static string BuildEnsureRepositoryScript()
     {
         return @"
@@ -475,4 +659,3 @@ try {
 ";
     }
 }
-
