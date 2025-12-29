@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -104,12 +105,29 @@ public sealed class ModuleBuilder
             try
             {
                 var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion, artifactsRoot);
-                foreach (var kv in publishes)
+
+                var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var tfm in frameworks)
                 {
-                    var tfm = kv.Key;
-                    var src = kv.Value;
+                    if (!publishes.TryGetValue(tfm, out var src)) continue;
+
                     var target = IsCore(tfm) ? coreDir : defDir;
-                    CopyFiltered(src, target, static p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+
+                    // We currently support one "Core" and one "Default" payload per build output.
+                    // If multiple TFMs map to the same target folder (e.g., net10.0 + net8.0 -> Core),
+                    // clear the previous payload to avoid mixing dependencies across TFMs.
+                    if (!usedTargets.Add(target))
+                    {
+                        _logger.Warn($"Multiple frameworks map to '{Path.GetFileName(target)}'. Clearing '{target}' before copying '{tfm}' to avoid mixed outputs.");
+                        try
+                        {
+                            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+                        }
+                        catch { /* best effort */ }
+                        Directory.CreateDirectory(target);
+                    }
+
+                    CopyPublishOutputBinaries(src, target, tfm);
                 }
             }
             finally
@@ -233,32 +251,217 @@ public sealed class ModuleBuilder
         return major >= 5;
     }
 
-    private static void CopyFiltered(string sourceDir, string destDir, Func<string, bool> filePredicate)
+    private sealed class PublishCopyPlan
     {
-        Directory.CreateDirectory(destDir);
-        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
-        {
-            var rel  = ComputeRelativePath(sourceDir, file);
-            var dest = Path.Combine(destDir, rel);
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            if (filePredicate(file)) File.Copy(file, dest, overwrite: true);    
-        }
+        public HashSet<string> RootFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> RuntimeTargetRelativePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static string ComputeRelativePath(string baseDir, string fullPath)
+    private static readonly HashSet<string> AlwaysExcludedRootFiles = new(StringComparer.OrdinalIgnoreCase)
     {
+        "System.Management.Automation.dll",
+        "System.Management.dll",
+    };
+
+    private void CopyPublishOutputBinaries(string publishDir, string targetDir, string tfm)
+    {
+        var plan = CreateCopyPlan(publishDir, tfm);
+        var copied = 0;
+
+        foreach (var fileName in plan.RootFileNames)
+        {
+            var source = Path.Combine(publishDir, fileName);
+            if (!File.Exists(source)) continue;
+
+            var dest = Path.Combine(targetDir, fileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(source, dest, overwrite: true);
+            copied++;
+        }
+
+        foreach (var rel in plan.RuntimeTargetRelativePaths)
+        {
+            var source = Path.Combine(publishDir, rel);
+            if (!File.Exists(source)) continue;
+
+            var dest = Path.Combine(targetDir, rel);
+            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            File.Copy(source, dest, overwrite: true);
+            copied++;
+        }
+
+        _logger.Verbose($"Copied {copied} binaries for {tfm} from '{publishDir}' to '{targetDir}'.");
+    }
+
+    private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm)
+    {
+        var plan = TryCreateCopyPlanFromDeps(publishDir, tfm);
+        if (plan is not null) return plan;
+
+        // Fallback: copy only top-level binaries, excluding PowerShell host assemblies.
+        var fallback = new PublishCopyPlan();
+        foreach (var file in Directory.EnumerateFiles(publishDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(file);
+            if (!IsBinaryFileName(fileName)) continue;
+            if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
+            fallback.RootFileNames.Add(fileName);
+        }
+
+        return fallback;
+    }
+
+    private PublishCopyPlan? TryCreateCopyPlanFromDeps(string publishDir, string tfm)
+    {
+        string? depsPath = null;
         try
         {
-            var baseUri = new Uri(AppendDirectorySeparatorChar(Path.GetFullPath(baseDir)));
-            var pathUri = new Uri(Path.GetFullPath(fullPath));
-            var rel = Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString());
-            return rel.Replace('/', Path.DirectorySeparatorChar);
+            depsPath = Directory.EnumerateFiles(publishDir, "*.deps.json", SearchOption.TopDirectoryOnly).FirstOrDefault();
         }
-        catch { return Path.GetFileName(fullPath) ?? fullPath; }
+        catch { /* ignore */ }
+
+        if (string.IsNullOrWhiteSpace(depsPath) || !File.Exists(depsPath)) return null;
+
+        try
+        {
+            using var stream = File.OpenRead(depsPath);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+
+            var plan = new PublishCopyPlan();
+            if (!root.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Object)
+                return plan;
+
+            var excluded = ComputeExcludedLibraries(targets);
+
+            foreach (var target in targets.EnumerateObject())
+            {
+                if (target.Value.ValueKind != JsonValueKind.Object) continue;
+
+                foreach (var lib in target.Value.EnumerateObject())
+                {
+                    if (excluded.Contains(lib.Name)) continue;
+
+                    AddRuntimeAssetFileNames(plan.RootFileNames, lib.Value, "runtime");
+                    AddRuntimeAssetFileNames(plan.RootFileNames, lib.Value, "native");
+                    AddRuntimeTargetPaths(plan.RuntimeTargetRelativePaths, lib.Value);
+                }
+            }
+
+            foreach (var excludedRoot in AlwaysExcludedRootFiles)
+                plan.RootFileNames.Remove(excludedRoot);
+
+            if (_logger.IsVerbose)
+                _logger.Verbose($"Copy plan for {tfm}: {plan.RootFileNames.Count} root binaries, {plan.RuntimeTargetRelativePaths.Count} runtime target binaries (deps: {Path.GetFileName(depsPath)}).");
+
+            return plan;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to parse deps.json for {tfm} ({depsPath}): {ex.Message}. Falling back to copying top-level binaries.");
+            return null;
+        }
     }
 
-    private static string AppendDirectorySeparatorChar(string path)
-        => path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? path : path + Path.DirectorySeparatorChar;
+    private static bool IsPowerShellRuntimeLibraryId(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return false;
+        return id.Equals("System.Management.Automation", StringComparison.OrdinalIgnoreCase) ||
+               id.Equals("Microsoft.PowerShell.5.ReferenceAssemblies", StringComparison.OrdinalIgnoreCase) ||
+               id.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase) ||
+               id.StartsWith("Microsoft.Management.Infrastructure", StringComparison.OrdinalIgnoreCase) ||
+               id.StartsWith("Microsoft.WSMan", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static HashSet<string> ComputeExcludedLibraries(JsonElement targets)
+    {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dependencyMap = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var target in targets.EnumerateObject())
+        {
+            if (target.Value.ValueKind != JsonValueKind.Object) continue;
+
+            foreach (var lib in target.Value.EnumerateObject())
+            {
+                var key = lib.Name;
+                var slash = key.IndexOf('/');
+                var id = slash > 0 ? key.Substring(0, slash) : key;
+                if (IsPowerShellRuntimeLibraryId(id))
+                    roots.Add(key);
+
+                if (dependencyMap.ContainsKey(key)) continue;
+                if (!lib.Value.TryGetProperty("dependencies", out var depsObj) || depsObj.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var deps = new List<string>();
+                foreach (var dep in depsObj.EnumerateObject())
+                {
+                    if (dep.Value.ValueKind != JsonValueKind.String) continue;
+
+                    var version = dep.Value.GetString();
+                    if (string.IsNullOrWhiteSpace(version)) continue;
+
+                    deps.Add(dep.Name + "/" + version);
+                }
+
+                if (deps.Count > 0)
+                    dependencyMap[key] = deps.ToArray();
+            }
+        }
+
+        var excluded = new HashSet<string>(roots, StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>(roots);
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!dependencyMap.TryGetValue(current, out var deps)) continue;
+
+            foreach (var depKey in deps)
+            {
+                if (excluded.Add(depKey)) queue.Enqueue(depKey);
+            }
+        }
+
+        return excluded;
+    }
+
+    private static void AddRuntimeAssetFileNames(HashSet<string> rootFileNames, JsonElement libEntry, string propertyName)
+    {
+        if (!libEntry.TryGetProperty(propertyName, out var assets) || assets.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var asset in assets.EnumerateObject())
+        {
+            var fileName = Path.GetFileName(asset.Name);
+            if (!IsBinaryFileName(fileName)) continue;
+            rootFileNames.Add(fileName);
+        }
+    }
+
+    private static void AddRuntimeTargetPaths(HashSet<string> relativePaths, JsonElement libEntry)
+    {
+        if (!libEntry.TryGetProperty("runtimeTargets", out var assets) || assets.ValueKind != JsonValueKind.Object)
+            return;
+
+        foreach (var asset in assets.EnumerateObject())
+        {
+            var relative = asset.Name.Replace('/', Path.DirectorySeparatorChar);
+            var fileName = Path.GetFileName(relative);
+            if (!IsBinaryFileName(fileName)) continue;
+            relativePaths.Add(relative);
+        }
+    }
+
+    private static bool IsBinaryFileName(string fileNameOrPath)
+    {
+        if (string.IsNullOrWhiteSpace(fileNameOrPath)) return false;
+
+        var ext = Path.GetExtension(fileNameOrPath);
+        return ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".so", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".dylib", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string[] ResolveExportAssemblies(string projectRoot, string moduleName, IReadOnlyList<string>? exportAssemblies)
     {
