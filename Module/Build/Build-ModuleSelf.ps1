@@ -19,8 +19,19 @@ if ($Framework -eq 'auto') {
 }
 
 if (-not $NoBuild) {
-    dotnet build $cliProject -c $Configuration -f $Framework
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "[i] Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
+
+    $buildArgs = @('build', $cliProject, '-c', $Configuration, '-f', $Framework, '--nologo')
+    if ($PSBoundParameters.ContainsKey('Verbose')) {
+        $buildArgs += @('--verbosity', 'minimal')
+        & dotnet @buildArgs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    } else {
+        $buildArgs += @('--verbosity', 'quiet')
+        $buildOutput = & dotnet @buildArgs 2>&1
+        if ($LASTEXITCODE -ne 0) { $buildOutput | Out-Host; exit $LASTEXITCODE }
+        Write-Host "[+] Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
+    }
 }
 
 $cliDir = Join-Path -Path $repoRoot -ChildPath ("PowerForge.Cli\\bin\\{0}\\{1}" -f $Configuration, $Framework)
