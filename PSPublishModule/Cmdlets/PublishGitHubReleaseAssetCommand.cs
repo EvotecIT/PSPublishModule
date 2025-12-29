@@ -119,7 +119,7 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
 
             if (string.IsNullOrWhiteSpace(TagName))
             {
-                if (!string.IsNullOrWhiteSpace(TagTemplate))
+                if (TagTemplate is not null && !string.IsNullOrWhiteSpace(TagTemplate))
                 {
                     TagName = TagTemplate.Replace("{Project}", projectName).Replace("{Version}", Version);
                 }
@@ -229,4 +229,3 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
         public string? ErrorMessage { get; set; }
     }
 }
-

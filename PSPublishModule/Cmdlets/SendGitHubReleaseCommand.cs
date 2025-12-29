@@ -232,6 +232,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
     private static string TrimForMessage(string? text)
     {
+        if (text is null) return string.Empty;
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
         var t = text.Trim();
         return t.Length > 4000 ? t.Substring(0, 4000) + "..." : t;

@@ -144,7 +144,13 @@ $files |
 
         try
         {
-            return new X509Certificate2(resolved, (string?)null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet);
+            var flags = X509KeyStorageFlags.Exportable | X509KeyStorageFlags.PersistKeySet;
+#if NET10_0_OR_GREATER
+            var data = File.ReadAllBytes(resolved);
+            return X509CertificateLoader.LoadPkcs12(data, (string?)null, flags);
+#else
+            return new X509Certificate2(resolved, (string?)null, flags);
+#endif
         }
         catch (Exception ex)
         {
