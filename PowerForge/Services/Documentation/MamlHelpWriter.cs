@@ -31,7 +31,7 @@ internal sealed class MamlHelpWriter
 
         var fileName = string.IsNullOrWhiteSpace(outputFileName)
             ? $"{moduleName}-help.xml"
-            : outputFileName.Trim();
+            : outputFileName!.Trim();
 
         var path = Path.Combine(outputDirectory, fileName);
 
@@ -335,11 +335,12 @@ internal sealed class MamlHelpWriter
 
     private static string[] SplitParas(string? text)
     {
+        if (text is null) return Array.Empty<string>();
         if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
         var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
         return normalized
             .Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => p.Replace("\n", Environment.NewLine).Trim())
+            .Select(p => p.Replace("\n", Environment.NewLine).Trim())     
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .ToArray();
     }
@@ -360,6 +361,7 @@ internal sealed class MamlHelpWriter
 
     private static string NormalizePosition(string? position)
     {
+        if (position is null) return "named";
         if (string.IsNullOrWhiteSpace(position)) return "named";
         var p = position.Trim();
         if (p.Equals("Named", StringComparison.OrdinalIgnoreCase)) return "named";
@@ -374,9 +376,9 @@ internal sealed class MamlHelpWriter
         return (commandName.Substring(0, idx), commandName.Substring(idx + 1));
     }
 
-    private static string Coalesce(string? primary, string? secondary)
+    private static string Coalesce(string? primary, string? secondary)    
     {
-        if (!string.IsNullOrWhiteSpace(primary)) return primary.Trim();
+        if (primary is not null && !string.IsNullOrWhiteSpace(primary)) return primary.Trim();
         return secondary?.Trim() ?? string.Empty;
     }
 }
