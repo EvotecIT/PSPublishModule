@@ -18,7 +18,6 @@ public sealed class NewConfigurationManifestCommand : PSCmdlet
 
     /// <summary>Specifies a unique identifier for the module.</summary>
     [Parameter(Mandatory = true)]
-    [Alias("GUID")]
     public string Guid { get; set; } = string.Empty;
 
     /// <summary>Identifies the module author.</summary>
