@@ -64,19 +64,39 @@ public sealed class ModulePipelineStep
 
         var steps = new List<ModulePipelineStep>();
 
-        // 1) Build (always)
+        // 1) Build (always) - split into sub-steps for better progress visibility.
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Build,
-            key: "build",
-            title: "Build to staging"));
+            key: "build:stage",
+            title: "Stage to staging"));
+        steps.Add(new ModulePipelineStep(
+            kind: ModulePipelineStepKind.Build,
+            key: "build:build",
+            title: "Build module"));
+        steps.Add(new ModulePipelineStep(
+            kind: ModulePipelineStepKind.Build,
+            key: "build:manifest",
+            title: "Patch manifest"));
 
-        // 2) Docs
+        // 2) Docs (split into extraction + writing so users can see where time goes)
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
         {
             steps.Add(new ModulePipelineStep(
                 kind: ModulePipelineStepKind.Documentation,
-                key: "docs",
-                title: "Generate docs"));
+                key: "docs:extract",
+                title: "Extract help"));
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Documentation,
+                key: "docs:write",
+                title: "Write docs"));
+
+            if (plan.DocumentationBuild?.GenerateExternalHelp == true)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Documentation,
+                    key: "docs:maml",
+                    title: "Generate external help"));
+            }
         }
 
         // 3) Artefacts
