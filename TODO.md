@@ -185,6 +185,7 @@
   - [x] Serialize enums as strings in CLI JSON output.
   - [x] Add `--quiet` and `--diagnostics` (keep stdout pure when `--output json` is used).
   - [x] Add `--view auto|standard|ansi` (auto disables live UI in CI).
+  - [x] Add interactive Spectre.Console progress for `docs`/`pack`/`pipeline` in Standard view (auto disables in CI and when `--output json`/`--no-color`/`--quiet`).
   - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `schemas/`.
 - [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [x] Add GitHub composite actions calling the CLI.
