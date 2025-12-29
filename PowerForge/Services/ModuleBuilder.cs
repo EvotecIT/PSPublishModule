@@ -96,13 +96,33 @@ public sealed class ModuleBuilder
 
             // 1) Build libraries (dotnet publish) per framework and copy to Lib/<Core|Default>
             var publisher = new DotnetPublisher(_logger);
-            var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion);
-            foreach (var kv in publishes)
+
+            // Publish into an isolated temp folder to avoid file locking issues when the build host has already loaded
+            // assemblies from the repo's bin/obj outputs.
+            var artifactsRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "dotnet", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(artifactsRoot);
+            try
             {
-                var tfm = kv.Key;
-                var src = kv.Value;
-                var target = IsCore(tfm) ? coreDir : defDir;
-                CopyFiltered(src, target, static p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+                var publishes = publisher.Publish(opts.CsprojPath, opts.Configuration, frameworks, opts.ModuleVersion, artifactsRoot);
+                foreach (var kv in publishes)
+                {
+                    var tfm = kv.Key;
+                    var src = kv.Value;
+                    var target = IsCore(tfm) ? coreDir : defDir;
+                    CopyFiltered(src, target, static p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase));
+                }
+            }
+            finally
+            {
+                if (!_logger.IsVerbose)
+                {
+                    try
+                    {
+                        if (Directory.Exists(artifactsRoot))
+                            Directory.Delete(artifactsRoot, recursive: true);
+                    }
+                    catch { /* best effort */ }
+                }
             }
         }
         else

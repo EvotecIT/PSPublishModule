@@ -39,7 +39,7 @@ public sealed partial class PSResourceGetClient
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
             var full = $"Register-PSResourceRepository failed (exit {result.ExitCode}). {message}".Trim();
-            _logger.Error(full);
+            if (_logger.IsVerbose) _logger.Verbose(full);
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
             if (result.ExitCode == 3)
@@ -65,7 +65,7 @@ public sealed partial class PSResourceGetClient
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
             var full = $"Unregister-PSResourceRepository failed (exit {result.ExitCode}). {message}".Trim();
-            _logger.Error(full);
+            if (_logger.IsVerbose) _logger.Verbose(full);
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
             if (result.ExitCode == 3)

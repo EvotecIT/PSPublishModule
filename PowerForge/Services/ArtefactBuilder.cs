@@ -17,6 +17,7 @@ public sealed class ArtefactBuilder
     private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "Data" };
 
     private readonly ILogger _logger;
+    private bool _skipPsResourceGetSave;
 
     /// <summary>
     /// Creates a new builder that logs progress via <paramref name="logger"/>.
@@ -197,37 +198,67 @@ public sealed class ArtefactBuilder
             var runner = new PowerShellRunner();
             IReadOnlyList<PSResourceInfo> saved;
 
-            var psrg = new PSResourceGetClient(runner, _logger);
-            var psrgOpts = new PSResourceSaveOptions(
+            var psg = new PowerShellGetClient(runner, _logger);
+            var psgOpts = new PowerShellGetSaveOptions(
                 name: name,
                 destinationPath: tempRoot,
-                version: versionArgument,
+                minimumVersion: minimumVersionArgument,
+                requiredVersion: requiredVersionArgument,
                 repository: null,
                 prerelease: false,
-                trustRepository: true,
-                skipDependencyCheck: true,
-                acceptLicense: true);
+                acceptLicense: true,
+                credential: null);
 
-            try
+            if (_skipPsResourceGetSave)
             {
-                saved = psrg.Save(psrgOpts, timeout: TimeSpan.FromMinutes(10));
+                saved = psg.Save(psgOpts, timeout: TimeSpan.FromMinutes(10));
             }
-            catch (Exception ex)
+            else
             {
-                _logger.Warn($"Save-PSResource failed for '{name}', falling back to Save-Module. {ex.Message}");
-
-                var psg = new PowerShellGetClient(runner, _logger);
-                var psgOpts = new PowerShellGetSaveOptions(
+                var psrg = new PSResourceGetClient(runner, _logger);
+                var psrgOpts = new PSResourceSaveOptions(
                     name: name,
                     destinationPath: tempRoot,
-                    minimumVersion: minimumVersionArgument,
-                    requiredVersion: requiredVersionArgument,
+                    version: versionArgument,
                     repository: null,
                     prerelease: false,
-                    acceptLicense: true,
-                    credential: null);
+                    trustRepository: true,
+                    skipDependencyCheck: true,
+                    acceptLicense: true);
 
-                saved = psg.Save(psgOpts, timeout: TimeSpan.FromMinutes(10));
+                try
+                {
+                    saved = psrg.Save(psrgOpts, timeout: TimeSpan.FromMinutes(10));
+                }
+                catch (Exception ex)
+                {
+                    _skipPsResourceGetSave = true;
+
+                    var raw = ex.Message ?? string.Empty;
+                    var reason = SimplifyPsResourceGetFailureMessage(raw);
+
+                    if (ex is PowerShellToolNotAvailableException)
+                    {
+                        _logger.Warn("PSResourceGet is not available; using Save-Module for required modules.");
+                    }
+                    else if (IsSecretStoreLockedMessage(raw))
+                    {
+                        _logger.Warn("PSResourceGet cannot access SecretStore (locked); using Save-Module for required modules.");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(reason))
+                    {
+                        _logger.Warn($"Save-PSResource failed; using Save-Module for required modules. {reason}");
+                    }
+                    else
+                    {
+                        _logger.Warn("Save-PSResource failed; using Save-Module for required modules.");
+                    }
+
+                    if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(raw))
+                        _logger.Verbose(raw.Trim());
+
+                    saved = psg.Save(psgOpts, timeout: TimeSpan.FromMinutes(10));
+                }
             }
             var resolved = saved.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
             var resolvedVersion = resolved?.Version;
@@ -255,6 +286,30 @@ public sealed class ArtefactBuilder
         {
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    private static bool IsSecretStoreLockedMessage(string message)
+        => !string.IsNullOrWhiteSpace(message) &&
+           (message.IndexOf("Microsoft.PowerShell.SecretStore", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("Unlock-SecretStore", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("A valid password is required", StringComparison.OrdinalIgnoreCase) >= 0);
+
+    private static string SimplifyPsResourceGetFailureMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return string.Empty;
+
+        var trimmed = message.Trim();
+
+        // "Save-PSResource failed (exit X). <reason>" -> "<reason>"
+        if (trimmed.StartsWith("Save-PSResource failed", StringComparison.OrdinalIgnoreCase))
+        {
+            var marker = "). ";
+            var idx = trimmed.IndexOf(marker, StringComparison.Ordinal);
+            if (idx >= 0 && idx + marker.Length < trimmed.Length)
+                return trimmed.Substring(idx + marker.Length).Trim();
+        }
+
+        return trimmed;
     }
 
     private static string? NormalizeVersionArgument(string? value)
