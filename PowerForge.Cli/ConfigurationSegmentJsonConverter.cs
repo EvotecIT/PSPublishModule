@@ -20,7 +20,8 @@ internal sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigu
             throw new JsonException("Configuration segment 'Type' discriminator is empty.");
 
         var concreteType = ResolveConcreteType(type);
-        var segment = (IConfigurationSegment?)doc.RootElement.Deserialize(concreteType, options);
+        var typeInfo = options.GetTypeInfo(concreteType);
+        var segment = (IConfigurationSegment?)JsonSerializer.Deserialize(doc.RootElement.GetRawText(), typeInfo);
         if (segment is null)
             throw new JsonException($"Failed to deserialize configuration segment of type '{type}'.");
 
@@ -30,7 +31,8 @@ internal sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigu
 
     public override void Write(Utf8JsonWriter writer, IConfigurationSegment value, JsonSerializerOptions options)
     {
-        JsonSerializer.Serialize(writer, (object)value, value.GetType(), options);
+        var typeInfo = options.GetTypeInfo(value.GetType());
+        JsonSerializer.Serialize(writer, (object)value, typeInfo);
     }
 
     private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
@@ -108,4 +110,3 @@ internal sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigu
         }
     }
 }
-

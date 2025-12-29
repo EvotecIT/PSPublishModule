@@ -1,7 +1,6 @@
 using PowerForge;
 using PowerForge.Cli;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 const int OutputSchemaVersion = 1;
 
@@ -10,7 +9,14 @@ if (!string.IsNullOrWhiteSpace(cliParseError))
 {
     if (IsJsonOutput(args ?? Array.Empty<string>()))
     {
-        WriteJson(new { schemaVersion = OutputSchemaVersion, command = "cli", success = false, exitCode = 2, error = cliParseError });
+        WriteJson(new CliJsonEnvelope
+        {
+            SchemaVersion = OutputSchemaVersion,
+            Command = "cli",
+            Success = false,
+            ExitCode = 2,
+            Error = cliParseError
+        });
         return 2;
     }
 
@@ -61,12 +67,11 @@ switch (cmd)
             // 2) If config is present, load either a BuildSpec or PipelineSpec.
             if (!string.IsNullOrWhiteSpace(configToUse))
             {
-                var (_, fullPath) = LoadJsonWithPath<JsonElement>(configToUse);
-                var fullConfigPath = fullPath;
+                var fullConfigPath = ResolveExistingFilePath(configToUse);
 
                 if (LooksLikePipelineSpec(fullConfigPath))
                 {
-                    var (spec, specPath) = LoadJsonWithPath<ModulePipelineSpec>(fullConfigPath);
+                    var (spec, specPath) = LoadPipelineSpecWithPath(fullConfigPath);
                     ResolvePipelineSpecPaths(spec, specPath);
 
                     var runner = new ModulePipelineRunner(cmdLogger);
@@ -77,18 +82,18 @@ switch (cmd)
 
                     if (outputJson)
                     {
-                        WriteJson(new
+                        WriteJson(new CliJsonEnvelope
                         {
-                            schemaVersion = OutputSchemaVersion,
-                            command = "build",
-                            success = true,
-                            exitCode = 0,
-                            config = "pipeline",
-                            configPath = specPath,
-                            spec,
-                            plan,
-                            result = res,
-                            logs = logBuffer?.Entries
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "build",
+                            Success = true,
+                            ExitCode = 0,
+                            Config = "pipeline",
+                            ConfigPath = specPath,
+                            Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
+                            Plan = CliJson.SerializeToElement(plan, CliJson.Context.ModulePipelinePlan),
+                            Result = CliJson.SerializeToElement(res, CliJson.Context.ModuleBuildResult),
+                            Logs = LogsToJsonElement(logBuffer)
                         });
                         return 0;
                     }
@@ -98,7 +103,7 @@ switch (cmd)
                 }
                 else
                 {
-                    var (spec, specPath) = LoadJsonWithPath<ModuleBuildSpec>(fullConfigPath);
+                    var (spec, specPath) = LoadBuildSpecWithPath(fullConfigPath);
                     ResolveBuildSpecPaths(spec, specPath);
 
                     var pipeline = new ModuleBuildPipeline(cmdLogger);
@@ -106,17 +111,17 @@ switch (cmd)
 
                     if (outputJson)
                     {
-                        WriteJson(new
+                        WriteJson(new CliJsonEnvelope
                         {
-                            schemaVersion = OutputSchemaVersion,
-                            command = "build",
-                            success = true,
-                            exitCode = 0,
-                            config = "build",
-                            configPath = specPath,
-                            spec,
-                            result = res,
-                            logs = logBuffer?.Entries
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "build",
+                            Success = true,
+                            ExitCode = 0,
+                            Config = "build",
+                            ConfigPath = specPath,
+                            Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModuleBuildSpec),
+                            Result = CliJson.SerializeToElement(res, CliJson.Context.ModuleBuildResult),
+                            Logs = LogsToJsonElement(logBuffer)
                         });
                         return 0;
                     }
@@ -131,7 +136,14 @@ switch (cmd)
             {
                 if (outputJson)
                 {
-                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 2, error = "Invalid arguments (missing --config and no default config found)." });
+                    WriteJson(new CliJsonEnvelope
+                    {
+                        SchemaVersion = OutputSchemaVersion,
+                        Command = "build",
+                        Success = false,
+                        ExitCode = 2,
+                        Error = "Invalid arguments (missing --config and no default config found)."
+                    });
                     return 2;
                 }
 
@@ -162,16 +174,16 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "build",
-                    success = true,
-                    exitCode = 0,
-                    config = "args",
-                    spec = specFromArgs,
-                    result = resFromArgs,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "build",
+                    Success = true,
+                    ExitCode = 0,
+                    Config = "args",
+                    Spec = CliJson.SerializeToElement(specFromArgs, CliJson.Context.ModuleBuildSpec),
+                    Result = CliJson.SerializeToElement(resFromArgs, CliJson.Context.ModuleBuildResult),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -183,7 +195,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "build", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "build",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -212,7 +231,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 2, error = "Missing --config and no default pipeline config found." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "docs",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Missing --config and no default pipeline config found."
+                });
                 return 2;
             }
 
@@ -223,7 +249,7 @@ switch (cmd)
         ModulePipelineSpec spec;
         try
         {
-            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            var loaded = LoadPipelineSpecWithPath(configPath);
             spec = loaded.Value;
             ResolvePipelineSpecPaths(spec, loaded.FullPath);
         }
@@ -231,7 +257,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 2, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "docs",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = ex.Message
+                });
                 return 2;
             }
 
@@ -262,7 +295,16 @@ switch (cmd)
                 const string msg = "Docs are not enabled in the pipeline config. Add Documentation + BuildDocumentation segments (Enable=true).";
                 if (outputJson)
                 {
-                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 2, error = msg, plan, logs = logBuffer?.Entries });
+                    WriteJson(new CliJsonEnvelope
+                    {
+                        SchemaVersion = OutputSchemaVersion,
+                        Command = "docs",
+                        Success = false,
+                        ExitCode = 2,
+                        Error = msg,
+                        Plan = CliJson.SerializeToElement(plan, CliJson.Context.ModulePipelinePlan),
+                        Logs = LogsToJsonElement(logBuffer)
+                    });
                     return 2;
                 }
 
@@ -276,16 +318,16 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "docs",
-                    success = true,
-                    exitCode = 0,
-                    spec,
-                    plan = res.Plan,
-                    result = res.DocumentationResult,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "docs",
+                    Success = true,
+                    ExitCode = 0,
+                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
+                    Plan = CliJson.SerializeToElement(res.Plan, CliJson.Context.ModulePipelinePlan),
+                    Result = res.DocumentationResult is null ? null : CliJson.SerializeToElement(res.DocumentationResult, CliJson.Context.DocumentationBuildResult),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -302,7 +344,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "docs", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "docs",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -332,7 +381,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 2, error = "Missing --config and no default pipeline config found." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pack",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Missing --config and no default pipeline config found."
+                });
                 return 2;
             }
 
@@ -343,7 +399,7 @@ switch (cmd)
         ModulePipelineSpec spec;
         try
         {
-            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            var loaded = LoadPipelineSpecWithPath(configPath);
             spec = loaded.Value;
             ResolvePipelineSpecPaths(spec, loaded.FullPath);
         }
@@ -351,7 +407,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 2, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pack",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = ex.Message
+                });
                 return 2;
             }
 
@@ -397,7 +460,16 @@ switch (cmd)
                 const string msg = "No enabled artefact segments found in the pipeline config.";
                 if (outputJson)
                 {
-                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 2, error = msg, plan, logs = logBuffer?.Entries });
+                    WriteJson(new CliJsonEnvelope
+                    {
+                        SchemaVersion = OutputSchemaVersion,
+                        Command = "pack",
+                        Success = false,
+                        ExitCode = 2,
+                        Error = msg,
+                        Plan = CliJson.SerializeToElement(plan, CliJson.Context.ModulePipelinePlan),
+                        Logs = LogsToJsonElement(logBuffer)
+                    });
                     return 2;
                 }
 
@@ -411,16 +483,16 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "pack",
-                    success = true,
-                    exitCode = 0,
-                    spec,
-                    plan = res.Plan,
-                    artefacts = res.ArtefactResults,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pack",
+                    Success = true,
+                    ExitCode = 0,
+                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
+                    Plan = CliJson.SerializeToElement(res.Plan, CliJson.Context.ModulePipelinePlan),
+                    Artefacts = CliJson.SerializeToElement(res.ArtefactResults, CliJson.Context.ArtefactBuildResultArray),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -436,7 +508,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pack", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pack",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -454,7 +533,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "normalize", success = false, exitCode = 2, error = "At least one file is required." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "normalize",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "At least one file is required."
+                });
                 return 2;
             }
 
@@ -466,7 +552,14 @@ switch (cmd)
         {
             var results = new List<NormalizationResult>();
             foreach (var f in targets) results.Add(forge.Normalize(f));
-            WriteJson(new { schemaVersion = OutputSchemaVersion, command = "normalize", success = true, exitCode = 0, results });
+            WriteJson(new CliJsonEnvelope
+            {
+                SchemaVersion = OutputSchemaVersion,
+                Command = "normalize",
+                Success = true,
+                ExitCode = 0,
+                Results = CliJson.SerializeToElement(results.ToArray(), CliJson.Context.NormalizationResultArray)
+            });
             return 0;
         }
 
@@ -488,7 +581,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "format", success = false, exitCode = 2, error = "At least one file is required." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "format",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "At least one file is required."
+                });
                 return 2;
             }
 
@@ -501,7 +601,15 @@ switch (cmd)
             var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var jsonForge = new PowerForgeFacade(cmdLogger);
             var jsonResults = jsonForge.Format(targets);
-            WriteJson(new { schemaVersion = OutputSchemaVersion, command = "format", success = true, exitCode = 0, results = jsonResults, logs = logBuffer?.Entries });
+            WriteJson(new CliJsonEnvelope
+            {
+                SchemaVersion = OutputSchemaVersion,
+                Command = "format",
+                Success = true,
+                ExitCode = 0,
+                Results = CliJson.SerializeToElement(jsonResults.ToArray(), CliJson.Context.FormatterResultArray),
+                Logs = LogsToJsonElement(logBuffer)
+            });
             return 0;
         }
 
@@ -522,7 +630,7 @@ switch (cmd)
         ModuleInstallSpec spec;
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            var loaded = LoadJsonWithPath<ModuleInstallSpec>(configPath);
+            var loaded = LoadInstallSpecWithPath(configPath);
             ResolveInstallSpecPaths(loaded.Value, loaded.FullPath);
             spec = loaded.Value;
         }
@@ -533,7 +641,14 @@ switch (cmd)
             {
                 if (outputJson)
                 {
-                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "install", success = false, exitCode = 2, error = "Invalid arguments." });
+                    WriteJson(new CliJsonEnvelope
+                    {
+                        SchemaVersion = OutputSchemaVersion,
+                        Command = "install",
+                        Success = false,
+                        ExitCode = 2,
+                        Error = "Invalid arguments."
+                    });
                     return 2;
                 }
 
@@ -560,15 +675,15 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "install",
-                    success = true,
-                    exitCode = 0,
-                    spec,
-                    result = res,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "install",
+                    Success = true,
+                    ExitCode = 0,
+                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModuleInstallSpec),
+                    Result = CliJson.SerializeToElement(res, CliJson.Context.ModuleInstallerResult),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -582,7 +697,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "install", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "install",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -599,7 +721,7 @@ switch (cmd)
         ModuleTestSuiteSpec spec;
         if (!string.IsNullOrWhiteSpace(configPath))
         {
-            var loaded = LoadJsonWithPath<ModuleTestSuiteSpec>(configPath);
+            var loaded = LoadTestSuiteSpecWithPath(configPath);
             ResolveTestSpecPaths(loaded.Value, loaded.FullPath);
             spec = loaded.Value;
         }
@@ -610,7 +732,14 @@ switch (cmd)
             {
                 if (outputJson)
                 {
-                    WriteJson(new { schemaVersion = OutputSchemaVersion, command = "test", success = false, exitCode = 2, error = "Invalid arguments." });
+                    WriteJson(new CliJsonEnvelope
+                    {
+                        SchemaVersion = OutputSchemaVersion,
+                        Command = "test",
+                        Success = false,
+                        ExitCode = 2,
+                        Error = "Invalid arguments."
+                    });
                     return 2;
                 }
 
@@ -631,15 +760,15 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "test",
-                    success,
-                    exitCode,
-                    spec,
-                    result = res,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "test",
+                    Success = success,
+                    ExitCode = exitCode,
+                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModuleTestSuiteSpec),
+                    Result = CliJson.SerializeToElement(res, CliJson.Context.ModuleTestSuiteResult),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return exitCode;
             }
@@ -670,7 +799,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "test", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "test",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -700,7 +836,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 2, error = "Missing required --config." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pipeline",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Missing required --config."
+                });
                 return 2;
             }
 
@@ -711,7 +854,7 @@ switch (cmd)
         ModulePipelineSpec spec;
         try
         {
-            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            var loaded = LoadPipelineSpecWithPath(configPath);
             spec = loaded.Value;
             ResolvePipelineSpecPaths(spec, loaded.FullPath);
         }
@@ -719,7 +862,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 2, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pipeline",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = ex.Message
+                });
                 return 2;
             }
 
@@ -741,15 +891,15 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "pipeline",
-                    success = true,
-                    exitCode = 0,
-                    spec,
-                    result = res,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pipeline",
+                    Success = true,
+                    ExitCode = 0,
+                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
+                    Result = CliJson.SerializeToElement(res, CliJson.Context.ModulePipelineResult),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -767,7 +917,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "pipeline", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "pipeline",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -796,7 +953,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 2, error = "Missing required --config." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "plan",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Missing required --config."
+                });
                 return 2;
             }
 
@@ -807,7 +971,7 @@ switch (cmd)
         ModulePipelineSpec spec;
         try
         {
-            var loaded = LoadJsonWithPath<ModulePipelineSpec>(configPath);
+            var loaded = LoadPipelineSpecWithPath(configPath);
             spec = loaded.Value;
             ResolvePipelineSpecPaths(spec, loaded.FullPath);
         }
@@ -815,7 +979,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 2, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "plan",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = ex.Message
+                });
                 return 2;
             }
 
@@ -831,15 +1002,15 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "plan",
-                    success = true,
-                    exitCode = 0,
-                    spec,
-                    plan,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "plan",
+                    Success = true,
+                    ExitCode = 0,
+                    Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
+                    Plan = CliJson.SerializeToElement(plan, CliJson.Context.ModulePipelinePlan),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -864,7 +1035,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "plan", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "plan",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -881,7 +1059,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "find", success = false, exitCode = 2, error = "Invalid arguments." });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "find",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Invalid arguments."
+                });
                 return 2;
             }
 
@@ -900,14 +1085,14 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "find",
-                    success = true,
-                    exitCode = 0,
-                    results,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "find",
+                    Success = true,
+                    ExitCode = 0,
+                    Results = CliJson.SerializeToElement(results.ToArray(), CliJson.Context.PSResourceInfoArray),
+                    Logs = LogsToJsonElement(logBuffer)
                 });
                 return 0;
             }
@@ -922,7 +1107,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "find", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "find",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -943,7 +1135,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "publish", success = false, exitCode = 2, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "publish",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = ex.Message
+                });
                 return 2;
             }
 
@@ -960,22 +1159,29 @@ switch (cmd)
 
             if (outputJson)
             {
-                WriteJson(new
+                WriteJson(new CliJsonEnvelope
                 {
-                    schemaVersion = OutputSchemaVersion,
-                    command = "publish",
-                    success = true,
-                    exitCode = 0,
-                    path = result.Path,
-                    isNupkg = result.IsNupkg,
-                    repository = result.RepositoryName,
-                    tool = result.Tool,
-                    destinationPath = request.DestinationPath,
-                    skipDependenciesCheck = request.SkipDependenciesCheck,
-                    skipModuleManifestValidate = request.SkipModuleManifestValidate,
-                    repositoryCreated = result.RepositoryCreated,
-                    repositoryUnregistered = result.RepositoryUnregistered,
-                    logs = logBuffer?.Entries
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "publish",
+                    Success = true,
+                    ExitCode = 0,
+                    Logs = LogsToJsonElement(logBuffer)
+                },
+                writer =>
+                {
+                    writer.WriteString("path", result.Path);
+                    writer.WriteBoolean("isNupkg", result.IsNupkg);
+                    writer.WriteString("repository", result.RepositoryName);
+                    writer.WriteString("tool", result.Tool.ToString());
+
+                    writer.WritePropertyName("destinationPath");
+                    if (string.IsNullOrWhiteSpace(request.DestinationPath)) writer.WriteNullValue();
+                    else writer.WriteStringValue(request.DestinationPath);
+
+                    writer.WriteBoolean("skipDependenciesCheck", request.SkipDependenciesCheck);
+                    writer.WriteBoolean("skipModuleManifestValidate", request.SkipModuleManifestValidate);
+                    writer.WriteBoolean("repositoryCreated", result.RepositoryCreated);
+                    writer.WriteBoolean("repositoryUnregistered", result.RepositoryUnregistered);
                 });
                 return 0;
             }
@@ -987,7 +1193,14 @@ switch (cmd)
         {
             if (outputJson)
             {
-                WriteJson(new { schemaVersion = OutputSchemaVersion, command = "publish", success = false, exitCode = 1, error = ex.Message });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "publish",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
                 return 1;
             }
 
@@ -1564,28 +1777,43 @@ static bool LooksLikePipelineSpec(string fullConfigPath)
     }
 }
 
-static JsonSerializerOptions CreateJsonOptions()
-{
-    var options = new JsonSerializerOptions
-    {
-        PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true,
-    };
-    options.Converters.Add(new JsonStringEnumConverter());
-    options.Converters.Add(new ConfigurationSegmentJsonConverter());
-    return options;
-}
-
-static (T Value, string FullPath) LoadJsonWithPath<T>(string path)
+static string ResolveExistingFilePath(string path)
 {
     var full = Path.GetFullPath(path.Trim().Trim('"'));
     if (!File.Exists(full)) throw new FileNotFoundException($"Config file not found: {full}");
+    return full;
+}
 
+static (ModulePipelineSpec Value, string FullPath) LoadPipelineSpecWithPath(string path)
+{
+    var full = ResolveExistingFilePath(path);
     var json = File.ReadAllText(full);
-    var obj = JsonSerializer.Deserialize<T>(json, CreateJsonOptions());
-    if (obj is null) throw new InvalidOperationException($"Failed to deserialize config file: {full}");
-    return (obj, full);
+    var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModulePipelineSpec, full);
+    return (spec, full);
+}
+
+static (ModuleBuildSpec Value, string FullPath) LoadBuildSpecWithPath(string path)
+{
+    var full = ResolveExistingFilePath(path);
+    var json = File.ReadAllText(full);
+    var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModuleBuildSpec, full);
+    return (spec, full);
+}
+
+static (ModuleInstallSpec Value, string FullPath) LoadInstallSpecWithPath(string path)
+{
+    var full = ResolveExistingFilePath(path);
+    var json = File.ReadAllText(full);
+    var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModuleInstallSpec, full);
+    return (spec, full);
+}
+
+static (ModuleTestSuiteSpec Value, string FullPath) LoadTestSuiteSpecWithPath(string path)
+{
+    var full = ResolveExistingFilePath(path);
+    var json = File.ReadAllText(full);
+    var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModuleTestSuiteSpec, full);
+    return (spec, full);
 }
 
 static (string[] Names, string? Version, bool Prerelease, string[] Repositories)? ParseFindArgs(string[] argv)
@@ -1889,18 +2117,16 @@ static string[] ParseTargets(string[] argv)
     return list.ToArray();
 }
 
-static void WriteJson(object obj)
+static JsonElement? LogsToJsonElement(BufferingLogger? logBuffer)
 {
-    var options = new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false
-    };
-    options.Converters.Add(new JsonStringEnumConverter());
-    options.Converters.Add(new ConfigurationSegmentJsonConverter());
+    if (logBuffer is null) return null;
+    if (logBuffer.Entries.Count == 0) return null;
+    return CliJson.SerializeToElement(logBuffer.Entries.ToArray(), CliJson.Context.LogEntryArray);
+}
 
-    var json = JsonSerializer.Serialize(obj, options);
-    Console.WriteLine(json);
+static void WriteJson(CliJsonEnvelope envelope, Action<Utf8JsonWriter>? writeAdditionalProperties = null)
+{
+    CliJsonWriter.Write(envelope, writeAdditionalProperties);
 }
 
 sealed class LogEntry

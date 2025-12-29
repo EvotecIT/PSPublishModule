@@ -15,7 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
+    <!-- Prevent NativeAOT publish properties from flowing into the multi-targeted core library (net472;net8.0;net10.0). -->
+    <ProjectReference Include="..\PowerForge\PowerForge.csproj">
+      <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
