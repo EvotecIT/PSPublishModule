@@ -191,8 +191,11 @@
 - [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [x] Add GitHub composite actions calling the CLI.
 - [ ] Validate AOT publish for CLI (code is AOT/trim-friendly; verify end-to-end publish in CI with a native toolchain on Windows runners).
+  - [ ] Current blocker: `dotnet publish -p:PublishAot=true` fails due to AOT analysis errors in `Microsoft.PowerShell.SDK` (System.Management.Automation), `Newtonsoft.Json`, and related dependencies (single-file + reflection-heavy APIs).
+  - [ ] Next: split AOT-safe core from PowerShell-SDK-dependent services (or conditionally exclude PowerShell SDK when `PublishAot=true`) so `PowerForge.Cli` can publish NativeAOT for the build/pack/docs paths that only require out-of-proc PowerShell.
 - [ ] Expand tests (service unit tests + CLI integration).
   - [x] Add `PowerForge.Tests` (xUnit) with starter coverage for `PowerShellCompatibilityAnalyzer` and `ModuleBuilder` TFM routing.
+  - [x] Add unit tests for pipeline step planning (`ModulePipelineStep.Create` build/docs substeps).
 - [x] Repository publishing: PSResourceGet + PowerShellGet support (tool selection + repo registration + publish/find/version check logic; internal; no standalone cmdlets).
 
 **Sample GitHub Workflow (sketch)**
