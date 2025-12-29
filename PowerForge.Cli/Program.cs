@@ -248,10 +248,15 @@ switch (cmd)
 
         try
         {
-            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+            var (cmdLogger, logBuffer) = interactive
+                ? (new NullLogger { IsVerbose = cli.Verbose }, null)
+                : CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
 
-            var plan = RunWithStatus(outputJson, cli, "Planning docs", () => runner.Plan(spec));
+            var plan = interactive
+                ? runner.Plan(spec)
+                : RunWithStatus(outputJson, cli, "Planning docs", () => runner.Plan(spec));
             if (plan.DocumentationBuild?.Enable != true || plan.Documentation is null)
             {
                 const string msg = "Docs are not enabled in the pipeline config. Add Documentation + BuildDocumentation segments (Enable=true).";
@@ -265,7 +270,9 @@ switch (cmd)
                 return 2;
             }
 
-            var res = RunWithStatus(outputJson, cli, "Generating docs", () => runner.Run(spec));
+            var res = interactive
+                ? PipelineConsoleUi.Run(runner, spec, plan, configPath, outputJson, cli)
+                : RunWithStatus(outputJson, cli, "Generating docs", () => runner.Run(spec, plan));
 
             if (outputJson)
             {
@@ -376,10 +383,15 @@ switch (cmd)
 
         try
         {
-            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+            var (cmdLogger, logBuffer) = interactive
+                ? (new NullLogger { IsVerbose = cli.Verbose }, null)
+                : CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
 
-            var plan = RunWithStatus(outputJson, cli, "Planning pack", () => runner.Plan(spec));
+            var plan = interactive
+                ? runner.Plan(spec)
+                : RunWithStatus(outputJson, cli, "Planning pack", () => runner.Plan(spec));
             if (plan.Artefacts.Length == 0)
             {
                 const string msg = "No enabled artefact segments found in the pipeline config.";
@@ -393,7 +405,9 @@ switch (cmd)
                 return 2;
             }
 
-            var res = RunWithStatus(outputJson, cli, "Packing artefacts", () => runner.Run(spec));
+            var res = interactive
+                ? PipelineConsoleUi.Run(runner, spec, plan, configPath, outputJson, cli)
+                : RunWithStatus(outputJson, cli, "Packing artefacts", () => runner.Run(spec, plan));
 
             if (outputJson)
             {
@@ -715,9 +729,15 @@ switch (cmd)
 
         try
         {
-            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
+            var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+            var (cmdLogger, logBuffer) = interactive
+                ? (new NullLogger { IsVerbose = cli.Verbose }, null)
+                : CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
-            var res = RunWithStatus(outputJson, cli, "Running pipeline", () => runner.Run(spec));
+            var plan = runner.Plan(spec);
+            var res = interactive
+                ? PipelineConsoleUi.Run(runner, spec, plan, configPath, outputJson, cli)
+                : RunWithStatus(outputJson, cli, "Running pipeline", () => runner.Run(spec, plan));
 
             if (outputJson)
             {
