@@ -71,6 +71,7 @@ public sealed class PowerShellRunner : IPowerShellRunner
         psi.UseShellExecute = false;
         psi.CreateNoWindow = true;
 
+#if NET472
         // Build classic argument string for net472
         var sb = new System.Text.StringBuilder();
         void AddArg(string s)
@@ -83,7 +84,7 @@ public sealed class PowerShellRunner : IPowerShellRunner
             }
             if (s.IndexOf(' ') >= 0 || s.IndexOf('"') >= 0)
             {
-                sb.Append('"').Append(s.Replace("\"", "\\\"")).Append('"');     
+                sb.Append('"').Append(s.Replace("\"", "\\\"")).Append('"');
             }
             else sb.Append(s);
         }
@@ -98,6 +99,18 @@ public sealed class PowerShellRunner : IPowerShellRunner
             AddArg(arg);
         }
         psi.Arguments = sb.ToString();
+#else
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(request.ScriptPath);
+        foreach (var arg in request.Arguments)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+#endif
 
         using var p = new Process { StartInfo = psi };
         p.Start();

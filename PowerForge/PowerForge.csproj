@@ -14,6 +14,11 @@
     <RootNamespace>PowerForge</RootNamespace>
   </PropertyGroup>
 
+  <!-- NativeAOT publish (for PowerForge.Cli) must not evaluate the net472 TFM. -->
+  <PropertyGroup Condition=" '$(PublishAot)' == 'true' ">
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+  </PropertyGroup>
+
   <ItemGroup Condition=" '$(TargetFramework)' == 'net8.0' Or '$(TargetFramework)' == 'net10.0' ">
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.1" />
     <PackageReference Include="System.IO.Packaging" Version="10.0.1" />

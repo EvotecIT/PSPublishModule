@@ -85,9 +85,11 @@ public sealed class ModulePipelineStep
             for (int i = 0; i < plan.Artefacts.Length; i++)
             {
                 var a = plan.Artefacts[i];
-                var id = a?.Configuration?.ID;
+                if (a is null) continue;
+
+                var id = a.Configuration?.ID;
                 var label = $"Pack {a.ArtefactType}";
-                if (!string.IsNullOrWhiteSpace(id)) label += $" ({id})";
+                if (!string.IsNullOrWhiteSpace(id)) label += $" ({id})";        
 
                 var key = $"artefact:{i + 1:00}:{a.ArtefactType}:{(id ?? string.Empty)}";
                 steps.Add(new ModulePipelineStep(
@@ -104,9 +106,11 @@ public sealed class ModulePipelineStep
             for (int i = 0; i < plan.Publishes.Length; i++)
             {
                 var p = plan.Publishes[i];
-                var cfg = p?.Configuration ?? new PublishConfiguration();
+                if (p is null) continue;
+
+                var cfg = p.Configuration ?? new PublishConfiguration();       
                 var id = cfg.ID;
-                var repoName = cfg.Repository?.Name ?? cfg.RepositoryName;
+                var repoName = cfg.Repository?.Name ?? cfg.RepositoryName;      
 
                 var label = $"Publish {cfg.Destination}";
                 if (!string.IsNullOrWhiteSpace(repoName)) label += $" ({repoName})";
@@ -142,4 +146,3 @@ public sealed class ModulePipelineStep
         return steps.ToArray();
     }
 }
-
