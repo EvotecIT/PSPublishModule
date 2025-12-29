@@ -131,18 +131,40 @@ internal static class PipelineConsoleUi
         var title = $"PowerForge • {plan.ModuleName} {plan.ResolvedVersion}";
         AnsiConsole.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
-        if (!string.IsNullOrWhiteSpace(configPath))
-            AnsiConsole.MarkupLine($"[grey][[i]][/] [grey]Config:[/] {Esc(configPath)}");
-        AnsiConsole.MarkupLine($"[grey][[i]][/] [grey]Project:[/] {Esc(plan.ProjectRoot)}");
-        AnsiConsole.MarkupLine($"[grey][[i]][/] [grey]Planned steps:[/] {steps.Length}");
+        var info = new Table()
+            .Border(TableBorder.None)
+            .HideHeaders()
+            .AddColumn(new TableColumn("k").NoWrap())
+            .AddColumn(new TableColumn("v"));
+
+        var cfgText = string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath;
+        info.AddRow("[grey][[i]][/] [grey]Config[/]", Esc(cfgText));
+        info.AddRow("[grey][[i]][/] [grey]Project[/]", Esc(plan.ProjectRoot));
+
+        var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
+        info.AddRow("[grey][[i]][/] [grey]Staging[/]", Esc(stagingText));
+
+        var frameworks = plan.BuildSpec.Frameworks is { Length: > 0 }
+            ? string.Join(", ", plan.BuildSpec.Frameworks)
+            : "(auto)";
+        info.AddRow("[grey][[i]][/] [grey]Frameworks[/]", Esc(frameworks));
+
+        var docsEnabled = plan.DocumentationBuild?.Enable == true;
+        info.AddRow("[grey][[i]][/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+        info.AddRow("[grey][[i]][/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
+        info.AddRow("[grey][[i]][/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
+        info.AddRow("[grey][[i]][/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
+
+        info.AddRow("[grey][[i]][/] [grey]Steps[/]", Esc(steps.Length.ToString()));
+        AnsiConsole.Write(info);
 
         try
         {
             int vw = Math.Max(60, Console.WindowWidth);
             if (vw >= 120)
             {
-                var preview = string.Join(", ", steps.Select(s => s.Kind.ToString()));
-                AnsiConsole.MarkupLine($"[grey][[i]][/] [grey]Steps:[/] {Esc(preview)}");
+                var preview = string.Join(", ", steps.Select(s => s.Title).Where(s => !string.IsNullOrWhiteSpace(s)));
+                AnsiConsole.MarkupLine($"[grey][[i]][/] [grey]Plan:[/] {Esc(preview)}");
             }
         }
         catch { }
@@ -153,11 +175,11 @@ internal static class PipelineConsoleUi
     private static string GetStepIcon(ModulePipelineStep step)
         => step.Kind switch
         {
-            ModulePipelineStepKind.Build => "[grey]BL[/]",
-            ModulePipelineStepKind.Documentation => "[grey]DC[/]",
-            ModulePipelineStepKind.Artefact => "[grey]PK[/]",
-            ModulePipelineStepKind.Publish => "[grey]PB[/]",
-            ModulePipelineStepKind.Install => "[grey]IN[/]",
+            ModulePipelineStepKind.Build => "[cyan]BL[/]",
+            ModulePipelineStepKind.Documentation => "[deepskyblue1]DC[/]",
+            ModulePipelineStepKind.Artefact => "[magenta]PK[/]",
+            ModulePipelineStepKind.Publish => "[yellow]PB[/]",
+            ModulePipelineStepKind.Install => "[green]IN[/]",
             ModulePipelineStepKind.Cleanup => "[grey]CL[/]",
             _ => "[grey]PF[/]"
         };
@@ -190,8 +212,8 @@ internal static class PipelineConsoleUi
 
         string name = step.Kind switch
         {
-            ModulePipelineStepKind.Build => "Build to staging",
-            ModulePipelineStepKind.Documentation => "Generate docs",
+            ModulePipelineStepKind.Build => step.Title,
+            ModulePipelineStepKind.Documentation => step.Title,
             ModulePipelineStepKind.Artefact => "Pack artefact",
             ModulePipelineStepKind.Publish => "Publish",
             ModulePipelineStepKind.Install => "Install",
@@ -369,4 +391,3 @@ internal static class PipelineConsoleUi
         }
     }
 }
-
