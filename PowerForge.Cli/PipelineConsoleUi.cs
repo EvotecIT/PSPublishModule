@@ -12,7 +12,8 @@ internal static class PipelineConsoleUi
 {
     public static bool ShouldUseInteractiveView(bool outputJson, CliOptions cli)
     {
-        if (outputJson || cli.Quiet || cli.NoColor) return false;
+        if (outputJson || cli.Quiet || cli.NoColor || cli.Verbose) return false;
+        if (Console.IsOutputRedirected || Console.IsErrorRedirected) return false;
 
         var view = ResolveView(cli.View);
         if (view != ConsoleView.Standard) return false;
@@ -128,7 +129,11 @@ internal static class PipelineConsoleUi
     {
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
 
-        var title = $"PowerForge • {plan.ModuleName} {plan.ResolvedVersion}";
+        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+
+        var title = unicode
+            ? $"🛠️ PowerForge • {plan.ModuleName} {plan.ResolvedVersion}"
+            : $"PowerForge • {plan.ModuleName} {plan.ResolvedVersion}";
         AnsiConsole.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
         var info = new Table()
@@ -138,24 +143,24 @@ internal static class PipelineConsoleUi
             .AddColumn(new TableColumn("v"));
 
         var cfgText = string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath;
-        info.AddRow("[grey][[i]][/] [grey]Config[/]", Esc(cfgText));
-        info.AddRow("[grey][[i]][/] [grey]Project[/]", Esc(plan.ProjectRoot));
+        info.AddRow($"[grey]{(unicode ? "⚙️" : "CFG")}[/] [grey]Config[/]", Esc(cfgText));
+        info.AddRow($"[grey]{(unicode ? "📁" : "DIR")}[/] [grey]Project[/]", Esc(plan.ProjectRoot));
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
-        info.AddRow("[grey][[i]][/] [grey]Staging[/]", Esc(stagingText));
+        info.AddRow($"[grey]{(unicode ? "🧪" : "TMP")}[/] [grey]Staging[/]", Esc(stagingText));
 
         var frameworks = plan.BuildSpec.Frameworks is { Length: > 0 }
             ? string.Join(", ", plan.BuildSpec.Frameworks)
             : "(auto)";
-        info.AddRow("[grey][[i]][/] [grey]Frameworks[/]", Esc(frameworks));
+        info.AddRow($"[grey]{(unicode ? "🧩" : "TFM")}[/] [grey]Frameworks[/]", Esc(frameworks));
 
         var docsEnabled = plan.DocumentationBuild?.Enable == true;
-        info.AddRow("[grey][[i]][/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
-        info.AddRow("[grey][[i]][/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
-        info.AddRow("[grey][[i]][/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
-        info.AddRow("[grey][[i]][/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
+        info.AddRow($"[grey]{(unicode ? "📚" : "DOC")}[/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+        info.AddRow($"[grey]{(unicode ? "📦" : "PKG")}[/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
+        info.AddRow($"[grey]{(unicode ? "🚀" : "PUB")}[/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
+        info.AddRow($"[grey]{(unicode ? "📥" : "INS")}[/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
-        info.AddRow("[grey][[i]][/] [grey]Steps[/]", Esc(steps.Length.ToString()));
+        info.AddRow($"[grey]{(unicode ? "🧭" : "STP")}[/] [grey]Steps[/]", Esc(steps.Length.ToString()));
         AnsiConsole.Write(info);
 
         try
@@ -164,7 +169,8 @@ internal static class PipelineConsoleUi
             if (vw >= 120)
             {
                 var preview = string.Join(", ", steps.Select(s => s.Title).Where(s => !string.IsNullOrWhiteSpace(s)));
-                AnsiConsole.MarkupLine($"[grey][[i]][/] [grey]Plan:[/] {Esc(preview)}");
+                var label = unicode ? "🗺️ Plan:" : "Plan:";
+                AnsiConsole.MarkupLine($"[grey]{label}[/] {Esc(preview)}");
             }
         }
         catch { }
@@ -173,16 +179,19 @@ internal static class PipelineConsoleUi
     }
 
     private static string GetStepIcon(ModulePipelineStep step)
-        => step.Kind switch
+    {
+        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        return step.Kind switch
         {
-            ModulePipelineStepKind.Build => "[cyan]BL[/]",
-            ModulePipelineStepKind.Documentation => "[deepskyblue1]DC[/]",
-            ModulePipelineStepKind.Artefact => "[magenta]PK[/]",
-            ModulePipelineStepKind.Publish => "[yellow]PB[/]",
-            ModulePipelineStepKind.Install => "[green]IN[/]",
-            ModulePipelineStepKind.Cleanup => "[grey]CL[/]",
-            _ => "[grey]PF[/]"
+            ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
+            ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
+            ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
+            ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
+            ModulePipelineStepKind.Install => unicode ? "[green]📥[/]" : "[green]IN[/]",
+            ModulePipelineStepKind.Cleanup => unicode ? "[grey]🧹[/]" : "[grey]CL[/]",
+            _ => unicode ? "[grey]•[/]" : "[grey]PF[/]"
         };
+    }
 
     private static string BuildLabel(
         ModulePipelineStep step,

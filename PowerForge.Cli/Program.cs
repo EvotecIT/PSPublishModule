@@ -1,8 +1,11 @@
 using PowerForge;
 using PowerForge.Cli;
+using Spectre.Console;
 using System.Text.Json;
 
 const int OutputSchemaVersion = 1;
+
+ConsoleEncoding.EnsureUtf8();
 
 var cli = ParseCliOptions(args, out var cliParseError);
 if (!string.IsNullOrWhiteSpace(cliParseError))
@@ -877,11 +880,12 @@ switch (cmd)
             return 2;
         }
 
+        BufferingLogger? interactiveBuffer = null;
         try
         {
             var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
             var (cmdLogger, logBuffer) = interactive
-                ? (new NullLogger { IsVerbose = cli.Verbose }, null)
+                ? (interactiveBuffer = new BufferingLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
                 : CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
             var plan = runner.Plan(spec);
@@ -904,13 +908,7 @@ switch (cmd)
                 return 0;
             }
 
-            logger.Success($"Pipeline built {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
-            logger.Info($"Staging: {res.BuildResult.StagingPath}");
-            if (res.InstallResult is not null)
-            {
-                logger.Success($"Installed {res.Plan.ModuleName} {res.InstallResult.Version}");
-                foreach (var path in res.InstallResult.InstalledPaths) logger.Info($" → {path}");
-            }
+            WritePipelineSummary(res, cli, logger);
             return 0;
         }
         catch (Exception ex)
@@ -928,6 +926,8 @@ switch (cmd)
                 return 1;
             }
 
+            if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
+                WriteLogTail(interactiveBuffer, logger);
             logger.Error(ex.Message);
             return 1;
         }
@@ -1374,6 +1374,105 @@ static (ILogger Logger, BufferingLogger? Buffer) CreateCommandLogger(bool output
     }
 
     return (new NullLogger { IsVerbose = cli.Verbose }, null);
+}
+
+static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogger logger)
+{
+    if (cli.Quiet) return;
+
+    if (cli.NoColor)
+    {
+        logger.Success($"Pipeline built {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
+        logger.Info($"Staging: {res.BuildResult.StagingPath}");
+
+        if (res.ArtefactResults is { Length: > 0 })
+        {
+            logger.Info($"Artefacts: {res.ArtefactResults.Length}");
+            foreach (var a in res.ArtefactResults)
+                logger.Info($" - {a.Type}{(string.IsNullOrWhiteSpace(a.Id) ? string.Empty : $" ({a.Id})")}: {a.OutputPath}");
+        }
+
+        if (res.InstallResult is not null)
+        {
+            logger.Success($"Installed {res.Plan.ModuleName} {res.InstallResult.Version}");
+            foreach (var path in res.InstallResult.InstalledPaths) logger.Info($" -> {path}");
+        }
+
+        return;
+    }
+
+    static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+    var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+    var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
+
+    AnsiConsole.Write(new Rule($"[green]{(unicode ? "✅" : "OK")} Summary[/]").LeftJustified());
+
+    var table = new Table()
+        .Border(border)
+        .AddColumn(new TableColumn("Item").NoWrap())
+        .AddColumn(new TableColumn("Value"));
+
+    table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
+    table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
+
+    if (res.ArtefactResults is { Length: > 0 })
+        table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
+    else
+        table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", "[grey]None[/]");
+
+    if (res.InstallResult is not null)
+        table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
+    else
+        table.AddRow($"{(unicode ? "📥" : "*")} Install", "[grey]Disabled[/]");
+
+    AnsiConsole.Write(table);
+
+    if (res.ArtefactResults is { Length: > 0 })
+    {
+        var artefacts = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Type").NoWrap())
+            .AddColumn(new TableColumn("Id").NoWrap())
+            .AddColumn(new TableColumn("Path"));
+
+        foreach (var a in res.ArtefactResults)
+            artefacts.AddRow(Esc(a.Type.ToString()), Esc(a.Id ?? string.Empty), Esc(a.OutputPath));
+
+        AnsiConsole.Write(artefacts);
+    }
+
+    if (res.InstallResult is not null && res.InstallResult.InstalledPaths is { Count: > 0 })
+    {
+        AnsiConsole.MarkupLine($"[grey]{(unicode ? "📍" : "*")} Installed paths:[/]");
+        foreach (var path in res.InstallResult.InstalledPaths)
+            AnsiConsole.MarkupLine($"  [grey]{(unicode ? "→" : "->")}[/] {Esc(path)}");
+    }
+}
+
+static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries = 80)
+{
+    if (buffer is null) return;
+    if (buffer.Entries.Count == 0) return;
+
+    maxEntries = Math.Max(1, maxEntries);
+    var total = buffer.Entries.Count;
+    var start = Math.Max(0, total - maxEntries);
+    var shown = total - start;
+
+    logger.Warn($"Last {shown}/{total} log lines:");
+    for (int i = start; i < total; i++)
+    {
+        var e = buffer.Entries[i];
+        var msg = e.Message ?? string.Empty;
+        switch (e.Level)
+        {
+            case "success": logger.Success(msg); break;
+            case "warn": logger.Warn(msg); break;
+            case "error": logger.Error(msg); break;
+            case "verbose": logger.Verbose(msg); break;
+            default: logger.Info(msg); break;
+        }
+    }
 }
 
 static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Func<T> action)
