@@ -42,9 +42,16 @@ public sealed class RepositoryPublisher
 
         var fullPath = Path.GetFullPath(request.Path.Trim().Trim('"'));
 
-        var repositoryName = string.IsNullOrWhiteSpace(request.Repository?.Name)
-            ? (string.IsNullOrWhiteSpace(request.RepositoryName) ? "PSGallery" : request.RepositoryName.Trim())
-            : request.Repository!.Name!.Trim();
+        var configuredRepository = request.Repository;
+        var configuredRepositoryName = configuredRepository?.Name;
+
+        var legacyRepositoryName = request.RepositoryName;
+        var repositoryName =
+            configuredRepositoryName is not null && !string.IsNullOrWhiteSpace(configuredRepositoryName)
+                ? configuredRepositoryName.Trim()
+                : (legacyRepositoryName is not null && !string.IsNullOrWhiteSpace(legacyRepositoryName)
+                    ? legacyRepositoryName.Trim()
+                    : "PSGallery");
 
         var repositorySpecified = !string.IsNullOrWhiteSpace(request.Repository?.Name) ||
                                   !string.IsNullOrWhiteSpace(request.RepositoryName);
