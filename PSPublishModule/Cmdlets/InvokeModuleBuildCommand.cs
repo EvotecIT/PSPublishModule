@@ -1,8 +1,10 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -61,6 +63,37 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string[] ExcludeFromPackage { get; set; } = { ".*", "Ignore", "Examples", "package.json", "Publish", "Docs" };
+
+    /// <summary>
+    /// Directory names excluded from staging copy (matched by directory name, not by path).
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public string[] ExcludeDirectories { get; set; } =
+    {
+        ".git",
+        ".vs",
+        ".vscode",
+        "bin",
+        "obj",
+        "packages",
+        "node_modules",
+        "Artefacts",
+        "Build",
+        "Docs",
+        "Documentation",
+        "Examples",
+        "Ignore",
+        "Publish",
+        "Tests",
+    };
+
+    /// <summary>
+    /// File names excluded from staging copy (matched by file name, not by path).
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public string[] ExcludeFiles { get; set; } = { ".gitignore" };
 
     /// <summary>
     /// Include patterns for root files in artefacts.
@@ -167,6 +200,10 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var sw = Stopwatch.StartNew();
+        var isVerbose = MyInvocation.BoundParameters.ContainsKey("Verbose");
+
+        ConsoleEncoding.EnsureUtf8();
+        ILogger logger = new SpectreConsoleLogger { IsVerbose = isVerbose };
 
         var moduleName = ParameterSetName == ParameterSetConfiguration
             ? LegacySegmentAdapter.ResolveModuleNameFromLegacyConfiguration(Configuration)
@@ -180,13 +217,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         {
             if (!Directory.Exists(basePathForScaffold))
             {
-                WriteHostMessage($"[-] Path {basePathForScaffold} doesn't exists. Please create it, before continuing.", ConsoleColor.Red);
+                logger.Error($"Path '{basePathForScaffold}' does not exist. Please create it before continuing.");
                 if (ExitCode.IsPresent) Host.SetShouldExit(1);
                 return;
             }
 
-            var scaffoldLogger = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
-            var scaffolder = new ModuleScaffoldService(scaffoldLogger);
+            var scaffolder = new ModuleScaffoldService(logger);
             scaffolder.EnsureScaffold(new ModuleScaffoldSpec { ProjectRoot = projectRoot, ModuleName = moduleName });
         }
 
@@ -197,9 +233,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
         var success = false;
+        BufferingLogger? interactiveBuffer = null;
         try
         {
-            var logger = new HostLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
             if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
                 logger.Warn("Legacy PowerShell build pipeline has been removed; using PowerForge pipeline.");
 
@@ -233,6 +269,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     Configuration = DotNetConfiguration,
                     Frameworks = frameworks,
                     KeepStaging = KeepStaging.IsPresent,
+                    ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
+                    ExcludeFiles = BuildStageExcludeFiles(moduleName),
                 },
                 Install = new ModulePipelineInstallOptions
                 {
@@ -244,34 +282,42 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 Segments = segments,
             };
 
-            var runner = new ModulePipelineRunner(logger);
-            var result = runner.Run(pipelineSpec);
-            if (result.InstallResult is not null)
-                logger.Success($"Installed {moduleName} {result.InstallResult.Version}");
+            var planningRunner = new ModulePipelineRunner(logger);
+            var plan = planningRunner.Plan(pipelineSpec);
+
+            var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+            var result = interactive
+                ? SpectrePipelineConsoleUi.RunInteractive(
+                    runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
+                    spec: pipelineSpec,
+                    plan: plan,
+                    configLabel: useLegacy ? "dsl" : "cmdlet")
+                : planningRunner.Run(pipelineSpec, plan);
+
+            SpectrePipelineConsoleUi.WriteSummary(result);
 
             success = true;
         }
         catch (Exception ex)
         {
             WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
+            if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
+                WriteLogTail(interactiveBuffer, logger);
             success = false;
         }
 #pragma warning restore CA1031
 
         var elapsed = sw.Elapsed;
-        var elapsedText =
-            $"{elapsed.Days} days, {elapsed.Hours} hours, {elapsed.Minutes} minutes, {elapsed.Seconds} seconds, {elapsed.Milliseconds} milliseconds";
+        var elapsedText = FormatDuration(elapsed);
 
         if (success)
         {
-            WriteHostMessage("[i] Module Build Completed ", ConsoleColor.Green, noNewLine: true);
-            WriteHostMessage($"[Time Total: {elapsedText}]", ConsoleColor.Green);
+            logger.Success($"Module build completed in {elapsedText}");
             if (ExitCode.IsPresent) Host.SetShouldExit(0);
         }
         else
         {
-            WriteHostMessage("[i] Module Build Failed ", ConsoleColor.Red, noNewLine: true);
-            WriteHostMessage($"[Time Total: {elapsedText}]", ConsoleColor.Red);
+            logger.Error($"Module build failed in {elapsedText}");
             if (ExitCode.IsPresent) Host.SetShouldExit(1);
         }
 
@@ -301,47 +347,55 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         return (rootToUse, null);
     }
 
-    private sealed class HostLogger : ILogger
+    private string[] BuildStageExcludeFiles(string moduleName)
     {
-        private readonly InvokeModuleBuildCommand _cmdlet;
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in (ExcludeFiles ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)))
+            set.Add(entry.Trim());
 
-        public bool IsVerbose { get; set; }
+        if (!string.IsNullOrWhiteSpace(moduleName))
+            set.Add($"{moduleName}.Tests.ps1");
 
-        public HostLogger(InvokeModuleBuildCommand cmdlet, bool isVerbose)
+        return set.ToArray();
+    }
+
+    private static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries = 80)
+    {
+        if (buffer is null) return;
+        if (buffer.Entries.Count == 0) return;
+
+        maxEntries = Math.Max(1, maxEntries);
+        var total = buffer.Entries.Count;
+        var start = Math.Max(0, total - maxEntries);
+        var shown = total - start;
+
+        logger.Warn($"Last {shown}/{total} log lines:");
+        for (int i = start; i < total; i++)
         {
-            _cmdlet = cmdlet;
-            IsVerbose = isVerbose;
-        }
-
-        public void Info(string message) => _cmdlet.WriteHostMessage("[i] " + message, ConsoleColor.DarkGray);
-        public void Success(string message) => _cmdlet.WriteHostMessage("[+] " + message, ConsoleColor.Green);
-        public void Warn(string message) => _cmdlet.WriteHostMessage("[-] " + message, ConsoleColor.Yellow);
-        public void Error(string message) => _cmdlet.WriteHostMessage("[e] " + message, ConsoleColor.Red);
-        public void Verbose(string message)
-        {
-            if (!IsVerbose) return;
-            _cmdlet.WriteHostMessage("[v] " + message, ConsoleColor.DarkGray);  
+            var e = buffer.Entries[i];
+            var msg = e.Message;
+            switch (e.Level)
+            {
+                case "success": logger.Success(msg); break;
+                case "warn": logger.Warn(msg); break;
+                case "error": logger.Error(msg); break;
+                case "verbose": logger.Verbose(msg); break;
+                default: logger.Info(msg); break;
+            }
         }
     }
 
-    private void WriteHostMessage(string message, ConsoleColor color, bool noNewLine = false)
+    private static string FormatDuration(TimeSpan elapsed)
     {
-        try
-        {
-            if (Host?.UI?.RawUI is not null)
-            {
-                Host.UI.Write(color, Host.UI.RawUI.BackgroundColor,
-                    message + (noNewLine ? string.Empty : Environment.NewLine));
-                return;
-            }
-        }
-        catch
-        {
-            // ignore and fall back
-        }
-
-        // Best-effort: do not write to the pipeline (Write-Host semantics).
-        WriteVerbose(message);
+        if (elapsed.TotalDays >= 1)
+            return $"{(int)elapsed.TotalDays}d {elapsed.Hours}h {elapsed.Minutes}m {elapsed.Seconds}s";
+        if (elapsed.TotalHours >= 1)
+            return $"{elapsed.Hours}h {elapsed.Minutes}m {elapsed.Seconds}s";
+        if (elapsed.TotalMinutes >= 1)
+            return $"{elapsed.Minutes}m {elapsed.Seconds}s";
+        if (elapsed.TotalSeconds >= 1)
+            return $"{elapsed.Seconds}s {elapsed.Milliseconds}ms";
+        return $"{elapsed.Milliseconds}ms";
     }
 }
 
