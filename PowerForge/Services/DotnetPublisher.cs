@@ -38,13 +38,37 @@ public sealed class DotnetPublisher
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"publish --configuration {configuration} -nologo --verbosity minimal -p:Version={version} -p:AssemblyVersion={version} -p:FileVersion={version} --framework {tfm}",
                 WorkingDirectory = projDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+#if NET472
+            psi.Arguments = BuildWindowsArgumentString(new[]
+            {
+                "publish",
+                "--configuration", configuration,
+                "-nologo",
+                "--verbosity", "minimal",
+                $"-p:Version={version}",
+                $"-p:AssemblyVersion={version}",
+                $"-p:FileVersion={version}",
+                "--framework", tfm
+            });
+#else
+            psi.ArgumentList.Add("publish");
+            psi.ArgumentList.Add("--configuration");
+            psi.ArgumentList.Add(configuration);
+            psi.ArgumentList.Add("-nologo");
+            psi.ArgumentList.Add("--verbosity");
+            psi.ArgumentList.Add("minimal");
+            psi.ArgumentList.Add($"-p:Version={version}");
+            psi.ArgumentList.Add($"-p:AssemblyVersion={version}");
+            psi.ArgumentList.Add($"-p:FileVersion={version}");
+            psi.ArgumentList.Add("--framework");
+            psi.ArgumentList.Add(tfm);
+#endif
             using var p = Process.Start(psi)!;
             var stdout = p.StandardOutput.ReadToEnd();
             var stderr = p.StandardError.ReadToEnd();
@@ -64,5 +88,54 @@ public sealed class DotnetPublisher
         }
         return result;
     }
-}
 
+#if NET472
+    private static string BuildWindowsArgumentString(IEnumerable<string> arguments)
+        => string.Join(" ", arguments.Select(EscapeWindowsArgument));
+
+    // Based on .NET's internal ProcessStartInfo quoting behavior for Windows CreateProcess.
+    private static string EscapeWindowsArgument(string arg)
+    {
+        if (arg is null) return "\"\"";
+        if (arg.Length == 0) return "\"\"";
+
+        bool needsQuotes = arg.Any(ch => char.IsWhiteSpace(ch) || ch == '"');
+        if (!needsQuotes) return arg;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append('"');
+
+        int backslashCount = 0;
+        foreach (var ch in arg)
+        {
+            if (ch == '\\')
+            {
+                backslashCount++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                sb.Append('\\', backslashCount * 2 + 1);
+                sb.Append('"');
+                backslashCount = 0;
+                continue;
+            }
+
+            if (backslashCount > 0)
+            {
+                sb.Append('\\', backslashCount);
+                backslashCount = 0;
+            }
+
+            sb.Append(ch);
+        }
+
+        if (backslashCount > 0)
+            sb.Append('\\', backslashCount * 2);
+
+        sb.Append('"');
+        return sb.ToString();
+    }
+#endif
+}

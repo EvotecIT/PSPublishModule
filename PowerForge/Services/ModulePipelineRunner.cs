@@ -309,9 +309,64 @@ public sealed class ModulePipelineRunner
     public ModulePipelineResult Run(ModulePipelineSpec spec)
     {
         var plan = Plan(spec);
+        return Run(spec, plan, progress: null);
+    }
+
+    /// <summary>
+    /// Executes the pipeline described by <paramref name="spec"/> using a precomputed <paramref name="plan"/>.
+    /// </summary>
+    public ModulePipelineResult Run(ModulePipelineSpec spec, ModulePipelinePlan plan, IModulePipelineProgressReporter? progress = null)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+
+        var reporter = progress ?? NullModulePipelineProgressReporter.Instance;
+        var steps = ModulePipelineStep.Create(plan);
+
+        var artefactSteps = steps
+            .Where(s => s.ArtefactSegment is not null)
+            .ToDictionary(s => s.ArtefactSegment!, s => s);
+        var publishSteps = steps
+            .Where(s => s.PublishSegment is not null)
+            .ToDictionary(s => s.PublishSegment!, s => s);
+
+        var buildStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Build);
+        var docsStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Documentation);
+        var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
+        var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
+
+        void SafeStart(ModulePipelineStep? step)
+        {
+            if (step is null) return;
+            try { reporter.StepStarting(step); } catch { /* best effort */ }
+        }
+
+        void SafeDone(ModulePipelineStep? step)
+        {
+            if (step is null) return;
+            try { reporter.StepCompleted(step); } catch { /* best effort */ }
+        }
+
+        void SafeFail(ModulePipelineStep? step, Exception ex)
+        {
+            if (step is null) return;
+            try { reporter.StepFailed(step, ex); } catch { /* best effort */ }
+        }
 
         var pipeline = new ModuleBuildPipeline(_logger);
-        var buildResult = pipeline.BuildToStaging(plan.BuildSpec);
+
+        ModuleBuildResult buildResult;
+        SafeStart(buildStep);
+        try
+        {
+            buildResult = pipeline.BuildToStaging(plan.BuildSpec);
+            SafeDone(buildStep);
+        }
+        catch (Exception ex)
+        {
+            SafeFail(buildStep, ex);
+            throw;
+        }
 
         if (plan.CompatiblePSEditions is { Length: > 0 })
             ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
@@ -325,17 +380,28 @@ public sealed class ModulePipelineRunner
         DocumentationBuildResult? documentationResult = null;
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
         {
-            var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
-            documentationResult = engine.Build(
-                moduleName: plan.ModuleName,
-                stagingPath: buildResult.StagingPath,
-                moduleManifestPath: buildResult.ManifestPath,
-                documentation: plan.Documentation,
-                buildDocumentation: plan.DocumentationBuild!);
-        }
+            SafeStart(docsStep);
+            try
+            {
+                var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
+                documentationResult = engine.Build(
+                    moduleName: plan.ModuleName,
+                    stagingPath: buildResult.StagingPath,
+                    moduleManifestPath: buildResult.ManifestPath,
+                    documentation: plan.Documentation,
+                    buildDocumentation: plan.DocumentationBuild!);
 
-        if (documentationResult is not null && !documentationResult.Succeeded)
-            throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
+                if (documentationResult is not null && !documentationResult.Succeeded)
+                    throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
+
+                SafeDone(docsStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(docsStep, ex);
+                throw;
+            }
+        }
 
         var artefactResults = new List<ArtefactBuildResult>();
         if (plan.Artefacts is { Length: > 0 })
@@ -343,15 +409,26 @@ public sealed class ModulePipelineRunner
             var builder = new ArtefactBuilder(_logger);
             foreach (var artefact in plan.Artefacts)
             {
-                artefactResults.Add(builder.Build(
-                    segment: artefact,
-                    projectRoot: plan.ProjectRoot,
-                    stagingPath: buildResult.StagingPath,
-                    moduleName: plan.ModuleName,
-                    moduleVersion: plan.ResolvedVersion,
-                    preRelease: plan.PreRelease,
-                    requiredModules: plan.RequiredModulesForPackaging,
-                    information: plan.Information));
+                artefactSteps.TryGetValue(artefact, out var step);
+                SafeStart(step);
+                try
+                {
+                    artefactResults.Add(builder.Build(
+                        segment: artefact,
+                        projectRoot: plan.ProjectRoot,
+                        stagingPath: buildResult.StagingPath,
+                        moduleName: plan.ModuleName,
+                        moduleVersion: plan.ResolvedVersion,
+                        preRelease: plan.PreRelease,
+                        requiredModules: plan.RequiredModulesForPackaging,
+                        information: plan.Information));
+                    SafeDone(step);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(step, ex);
+                    throw;
+                }
             }
         }
 
@@ -361,32 +438,66 @@ public sealed class ModulePipelineRunner
             var publisher = new ModulePublisher(_logger);
             foreach (var publish in plan.Publishes)
             {
-                publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults));
+                publishSteps.TryGetValue(publish, out var step);
+                SafeStart(step);
+                try
+                {
+                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults));
+                    SafeDone(step);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(step, ex);
+                    throw;
+                }
             }
         }
 
         ModuleInstallerResult? installResult = null;
         if (plan.InstallEnabled)
         {
-            var installSpec = new ModuleInstallSpec
+            SafeStart(installStep);
+            try
             {
-                Name = plan.ModuleName,
-                Version = plan.ResolvedVersion,
-                StagingPath = buildResult.StagingPath,
-                Strategy = plan.InstallStrategy,
-                KeepVersions = plan.InstallKeepVersions,
-                Roots = plan.InstallRoots
-            };
-            installResult = pipeline.InstallFromStaging(installSpec);
+                var installSpec = new ModuleInstallSpec
+                {
+                    Name = plan.ModuleName,
+                    Version = plan.ResolvedVersion,
+                    StagingPath = buildResult.StagingPath,
+                    Strategy = plan.InstallStrategy,
+                    KeepVersions = plan.InstallKeepVersions,
+                    Roots = plan.InstallRoots
+                };
+                installResult = pipeline.InstallFromStaging(installSpec);
+                SafeDone(installStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(installStep, ex);
+                throw;
+            }
         }
 
         if (plan.DeleteGeneratedStagingAfterRun)
         {
-            try { Directory.Delete(buildResult.StagingPath, recursive: true); } 
-            catch { /* best effort */ }
+            SafeStart(cleanupStep);
+            try { Directory.Delete(buildResult.StagingPath, recursive: true); }
+            catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
+            SafeDone(cleanupStep);
         }
 
         return new ModulePipelineResult(plan, buildResult, installResult, documentationResult, publishResults.ToArray(), artefactResults.ToArray());
+    }
+
+    private sealed class NullModulePipelineProgressReporter : IModulePipelineProgressReporter
+    {
+        public static readonly NullModulePipelineProgressReporter Instance = new();
+
+        private NullModulePipelineProgressReporter() { }
+
+        public void StepStarting(ModulePipelineStep step) { }
+        public void StepCompleted(ModulePipelineStep step) { }
+        public void StepFailed(ModulePipelineStep step, Exception error) { }
     }
 
     private static bool IsAutoVersion(string? value)
