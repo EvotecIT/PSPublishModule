@@ -116,27 +116,4 @@ Register-Certificate -Path $path -LocalStore $store -Thumbprint $thumb -TimeStam
         var bound = module.NewBoundScriptBlock(sb);
         bound.Invoke(releasePath, store.ToString(), thumbprint, timeStampServer, includePatterns);
     }
-
-    private sealed class CmdletLogger : ILogger
-    {
-        private readonly PSCmdlet _cmdlet;
-        public bool IsVerbose { get; set; }
-
-        public CmdletLogger(PSCmdlet cmdlet, bool isVerbose)
-        {
-            _cmdlet = cmdlet;
-            IsVerbose = isVerbose;
-        }
-
-        public void Info(string message) => _cmdlet.WriteVerbose(message);
-        public void Success(string message) => _cmdlet.WriteVerbose(message);
-        public void Warn(string message) => _cmdlet.WriteWarning(message);
-        public void Error(string message) => _cmdlet.WriteVerbose(message);
-        public void Verbose(string message)
-        {
-            if (!IsVerbose) return;
-            _cmdlet.WriteVerbose(message);
-        }
-    }
 }
-
