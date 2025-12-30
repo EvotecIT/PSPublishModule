@@ -156,24 +156,20 @@ internal static class PipelineConsoleUi
 
         var docsEnabled = plan.DocumentationBuild?.Enable == true;
         info.AddRow($"[grey]{(unicode ? "📚" : "DOC")}[/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+
+        var validations = new List<string>();
+        if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
+        if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
+        info.AddRow(
+            $"[grey]{(unicode ? "🔎" : "VAL")}[/] [grey]Validation[/]",
+            validations.Count == 0 ? "[grey]Disabled[/]" : Esc(string.Join(", ", validations)));
+
         info.AddRow($"[grey]{(unicode ? "📦" : "PKG")}[/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
         info.AddRow($"[grey]{(unicode ? "🚀" : "PUB")}[/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
         info.AddRow($"[grey]{(unicode ? "📥" : "INS")}[/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
         info.AddRow($"[grey]{(unicode ? "🧭" : "STP")}[/] [grey]Steps[/]", Esc(steps.Length.ToString()));
         AnsiConsole.Write(info);
-
-        try
-        {
-            int vw = Math.Max(60, Console.WindowWidth);
-            if (vw >= 120)
-            {
-                var preview = string.Join(", ", steps.Select(s => s.Title).Where(s => !string.IsNullOrWhiteSpace(s)));
-                var label = unicode ? "🗺️ Plan:" : "Plan:";
-                AnsiConsole.MarkupLine($"[grey]{label}[/] {Esc(preview)}");
-            }
-        }
-        catch { }
 
         AnsiConsole.WriteLine();
     }
@@ -185,6 +181,7 @@ internal static class PipelineConsoleUi
         {
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
             ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
+            ModulePipelineStepKind.Validation => unicode ? "[lightskyblue1]🔎[/]" : "[lightskyblue1]VA[/]",
             ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
             ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
             ModulePipelineStepKind.Install => unicode ? "[green]📥[/]" : "[green]IN[/]",

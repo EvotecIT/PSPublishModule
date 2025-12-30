@@ -1389,10 +1389,54 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
 {
     if (cli.Quiet) return;
 
+    static int CountFileConsistencyIssues(ProjectConsistencyReport report, FileConsistencySettings? settings)
+    {
+        if (report is null) return 0;
+        if (settings is null) return report.ProblematicFiles.Length;
+
+        int count = 0;
+        foreach (var f in report.ProblematicFiles)
+        {
+            if (f.NeedsEncodingConversion || f.NeedsLineEndingConversion)
+            {
+                count++;
+                continue;
+            }
+
+            if (settings.CheckMissingFinalNewline && f.MissingFinalNewline)
+            {
+                count++;
+                continue;
+            }
+
+            if (settings.CheckMixedLineEndings && f.HasMixedLineEndings)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     if (cli.NoColor)
     {
         logger.Success($"Pipeline built {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
         logger.Info($"Staging: {res.BuildResult.StagingPath}");
+
+        if (res.FileConsistencyReport is not null)
+        {
+            var total = res.FileConsistencyReport.Summary.TotalFiles;
+            var issues = CountFileConsistencyIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings);
+            var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+            logger.Info($"File consistency: {res.FileConsistencyStatus} ({compliance:0.0}% compliant)");
+        }
+        else
+            logger.Info("File consistency: disabled");
+
+        if (res.CompatibilityReport is not null)
+            logger.Info($"Compatibility: {res.CompatibilityReport.Summary.Status} ({res.CompatibilityReport.Summary.CrossCompatibilityPercentage:0.0}% cross-compatible)");
+        else
+            logger.Info("Compatibility: disabled");
 
         if (res.ArtefactResults is { Length: > 0 })
         {
@@ -1411,6 +1455,14 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
     }
 
     static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+    static string StatusMarkup(CheckStatus status)
+        => status switch
+        {
+            CheckStatus.Pass => "[green]Pass[/]",
+            CheckStatus.Warning => "[yellow]Warning[/]",
+            _ => "[red]Fail[/]"
+        };
+
     var unicode = AnsiConsole.Profile.Capabilities.Unicode;
     var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
 
@@ -1423,6 +1475,33 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
 
     table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
     table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
+
+    if (res.FileConsistencyReport is not null)
+    {
+        var status = res.FileConsistencyStatus ?? CheckStatus.Warning;
+        var total = res.FileConsistencyReport.Summary.TotalFiles;
+        var issues = CountFileConsistencyIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings);
+        var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+        table.AddRow(
+            $"{(unicode ? "🔎" : "*")} File consistency",
+            $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+    }
+    else
+    {
+        table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
+    }
+
+    if (res.CompatibilityReport is not null)
+    {
+        var s = res.CompatibilityReport.Summary;
+        table.AddRow(
+            $"{(unicode ? "🔎" : "*")} Compatibility",
+            $"{StatusMarkup(s.Status)} [grey]{s.CrossCompatibilityPercentage:0.0}% cross-compatible[/]");
+    }
+    else
+    {
+        table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+    }
 
     if (res.ArtefactResults is { Length: > 0 })
         table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
