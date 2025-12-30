@@ -6,6 +6,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -188,6 +191,22 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public SwitchParameter KeepStaging { get; set; }
 
     /// <summary>
+    /// Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
+    /// Intended for migrating legacy DSL scripts to <c>powerforge</c> CLI configuration.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public SwitchParameter JsonOnly { get; set; }
+
+    /// <summary>
+    /// Output path for the generated pipeline JSON file (used with <see cref="JsonOnly"/>).
+    /// Defaults to <c>powerforge.json</c> in the project root.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public string? JsonPath { get; set; }
+
+    /// <summary>
     /// When specified, requests the host to exit with code 0 on success and 1 on failure.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
@@ -291,19 +310,29 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 Segments = segments,
             };
 
-            var planningRunner = new ModulePipelineRunner(logger);
-            var plan = planningRunner.Plan(pipelineSpec);
+            if (JsonOnly.IsPresent)
+            {
+                var jsonFullPath = ResolveJsonOutputPath(projectRoot);
+                PrepareSpecForJsonExport(pipelineSpec, jsonFullPath);
+                WritePipelineSpecJson(pipelineSpec, jsonFullPath);
+                logger.Success($"Wrote pipeline JSON: {jsonFullPath}");
+            }
+            else
+            {
+                var planningRunner = new ModulePipelineRunner(logger);
+                var plan = planningRunner.Plan(pipelineSpec);
 
-            var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
-            var result = interactive
-                ? SpectrePipelineConsoleUi.RunInteractive(
-                    runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
-                    spec: pipelineSpec,
-                    plan: plan,
-                    configLabel: useLegacy ? "dsl" : "cmdlet")
-                : planningRunner.Run(pipelineSpec, plan);
+                var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                var result = interactive
+                    ? SpectrePipelineConsoleUi.RunInteractive(
+                        runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
+                        spec: pipelineSpec,
+                        plan: plan,
+                        configLabel: useLegacy ? "dsl" : "cmdlet")
+                    : planningRunner.Run(pipelineSpec, plan);
 
-            SpectrePipelineConsoleUi.WriteSummary(result);
+                SpectrePipelineConsoleUi.WriteSummary(result);
+            }
 
             success = true;
         }
@@ -321,12 +350,16 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
         if (success)
         {
-            logger.Success($"Module build completed in {elapsedText}");
+            logger.Success(JsonOnly.IsPresent
+                ? $"Pipeline config generated in {elapsedText}"
+                : $"Module build completed in {elapsedText}");
             if (ExitCode.IsPresent) Host.SetShouldExit(0);
         }
         else
         {
-            logger.Error($"Module build failed in {elapsedText}");
+            logger.Error(JsonOnly.IsPresent
+                ? $"Pipeline config generation failed in {elapsedText}"
+                : $"Module build failed in {elapsedText}");
             if (ExitCode.IsPresent) Host.SetShouldExit(1);
         }
 
@@ -366,6 +399,101 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             set.Add($"{moduleName}.Tests.ps1");
 
         return set.ToArray();
+    }
+
+    private string ResolveJsonOutputPath(string projectRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(JsonPath))
+            return SessionState.Path.GetUnresolvedProviderPathFromPSPath(JsonPath);
+
+        return System.IO.Path.Combine(projectRoot, "powerforge.json");
+    }
+
+    private static void PrepareSpecForJsonExport(ModulePipelineSpec spec, string jsonFullPath)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (spec.Build is null) throw new ArgumentException("Spec.Build is required.", nameof(spec));
+
+        var baseDir = System.IO.Path.GetDirectoryName(jsonFullPath);
+        if (string.IsNullOrWhiteSpace(baseDir)) return;
+
+        spec.Build.SourcePath = MakeRelativeForConfig(baseDir, spec.Build.SourcePath);
+        spec.Build.StagingPath = MakeRelativeForConfigNullable(baseDir, spec.Build.StagingPath);
+        spec.Build.CsprojPath = MakeRelativeForConfigNullable(baseDir, spec.Build.CsprojPath);
+    }
+
+    private static string MakeRelativeForConfig(string baseDir, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return path;
+
+        try
+        {
+            var full = System.IO.Path.GetFullPath(path);
+            var rel = GetRelativePath(baseDir, full);
+            return rel.Replace('\\', '/');
+        }
+        catch
+        {
+            return path.Replace('\\', '/');
+        }
+    }
+
+    private static string? MakeRelativeForConfigNullable(string baseDir, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        return MakeRelativeForConfig(baseDir, path!);
+    }
+
+    private static string GetRelativePath(string baseDir, string fullPath)
+    {
+#if NET472
+        // System.IO.Path.GetRelativePath is not available on .NET Framework.
+        // Use Uri-based relative path calculation as a fallback.
+        var baseFull = EnsureTrailingSeparator(System.IO.Path.GetFullPath(baseDir));
+        var baseUri = new Uri(baseFull);
+        var pathUri = new Uri(System.IO.Path.GetFullPath(fullPath));
+
+        if (!string.Equals(baseUri.Scheme, pathUri.Scheme, StringComparison.OrdinalIgnoreCase))
+            return fullPath;
+
+        var relativeUri = baseUri.MakeRelativeUri(pathUri);
+        var relative = Uri.UnescapeDataString(relativeUri.ToString());
+        return relative.Replace('/', System.IO.Path.DirectorySeparatorChar);
+#else
+        return System.IO.Path.GetRelativePath(baseDir, fullPath);
+#endif
+
+#if NET472
+        static string EnsureTrailingSeparator(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return input;
+            if (input.EndsWith(System.IO.Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ||
+                input.EndsWith(System.IO.Path.AltDirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                return input;
+            return input + System.IO.Path.DirectorySeparatorChar;
+        }
+#endif
+    }
+
+    private static void WritePipelineSpecJson(ModulePipelineSpec spec, string jsonFullPath)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
+        if (string.IsNullOrWhiteSpace(jsonFullPath)) throw new ArgumentException("Json path is required.", nameof(jsonFullPath));
+
+        var opts = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        };
+        opts.Converters.Add(new JsonStringEnumConverter());
+        opts.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var outDir = System.IO.Path.GetDirectoryName(jsonFullPath);
+        if (!string.IsNullOrWhiteSpace(outDir))
+            Directory.CreateDirectory(outDir);
+
+        var json = JsonSerializer.Serialize(spec, opts) + Environment.NewLine;
+        File.WriteAllText(jsonFullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
     private static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries = 80)

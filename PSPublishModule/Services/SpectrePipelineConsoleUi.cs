@@ -87,10 +87,45 @@ internal static class SpectrePipelineConsoleUi
     {
         if (res is null) return;
 
-        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);       
+        static string StatusMarkup(CheckStatus status)
+            => status switch
+            {
+                CheckStatus.Pass => "[green]Pass[/]",
+                CheckStatus.Warning => "[yellow]Warning[/]",
+                _ => "[red]Fail[/]"
+            };
+        static int CountIssues(ProjectConsistencyReport report, FileConsistencySettings? settings)
+        {
+            if (report is null) return 0;
+            if (settings is null) return report.ProblematicFiles.Length;
+
+            int count = 0;
+            foreach (var f in report.ProblematicFiles)
+            {
+                if (f.NeedsEncodingConversion || f.NeedsLineEndingConversion)
+                {
+                    count++;
+                    continue;
+                }
+
+                if (settings.CheckMissingFinalNewline && f.MissingFinalNewline)
+                {
+                    count++;
+                    continue;
+                }
+
+                if (settings.CheckMixedLineEndings && f.HasMixedLineEndings)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
 
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
-        var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
+        var border = unicode ? TableBorder.Rounded : TableBorder.Simple;        
 
         AnsiConsole.Write(new Rule($"[green]{(unicode ? "✅" : "OK")} Summary[/]").LeftJustified());
 
@@ -101,6 +136,33 @@ internal static class SpectrePipelineConsoleUi
 
         table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
         table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
+
+        if (res.FileConsistencyReport is not null)
+        {
+            var status = res.FileConsistencyStatus ?? CheckStatus.Warning;
+            var total = res.FileConsistencyReport.Summary.TotalFiles;
+            var issues = CountIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings);
+            var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+            table.AddRow(
+                $"{(unicode ? "🔎" : "*")} File consistency",
+                $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+        }
+        else
+        {
+            table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
+        }
+
+        if (res.CompatibilityReport is not null)
+        {
+            var s = res.CompatibilityReport.Summary;
+            table.AddRow(
+                $"{(unicode ? "🔎" : "*")} Compatibility",
+                $"{StatusMarkup(s.Status)} [grey]{s.CrossCompatibilityPercentage:0.0}% cross-compatible[/]");
+        }
+        else
+        {
+            table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+        }
 
         if (res.ArtefactResults is { Length: > 0 })
             table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
@@ -201,24 +263,20 @@ internal static class SpectrePipelineConsoleUi
 
         var docsEnabled = plan.DocumentationBuild?.Enable == true;
         info.AddRow($"[grey]{(unicode ? "📚" : "DOC")}[/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+
+        var validations = new List<string>();
+        if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
+        if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
+        info.AddRow(
+            $"[grey]{(unicode ? "🔎" : "VAL")}[/] [grey]Validation[/]",
+            validations.Count == 0 ? "[grey]Disabled[/]" : Esc(string.Join(", ", validations)));
+
         info.AddRow($"[grey]{(unicode ? "📦" : "PKG")}[/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
         info.AddRow($"[grey]{(unicode ? "🚀" : "PUB")}[/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
         info.AddRow($"[grey]{(unicode ? "📥" : "INS")}[/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
         info.AddRow($"[grey]{(unicode ? "🧭" : "STP")}[/] [grey]Steps[/]", Esc(steps.Length.ToString()));
         AnsiConsole.Write(info);
-
-        try
-        {
-            int vw = Math.Max(60, Console.WindowWidth);
-            if (vw >= 120)
-            {
-                var preview = string.Join(", ", steps.Select(s => s.Title).Where(s => !string.IsNullOrWhiteSpace(s)));
-                var label = unicode ? "🗺️ Plan:" : "Plan:";
-                AnsiConsole.MarkupLine($"[grey]{label}[/] {Esc(preview)}");
-            }
-        }
-        catch { }
 
         AnsiConsole.WriteLine();
     }
@@ -230,6 +288,7 @@ internal static class SpectrePipelineConsoleUi
         {
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
             ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
+            ModulePipelineStepKind.Validation => unicode ? "[lightskyblue1]🔎[/]" : "[lightskyblue1]VA[/]",
             ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
             ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
             ModulePipelineStepKind.Install => unicode ? "[green]📥[/]" : "[green]IN[/]",
