@@ -7,6 +7,7 @@ PowerForge CLI commands accept JSON configuration files (`--config <file.json>`)
 - Build: `schemas/powerforge.buildspec.schema.json` (maps to `PowerForge.ModuleBuildSpec`)
 - Install: `schemas/powerforge.installspec.schema.json` (maps to `PowerForge.ModuleInstallSpec`)
 - Test: `schemas/powerforge.testsuitespec.schema.json` (maps to `PowerForge.ModuleTestSuiteSpec`)
+- DotNet publish: `schemas/powerforge.dotnetpublish.schema.json` (maps to `PowerForge.DotNetPublishSpec`)
 - Pipeline / Plan: `schemas/powerforge.pipelinespec.schema.json` (maps to `PowerForge.ModulePipelineSpec`)
   - Segments: `schemas/powerforge.segments.schema.json` (maps to `PowerForge.IConfigurationSegment` + concrete segment types)
 - Shared enums: `schemas/powerforge.common.schema.json`

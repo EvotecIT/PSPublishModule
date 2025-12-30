@@ -1,0 +1,46 @@
+{
+  "$schema": "./schemas/powerforge.dotnetpublish.schema.json",
+  "SchemaVersion": 1,
+  "DotNet": {
+    "ProjectRoot": ".",
+    "SolutionPath": "PSPublishModule.sln",
+    "Configuration": "Release",
+    "Restore": true,
+    "Clean": false,
+    "Build": true,
+    "NoRestoreInPublish": true,
+    "NoBuildInPublish": true,
+    "Runtimes": ["win-x64"],
+    "MsBuildProperties": {
+      "ErrorOnDuplicatePublishOutputFiles": "false",
+      "GenerateDocumentationFile": "false",
+      "CopyDocumentationFiles": "false",
+      "ExcludeSymbolsFromSingleFile": "true"
+    }
+  },
+  "Targets": [
+    {
+      "Name": "PowerForge.Cli",
+      "Kind": "Cli",
+      "ProjectPath": "PowerForge.Cli/PowerForge.Cli.csproj",
+      "Publish": {
+        "Style": "PortableCompat",
+        "Framework": "net10.0",
+        "OutputPath": "Artifacts/PowerForge/{rid}/{framework}/{style}",
+        "UseStaging": true,
+        "ClearOutput": true,
+        "Slim": true,
+        "KeepSymbols": false,
+        "KeepDocs": false,
+        "PruneReferences": true,
+        "RenameTo": "powerforge.exe",
+        "Zip": false
+      }
+    }
+  ],
+  "Outputs": {
+    "ManifestJsonPath": "Artifacts/PowerForge/manifest.json",
+    "ManifestTextPath": "Artifacts/PowerForge/manifest.txt"
+  }
+}
+

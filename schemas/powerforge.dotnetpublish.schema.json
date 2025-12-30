@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.dotnetpublish.schema.json",
+  "title": "PowerForge DotNetPublishSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "DotNet": { "$ref": "#/$defs/DotNetPublishDotNetOptions" },
+    "Targets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/DotNetPublishTarget" }
+    },
+    "Outputs": { "$ref": "#/$defs/DotNetPublishOutputs" }
+  },
+  "required": ["Targets"],
+  "$defs": {
+    "DotNetPublishStyle": {
+      "type": "string",
+      "enum": ["Portable", "PortableCompat", "PortableSize", "AotSpeed", "AotSize"]
+    },
+    "DotNetPublishTargetKind": {
+      "type": "string",
+      "enum": ["Unknown", "Cli", "Service", "Library"]
+    },
+    "DotNetPublishSignOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "ToolPath": { "type": ["string", "null"] },
+        "Thumbprint": { "type": ["string", "null"] },
+        "SubjectName": { "type": ["string", "null"] },
+        "TimestampUrl": { "type": ["string", "null"] },
+        "Description": { "type": ["string", "null"] },
+        "Url": { "type": ["string", "null"] },
+        "Csp": { "type": ["string", "null"] },
+        "KeyContainer": { "type": ["string", "null"] }
+      }
+    },
+    "DotNetPublishPublishOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Style": { "$ref": "#/$defs/DotNetPublishStyle" },
+        "Framework": { "type": "string" },
+        "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
+        "OutputPath": { "type": ["string", "null"] },
+        "UseStaging": { "type": "boolean" },
+        "ClearOutput": { "type": "boolean" },
+        "Slim": { "type": "boolean" },
+        "KeepSymbols": { "type": "boolean" },
+        "KeepDocs": { "type": "boolean" },
+        "PruneReferences": { "type": "boolean" },
+        "Zip": { "type": "boolean" },
+        "ZipPath": { "type": ["string", "null"] },
+        "ZipNameTemplate": { "type": ["string", "null"] },
+        "RenameTo": { "type": ["string", "null"] },
+        "ReadyToRun": { "type": ["boolean", "null"] },
+        "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] }
+      },
+      "required": ["Framework"]
+    },
+    "DotNetPublishTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string", "minLength": 1 },
+        "ProjectPath": { "type": "string", "minLength": 1 },
+        "Kind": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishTargetKind" }, { "type": "null" }] },
+        "Publish": { "$ref": "#/$defs/DotNetPublishPublishOptions" }
+      },
+      "required": ["Name", "ProjectPath", "Publish"]
+    },
+    "DotNetPublishDotNetOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ProjectRoot": { "type": ["string", "null"] },
+        "SolutionPath": { "type": ["string", "null"] },
+        "Configuration": { "type": "string" },
+        "Restore": { "type": "boolean" },
+        "Clean": { "type": "boolean" },
+        "Build": { "type": "boolean" },
+        "NoRestoreInPublish": { "type": "boolean" },
+        "NoBuildInPublish": { "type": "boolean" },
+        "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
+        "MsBuildProperties": {
+          "type": ["object", "null"],
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "DotNetPublishOutputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ManifestJsonPath": { "type": ["string", "null"] },
+        "ManifestTextPath": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
+
