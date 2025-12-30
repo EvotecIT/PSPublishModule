@@ -45,6 +45,11 @@ if ($UseStaging) {
     New-Item -ItemType Directory -Force -Path $publishDir | Out-Null
 }
 
+# When using a staging publish dir, treat the output as an exact snapshot and clear it by default.
+if ($UseStaging -and -not $PSBoundParameters.ContainsKey('ClearOut')) {
+    $ClearOut = $true
+}
+
 $singleFile = $Flavor -in @('SingleContained', 'SingleFx')
 $selfContained = $Flavor -in @('SingleContained', 'Portable')
 $compress = $singleFile
@@ -62,6 +67,7 @@ $publishArgs = @(
     "/p:PublishSingleFile=$singleFile",
     "/p:PublishReadyToRun=false",
     "/p:PublishTrimmed=false",
+    "/p:IncludeAllContentForSelfExtract=$singleFile",
     "/p:IncludeNativeLibrariesForSelfExtract=$selfExtract",
     "/p:EnableCompressionInSingleFile=$compress",
     "/p:DebugType=None",
@@ -74,8 +80,14 @@ $publishArgs = @(
     "/p:PublishDir=$publishDir"
 )
 
+if ($ClearOut -and (Test-Path $OutDir) -and ($publishDir -eq $OutDir)) {
+    Write-Step "Clearing $OutDir"
+    Get-ChildItem -Path $OutDir -Recurse -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 dotnet.exe @publishArgs
-if ($LASTEXITCODE -ne 0) { throw "Publish failed ($LASTEXITCODE)" }
+if ($LASTEXITCODE -ne 0) { throw "Publish failed ($LASTEXITCODE)" }       
 
 if (-not $KeepSymbols) {
     Write-Step "Removing symbols (*.pdb)"
@@ -93,10 +105,14 @@ if (-not $KeepDocs) {
 $cliExe = Join-Path $publishDir 'PowerForge.Cli.exe'
 $friendlyExe = Join-Path $publishDir 'powerforge.exe'
 if (Test-Path -LiteralPath $cliExe) {
-    Copy-Item -LiteralPath $cliExe -Destination $friendlyExe -Force
+    # Keep a stable, user-friendly binary name without duplicating 50+ MB on disk.
+    if (Test-Path -LiteralPath $friendlyExe) {
+        Remove-Item -LiteralPath $friendlyExe -Force -ErrorAction SilentlyContinue
+    }
+    Move-Item -LiteralPath $cliExe -Destination $friendlyExe -Force
 }
 
-if ($ClearOut -and (Test-Path $OutDir)) {
+if ($ClearOut -and (Test-Path $OutDir) -and ($publishDir -ne $OutDir)) {
     Write-Step "Clearing $OutDir"
     Get-ChildItem -Path $OutDir -Recurse -Force -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -121,4 +137,3 @@ if ($stagingDir -and (Test-Path $stagingDir)) {
 }
 
 Write-Ok ("Built PowerForge -> {0}" -f $OutDir)
-

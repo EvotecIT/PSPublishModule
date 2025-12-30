@@ -92,19 +92,33 @@ public sealed class ModuleScaffoldService
             return full;
         }
 
-        // Try to locate templates relative to the PowerForge assembly location first (PowerShell host base dir is not reliable).
-        var current = Path.GetDirectoryName(typeof(ModuleScaffoldService).Assembly.Location) ?? AppContext.BaseDirectory;
-        for (var i = 0; i < 10; i++)
+        // Try to locate templates relative to the app base directory / current directory.
+        // PowerShell host base dir can be unreliable, so callers (cmdlets) should prefer passing TemplateRootPath when possible.
+        var startPoints = new List<string>();
+        if (!string.IsNullOrWhiteSpace(AppContext.BaseDirectory))
+            startPoints.Add(AppContext.BaseDirectory);
+        try
         {
-            if (string.IsNullOrWhiteSpace(current)) break;
+            var cwd = Directory.GetCurrentDirectory();
+            if (!string.IsNullOrWhiteSpace(cwd)) startPoints.Add(cwd);
+        }
+        catch { /* ignore */ }
 
-            var direct = Path.Combine(current, "Data");
-            if (IsTemplateRoot(direct)) return direct;
+        foreach (var start in startPoints.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var current = start;
+            for (var i = 0; i < 10; i++)
+            {
+                if (string.IsNullOrWhiteSpace(current)) break;
 
-            var moduleData = Path.Combine(current, "Module", "Data");
-            if (IsTemplateRoot(moduleData)) return moduleData;
+                var direct = Path.Combine(current, "Data");
+                if (IsTemplateRoot(direct)) return direct;
 
-            current = Directory.GetParent(current)?.FullName;
+                var moduleData = Path.Combine(current, "Module", "Data");
+                if (IsTemplateRoot(moduleData)) return moduleData;
+
+                current = Directory.GetParent(current)?.FullName;
+            }
         }
 
         throw new DirectoryNotFoundException("Module Data directory not found (expected template files under 'Data' or 'Module\\Data').");

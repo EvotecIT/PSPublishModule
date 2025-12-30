@@ -219,7 +219,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     protected override void ProcessRecord()
     {
         var sw = Stopwatch.StartNew();
-        var isVerbose = MyInvocation.BoundParameters.ContainsKey("Verbose");
+        var boundParameters = MyInvocation?.BoundParameters;
+        var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
 
         ConsoleEncoding.EnsureUtf8();
         try
@@ -251,7 +252,14 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             }
 
             var scaffolder = new ModuleScaffoldService(logger);
-            scaffolder.EnsureScaffold(new ModuleScaffoldSpec { ProjectRoot = projectRoot, ModuleName = moduleName });
+            var moduleBase = MyInvocation?.MyCommand?.Module?.ModuleBase;
+            var templates = !string.IsNullOrWhiteSpace(moduleBase) ? System.IO.Path.Combine(moduleBase, "Data") : null;
+            scaffolder.EnsureScaffold(new ModuleScaffoldSpec
+            {
+                ProjectRoot = projectRoot,
+                ModuleName = moduleName,
+                TemplateRootPath = templates
+            });
         }
 
         var useLegacy =
@@ -281,7 +289,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             {
                 baseVersion = version!;
             }
-            var frameworks = useLegacy && !MyInvocation.BoundParameters.ContainsKey(nameof(DotNetFramework))
+            var frameworks = useLegacy && boundParameters?.ContainsKey(nameof(DotNetFramework)) != true
                 ? Array.Empty<string>()
                 : DotNetFramework;
 
@@ -303,9 +311,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 Install = new ModulePipelineInstallOptions
                 {
                     Enabled = !SkipInstall.IsPresent,
-                    Strategy = MyInvocation.BoundParameters.ContainsKey(nameof(InstallStrategy)) ? InstallStrategy : null,
-                    KeepVersions = MyInvocation.BoundParameters.ContainsKey(nameof(KeepVersions)) ? KeepVersions : null,
-                    Roots = MyInvocation.BoundParameters.ContainsKey(nameof(InstallRoots)) ? (InstallRoots ?? Array.Empty<string>()) : null,
+                    Strategy = boundParameters?.ContainsKey(nameof(InstallStrategy)) == true ? InstallStrategy : null,
+                    KeepVersions = boundParameters?.ContainsKey(nameof(KeepVersions)) == true ? KeepVersions : null,
+                    Roots = boundParameters?.ContainsKey(nameof(InstallRoots)) == true ? (InstallRoots ?? Array.Empty<string>()) : null,
                 },
                 Segments = segments,
             };
@@ -375,7 +383,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             return (fullProjectPath, basePath);
         }
 
-        var scriptRoot = MyInvocation.PSScriptRoot;
+        var scriptRoot = MyInvocation?.PSScriptRoot;
         string rootToUse;
         if (!string.IsNullOrWhiteSpace(scriptRoot))
         {
