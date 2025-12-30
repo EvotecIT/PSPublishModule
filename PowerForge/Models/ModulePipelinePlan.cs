@@ -66,6 +66,16 @@ public sealed class ModulePipelinePlan
     public BuildDocumentationConfiguration? DocumentationBuild { get; }
 
     /// <summary>
+    /// Optional compatibility validation settings.
+    /// </summary>
+    public CompatibilitySettings? CompatibilitySettings { get; }
+
+    /// <summary>
+    /// Optional file consistency validation settings.
+    /// </summary>
+    public FileConsistencySettings? FileConsistencySettings { get; }
+
+    /// <summary>
     /// Publish configuration segments enabled for this pipeline run.
     /// </summary>
     public ConfigurationPublishSegment[] Publishes { get; }
@@ -121,6 +131,8 @@ public sealed class ModulePipelinePlan
         InformationConfiguration? information,
         DocumentationConfiguration? documentation,
         BuildDocumentationConfiguration? documentationBuild,
+        CompatibilitySettings? compatibilitySettings,
+        FileConsistencySettings? fileConsistencySettings,
         ConfigurationPublishSegment[] publishes,
         ConfigurationArtefactSegment[] artefacts,
         bool installEnabled,
@@ -142,7 +154,9 @@ public sealed class ModulePipelinePlan
         Information = information;
         Documentation = documentation;
         DocumentationBuild = documentationBuild;
-        Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();
+        CompatibilitySettings = compatibilitySettings;
+        FileConsistencySettings = fileConsistencySettings;
+        Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();    
         Artefacts = artefacts;
         InstallEnabled = installEnabled;
         InstallStrategy = installStrategy;

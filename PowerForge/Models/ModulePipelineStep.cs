@@ -9,6 +9,8 @@ public enum ModulePipelineStepKind
     Build = 0,
     /// <summary>Generate documentation (markdown + external help).</summary>
     Documentation = 1,
+    /// <summary>Run validation checks (compatibility, consistency).</summary>
+    Validation = 6,
     /// <summary>Create an artefact output (packed/unpacked).</summary>
     Artefact = 2,
     /// <summary>Publish to a repository or GitHub.</summary>
@@ -99,7 +101,24 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 3) Artefacts
+        // 3) Validation checks (after build/docs, before packaging/publish/install).
+        if (plan.FileConsistencySettings?.Enable == true)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Validation,
+                key: "validate:fileconsistency",
+                title: "Check file consistency"));
+        }
+
+        if (plan.CompatibilitySettings?.Enable == true)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Validation,
+                key: "validate:compatibility",
+                title: "Check PowerShell compatibility"));
+        }
+
+        // 4) Artefacts
         if (plan.Artefacts is { Length: > 0 })
         {
             for (int i = 0; i < plan.Artefacts.Length; i++)
@@ -120,7 +139,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 4) Publishes
+        // 5) Publishes
         if (plan.Publishes is { Length: > 0 })
         {
             for (int i = 0; i < plan.Publishes.Length; i++)
@@ -145,7 +164,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 5) Install
+        // 6) Install
         if (plan.InstallEnabled)
         {
             steps.Add(new ModulePipelineStep(
@@ -154,7 +173,7 @@ public sealed class ModulePipelineStep
                 title: $"Install ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})"));
         }
 
-        // 6) Cleanup staging
+        // 7) Cleanup staging
         if (plan.DeleteGeneratedStagingAfterRun)
         {
             steps.Add(new ModulePipelineStep(

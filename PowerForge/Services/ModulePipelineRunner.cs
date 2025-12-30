@@ -77,6 +77,8 @@ public sealed class ModulePipelineRunner
         InformationConfiguration? information = null;
         DocumentationConfiguration? documentation = null;
         BuildDocumentationConfiguration? documentationBuild = null;
+        CompatibilitySettings? compatibilitySettings = null;
+        FileConsistencySettings? fileConsistencySettings = null;
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
 
@@ -170,6 +172,16 @@ public sealed class ModulePipelineRunner
                 case ConfigurationBuildDocumentationSegment buildDocs:
                 {
                     documentationBuild = buildDocs.Configuration;
+                    break;
+                }
+                case ConfigurationCompatibilitySegment compatibility:
+                {
+                    compatibilitySettings = compatibility.Settings;
+                    break;
+                }
+                case ConfigurationFileConsistencySegment fileConsistency:
+                {
+                    fileConsistencySettings = fileConsistency.Settings;
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -293,6 +305,8 @@ public sealed class ModulePipelineRunner
             information: information,
             documentation: documentation,
             documentationBuild: documentationBuild,
+            compatibilitySettings: compatibilitySettings,
+            fileConsistencySettings: fileConsistencySettings,
             publishes: enabledPublishes,
             artefacts: enabledArtefacts,
             installEnabled: installEnabled,
@@ -337,6 +351,8 @@ public sealed class ModulePipelineRunner
         var docsExtractStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:extract", StringComparison.OrdinalIgnoreCase));
         var docsWriteStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:write", StringComparison.OrdinalIgnoreCase));
         var docsMamlStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:maml", StringComparison.OrdinalIgnoreCase));
+        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));
+        var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -436,6 +452,123 @@ public sealed class ModulePipelineRunner
             }
         }
 
+        ProjectConsistencyReport? fileConsistencyReport = null;
+        CheckStatus? fileConsistencyStatus = null;
+        ProjectConversionResult? fileConsistencyEncodingFix = null;
+        ProjectConversionResult? fileConsistencyLineEndingFix = null;
+        PowerShellCompatibilityReport? compatibilityReport = null;
+
+        if (plan.FileConsistencySettings?.Enable == true)
+        {
+            SafeStart(fileConsistencyStep);
+            try
+            {
+                var s = plan.FileConsistencySettings;
+                var excludeDirs = MergeExcludeDirectories(
+                    s.ExcludeDirectories,
+                    new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+
+                var enumeration = new ProjectEnumeration(
+                    rootPath: buildResult.StagingPath,
+                    kind: ProjectKind.Mixed,
+                    customExtensions: null,
+                    excludeDirectories: excludeDirs);
+
+                var recommendedEncoding = MapEncoding(s.RequiredEncoding);
+                var exportPath = s.ExportReport
+                    ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "FileConsistencyReport.csv")
+                    : null;
+
+                var analyzer = new ProjectConsistencyAnalyzer(_logger);
+                fileConsistencyReport = analyzer.Analyze(
+                    enumeration: enumeration,
+                    projectType: "Mixed",
+                    recommendedEncoding: recommendedEncoding,
+                    recommendedLineEnding: s.RequiredLineEnding,
+                    includeDetails: false,
+                    exportPath: exportPath);
+
+                if (s.AutoFix)
+                {
+                    var enc = new EncodingConverter();
+                    fileConsistencyEncodingFix = enc.Convert(new EncodingConversionOptions(
+                        enumeration: enumeration,
+                        sourceEncoding: TextEncodingKind.Any,
+                        targetEncoding: recommendedEncoding,
+                        createBackups: s.CreateBackups,
+                        backupDirectory: null,
+                        force: false,
+                        noRollbackOnMismatch: false,
+                        preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+
+                    var le = new LineEndingConverter();
+                    var target = s.RequiredLineEnding == FileConsistencyLineEnding.CRLF ? LineEnding.CRLF : LineEnding.LF;
+                    fileConsistencyLineEndingFix = le.Convert(new LineEndingConversionOptions(
+                        enumeration: enumeration,
+                        target: target,
+                        createBackups: s.CreateBackups,
+                        backupDirectory: null,
+                        force: false,
+                        onlyMixed: false,
+                        ensureFinalNewline: s.CheckMissingFinalNewline,
+                        onlyMissingNewline: false,
+                        preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+
+                    fileConsistencyReport = analyzer.Analyze(
+                        enumeration: enumeration,
+                        projectType: "Mixed",
+                        recommendedEncoding: recommendedEncoding,
+                        recommendedLineEnding: s.RequiredLineEnding,
+                        includeDetails: false,
+                        exportPath: exportPath);
+                }
+
+                var finalReport = fileConsistencyReport ?? throw new InvalidOperationException("File consistency analysis produced no report.");
+                fileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
+                if (s.FailOnInconsistency && fileConsistencyStatus == CheckStatus.Fail)
+                    throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
+
+                SafeDone(fileConsistencyStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(fileConsistencyStep, ex);
+                throw;
+            }
+        }
+
+        if (plan.CompatibilitySettings?.Enable == true)
+        {
+            SafeStart(compatibilityStep);
+            try
+            {
+                var s = plan.CompatibilitySettings;
+                var excludeDirs = MergeExcludeDirectories(
+                    s.ExcludeDirectories,
+                    new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+
+                var exportPath = s.ExportReport
+                    ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "PowerShellCompatibilityReport.csv")
+                    : null;
+
+                var analyzer = new PowerShellCompatibilityAnalyzer(_logger);
+                var specCompat = new PowerShellCompatibilitySpec(buildResult.StagingPath, recurse: true, excludeDirectories: excludeDirs);
+                var raw = analyzer.Analyze(specCompat, progress: null, exportPath: exportPath);
+                var adjusted = ApplyCompatibilitySettings(raw, s);
+                compatibilityReport = adjusted;
+
+                if (s.FailOnIncompatibility && adjusted.Summary.Status == CheckStatus.Fail)
+                    throw new InvalidOperationException($"PowerShell compatibility check failed. {adjusted.Summary.Message}");
+
+                SafeDone(compatibilityStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(compatibilityStep, ex);
+                throw;
+            }
+        }
+
         var artefactResults = new List<ArtefactBuildResult>();
         if (plan.Artefacts is { Length: > 0 })
         {
@@ -519,7 +652,18 @@ public sealed class ModulePipelineRunner
             SafeDone(cleanupStep);
         }
 
-        return new ModulePipelineResult(plan, buildResult, installResult, documentationResult, publishResults.ToArray(), artefactResults.ToArray());
+        return new ModulePipelineResult(
+            plan,
+            buildResult,
+            installResult,
+            documentationResult,
+            fileConsistencyReport,
+            fileConsistencyStatus,
+            fileConsistencyEncodingFix,
+            fileConsistencyLineEndingFix,
+            compatibilityReport,
+            publishResults.ToArray(),
+            artefactResults.ToArray());
     }
 
     private sealed class NullModulePipelineProgressReporter : IModulePipelineProgressReporter
@@ -751,5 +895,146 @@ exit 0
         }
 
         return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static TextEncodingKind MapEncoding(FileConsistencyEncoding encoding)
+    {
+        return encoding switch
+        {
+            FileConsistencyEncoding.ASCII => TextEncodingKind.Ascii,
+            FileConsistencyEncoding.UTF8 => TextEncodingKind.UTF8,
+            FileConsistencyEncoding.UTF8BOM => TextEncodingKind.UTF8BOM,
+            FileConsistencyEncoding.Unicode => TextEncodingKind.Unicode,
+            FileConsistencyEncoding.BigEndianUnicode => TextEncodingKind.BigEndianUnicode,
+            FileConsistencyEncoding.UTF7 => TextEncodingKind.UTF7,
+            FileConsistencyEncoding.UTF32 => TextEncodingKind.UTF32,
+            _ => TextEncodingKind.UTF8BOM
+        };
+    }
+
+    private static string BuildArtefactsReportPath(string projectRoot, string? reportFileName, string fallbackFileName)
+    {
+        var name = string.IsNullOrWhiteSpace(reportFileName) ? fallbackFileName : reportFileName!.Trim();
+        var artefacts = Path.Combine(projectRoot, "Artefacts");
+        Directory.CreateDirectory(artefacts);
+        return Path.GetFullPath(Path.Combine(artefacts, name));
+    }
+
+    private static string[] MergeExcludeDirectories(IEnumerable<string>? primary, IEnumerable<string>? extra)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in (primary ?? Array.Empty<string>()))
+            if (!string.IsNullOrWhiteSpace(s)) set.Add(s.Trim());
+        foreach (var s in (extra ?? Array.Empty<string>()))
+            if (!string.IsNullOrWhiteSpace(s)) set.Add(s.Trim());
+        return set.ToArray();
+    }
+
+    private static CheckStatus EvaluateFileConsistency(ProjectConsistencyReport report, FileConsistencySettings settings)
+    {
+        var total = report.Summary.TotalFiles;
+        if (total <= 0) return CheckStatus.Pass;
+
+        var filesWithIssues = CountFileConsistencyIssues(report, settings);
+
+        if (filesWithIssues == 0) return CheckStatus.Pass;
+
+        var max = Clamp(settings.MaxInconsistencyPercentage, 0, 100);
+        var percent = (filesWithIssues / (double)total) * 100.0;
+        return percent <= max ? CheckStatus.Warning : CheckStatus.Fail;
+    }
+
+    private static string BuildFileConsistencyMessage(ProjectConsistencyReport report, FileConsistencySettings settings)
+    {
+        var total = report.Summary.TotalFiles;
+        var max = Clamp(settings.MaxInconsistencyPercentage, 0, 100);
+        var issues = CountFileConsistencyIssues(report, settings);
+        var percent = total <= 0 ? 0.0 : Math.Round((issues / (double)total) * 100.0, 1);
+        return $"{issues}/{total} files have issues ({percent:0.0}%, max allowed {max}%).";
+    }
+
+    private static int CountFileConsistencyIssues(ProjectConsistencyReport report, FileConsistencySettings settings)
+    {
+        int filesWithIssues = 0;
+        foreach (var f in report.ProblematicFiles)
+        {
+            if (f.NeedsEncodingConversion || f.NeedsLineEndingConversion)
+            {
+                filesWithIssues++;
+                continue;
+            }
+
+            if (settings.CheckMissingFinalNewline && f.MissingFinalNewline)
+            {
+                filesWithIssues++;
+                continue;
+            }
+
+            if (settings.CheckMixedLineEndings && f.HasMixedLineEndings)
+            {
+                filesWithIssues++;
+            }
+        }
+
+        return filesWithIssues;
+    }
+
+    private static PowerShellCompatibilityReport ApplyCompatibilitySettings(PowerShellCompatibilityReport report, CompatibilitySettings settings)
+    {
+        if (report is null) throw new ArgumentNullException(nameof(report));
+        if (settings is null) return report;
+
+        var s = report.Summary;
+        if (!settings.RequireCrossCompatibility && !settings.RequirePS51Compatibility && !settings.RequirePS7Compatibility)
+            return report;
+
+        if (s.TotalFiles == 0)
+            return report;
+
+        var failures = new List<string>();
+
+        if (settings.RequirePS51Compatibility && s.PowerShell51Compatible != s.TotalFiles)
+            failures.Add($"PS 5.1 compatible {s.PowerShell51Compatible}/{s.TotalFiles}");
+
+        if (settings.RequirePS7Compatibility && s.PowerShell7Compatible != s.TotalFiles)
+            failures.Add($"PS 7 compatible {s.PowerShell7Compatible}/{s.TotalFiles}");
+
+        if (settings.RequireCrossCompatibility)
+        {
+            var min = Clamp(settings.MinimumCompatibilityPercentage, 0, 100);
+            if (s.CrossCompatibilityPercentage < min)
+                failures.Add($"Cross-compatible {s.CrossCompatibilityPercentage:0.0}% (< {min}%)");
+        }
+
+        var status = failures.Count > 0
+            ? CheckStatus.Fail
+            : s.FilesWithIssues > 0 ? CheckStatus.Warning : CheckStatus.Pass;
+
+        var message = status switch
+        {
+            CheckStatus.Pass => $"All {s.TotalFiles} files meet compatibility requirements",
+            CheckStatus.Warning => $"{s.FilesWithIssues} files have compatibility issues but requirements are met",
+            _ => $"Compatibility requirements not met: {string.Join(", ", failures)}"
+        };
+
+        var adjusted = new PowerShellCompatibilitySummary(
+            status: status,
+            analysisDate: s.AnalysisDate,
+            totalFiles: s.TotalFiles,
+            powerShell51Compatible: s.PowerShell51Compatible,
+            powerShell7Compatible: s.PowerShell7Compatible,
+            crossCompatible: s.CrossCompatible,
+            filesWithIssues: s.FilesWithIssues,
+            crossCompatibilityPercentage: s.CrossCompatibilityPercentage,
+            message: message,
+            recommendations: s.Recommendations);
+
+        return new PowerShellCompatibilityReport(adjusted, report.Files, report.ExportPath);
+    }
+
+    private static int Clamp(int value, int min, int max)
+    {
+        if (value < min) return min;
+        return value > max ? max : value;
     }
 }

@@ -26,6 +26,31 @@ public sealed class ModulePipelineResult
     public DocumentationBuildResult? DocumentationResult { get; }
 
     /// <summary>
+    /// File consistency report when enabled; otherwise null.
+    /// </summary>
+    public ProjectConsistencyReport? FileConsistencyReport { get; }
+
+    /// <summary>
+    /// File consistency status computed by the pipeline (pass/warn/fail).
+    /// </summary>
+    public CheckStatus? FileConsistencyStatus { get; }
+
+    /// <summary>
+    /// Encoding conversion result when AutoFix was enabled; otherwise null.
+    /// </summary>
+    public ProjectConversionResult? FileConsistencyEncodingFix { get; }
+
+    /// <summary>
+    /// Line ending conversion result when AutoFix was enabled; otherwise null.
+    /// </summary>
+    public ProjectConversionResult? FileConsistencyLineEndingFix { get; }
+
+    /// <summary>
+    /// Compatibility report when enabled; otherwise null.
+    /// </summary>
+    public PowerShellCompatibilityReport? CompatibilityReport { get; }
+
+    /// <summary>
     /// Publish results produced during the run.
     /// </summary>
     public ModulePublishResult[] PublishResults { get; }
@@ -43,6 +68,11 @@ public sealed class ModulePipelineResult
         ModuleBuildResult buildResult,
         ModuleInstallerResult? installResult,
         DocumentationBuildResult? documentationResult,
+        ProjectConsistencyReport? fileConsistencyReport,
+        CheckStatus? fileConsistencyStatus,
+        ProjectConversionResult? fileConsistencyEncodingFix,
+        ProjectConversionResult? fileConsistencyLineEndingFix,
+        PowerShellCompatibilityReport? compatibilityReport,
         ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults)
     {
@@ -50,7 +80,12 @@ public sealed class ModulePipelineResult
         BuildResult = buildResult;
         InstallResult = installResult;
         DocumentationResult = documentationResult;
-        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();
+        FileConsistencyReport = fileConsistencyReport;
+        FileConsistencyStatus = fileConsistencyStatus;
+        FileConsistencyEncodingFix = fileConsistencyEncodingFix;
+        FileConsistencyLineEndingFix = fileConsistencyLineEndingFix;
+        CompatibilityReport = compatibilityReport;
+        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
     }
 }

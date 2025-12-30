@@ -33,11 +33,20 @@ public sealed class EncodingConverter
             try
             {
                 var detected = DetectEncoding(file);
+                var targetEnc = GetTarget(file, options);
+
+                if (SameEncoding(detected, targetEnc))
+                {
+                    skipped++;
+                    results.Add(new FileConversion(file, detected?.WebName, targetEnc.WebName, "Skipped", null, null));
+                    continue;
+                }
+
                 var shouldConvert = ShouldConvert(detected, options.SourceEncoding);
                 if (!shouldConvert && !options.Force)
                 {
                     skipped++;
-                    results.Add(new FileConversion(file, detected?.WebName, GetTarget(file, options).WebName, "Skipped", null, null));
+                    results.Add(new FileConversion(file, detected?.WebName, targetEnc.WebName, "Skipped", null, null));
                     continue;
                 }
 
@@ -50,7 +59,6 @@ public sealed class EncodingConverter
                 }
 
                 var content = File.ReadAllText(file, detected ?? new UTF8Encoding(false));
-                var targetEnc = GetTarget(file, options);
                 File.WriteAllText(file, content, targetEnc);
 
                 // quick verification
@@ -155,6 +163,15 @@ public sealed class EncodingConverter
     private static Encoding GetOemEncoding()
     {
         try { return Encoding.GetEncoding(437); } catch { return Encoding.Default; }
+    }
+
+    private static bool SameEncoding(Encoding? detected, Encoding target)
+    {
+        if (detected is null) return false;
+        if (detected.CodePage != target.CodePage) return false;
+
+        // Differentiate UTF-8 BOM vs no BOM (WebName is the same).
+        return detected.GetPreamble().Length == target.GetPreamble().Length;
     }
 }
 
