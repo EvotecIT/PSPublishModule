@@ -535,6 +535,155 @@ switch (cmd)
             return 1;
         }
     }
+    case "dotnet":
+    {
+        var argv = filteredArgs.Skip(1).ToArray();
+        if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]");
+            return 2;
+        }
+
+        var sub = argv[0].ToLowerInvariant();
+        switch (sub)
+        {
+            case "publish":
+            {
+                var subArgs = argv.Skip(1).ToArray();
+                var outputJson = IsJsonOutput(subArgs);
+                var planOnly = subArgs.Any(a => a.Equals("--plan", StringComparison.OrdinalIgnoreCase) || a.Equals("--dry-run", StringComparison.OrdinalIgnoreCase));
+
+                var configPath = TryGetOptionValue(subArgs, "--config");
+                if (string.IsNullOrWhiteSpace(configPath))
+                {
+                    var baseDir = TryGetProjectRoot(subArgs);
+                    if (!string.IsNullOrWhiteSpace(baseDir))
+                        baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
+                    else
+                        baseDir = Directory.GetCurrentDirectory();
+
+                    configPath = FindDefaultDotNetPublishConfig(baseDir);
+                }
+
+                if (string.IsNullOrWhiteSpace(configPath))
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.publish",
+                            Success = false,
+                            ExitCode = 2,
+                            Error = "Missing --config and no default dotnet publish config found."
+                        });
+                        return 2;
+                    }
+
+                    Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]");
+                    return 2;
+                }
+
+                try
+                {
+                    var interactive = !planOnly && DotNetPublishConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+                    var (cmdLogger, logBuffer) = interactive
+                        ? (new NullLogger { IsVerbose = cli.Verbose }, null)
+                        : CreateCommandLogger(outputJson, cli, logger);
+
+                    var loaded = LoadDotNetPublishSpecWithPath(configPath);
+                    var spec = loaded.Value;
+                    var specPath = loaded.FullPath;
+
+                    var runner = new DotNetPublishPipelineRunner(cmdLogger);
+                    var plan = runner.Plan(spec, specPath);
+
+                    DotNetPublishResult? result = null;
+                    if (!planOnly)
+                    {
+                        result = interactive
+                            ? DotNetPublishConsoleUi.Run(runner, plan, specPath, outputJson, cli)
+                            : RunWithStatus(outputJson, cli, "Publishing dotnet artefacts", () => runner.Run(plan, progress: null));
+                    }
+
+                    var exitCode = result is not null && !result.Succeeded ? 1 : 0;
+
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.publish",
+                            Success = exitCode == 0,
+                            ExitCode = exitCode,
+                            Error = exitCode == 0 ? null : result?.ErrorMessage,
+                            Config = "dotnetpublish",
+                            ConfigPath = specPath,
+                            Spec = CliJson.SerializeToElement(spec, CliJson.Context.DotNetPublishSpec),
+                            Plan = CliJson.SerializeToElement(plan, CliJson.Context.DotNetPublishPlan),
+                            Result = result is null ? null : CliJson.SerializeToElement(result, CliJson.Context.DotNetPublishResult),
+                            Logs = LogsToJsonElement(logBuffer)
+                        });
+                        return exitCode;
+                    }
+
+                    if (planOnly)
+                    {
+                        cmdLogger.Success($"Planned dotnet publish ({plan.Steps.Length} steps, {plan.Targets.Length} target(s)).");
+                        cmdLogger.Info($"Project root: {plan.ProjectRoot}");
+                        if (!string.IsNullOrWhiteSpace(plan.Outputs.ManifestJsonPath))
+                            cmdLogger.Info($"Manifest: {plan.Outputs.ManifestJsonPath}");
+                        return 0;
+                    }
+
+                    if (result is null)
+                    {
+                        logger.Error("Dotnet publish failed (no result).");
+                        return 1;
+                    }
+
+                    if (!result.Succeeded)
+                    {
+                        logger.Error(result.ErrorMessage ?? "Dotnet publish failed.");
+                        return 1;
+                    }
+
+                    cmdLogger.Success($"Dotnet publish completed ({result.Artefacts.Length} artefact(s)).");
+                    if (!string.IsNullOrWhiteSpace(result?.ManifestJsonPath))
+                        cmdLogger.Info($"Manifest: {result!.ManifestJsonPath}");
+                    foreach (var a in result?.Artefacts ?? Array.Empty<DotNetPublishArtefactResult>())
+                    {
+                        if (!string.IsNullOrWhiteSpace(a.OutputDir))
+                            cmdLogger.Info($" → {a.Target} {a.Framework} {a.Runtime} {a.Style}: {a.OutputDir}");
+                    }
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    if (outputJson)
+                    {
+                        WriteJson(new CliJsonEnvelope
+                        {
+                            SchemaVersion = OutputSchemaVersion,
+                            Command = "dotnet.publish",
+                            Success = false,
+                            ExitCode = 1,
+                            Error = ex.Message
+                        });
+                        return 1;
+                    }
+
+                    logger.Error(ex.Message);
+                    return 1;
+                }
+            }
+            default:
+            {
+                Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]");
+                return 2;
+            }
+        }
+    }
     case "normalize":
     {
         var argv = filteredArgs.Skip(1).ToArray();
@@ -1230,10 +1379,11 @@ Usage:
   powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
   powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]
   powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
+  powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]
   powerforge normalize <files...>   Normalize encodings and line endings [--output json]
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
   powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
-                 [--skip-dependencies] [--skip-import] [--keep-xml] [--timeout <seconds>] [--output json]
+                  [--skip-dependencies] [--skip-import] [--keep-xml] [--timeout <seconds>] [--output json]
   powerforge test --config <TestSpec.json>
   powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
   powerforge install --config <InstallSpec.json>
@@ -1255,6 +1405,7 @@ Usage:
 Default config discovery (when --config is omitted):
   Searches for powerforge.json / powerforge.pipeline.json / .powerforge/pipeline.json
   in the current directory and parent directories.
+  DotNet publish searches for powerforge.dotnetpublish.json / .powerforge/dotnetpublish.json.
 ");
 }
 
@@ -1913,7 +2064,31 @@ static string? FindDefaultBuildConfig(string baseDir)
     return FindDefaultPipelineConfig(baseDir);
 }
 
-static IEnumerable<string> EnumerateSelfAndParents(string? baseDir)
+static string? FindDefaultDotNetPublishConfig(string baseDir)
+{
+    var candidates = new[]
+    {
+        "powerforge.dotnetpublish.json",
+        Path.Combine(".powerforge", "dotnetpublish.json"),
+    };
+
+    foreach (var dir in EnumerateSelfAndParents(baseDir))
+    {
+        foreach (var rel in candidates)
+        {
+            try
+            {
+                var full = Path.GetFullPath(Path.Combine(dir, rel));
+                if (File.Exists(full)) return full;
+            }
+            catch { /* ignore */ }
+        }
+    }
+
+    return null;
+}
+
+static IEnumerable<string> EnumerateSelfAndParents(string? baseDir)       
 {
     string current;
     try
@@ -1984,6 +2159,14 @@ static (ModuleBuildSpec Value, string FullPath) LoadBuildSpecWithPath(string pat
     var full = ResolveExistingFilePath(path);
     var json = File.ReadAllText(full);
     var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.ModuleBuildSpec, full);
+    return (spec, full);
+}
+
+static (DotNetPublishSpec Value, string FullPath) LoadDotNetPublishSpecWithPath(string path)
+{
+    var full = ResolveExistingFilePath(path);
+    var json = File.ReadAllText(full);
+    var spec = CliJson.DeserializeOrThrow(json, CliJson.Context.DotNetPublishSpec, full);
     return (spec, full);
 }
 
