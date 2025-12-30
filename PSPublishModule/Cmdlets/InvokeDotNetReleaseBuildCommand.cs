@@ -16,7 +16,7 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
     /// <summary>Path to the folder containing the project (*.csproj) file (or the csproj file itself).</summary>
     [Parameter(Mandatory = true)]
     [ValidateNotNullOrEmpty]
-    public string ProjectPath { get; set; } = string.Empty;
+    public string[] ProjectPath { get; set; } = Array.Empty<string>();
 
     /// <summary>Optional certificate thumbprint used to sign assemblies and packages. When omitted, no signing is performed.</summary>
     [Parameter]
@@ -37,66 +37,81 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
     /// <summary>Executes build/pack/sign operations and returns a result object.</summary>
     protected override void ProcessRecord()
     {
-        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var boundParameters = MyInvocation?.BoundParameters;
+        var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
+        var logger = new CmdletLogger(this, isVerbose);
         var service = new DotNetReleaseBuildService(logger);
-
-        string fullProjectPath;
-        try { fullProjectPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ProjectPath); }
-        catch { fullProjectPath = ProjectPath; }
 
         var mappedStore = LocalStore == CertificateStoreLocation.LocalMachine
             ? PowerForge.CertificateStoreLocation.LocalMachine
             : PowerForge.CertificateStoreLocation.CurrentUser;
 
-        var spec = new DotNetReleaseBuildSpec
+        foreach (var project in ProjectPath ?? Array.Empty<string>())
         {
-            ProjectPath = fullProjectPath,
-            Configuration = "Release",
-            CertificateThumbprint = CertificateThumbprint,
-            LocalStore = mappedStore,
-            TimeStampServer = TimeStampServer,
-            PackDependencies = PackDependencies.IsPresent
-        };
-
-        // Plan first (used for ShouldProcess messaging and -WhatIf output).
-        spec.WhatIf = true;
-        var plan = service.Execute(spec);
-        spec.WhatIf = false;
-
-        if (!string.IsNullOrWhiteSpace(plan.ErrorMessage))
-        {
-            WriteObject(plan);
-            return;
-        }
-
-        var target = !string.IsNullOrWhiteSpace(plan.ProjectName) && !string.IsNullOrWhiteSpace(plan.Version)
-            ? $"{plan.ProjectName} v{plan.Version}"
-            : spec.ProjectPath;
-
-        if (!ShouldProcess(target, "Build and pack .NET project"))
-        {
-            if (PackDependencies.IsPresent && plan.DependencyProjects.Length > 0)
+            if (string.IsNullOrWhiteSpace(project))
             {
-                WriteVerbose($"Would also pack {plan.DependencyProjects.Length} dependency projects: {string.Join(", ", plan.DependencyProjects.Select(Path.GetFileName))}");
+                WriteObject(new DotNetReleaseBuildResult
+                {
+                    Success = false,
+                    ErrorMessage = "ProjectPath contains an empty value."
+                });
+                continue;
             }
 
-            WriteObject(plan);
-            return;
-        }
+            string fullProjectPath;
+            try { fullProjectPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(project); }
+            catch { fullProjectPath = project; }
 
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null;
-        if (!string.IsNullOrWhiteSpace(CertificateThumbprint))
-        {
-            signAssemblies = req => InvokeRegisterCertificate(
-                req.ReleasePath,
-                LocalStore,
-                req.CertificateThumbprint,
-                req.TimeStampServer,
-                req.IncludePatterns);
-        }
+            var spec = new DotNetReleaseBuildSpec
+            {
+                ProjectPath = fullProjectPath,
+                Configuration = "Release",
+                CertificateThumbprint = CertificateThumbprint,
+                LocalStore = mappedStore,
+                TimeStampServer = TimeStampServer,
+                PackDependencies = PackDependencies.IsPresent
+            };
 
-        var result = service.Execute(spec, signAssemblies);
-        WriteObject(result);
+            // Plan first (used for ShouldProcess messaging and -WhatIf output).
+            spec.WhatIf = true;
+            var plan = service.Execute(spec);
+            spec.WhatIf = false;
+
+            if (!string.IsNullOrWhiteSpace(plan.ErrorMessage))
+            {
+                WriteObject(plan);
+                continue;
+            }
+
+            var target = !string.IsNullOrWhiteSpace(plan.ProjectName) && !string.IsNullOrWhiteSpace(plan.Version)
+                ? $"{plan.ProjectName} v{plan.Version}"
+                : spec.ProjectPath;
+
+            if (!ShouldProcess(target, "Build and pack .NET project"))
+            {
+                if (PackDependencies.IsPresent && plan.DependencyProjects.Length > 0)
+                {
+                    WriteVerbose($"Would also pack {plan.DependencyProjects.Length} dependency projects: {string.Join(", ", plan.DependencyProjects.Select(System.IO.Path.GetFileName))}");
+                }
+
+                WriteObject(plan);
+                continue;
+            }
+
+            Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null;
+            if (!string.IsNullOrWhiteSpace(CertificateThumbprint))
+            {
+                signAssemblies = req => InvokeRegisterCertificate(
+                    req.ReleasePath,
+                    LocalStore,
+                    req.CertificateThumbprint,
+                    req.TimeStampServer,
+                    req.IncludePatterns);
+            }
+
+            var result = service.Execute(spec, signAssemblies);
+            WriteObject(result);
+        }
     }
 
     private void InvokeRegisterCertificate(

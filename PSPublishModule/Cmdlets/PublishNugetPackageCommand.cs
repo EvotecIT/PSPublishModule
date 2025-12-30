@@ -17,7 +17,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     /// <summary>Directory to search for NuGet packages.</summary>
     [Parameter(Mandatory = true)]
     [ValidateNotNullOrEmpty]
-    public string Path { get; set; } = string.Empty;
+    public string[] Path { get; set; } = Array.Empty<string>();
 
     /// <summary>API key used to authenticate against the NuGet feed.</summary>
     [Parameter(Mandatory = true)]
@@ -28,6 +28,13 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     [Parameter]
     public string Source { get; set; } = "https://api.nuget.org/v3/index.json";
 
+    /// <summary>
+    /// When set, passes <c>--skip-duplicate</c> to <c>dotnet nuget push</c>.
+    /// This makes repeated publishing runs idempotent when the package already exists.
+    /// </summary>
+    [Parameter]
+    public SwitchParameter SkipDuplicate { get; set; }
+
     /// <summary>Executes publishing.</summary>
     protected override void ProcessRecord()
     {
@@ -35,16 +42,35 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
 
         try
         {
-            var root = SessionState.Path.GetUnresolvedProviderPathFromPSPath(Path);
-            if (!Directory.Exists(root))
+            var resolvedRoots = new List<string>();
+            foreach (var raw in Path ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var root = SessionState.Path.GetUnresolvedProviderPathFromPSPath(raw);
+                if (!Directory.Exists(root))
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Path '{raw}' not found.";
+                    WriteObject(result);
+                    return;
+                }
+                resolvedRoots.Add(root);
+            }
+
+            if (resolvedRoots.Count == 0)
             {
                 result.Success = false;
-                result.ErrorMessage = $"Path '{Path}' not found.";
+                result.ErrorMessage = "No paths were provided.";
                 WriteObject(result);
                 return;
             }
 
-            var packages = Directory.EnumerateFiles(root, "*.nupkg", SearchOption.AllDirectories);
+            var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var packages = resolvedRoots
+                .SelectMany(r => Directory.EnumerateFiles(r, "*.nupkg", SearchOption.AllDirectories))
+                .Where(p => unique.Add(p))
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             var foundAny = false;
 
             foreach (var pkg in packages)
@@ -52,7 +78,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                 foundAny = true;
                 if (ShouldProcess(pkg, $"Publish NuGet package to {Source}"))
                 {
-                    var exitCode = RunDotnetNugetPush(pkg, ApiKey, Source, out var stdErr, out var stdOut);
+                    var exitCode = RunDotnetNugetPush(pkg, ApiKey, Source, SkipDuplicate.IsPresent, out var stdErr, out var stdOut);
                     if (exitCode == 0)
                     {
                         result.Pushed.Add(pkg);
@@ -78,7 +104,8 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
             if (!foundAny)
             {
                 result.Success = false;
-                result.ErrorMessage = $"No packages found in {Path}";
+                var display = string.Join(", ", (Path ?? Array.Empty<string>()).Where(p => !string.IsNullOrWhiteSpace(p)));
+                result.ErrorMessage = $"No packages found in {display}";
             }
 
             WriteObject(result);
@@ -91,7 +118,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
         }
     }
 
-    private static int RunDotnetNugetPush(string packagePath, string apiKey, string source, out string stdErr, out string stdOut)
+    private static int RunDotnetNugetPush(string packagePath, string apiKey, string source, bool skipDuplicate, out string stdErr, out string stdOut)
     {
         stdErr = string.Empty;
         stdOut = string.Empty;
@@ -105,12 +132,14 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
             CreateNoWindow = true
         };
 #if NET472
-        psi.Arguments = BuildWindowsArgumentString(new[]
+        var args = new List<string>
         {
             "nuget", "push", packagePath,
             "--api-key", apiKey,
             "--source", source
-        });
+        };
+        if (skipDuplicate) args.Add("--skip-duplicate");
+        psi.Arguments = BuildWindowsArgumentString(args);
 #else
         psi.ArgumentList.Add("nuget");
         psi.ArgumentList.Add("push");
@@ -119,6 +148,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
         psi.ArgumentList.Add(apiKey);
         psi.ArgumentList.Add("--source");
         psi.ArgumentList.Add(source);
+        if (skipDuplicate) psi.ArgumentList.Add("--skip-duplicate");
 #endif
 
         using var p = Process.Start(psi);

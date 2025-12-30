@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -15,7 +16,7 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
     /// <summary>Path to the project folder containing the *.csproj file.</summary>
     [Parameter(Mandatory = true)]
     [ValidateNotNullOrEmpty]
-    public string ProjectPath { get; set; } = string.Empty;
+    public string[] ProjectPath { get; set; } = Array.Empty<string>();
 
     /// <summary>GitHub account name owning the repository.</summary>
     [Parameter(Mandatory = true)]
@@ -63,7 +64,7 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
     /// <summary>Publishes the release asset.</summary>
     protected override void ProcessRecord()
     {
-        var result = new PublishGitHubReleaseAssetResult
+        static PublishGitHubReleaseAssetResult NewResult() => new()
         {
             Success = false,
             TagName = null,
@@ -73,87 +74,121 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
             ErrorMessage = null
         };
 
+        var versionOverride = Version;
+        var tagNameOverride = TagName;
+        var releaseNameOverride = ReleaseName;
+        var zipOverride = ZipPath;
+        var tagTemplate = TagTemplate;
+        var includeProjectInTag = IncludeProjectNameInTag.IsPresent;
+        var isPreRelease = IsPreRelease.IsPresent;
+
+        var projectPaths = ProjectPath ?? Array.Empty<string>();
+        if (projectPaths.Length > 1 && !string.IsNullOrWhiteSpace(zipOverride))
+        {
+            var r = NewResult();
+            r.ErrorMessage = "ZipPath override is not supported when multiple ProjectPath values are provided.";
+            WriteObject(r);
+            return;
+        }
+
+        var entries = new List<(string ProjectName, string TagName, string ReleaseName, string ZipPath)>();
+
         try
         {
-            var fullProjectPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(ProjectPath);
-            if (!Directory.Exists(fullProjectPath) && !File.Exists(fullProjectPath))
+            foreach (var projectPath in projectPaths)
             {
-                result.ErrorMessage = $"Project path '{ProjectPath}' not found.";
-                WriteObject(result);
-                return;
-            }
+                var result = NewResult();
 
-            var csproj = ResolveCsproj(fullProjectPath);
-            if (csproj is null)
-            {
-                result.ErrorMessage = $"No csproj found in {ProjectPath}";
-                WriteObject(result);
-                return;
-            }
-
-            var projectName = Path.GetFileNameWithoutExtension(csproj) ?? "Project";
-            var csprojDir = Path.GetDirectoryName(csproj) ?? fullProjectPath;
-
-            var doc = XDocument.Load(csproj);
-            if (string.IsNullOrWhiteSpace(Version))
-            {
-                Version = GetFirstElementValue(doc, "VersionPrefix");
-                if (string.IsNullOrWhiteSpace(Version))
+                if (string.IsNullOrWhiteSpace(projectPath))
                 {
-                    result.ErrorMessage = $"VersionPrefix not found in '{csproj}'";
+                    result.ErrorMessage = "ProjectPath contains an empty value.";
                     WriteObject(result);
-                    return;
+                    continue;
                 }
+
+                string fullProjectPath;
+                try { fullProjectPath = SessionState.Path.GetUnresolvedProviderPathFromPSPath(projectPath); }
+                catch { fullProjectPath = projectPath; }
+
+                if (!Directory.Exists(fullProjectPath) && !File.Exists(fullProjectPath))
+                {
+                    result.ErrorMessage = $"Project path '{projectPath}' not found.";
+                    WriteObject(result);
+                    continue;
+                }
+
+                var csproj = ResolveCsproj(fullProjectPath);
+                if (csproj is null)
+                {
+                    result.ErrorMessage = $"No csproj found in {projectPath}";
+                    WriteObject(result);
+                    continue;
+                }
+
+                var projectName = Path.GetFileNameWithoutExtension(csproj) ?? "Project";
+                var csprojDir = Path.GetDirectoryName(csproj) ?? fullProjectPath;
+
+                var version = versionOverride;
+                if (string.IsNullOrWhiteSpace(version))
+                {
+                    var doc = XDocument.Load(csproj);
+                    version = GetFirstElementValue(doc, "VersionPrefix");
+                    if (string.IsNullOrWhiteSpace(version))
+                    {
+                        result.ErrorMessage = $"VersionPrefix not found in '{csproj}'";
+                        WriteObject(result);
+                        continue;
+                    }
+                }
+
+                var zip = string.IsNullOrWhiteSpace(zipOverride)
+                    ? Path.Combine(csprojDir, "bin", "Release", $"{projectName}.{version}.zip")
+                    : SessionState.Path.GetUnresolvedProviderPathFromPSPath(zipOverride);
+
+                if (!File.Exists(zip))
+                {
+                    result.ErrorMessage = $"Zip file '{zip}' not found.";
+                    WriteObject(result);
+                    continue;
+                }
+
+                var tag = tagNameOverride;
+                if (string.IsNullOrWhiteSpace(tag))
+                {
+                    if (!string.IsNullOrWhiteSpace(tagTemplate))
+                    {
+                        tag = tagTemplate!.Replace("{Project}", projectName).Replace("{Version}", version);
+                    }
+                    else if (includeProjectInTag)
+                    {
+                        tag = $"{projectName}-v{version}";
+                    }
+                    else
+                    {
+                        tag = $"v{version}";
+                    }
+                }
+
+                var relName = !string.IsNullOrWhiteSpace(releaseNameOverride) ? releaseNameOverride : tag;
+
+                entries.Add((projectName, tag!, relName!, zip));
             }
 
-            var zip = string.IsNullOrWhiteSpace(ZipPath)
-                ? Path.Combine(csprojDir, "bin", "Release", $"{projectName}.{Version}.zip")
-                : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ZipPath);
-
-            if (!File.Exists(zip))
-            {
-                result.ErrorMessage = $"Zip file '{zip}' not found.";
-                WriteObject(result);
+            if (entries.Count == 0)
                 return;
-            }
-
-            if (string.IsNullOrWhiteSpace(TagName))
-            {
-                if (TagTemplate is not null && !string.IsNullOrWhiteSpace(TagTemplate))
-                {
-                    TagName = TagTemplate.Replace("{Project}", projectName).Replace("{Version}", Version);
-                }
-                else if (IncludeProjectNameInTag.IsPresent)
-                {
-                    TagName = $"{projectName}-v{Version}";
-                }
-                else
-                {
-                    TagName = $"v{Version}";
-                }
-            }
-
-            result.TagName = TagName;
-            if (string.IsNullOrWhiteSpace(ReleaseName))
-            {
-                ReleaseName = TagName;
-            }
-            result.ReleaseName = ReleaseName;
-            result.ZipPath = zip;
-
-            if (!ShouldProcess($"{GitHubUsername}/{GitHubRepositoryName}", $"Publish release {TagName} to GitHub"))
-            {
-                result.Success = true;
-                result.ReleaseUrl = $"https://github.com/{GitHubUsername}/{GitHubRepositoryName}/releases/tag/{TagName}";
-                WriteObject(result);
-                return;
-            }
 
             var module = MyInvocation.MyCommand?.Module;
             if (module is null)
             {
-                result.ErrorMessage = "Module context not available.";
-                WriteObject(result);
+                foreach (var e in entries)
+                {
+                    var r = NewResult();
+                    r.TagName = e.TagName;
+                    r.ReleaseName = e.ReleaseName;
+                    r.ZipPath = e.ZipPath;
+                    r.ErrorMessage = "Module context not available.";
+                    WriteObject(r);
+                }
                 return;
             }
 
@@ -162,34 +197,70 @@ param($u,$r,$t,$tag,$name,$asset,$pre)
 Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToken $t -TagName $tag -ReleaseName $name -AssetFilePaths $asset -IsPreRelease:$pre
 ");
             var bound = module.NewBoundScriptBlock(sb);
-            var output = bound.Invoke(GitHubUsername, GitHubRepositoryName, GitHubAccessToken, TagName, ReleaseName, new[] { zip }, IsPreRelease.IsPresent);
-            var status = output.Count > 0 ? output[0]?.BaseObject : null;
 
-            if (status is SendGitHubReleaseCommand.GitHubReleaseResult gr)
+            foreach (var group in entries.GroupBy(e => e.TagName, StringComparer.OrdinalIgnoreCase))
             {
-                result.Success = gr.Succeeded;
-                result.ReleaseUrl = gr.ReleaseUrl;
-                result.ErrorMessage = gr.Succeeded ? null : gr.ErrorMessage;
-            }
-            else if (status is PSObject pso)
-            {
-                var succeeded = pso.Properties["Succeeded"]?.Value as bool?;
-                result.Success = succeeded ?? false;
-                result.ReleaseUrl = pso.Properties["ReleaseUrl"]?.Value?.ToString();
-                result.ErrorMessage = pso.Properties["ErrorMessage"]?.Value?.ToString();
-            }
-            else
-            {
-                result.ErrorMessage = "Unexpected result from Send-GitHubRelease.";
-            }
+                var tag = group.Key;
+                var relName = group.First().ReleaseName;
+                var assets = group.Select(e => e.ZipPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-            WriteObject(result);
+                bool succeeded;
+                string? releaseUrl;
+                string? errorMessage;
+
+                if (!ShouldProcess($"{GitHubUsername}/{GitHubRepositoryName}", $"Publish release {tag} to GitHub"))
+                {
+                    succeeded = true;
+                    errorMessage = null;
+                    releaseUrl = $"https://github.com/{GitHubUsername}/{GitHubRepositoryName}/releases/tag/{tag}";
+                }
+                else
+                {
+                    var output = bound.Invoke(GitHubUsername, GitHubRepositoryName, GitHubAccessToken, tag, relName, assets, isPreRelease);
+                    var status = output.Count > 0 ? output[0]?.BaseObject : null;
+
+                    succeeded = false;
+                    releaseUrl = null;
+                    errorMessage = null;
+
+                    if (status is SendGitHubReleaseCommand.GitHubReleaseResult gr)
+                    {
+                        succeeded = gr.Succeeded;
+                        releaseUrl = gr.ReleaseUrl;
+                        errorMessage = gr.Succeeded ? null : gr.ErrorMessage;
+                    }
+                    else if (status is PSObject pso)
+                    {
+                        var ok = pso.Properties["Succeeded"]?.Value as bool?;
+                        succeeded = ok ?? false;
+                        releaseUrl = pso.Properties["ReleaseUrl"]?.Value?.ToString();
+                        errorMessage = pso.Properties["ErrorMessage"]?.Value?.ToString();
+                    }
+                    else
+                    {
+                        errorMessage = "Unexpected result from Send-GitHubRelease.";
+                    }
+                }
+
+                foreach (var e in group)
+                {
+                    var r = NewResult();
+                    r.Success = succeeded;
+                    r.TagName = tag;
+                    r.ReleaseName = relName;
+                    r.ZipPath = e.ZipPath;
+                    r.ReleaseUrl = releaseUrl;
+                    r.ErrorMessage = succeeded ? null : errorMessage;
+                    WriteObject(r);
+                }
+            }
         }
         catch (Exception ex)
         {
-            result.Success = false;
-            result.ErrorMessage = ex.Message;
-            WriteObject(result);
+            var r = NewResult();
+            r.Success = false;
+            r.ErrorMessage = ex.Message;
+            WriteObject(r);
         }
     }
 

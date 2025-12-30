@@ -15,7 +15,10 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// <summary>Removes all files from the documentation folder before creating new documentation.</summary>
     [Parameter] public SwitchParameter StartClean { get; set; }
 
-    /// <summary>Legacy compatibility switch; ignored by the PowerForge generator.</summary>
+    /// <summary>
+    /// When enabled, generated documentation is also synced back to the project folder
+    /// (not only to the staging build output).
+    /// </summary>
     [Parameter] public SwitchParameter UpdateWhenNew { get; set; }
 
     /// <summary>Disable external help (MAML) generation.</summary>
