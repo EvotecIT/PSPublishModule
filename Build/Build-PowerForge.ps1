@@ -1,5 +1,5 @@
 [CmdletBinding()] param(
-    [ValidateSet('win-x64', 'win-arm64')]
+    [ValidateSet('win-x64', 'win-arm64', 'linux-x64', 'linux-arm64', 'linux-musl-x64', 'linux-musl-arm64', 'osx-x64', 'osx-arm64')]
     [string] $Runtime = 'win-x64',
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Release',
@@ -103,13 +103,18 @@ if (-not $KeepDocs) {
 }
 
 $cliExe = Join-Path $publishDir 'PowerForge.Cli.exe'
-$friendlyExe = Join-Path $publishDir 'powerforge.exe'
-if (Test-Path -LiteralPath $cliExe) {
+$ridIsWindows = $Runtime -like 'win-*'
+$cliExeAlt = Join-Path $publishDir 'PowerForge.Cli'
+$friendlyExe = Join-Path $publishDir ($ridIsWindows ? 'powerforge.exe' : 'powerforge')
+foreach ($candidate in @($cliExe, $cliExeAlt)) {
+    if (-not (Test-Path -LiteralPath $candidate)) { continue }
+
     # Keep a stable, user-friendly binary name without duplicating 50+ MB on disk.
     if (Test-Path -LiteralPath $friendlyExe) {
         Remove-Item -LiteralPath $friendlyExe -Force -ErrorAction SilentlyContinue
     }
-    Move-Item -LiteralPath $cliExe -Destination $friendlyExe -Force
+    Move-Item -LiteralPath $candidate -Destination $friendlyExe -Force
+    break
 }
 
 if ($ClearOut -and (Test-Path $OutDir) -and ($publishDir -ne $OutDir)) {
