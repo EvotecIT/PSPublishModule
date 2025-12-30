@@ -203,6 +203,15 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         var isVerbose = MyInvocation.BoundParameters.ContainsKey("Verbose");
 
         ConsoleEncoding.EnsureUtf8();
+        try
+        {
+            if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
+                Spectre.Console.AnsiConsole.Profile.Capabilities.Unicode = true;
+        }
+        catch
+        {
+            // best effort only
+        }
         ILogger logger = new SpectreConsoleLogger { IsVerbose = isVerbose };
 
         var moduleName = ParameterSetName == ParameterSetConfiguration

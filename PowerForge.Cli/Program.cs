@@ -6,6 +6,15 @@ using System.Text.Json;
 const int OutputSchemaVersion = 1;
 
 ConsoleEncoding.EnsureUtf8();
+try
+{
+    if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
+        AnsiConsole.Profile.Capabilities.Unicode = true;
+}
+catch
+{
+    // best effort only
+}
 
 var cli = ParseCliOptions(args, out var cliParseError);
 if (!string.IsNullOrWhiteSpace(cliParseError))

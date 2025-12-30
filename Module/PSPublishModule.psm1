@@ -1,5 +1,14 @@
 # PSPublishModule bootstrapper (script module)
 # Loads binary cmdlets (preferred) and optionally dot-sources script helpers when present.
+try {
+    if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
+        $utf8 = [System.Text.UTF8Encoding]::new($false)
+        [Console]::InputEncoding = $utf8
+        [Console]::OutputEncoding = $utf8
+    }
+} catch {
+    # best effort only
+}
 
 # Get public and private function definition files.
 $Public  = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
