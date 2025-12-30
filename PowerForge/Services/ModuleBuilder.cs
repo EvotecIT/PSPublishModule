@@ -97,6 +97,7 @@ public sealed class ModuleBuilder
 
             // 1) Build libraries (dotnet publish) per framework and copy to Lib/<Core|Default>
             var publisher = new DotnetPublisher(_logger);
+            var exportAssemblyFileNames = ResolveExportAssemblyFileNames(opts.ModuleName, opts.ExportAssemblies);
 
             // Publish into an isolated temp folder to avoid file locking issues when the build host has already loaded
             // assemblies from the repo's bin/obj outputs.
@@ -127,7 +128,7 @@ public sealed class ModuleBuilder
                         Directory.CreateDirectory(target);
                     }
 
-                    CopyPublishOutputBinaries(src, target, tfm);
+                    CopyPublishOutputBinaries(src, target, tfm, exportAssemblyFileNames);
                 }
             }
             finally
@@ -263,7 +264,7 @@ public sealed class ModuleBuilder
         "System.Management.dll",
     };
 
-    private void CopyPublishOutputBinaries(string publishDir, string targetDir, string tfm)
+    private void CopyPublishOutputBinaries(string publishDir, string targetDir, string tfm, ISet<string> exportAssemblyFileNames)
     {
         var plan = CreateCopyPlan(publishDir, tfm);
         var copied = 0;
@@ -290,7 +291,43 @@ public sealed class ModuleBuilder
             copied++;
         }
 
+        foreach (var fileName in exportAssemblyFileNames)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) continue;
+
+            var xmlFileName = Path.ChangeExtension(fileName, ".xml");
+            var xmlSource = Path.Combine(publishDir, xmlFileName);
+            if (!File.Exists(xmlSource)) continue;
+
+            var xmlDest = Path.Combine(targetDir, xmlFileName);
+            Directory.CreateDirectory(Path.GetDirectoryName(xmlDest)!);
+            File.Copy(xmlSource, xmlDest, overwrite: true);
+            copied++;
+        }
+
         _logger.Verbose($"Copied {copied} binaries for {tfm} from '{publishDir}' to '{targetDir}'.");
+    }
+
+    private static ISet<string> ResolveExportAssemblyFileNames(string moduleName, IReadOnlyList<string>? exportAssemblies)
+    {
+        var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var specified = (exportAssemblies ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim().Trim('"'))
+            .ToArray();
+
+        var entries = specified.Length > 0 ? specified : new[] { moduleName + ".dll" };
+        foreach (var entry in entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry)) continue;
+            var name = entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? entry : entry + ".dll";
+            name = Path.GetFileName(name);
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            fileNames.Add(name);
+        }
+
+        return fileNames;
     }
 
     private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm)

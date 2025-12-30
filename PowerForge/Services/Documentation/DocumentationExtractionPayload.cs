@@ -40,6 +40,20 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "commandType")]
     public string CommandType { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Full name of the implementing .NET type for cmdlets (from <c>Get-Command</c>), when available.
+    /// Empty for script functions.
+    /// </summary>
+    [DataMember(Name = "implementingType")]
+    public string? ImplementingType { get; set; }
+
+    /// <summary>
+    /// Assembly path for cmdlets (from <c>Get-Command</c>), when available.
+    /// Empty for script functions.
+    /// </summary>
+    [DataMember(Name = "assemblyPath")]
+    public string? AssemblyPath { get; set; }
+
     /// <summary>Default parameter set name, when available.</summary>
     [DataMember(Name = "defaultParameterSet")]
     public string? DefaultParameterSet { get; set; }

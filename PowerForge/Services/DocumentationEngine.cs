@@ -128,6 +128,16 @@ public sealed class DocumentationEngine
                 throw;
             }
 
+            try
+            {
+                new XmlDocCommentEnricher(_logger).Enrich(extracted);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to enrich help from XML docs. Error: {ex.Message}");
+                if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            }
+
             var writer = new MarkdownHelpWriter();
             SafeStart(writeStep);
             try
@@ -361,6 +371,11 @@ try {
     $help = $null
     try { $help = Get-Help -Name $c.Name -Full -ErrorAction SilentlyContinue } catch { $help = $null }
 
+    $implType = $null
+    $dllPath = $null
+    try { if ($c -and $c.ImplementingType) { $implType = [string]$c.ImplementingType.FullName } } catch { $implType = $null }
+    try { if ($c -and $c.Dll) { $dllPath = [string]$c.Dll } } catch { $dllPath = $null }
+
     $defaultSet = $null
     try { $defaultSet = $c.DefaultParameterSet } catch { $defaultSet = $null }
 
@@ -387,8 +402,13 @@ try {
       }
     }
 
+    $helpParameters = @()
+    try {
+      if ($help -and $help.Parameters -and $help.Parameters.Parameter) { $helpParameters = @($help.Parameters.Parameter) }
+    } catch { $helpParameters = @() }
+
     $parameters = @()
-    foreach ($p in @($help.Parameters.Parameter)) {
+    foreach ($p in $helpParameters) {
       $pn = [string]$p.Name
       $aliases = @()
       foreach ($a in @($p.Aliases)) { $aliases += [string]$a }
@@ -417,12 +437,17 @@ try {
       }
     }
 
+    $helpExamples = @()
+    try {
+      if ($help -and $help.Examples -and $help.Examples.Example) { $helpExamples = @($help.Examples.Example) }
+    } catch { $helpExamples = @() }
+
     $examples = @()
-    foreach ($ex in @($help.Examples.Example)) {
+    foreach ($ex in $helpExamples) {
       $remarks = ''
       foreach ($r in @($ex.Remarks)) {
         $t = (GetText $r).Trim()
-        if ($t) { if ($remarks) { $remarks += ""`n`n"" }; $remarks += $t }
+        if ($t) { if ($remarks) { $remarks += ""`n`n"" }; $remarks += $t }      
       }
 
       $examples += [ordered]@{
@@ -433,14 +458,18 @@ try {
     }
 
     $descMain = ''
-    foreach ($d in @($help.Description)) {
+    $helpDescriptions = @()
+    try { if ($help -and $help.Description) { $helpDescriptions = @($help.Description) } } catch { $helpDescriptions = @() }
+    foreach ($d in $helpDescriptions) {
       $t = (GetText $d).Trim()
-      if ($t) { if ($descMain) { $descMain += ""`n`n"" }; $descMain += $t }
+      if ($t) { if ($descMain) { $descMain += ""`n`n"" }; $descMain += $t }     
     }
 
     $inputs = @()
     try {
-      foreach ($it in @($help.InputTypes.InputType)) {
+      $helpInputTypes = @()
+      try { if ($help -and $help.InputTypes -and $help.InputTypes.InputType) { $helpInputTypes = @($help.InputTypes.InputType) } } catch { $helpInputTypes = @() }
+      foreach ($it in $helpInputTypes) {
         $typeName = ''
         try { $typeName = [string]$it.Type.Name } catch { $typeName = '' }
         if (-not $typeName) { try { $typeName = [string]$it.Type } catch { $typeName = '' } }
@@ -459,7 +488,9 @@ try {
 
     $outputs = @()
     try {
-      foreach ($rv in @($help.ReturnValues.ReturnValue)) {
+      $helpReturnValues = @()
+      try { if ($help -and $help.ReturnValues -and $help.ReturnValues.ReturnValue) { $helpReturnValues = @($help.ReturnValues.ReturnValue) } } catch { $helpReturnValues = @() }
+      foreach ($rv in $helpReturnValues) {
         $typeName = ''
         try { $typeName = [string]$rv.Type.Name } catch { $typeName = '' }
         if (-not $typeName) { try { $typeName = [string]$rv.Type } catch { $typeName = '' } }
@@ -478,7 +509,9 @@ try {
 
     $links = @()
     try {
-      foreach ($l in @($help.RelatedLinks.NavigationLink)) {
+      $helpLinks = @()
+      try { if ($help -and $help.RelatedLinks -and $help.RelatedLinks.NavigationLink) { $helpLinks = @($help.RelatedLinks.NavigationLink) } } catch { $helpLinks = @() }
+      foreach ($l in $helpLinks) {
         $text = ''
         $uri = ''
         try { $text = (GetText $l.LinkText).Trim() } catch { $text = '' }
@@ -492,6 +525,8 @@ try {
     $result.commands += [ordered]@{
       name = [string]$c.Name
       commandType = [string]$c.CommandType
+      implementingType = $implType
+      assemblyPath = $dllPath
       defaultParameterSet = if ($defaultSet) { [string]$defaultSet } else { $null }
       synopsis = if ($help -and $help.Synopsis) { [string]$help.Synopsis } else { '' }
       description = $descMain
