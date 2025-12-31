@@ -50,8 +50,26 @@ public sealed class BuildDocumentationConfiguration
     /// <summary>Run a post-update step after generating new docs.</summary>
     public bool UpdateWhenNew { get; set; }
 
+    /// <summary>
+    /// When enabled, also syncs the generated external help file back to the project root
+    /// (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>) during <c>UpdateWhenNew</c>.
+    /// By default, external help is generated in staging and included in artefacts, but not copied into the project.
+    /// </summary>
+    public bool SyncExternalHelpToProjectRoot { get; set; }
+
     /// <summary>Documentation tool selection.</summary>
     public DocumentationTool Tool { get; set; } = DocumentationTool.PowerForge;
+
+    /// <summary>
+    /// When enabled, converts <c>about_*.help.txt</c> / <c>about_*.txt</c> topic files found in the module
+    /// into markdown pages under <c>Docs/About</c>.
+    /// </summary>
+    public bool IncludeAboutTopics { get; set; } = true;
+
+    /// <summary>
+    /// When enabled, generates basic example blocks for cmdlets missing examples in help metadata and XML docs.
+    /// </summary>
+    public bool GenerateFallbackExamples { get; set; } = true;
 
     /// <summary>
     /// When enabled, generates external help in MAML XML format (for Get-Help) under a culture folder (default: <c>en-US</c>).
