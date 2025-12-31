@@ -97,7 +97,11 @@ public sealed class ArtefactBuilder
         {
             foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
             {
-                var depEntry = SaveRequiredModuleToFolder(rm, requiredRoot);
+                var depEntry = SaveRequiredModuleToFolder(
+                    rm,
+                    requiredRoot,
+                    cfg.RequiredModules.Repository,
+                    cfg.RequiredModules.Credential);
                 modules.Add(depEntry);
             }
         }
@@ -151,7 +155,11 @@ public sealed class ArtefactBuilder
             {
                 foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
                 {
-                    var depEntry = SaveRequiredModuleToFolder(rm, tempRoot);
+                    var depEntry = SaveRequiredModuleToFolder(
+                        rm,
+                        tempRoot,
+                        cfg.RequiredModules.Repository,
+                        cfg.RequiredModules.Credential);
                     modules.Add(depEntry);
                 }
             }
@@ -176,7 +184,11 @@ public sealed class ArtefactBuilder
         return new ArtefactBuildResult(ArtefactType.Packed, cfg.ID, zipPath, modules.ToArray(), copied.ToArray());
     }
 
-    private ArtefactModuleEntry SaveRequiredModuleToFolder(ManifestEditor.RequiredModule requiredModule, string destinationRoot)
+    private ArtefactModuleEntry SaveRequiredModuleToFolder(
+        ManifestEditor.RequiredModule requiredModule,
+        string destinationRoot,
+        string? repository,
+        RepositoryCredential? credential)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
         if (string.IsNullOrWhiteSpace(requiredModule.ModuleName))
@@ -204,10 +216,10 @@ public sealed class ArtefactBuilder
                 destinationPath: tempRoot,
                 minimumVersion: minimumVersionArgument,
                 requiredVersion: requiredVersionArgument,
-                repository: null,
+                repository: repository,
                 prerelease: false,
                 acceptLicense: true,
-                credential: null);
+                credential: credential);
 
             if (_skipPsResourceGetSave)
             {
@@ -215,16 +227,17 @@ public sealed class ArtefactBuilder
             }
             else
             {
-                var psrg = new PSResourceGetClient(runner, _logger);
+                var psrg = new PSResourceGetClient(runner, _logger);      
                 var psrgOpts = new PSResourceSaveOptions(
                     name: name,
                     destinationPath: tempRoot,
                     version: versionArgument,
-                    repository: null,
+                    repository: repository,
                     prerelease: false,
                     trustRepository: true,
                     skipDependencyCheck: true,
-                    acceptLicense: true);
+                    acceptLicense: true,
+                    credential: credential);
 
                 try
                 {

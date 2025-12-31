@@ -143,6 +143,10 @@ public sealed class PSResourceInstallOptions
     public bool TrustRepository { get; }
     /// <summary>Whether to skip dependency checks.</summary>
     public bool SkipDependencyCheck { get; }
+    /// <summary>Whether to accept license prompts.</summary>
+    public bool AcceptLicense { get; }
+    /// <summary>Whether to suppress non-essential output.</summary>
+    public bool Quiet { get; }
     /// <summary>Optional credential used for repository access.</summary>
     public RepositoryCredential? Credential { get; }
 
@@ -158,6 +162,8 @@ public sealed class PSResourceInstallOptions
         bool reinstall = false,
         bool trustRepository = true,
         bool skipDependencyCheck = false,
+        bool acceptLicense = true,
+        bool quiet = true,
         RepositoryCredential? credential = null)
     {
         Name = name;
@@ -168,6 +174,8 @@ public sealed class PSResourceInstallOptions
         Reinstall = reinstall;
         TrustRepository = trustRepository;
         SkipDependencyCheck = skipDependencyCheck;
+        AcceptLicense = acceptLicense;
+        Quiet = quiet;
         Credential = credential;
     }
 }
@@ -193,6 +201,8 @@ public sealed class PSResourceSaveOptions
     public bool SkipDependencyCheck { get; }
     /// <summary>Whether to accept license prompts.</summary>
     public bool AcceptLicense { get; }
+    /// <summary>Whether to suppress non-essential output.</summary>
+    public bool Quiet { get; }
     /// <summary>Optional credential used for repository access.</summary>
     public RepositoryCredential? Credential { get; }
 
@@ -208,6 +218,7 @@ public sealed class PSResourceSaveOptions
         bool trustRepository = true,
         bool skipDependencyCheck = true,
         bool acceptLicense = true,
+        bool quiet = true,
         RepositoryCredential? credential = null)
     {
         Name = name;
@@ -218,6 +229,7 @@ public sealed class PSResourceSaveOptions
         TrustRepository = trustRepository;
         SkipDependencyCheck = skipDependencyCheck;
         AcceptLicense = acceptLicense;
+        Quiet = quiet;
         Credential = credential;
     }
 }
@@ -258,6 +270,14 @@ public sealed partial class PSResourceGetClient
             .Select(r => r.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+        // IMPORTANT:
+        // When no repository is specified, PSResourceGet may enumerate all registered repositories
+        // and attempt to resolve CredentialInfo from SecretManagement/SecretStore. If SecretStore is
+        // locked, this causes Find-PSResource/Save-PSResource/Install-PSResource to fail even for
+        // public PSGallery operations. Default to PSGallery to keep builds non-interactive.
+        if (repos.Length == 0)
+            repos = new[] { "PSGallery" };
 
         var script = BuildFindScript();
         var args = new List<string>(6)
@@ -333,16 +353,19 @@ public sealed partial class PSResourceGetClient
         if (string.IsNullOrWhiteSpace(options.Name)) throw new ArgumentException("Name is required.", nameof(options));
 
         var script = BuildInstallScript();
-        var args = new List<string>(10)
+        var repository = string.IsNullOrWhiteSpace(options.Repository) ? "PSGallery" : options.Repository!.Trim();
+        var args = new List<string>(12)
         {
             options.Name,
             options.Version ?? string.Empty,
-            options.Repository ?? string.Empty,
+            repository,
             options.Scope ?? string.Empty,
             options.Prerelease ? "1" : "0",
             options.Reinstall ? "1" : "0",
             options.TrustRepository ? "1" : "0",
             options.SkipDependencyCheck ? "1" : "0",
+            options.AcceptLicense ? "1" : "0",
+            options.Quiet ? "1" : "0",
             options.Credential?.UserName ?? string.Empty,
             options.Credential?.Secret ?? string.Empty
         };
@@ -376,16 +399,18 @@ public sealed partial class PSResourceGetClient
         Directory.CreateDirectory(dest);
 
         var script = BuildSaveScript();
-        var args = new List<string>(10)
+        var repository = string.IsNullOrWhiteSpace(options.Repository) ? "PSGallery" : options.Repository!.Trim();
+        var args = new List<string>(11)
         {
             options.Name,
             options.Version ?? string.Empty,
-            options.Repository ?? string.Empty,
+            repository,
             dest,
             options.Prerelease ? "1" : "0",
             options.TrustRepository ? "1" : "0",
             options.SkipDependencyCheck ? "1" : "0",
             options.AcceptLicense ? "1" : "0",
+            options.Quiet ? "1" : "0",
             options.Credential?.UserName ?? string.Empty,
             options.Credential?.Secret ?? string.Empty
         };
@@ -621,6 +646,8 @@ param(
   [string]$ReinstallFlag,
   [string]$TrustRepositoryFlag,
   [string]$SkipDependencyFlag,
+  [string]$AcceptLicenseFlag,
+  [string]$QuietFlag,
   [string]$CredentialUser,
   [string]$CredentialSecret
 )
@@ -643,8 +670,10 @@ if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repo
 if (-not [string]::IsNullOrWhiteSpace($Scope)) { $params.Scope = $Scope }
 if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
 if ($ReinstallFlag -eq '1') { $params.Reinstall = $true }
-if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }
-if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
+if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }     
+if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }  
+if ($AcceptLicenseFlag -eq '1') { $params.AcceptLicense = $true }
+if ($QuietFlag -eq '1') { $params.Quiet = $true }
 if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
   $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
   $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
@@ -675,6 +704,7 @@ param(
   [string]$TrustRepositoryFlag,
   [string]$SkipDependencyFlag,
   [string]$AcceptLicenseFlag,
+  [string]$QuietFlag,
   [string]$CredentialUser,
   [string]$CredentialSecret
 )
@@ -696,9 +726,10 @@ $params.Path = $Path
 if (-not [string]::IsNullOrWhiteSpace($Version)) { $params.Version = $Version }
 if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
 if ($PrereleaseFlag -eq '1') { $params.Prerelease = $true }
-if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }
-if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }
+if ($TrustRepositoryFlag -eq '1') { $params.TrustRepository = $true }     
+if ($SkipDependencyFlag -eq '1') { $params.SkipDependencyCheck = $true }  
 if ($AcceptLicenseFlag -eq '1') { $params.AcceptLicense = $true }
+if ($QuietFlag -eq '1') { $params.Quiet = $true }
 if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
   $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
   $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)

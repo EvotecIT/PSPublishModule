@@ -31,6 +31,7 @@ public sealed class ModuleDependencyInstaller
         IEnumerable<string>? skipModules = null,
         bool force = false,
         string? repository = null,
+        RepositoryCredential? credential = null,
         bool prerelease = false,
         TimeSpan? timeoutPerModule = null)
     {
@@ -74,7 +75,7 @@ public sealed class ModuleDependencyInstaller
             try
             {
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, decision.VersionArgument, repository, prerelease, force, perModuleTimeout);
+                var usedInstaller = TryInstall(dep, decision.VersionArgument, repository, credential, prerelease, force, perModuleTimeout);
                 actions.Add(new ActionItem(dep.Name, installedBefore, decision.RequestedVersion, installStatus, installer: usedInstaller, message: decision.Reason));
             }
             catch (Exception ex)
@@ -157,7 +158,14 @@ public sealed class ModuleDependencyInstaller
         return new Decision(needsInstall: false, requestedVersion: dep.MinimumVersion, versionArgument: BuildVersionArgument(dep), reason: "Version requirements satisfied");
     }
 
-    private string TryInstall(ModuleDependency dep, string? versionArgument, string? repository, bool prerelease, bool force, TimeSpan timeout)
+    private string TryInstall(
+        ModuleDependency dep,
+        string? versionArgument,
+        string? repository,
+        RepositoryCredential? credential,
+        bool prerelease,
+        bool force,
+        TimeSpan timeout)
     {
         // Prefer PSResourceGet (out-of-process).
         try
@@ -171,27 +179,32 @@ public sealed class ModuleDependencyInstaller
                 prerelease: prerelease,
                 reinstall: force,
                 trustRepository: true,
-                skipDependencyCheck: false);
+                skipDependencyCheck: false,
+                acceptLicense: true,
+                quiet: true,
+                credential: credential);
             client.Install(opts, timeout);
             return "PSResourceGet";
         }
         catch (PowerShellToolNotAvailableException)
         {
             _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'.");
-            InstallWithPowerShellGet(dep, repository, timeout);
+            InstallWithPowerShellGet(dep, repository, credential, timeout);
             return "PowerShellGet";
         }
     }
 
-    private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, TimeSpan timeout)
+    private void InstallWithPowerShellGet(ModuleDependency dep, string? repository, RepositoryCredential? credential, TimeSpan timeout)
     {
         var script = BuildInstallModuleScript();
-        var args = new List<string>(4)
+        var args = new List<string>(6)
         {
             dep.Name,
             dep.RequiredVersion ?? string.Empty,
             dep.MinimumVersion ?? string.Empty,
-            repository ?? string.Empty
+            repository ?? string.Empty,
+            credential?.UserName ?? string.Empty,
+            credential?.Secret ?? string.Empty
         };
         var result = RunScript(script, args, timeout);
         if (result.ExitCode != 0)
@@ -364,7 +377,9 @@ param(
   [string]$Name,
   [string]$RequiredVersion,
   [string]$MinimumVersion,
-  [string]$Repository
+  [string]$Repository,
+  [string]$CredentialUser,
+  [string]$CredentialSecret
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -380,10 +395,15 @@ try {
     ErrorAction = 'Stop'
     SkipPublisherCheck = $true
     Scope = 'CurrentUser'
+    AcceptLicense = $true
   }
   if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
   if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
   elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
+  if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
+    $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
+    $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
+  }
 
   Install-Module @params | Out-Null
   Write-Output 'PFMOD::INSTALL::OK'

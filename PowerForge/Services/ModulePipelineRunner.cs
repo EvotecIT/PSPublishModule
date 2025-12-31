@@ -76,6 +76,7 @@ public sealed class ModulePipelineRunner
 
         InformationConfiguration? information = null;
         DocumentationConfiguration? documentation = null;
+        DeliveryOptionsConfiguration? delivery = null;
         BuildDocumentationConfiguration? documentationBuild = null;
         CompatibilitySettings? compatibilitySettings = null;
         FileConsistencySettings? fileConsistencySettings = null;
@@ -158,6 +159,13 @@ public sealed class ModulePipelineRunner
                             requiredModulesDraftForPackaging.Add(draft);
                         }
                     }
+                    break;
+                }
+                case ConfigurationOptionsSegment optionsSegment:
+                {
+                    var opts = optionsSegment.Options ?? new ConfigurationOptions();
+                    if (opts.Delivery is not null && opts.Delivery.Enable)
+                        delivery = opts.Delivery;
                     break;
                 }
                 case ConfigurationInformationSegment info:
@@ -310,6 +318,7 @@ public sealed class ModulePipelineRunner
             requiredModulesForPackaging: requiredModulesForPackaging,
             information: information,
             documentation: documentation,
+            delivery: delivery,
             documentationBuild: documentationBuild,
             compatibilitySettings: compatibilitySettings,
             fileConsistencySettings: fileConsistencySettings,
@@ -423,6 +432,36 @@ public sealed class ModulePipelineRunner
 
             if (!string.IsNullOrWhiteSpace(plan.PreRelease))
                 ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+
+            if (plan.Delivery is not null && plan.Delivery.Enable)
+            {
+                ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
+
+                if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
+                {
+                    var generator = new DeliveryCommandGenerator(_logger);
+                    var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery);
+
+                    if (generated.Length > 0)
+                    {
+                        try
+                        {
+                            var publicFolder = Path.Combine(buildResult.StagingPath, "Public");
+                            if (Directory.Exists(publicFolder))
+                            {
+                                var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
+                                var functions = ExportDetector.DetectScriptFunctions(scripts);
+                                BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Warn($"Failed to update manifest exports after generating delivery commands. Error: {ex.Message}");
+                            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+                        }
+                    }
+                }
+            }
 
             SafeDone(manifestStep);
         }
@@ -1419,5 +1458,62 @@ exit 0
     {
         if (value < min) return min;
         return value > max ? max : value;
+    }
+
+    private static void ApplyDeliveryMetadata(string manifestPath, DeliveryOptionsConfiguration delivery)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath)) return;
+        if (delivery is null || !delivery.Enable) return;
+
+        try
+        {
+            var internals = string.IsNullOrWhiteSpace(delivery.InternalsPath) ? "Internals" : delivery.InternalsPath.Trim();
+            ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "Schema", delivery.Schema ?? "1.3");
+            ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "InternalsPath", internals);
+
+            if (!string.IsNullOrWhiteSpace(delivery.IntroFile))
+                ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "IntroFile", delivery.IntroFile!.Trim());
+            if (!string.IsNullOrWhiteSpace(delivery.UpgradeFile))
+                ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "UpgradeFile", delivery.UpgradeFile!.Trim());
+
+            if (delivery.DocumentationOrder is { Length: > 0 })
+            {
+                var ordered = delivery.DocumentationOrder
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s.Trim())
+                    .ToArray();
+                if (ordered.Length > 0)
+                    ManifestEditor.TrySetPsDataSubStringArray(manifestPath, "Delivery", "DocumentationOrder", ordered);
+            }
+
+            if (delivery.RepositoryPaths is { Length: > 0 } || !string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
+            {
+                BuildServices.SetRepository(
+                    manifestPath,
+                    branch: string.IsNullOrWhiteSpace(delivery.RepositoryBranch) ? null : delivery.RepositoryBranch!.Trim(),
+                    paths: delivery.RepositoryPaths);
+            }
+
+            BuildServices.SetDeliveryTexts(manifestPath, delivery.IntroText, delivery.UpgradeText);
+
+            if (delivery.ImportantLinks is { Length: > 0 })
+            {
+                var items = delivery.ImportantLinks
+                    .Where(l => l is not null && !string.IsNullOrWhiteSpace(l.Title) && !string.IsNullOrWhiteSpace(l.Url))
+                    .Select(l => new Dictionary<string, string>
+                    {
+                        ["Title"] = l.Title.Trim(),
+                        ["Url"] = l.Url.Trim()
+                    })
+                    .ToArray();
+
+                if (items.Length > 0)
+                    ManifestEditor.TrySetPsDataSubHashtableArray(manifestPath, "Delivery", "ImportantLinks", items);
+            }
+        }
+        catch
+        {
+            // Best-effort: do not throw in the build pipeline for delivery metadata.
+        }
     }
 }
