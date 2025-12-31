@@ -76,6 +76,11 @@ public sealed class ModulePipelinePlan
     public FileConsistencySettings? FileConsistencySettings { get; }
 
     /// <summary>
+    /// Optional formatting configuration.
+    /// </summary>
+    public ConfigurationFormattingSegment? Formatting { get; }
+
+    /// <summary>
     /// Publish configuration segments enabled for this pipeline run.
     /// </summary>
     public ConfigurationPublishSegment[] Publishes { get; }
@@ -133,6 +138,7 @@ public sealed class ModulePipelinePlan
         BuildDocumentationConfiguration? documentationBuild,
         CompatibilitySettings? compatibilitySettings,
         FileConsistencySettings? fileConsistencySettings,
+        ConfigurationFormattingSegment? formatting,
         ConfigurationPublishSegment[] publishes,
         ConfigurationArtefactSegment[] artefacts,
         bool installEnabled,
@@ -156,6 +162,7 @@ public sealed class ModulePipelinePlan
         DocumentationBuild = documentationBuild;
         CompatibilitySettings = compatibilitySettings;
         FileConsistencySettings = fileConsistencySettings;
+        Formatting = formatting;
         Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();    
         Artefacts = artefacts;
         InstallEnabled = installEnabled;

@@ -22,6 +22,11 @@ public sealed class FormattingOptions
 
     /// <summary>Formatting settings applied to standard (non-merge) files.</summary>
     public FormattingTargetOptions Standard { get; set; } = new();
+
+    /// <summary>
+    /// When true, formats PowerShell sources in the project root in addition to staging output.
+    /// </summary>
+    public bool UpdateProjectRoot { get; set; }
 }
 
 /// <summary>
@@ -200,4 +205,3 @@ public sealed class AlignAssignmentRuleOptions : EnableOnlyRuleOptions
     /// <summary>Check hashtables for alignment.</summary>
     public bool CheckHashtable { get; set; }
 }
-

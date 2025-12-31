@@ -46,9 +46,39 @@ public sealed class ModulePipelineResult
     public ProjectConversionResult? FileConsistencyLineEndingFix { get; }
 
     /// <summary>
+    /// Project-root file consistency report when enabled; otherwise null.
+    /// </summary>
+    public ProjectConsistencyReport? ProjectRootFileConsistencyReport { get; }
+
+    /// <summary>
+    /// Project-root file consistency status computed by the pipeline (pass/warn/fail).
+    /// </summary>
+    public CheckStatus? ProjectRootFileConsistencyStatus { get; }
+
+    /// <summary>
+    /// Project-root encoding conversion result when AutoFix was enabled; otherwise null.
+    /// </summary>
+    public ProjectConversionResult? ProjectRootFileConsistencyEncodingFix { get; }
+
+    /// <summary>
+    /// Project-root line ending conversion result when AutoFix was enabled; otherwise null.
+    /// </summary>
+    public ProjectConversionResult? ProjectRootFileConsistencyLineEndingFix { get; }
+
+    /// <summary>
     /// Compatibility report when enabled; otherwise null.
     /// </summary>
     public PowerShellCompatibilityReport? CompatibilityReport { get; }
+
+    /// <summary>
+    /// Formatting results for the staging output (empty when formatting was disabled).
+    /// </summary>
+    public FormatterResult[] FormattingStagingResults { get; }
+
+    /// <summary>
+    /// Formatting results for the project root (empty when formatting was disabled).
+    /// </summary>
+    public FormatterResult[] FormattingProjectResults { get; }
 
     /// <summary>
     /// Publish results produced during the run.
@@ -74,7 +104,13 @@ public sealed class ModulePipelineResult
         ProjectConversionResult? fileConsistencyLineEndingFix,
         PowerShellCompatibilityReport? compatibilityReport,
         ModulePublishResult[] publishResults,
-        ArtefactBuildResult[] artefactResults)
+        ArtefactBuildResult[] artefactResults,
+        FormatterResult[]? formattingStagingResults = null,
+        FormatterResult[]? formattingProjectResults = null,
+        ProjectConsistencyReport? projectRootFileConsistencyReport = null,
+        CheckStatus? projectRootFileConsistencyStatus = null,
+        ProjectConversionResult? projectRootFileConsistencyEncodingFix = null,
+        ProjectConversionResult? projectRootFileConsistencyLineEndingFix = null)
     {
         Plan = plan;
         BuildResult = buildResult;
@@ -84,8 +120,14 @@ public sealed class ModulePipelineResult
         FileConsistencyStatus = fileConsistencyStatus;
         FileConsistencyEncodingFix = fileConsistencyEncodingFix;
         FileConsistencyLineEndingFix = fileConsistencyLineEndingFix;
+        ProjectRootFileConsistencyReport = projectRootFileConsistencyReport;
+        ProjectRootFileConsistencyStatus = projectRootFileConsistencyStatus;
+        ProjectRootFileConsistencyEncodingFix = projectRootFileConsistencyEncodingFix;
+        ProjectRootFileConsistencyLineEndingFix = projectRootFileConsistencyLineEndingFix;
         CompatibilityReport = compatibilityReport;
-        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
+        FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
+        FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
+        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
     }
 }

@@ -9,6 +9,8 @@ public enum ModulePipelineStepKind
     Build = 0,
     /// <summary>Generate documentation (markdown + external help).</summary>
     Documentation = 1,
+    /// <summary>Format PowerShell sources.</summary>
+    Formatting = 7,
     /// <summary>Run validation checks (compatibility, consistency).</summary>
     Validation = 6,
     /// <summary>Create an artefact output (packed/unpacked).</summary>
@@ -101,13 +103,38 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 3) Validation checks (after build/docs, before packaging/publish/install).
+        // 3) Formatting (after build/docs, before validation/packaging).
+        if (plan.Formatting is not null)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Formatting,
+                key: "format:staging",
+                title: "Format PowerShell"));
+
+            if (plan.Formatting.Options.UpdateProjectRoot)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Formatting,
+                    key: "format:project",
+                    title: "Format PowerShell (project)"));
+            }
+        }
+
+        // 4) Validation checks (after build/docs/formatting, before packaging/publish/install).
         if (plan.FileConsistencySettings?.Enable == true)
         {
             steps.Add(new ModulePipelineStep(
                 kind: ModulePipelineStepKind.Validation,
                 key: "validate:fileconsistency",
                 title: "Check file consistency"));
+
+            if (plan.FileConsistencySettings.UpdateProjectRoot)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Validation,
+                    key: "validate:fileconsistency-project",
+                    title: "Check file consistency (project)"));
+            }
         }
 
         if (plan.CompatibilitySettings?.Enable == true)
@@ -118,7 +145,7 @@ public sealed class ModulePipelineStep
                 title: "Check PowerShell compatibility"));
         }
 
-        // 4) Artefacts
+        // 5) Artefacts
         if (plan.Artefacts is { Length: > 0 })
         {
             for (int i = 0; i < plan.Artefacts.Length; i++)
@@ -139,7 +166,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 5) Publishes
+        // 6) Publishes
         if (plan.Publishes is { Length: > 0 })
         {
             for (int i = 0; i < plan.Publishes.Length; i++)
@@ -164,7 +191,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 6) Install
+        // 7) Install
         if (plan.InstallEnabled)
         {
             steps.Add(new ModulePipelineStep(
@@ -173,7 +200,7 @@ public sealed class ModulePipelineStep
                 title: $"Install ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})"));
         }
 
-        // 7) Cleanup staging
+        // 8) Cleanup staging
         if (plan.DeleteGeneratedStagingAfterRun)
         {
             steps.Add(new ModulePipelineStep(

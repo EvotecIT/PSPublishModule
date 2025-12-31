@@ -11,6 +11,11 @@ public sealed class DotNetPublishResult
     /// <summary>Optional failure message.</summary>
     public string? ErrorMessage { get; set; }
 
+    /// <summary>
+    /// Optional failure details, including output tail and log file path.
+    /// </summary>
+    public DotNetPublishFailure? Failure { get; set; }
+
     /// <summary>Published artefacts.</summary>
     public DotNetPublishArtefactResult[] Artefacts { get; set; } = Array.Empty<DotNetPublishArtefactResult>();
 
@@ -19,6 +24,45 @@ public sealed class DotNetPublishResult
 
     /// <summary>Path to the text manifest written by the pipeline (when enabled).</summary>
     public string? ManifestTextPath { get; set; }
+}
+
+/// <summary>
+/// Failure details for a dotnet publish run.
+/// </summary>
+public sealed class DotNetPublishFailure
+{
+    /// <summary>Failed step key.</summary>
+    public string StepKey { get; set; } = string.Empty;
+
+    /// <summary>Failed step kind.</summary>
+    public DotNetPublishStepKind StepKind { get; set; }
+
+    /// <summary>Optional target name associated with the failure.</summary>    
+    public string? TargetName { get; set; }
+
+    /// <summary>Optional target framework associated with the failure.</summary>
+    public string? Framework { get; set; }
+
+    /// <summary>Optional runtime identifier associated with the failure.</summary>
+    public string? Runtime { get; set; }
+
+    /// <summary>Exit code of the failed process.</summary>
+    public int ExitCode { get; set; }
+
+    /// <summary>Command line used for the failed process.</summary>
+    public string CommandLine { get; set; } = string.Empty;
+
+    /// <summary>Working directory used for the failed process.</summary>
+    public string WorkingDirectory { get; set; } = string.Empty;
+
+    /// <summary>Tail of the captured standard output.</summary>
+    public string? StdOutTail { get; set; }
+
+    /// <summary>Tail of the captured standard error.</summary>
+    public string? StdErrTail { get; set; }
+
+    /// <summary>Path to a detailed log file (when written).</summary>
+    public string? LogPath { get; set; }
 }
 
 /// <summary>
@@ -80,4 +124,3 @@ public sealed class DotNetPublishCleanupResult
     /// <summary>True when the ref/ directory was removed.</summary>
     public bool RefPruned { get; set; }
 }
-

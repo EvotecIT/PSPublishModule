@@ -29,9 +29,15 @@ public sealed class DotNetPublishPublishOptions
     public DotNetPublishStyle Style { get; set; } = DotNetPublishStyle.Portable;
 
     /// <summary>
-    /// Target framework to publish (e.g. net10.0, net10.0-windows).
+    /// Target framework to publish (e.g. net10.0, net10.0-windows).      
     /// </summary>
     public string Framework { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional target frameworks to publish (e.g. net10.0, net10.0-windows).
+    /// When provided and non-empty, this takes precedence over <see cref="Framework"/>.
+    /// </summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
 
     /// <summary>
     /// Runtime identifiers to publish for. When omitted/empty, uses <see cref="DotNetPublishDotNetOptions.Runtimes"/>.
@@ -40,7 +46,7 @@ public sealed class DotNetPublishPublishOptions
 
     /// <summary>
     /// Optional output path template. Supports tokens: {target}, {rid}, {framework}, {style}, {configuration}.
-    /// When omitted, defaults to <c>Artifacts/DotNetPublish/{target}/{rid}/{style}</c>.
+    /// When omitted, defaults to <c>Artifacts/DotNetPublish/{target}/{rid}/{framework}/{style}</c>.
     /// </summary>
     public string? OutputPath { get; set; }
 
@@ -139,4 +145,3 @@ public sealed class DotNetPublishSignOptions
     /// <summary>Optional key container name (signtool /kc).</summary>
     public string? KeyContainer { get; set; }
 }
-

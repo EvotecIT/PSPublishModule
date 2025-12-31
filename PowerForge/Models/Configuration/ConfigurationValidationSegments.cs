@@ -86,6 +86,11 @@ public sealed class FileConsistencySettings
     /// <summary>Directory names to exclude from consistency analysis.</summary>
     public string[] ExcludeDirectories { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// When true, applies consistency checks (and optional AutoFix) to the project root as well as staging output.
+    /// </summary>
+    public bool UpdateProjectRoot { get; set; }
+
     /// <summary>Export detailed consistency report to the artifacts directory.</summary>
     public bool ExportReport { get; set; }
 
@@ -98,4 +103,3 @@ public sealed class FileConsistencySettings
     /// <summary>Check for files missing final newlines.</summary>
     public bool CheckMissingFinalNewline { get; set; }
 }
-

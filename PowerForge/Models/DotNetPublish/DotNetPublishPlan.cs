@@ -77,7 +77,9 @@ public sealed class DotNetPublishStep
     /// <summary>Optional target name for publish steps.</summary>
     public string? TargetName { get; set; }
 
-    /// <summary>Optional runtime identifier for publish steps.</summary>
+    /// <summary>Optional target framework for publish steps.</summary>
+    public string? Framework { get; set; }
+
+    /// <summary>Optional runtime identifier for publish steps.</summary>       
     public string? Runtime { get; set; }
 }
-
