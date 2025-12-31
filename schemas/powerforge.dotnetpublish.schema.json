@@ -44,7 +44,8 @@
       "additionalProperties": false,
       "properties": {
         "Style": { "$ref": "#/$defs/DotNetPublishStyle" },
-        "Framework": { "type": "string" },
+        "Framework": { "type": "string", "minLength": 1 },
+        "Frameworks": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
         "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
         "OutputPath": { "type": ["string", "null"] },
         "UseStaging": { "type": "boolean" },
@@ -60,7 +61,10 @@
         "ReadyToRun": { "type": ["boolean", "null"] },
         "Sign": { "anyOf": [{ "$ref": "#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] }
       },
-      "required": ["Framework"]
+      "anyOf": [
+        { "required": ["Framework"] },
+        { "required": ["Frameworks"] }
+      ]
     },
     "DotNetPublishTarget": {
       "type": "object",
@@ -102,4 +106,3 @@
     }
   }
 }
-

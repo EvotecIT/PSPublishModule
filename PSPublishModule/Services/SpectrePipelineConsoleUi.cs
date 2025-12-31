@@ -33,10 +33,10 @@ internal static class SpectrePipelineConsoleUi
         int vw = 120;
         try { vw = Math.Max(60, Console.WindowWidth); } catch { }
 
-        bool includeBar = vw >= 120;
         bool includeElapsed = vw >= 100;
 
-        int barWidth = includeBar ? (vw >= 160 ? 40 : vw >= 140 ? 30 : 18) : 0;
+        int barWidth = ComputeBarWidth(vw);
+        bool includeBar = barWidth > 0;
         int percentWidth = 5;
         int elapsedWidth = includeElapsed ? 5 : 0;
         int spinnerWidth = 2;
@@ -81,6 +81,16 @@ internal static class SpectrePipelineConsoleUi
             });
 
         return result!;
+    }
+
+    private static int ComputeBarWidth(int viewportWidth)
+    {
+        if (viewportWidth >= 160) return 40;
+        if (viewportWidth >= 140) return 30;
+        if (viewportWidth >= 120) return 18;
+        if (viewportWidth >= 100) return 14;
+        if (viewportWidth >= 80) return 12;
+        return 10;
     }
 
     public static void WriteSummary(ModulePipelineResult res)
@@ -152,6 +162,21 @@ internal static class SpectrePipelineConsoleUi
             table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
         }
 
+        if (res.ProjectRootFileConsistencyReport is not null)
+        {
+            var status = res.ProjectRootFileConsistencyStatus ?? CheckStatus.Warning;
+            var total = res.ProjectRootFileConsistencyReport.Summary.TotalFiles;
+            var issues = CountIssues(res.ProjectRootFileConsistencyReport, res.Plan.FileConsistencySettings);
+            var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+            table.AddRow(
+                $"{(unicode ? "🔎" : "*")} File consistency (project)",
+                $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+        }
+        else if (res.Plan.FileConsistencySettings?.Enable == true && res.Plan.FileConsistencySettings.UpdateProjectRoot)
+        {
+            table.AddRow($"{(unicode ? "🔎" : "*")} File consistency (project)", "[grey]Disabled[/]");
+        }
+
         if (res.CompatibilityReport is not null)
         {
             var s = res.CompatibilityReport.Summary;
@@ -162,6 +187,35 @@ internal static class SpectrePipelineConsoleUi
         else
         {
             table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+        }
+
+        if (res.FormattingStagingResults is { Length: > 0 } || res.FormattingProjectResults is { Length: > 0 })
+        {
+            static string FormatCount(int changed, int total, string label)
+            {
+                var c = changed > 0 ? $"[green]{changed}[/]" : "[grey]0[/]";
+                return $"{label} {c}[grey]/{total}[/]";
+            }
+
+            var parts = new List<string>(2);
+            if (res.FormattingStagingResults is { Length: > 0 })
+            {
+                var total = res.FormattingStagingResults.Length;
+                var changed = res.FormattingStagingResults.Count(r => r.Changed);
+                parts.Add(FormatCount(changed, total, "staging"));
+            }
+            if (res.FormattingProjectResults is { Length: > 0 })
+            {
+                var total = res.FormattingProjectResults.Length;
+                var changed = res.FormattingProjectResults.Count(r => r.Changed);
+                parts.Add(FormatCount(changed, total, "project"));
+            }
+
+            table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", string.Join(", ", parts));
+        }
+        else
+        {
+            table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", "[grey]Disabled[/]");
         }
 
         if (res.ArtefactResults is { Length: > 0 })
@@ -288,6 +342,7 @@ internal static class SpectrePipelineConsoleUi
         {
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
             ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
+            ModulePipelineStepKind.Formatting => unicode ? "[mediumpurple3]🎨[/]" : "[mediumpurple3]FM[/]",
             ModulePipelineStepKind.Validation => unicode ? "[lightskyblue1]🔎[/]" : "[lightskyblue1]VA[/]",
             ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
             ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",

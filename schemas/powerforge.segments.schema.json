@@ -441,7 +441,8 @@
       "additionalProperties": false,
       "properties": {
         "Merge": { "$ref": "#/$defs/FormattingTargetOptions" },
-        "Standard": { "$ref": "#/$defs/FormattingTargetOptions" }
+        "Standard": { "$ref": "#/$defs/FormattingTargetOptions" },
+        "UpdateProjectRoot": { "type": "boolean" }
       }
     },
 
@@ -473,6 +474,7 @@
         "CreateBackups": { "type": "boolean" },
         "MaxInconsistencyPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
         "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "UpdateProjectRoot": { "type": "boolean" },
         "ExportReport": { "type": "boolean" },
         "ReportFileName": { "type": "string" },
         "CheckMixedLineEndings": { "type": "boolean" },
@@ -747,4 +749,3 @@
     }
   }
 }
-
