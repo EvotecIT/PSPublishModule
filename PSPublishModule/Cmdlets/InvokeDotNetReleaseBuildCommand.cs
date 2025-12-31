@@ -121,14 +121,13 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
         string timeStampServer,
         string[] includePatterns)
     {
-        var module = MyInvocation.MyCommand?.Module;
-        if (module is null) return;
-
         var sb = ScriptBlock.Create(@"
 param($path,$store,$thumb,$ts,$include)
 Register-Certificate -Path $path -LocalStore $store -Thumbprint $thumb -TimeStampServer $ts -Include $include
 ");
-        var bound = module.NewBoundScriptBlock(sb);
-        bound.Invoke(releasePath, store.ToString(), thumbprint, timeStampServer, includePatterns);
+
+        // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
+        // in the binary module context, so we must invoke directly.
+        sb.Invoke(releasePath, store.ToString(), thumbprint, timeStampServer, includePatterns);
     }
 }

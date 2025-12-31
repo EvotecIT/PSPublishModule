@@ -177,26 +177,10 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
             if (entries.Count == 0)
                 return;
 
-            var module = MyInvocation.MyCommand?.Module;
-            if (module is null)
-            {
-                foreach (var e in entries)
-                {
-                    var r = NewResult();
-                    r.TagName = e.TagName;
-                    r.ReleaseName = e.ReleaseName;
-                    r.ZipPath = e.ZipPath;
-                    r.ErrorMessage = "Module context not available.";
-                    WriteObject(r);
-                }
-                return;
-            }
-
             var sb = ScriptBlock.Create(@"
 param($u,$r,$t,$tag,$name,$asset,$pre)
 Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToken $t -TagName $tag -ReleaseName $name -AssetFilePaths $asset -IsPreRelease:$pre
 ");
-            var bound = module.NewBoundScriptBlock(sb);
 
             foreach (var group in entries.GroupBy(e => e.TagName, StringComparer.OrdinalIgnoreCase))
             {
@@ -216,7 +200,9 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                 }
                 else
                 {
-                    var output = bound.Invoke(GitHubUsername, GitHubRepositoryName, GitHubAccessToken, tag, relName, assets, isPreRelease);
+                    // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
+                    // in the binary module context, so we must invoke directly.
+                    var output = sb.Invoke(GitHubUsername, GitHubRepositoryName, GitHubAccessToken, tag, relName, assets, isPreRelease);
                     var status = output.Count > 0 ? output[0]?.BaseObject : null;
 
                     succeeded = false;

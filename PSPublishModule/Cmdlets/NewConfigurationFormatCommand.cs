@@ -45,6 +45,10 @@ public sealed class NewConfigurationFormatCommand : PSCmdlet
     [Parameter]
     public SwitchParameter RemoveCommentsBeforeParamBlock { get; set; }
 
+    /// <summary>When set, formats PowerShell sources in the project root in addition to staging output.</summary>
+    [Parameter]
+    public SwitchParameter UpdateProjectRoot { get; set; }
+
     /// <summary>Enable PSPlaceOpenBrace rule and configure its behavior.</summary>
     [Parameter]
     public SwitchParameter PlaceOpenBraceEnable { get; set; }
@@ -309,6 +313,12 @@ public sealed class NewConfigurationFormatCommand : PSCmdlet
                     options.Standard.Style = new FormattingStyleOptions { PSD1 = PSD1Style };
                 }
             }
+        }
+
+        if (UpdateProjectRoot.IsPresent)
+        {
+            options.UpdateProjectRoot = true;
+            settingsCount++;
         }
 
         if (settingsCount > 0)

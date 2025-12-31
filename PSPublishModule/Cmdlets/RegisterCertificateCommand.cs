@@ -250,12 +250,9 @@ $files |
 
     private ICollection<PSObject> InvokeInModuleScope(ScriptBlock scriptBlock, params object[] args)
     {
-        var module = MyInvocation.MyCommand?.Module;
-        if (module is null)
-            return Array.Empty<PSObject>();
-
-        var bound = module.NewBoundScriptBlock(scriptBlock);
-        return bound.Invoke(args);
+        // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
+        // in the binary module context, so we must invoke directly.
+        return scriptBlock.Invoke(args);
     }
 
     private static bool IsWindows()

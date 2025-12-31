@@ -46,6 +46,9 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
     /// <summary>Check for files missing final newlines.</summary>
     [Parameter] public SwitchParameter CheckMissingFinalNewline { get; set; }
 
+    /// <summary>When set, applies encoding/line-ending consistency fixes to the project root as well as staging output.</summary>
+    [Parameter] public SwitchParameter UpdateProjectRoot { get; set; }
+
     /// <summary>Emits file-consistency configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -59,6 +62,7 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
             CreateBackups = CreateBackups.IsPresent,
             MaxInconsistencyPercentage = MaxInconsistencyPercentage,
             ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
+            UpdateProjectRoot = UpdateProjectRoot.IsPresent,
             ExportReport = ExportReport.IsPresent,
             ReportFileName = ReportFileName,
             CheckMixedLineEndings = CheckMixedLineEndings.IsPresent,
