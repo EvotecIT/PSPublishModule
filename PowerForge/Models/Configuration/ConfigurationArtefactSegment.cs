@@ -76,6 +76,15 @@ public sealed class ArtefactRequiredModulesConfiguration
 
     /// <summary>Path where main module (or required module) will be copied to.</summary>
     public string? ModulesPath { get; set; }
+
+    /// <summary>
+    /// Repository name used when downloading required modules (Save-PSResource / Save-Module).
+    /// When empty, the default PSResourceGet behavior is used (PowerForge defaults to PSGallery).
+    /// </summary>
+    public string? Repository { get; set; }
+
+    /// <summary>Optional credential used for repository access when downloading required modules.</summary>
+    public RepositoryCredential? Credential { get; set; }
 }
 
 /// <summary>
@@ -89,4 +98,3 @@ public sealed class ArtefactCopyMapping
     /// <summary>Destination path.</summary>
     public string Destination { get; set; } = string.Empty;
 }
-

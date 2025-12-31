@@ -56,9 +56,14 @@ public sealed class ModulePipelinePlan
     public InformationConfiguration? Information { get; }
 
     /// <summary>
-    /// Optional documentation configuration (docs folder + readme path).
+    /// Optional documentation configuration (docs folder + readme path).       
     /// </summary>
     public DocumentationConfiguration? Documentation { get; }
+
+    /// <summary>
+    /// Optional delivery metadata configuration (Internals bundle information and generated install/update commands).
+    /// </summary>
+    public DeliveryOptionsConfiguration? Delivery { get; }
 
     /// <summary>
     /// Optional documentation build configuration (enable/clean/tool).
@@ -135,6 +140,7 @@ public sealed class ModulePipelinePlan
         ManifestEditor.RequiredModule[] requiredModulesForPackaging,
         InformationConfiguration? information,
         DocumentationConfiguration? documentation,
+        DeliveryOptionsConfiguration? delivery,
         BuildDocumentationConfiguration? documentationBuild,
         CompatibilitySettings? compatibilitySettings,
         FileConsistencySettings? fileConsistencySettings,
@@ -159,6 +165,7 @@ public sealed class ModulePipelinePlan
         RequiredModulesForPackaging = requiredModulesForPackaging;
         Information = information;
         Documentation = documentation;
+        Delivery = delivery;
         DocumentationBuild = documentationBuild;
         CompatibilitySettings = compatibilitySettings;
         FileConsistencySettings = fileConsistencySettings;

@@ -110,6 +110,27 @@ public sealed class DeliveryOptionsConfiguration
     /// <summary>Optional file-name order for Internals\\Docs when rendering documentation.</summary>
     public string[]? DocumentationOrder { get; set; }
 
+    /// <summary>
+    /// When true, generates a public <c>Install-&lt;ModuleName&gt;</c> helper function during build that copies Internals
+    /// to a destination folder (script-package workflow).
+    /// </summary>
+    public bool GenerateInstallCommand { get; set; }
+
+    /// <summary>
+    /// When true, generates a public <c>Update-&lt;ModuleName&gt;</c> helper function during build that delegates to the install command.
+    /// </summary>
+    public bool GenerateUpdateCommand { get; set; }
+
+    /// <summary>
+    /// Optional override name for the generated install command. When empty, defaults to <c>Install-&lt;ModuleName&gt;</c>.
+    /// </summary>
+    public string? InstallCommandName { get; set; }
+
+    /// <summary>
+    /// Optional override name for the generated update command. When empty, defaults to <c>Update-&lt;ModuleName&gt;</c>.
+    /// </summary>
+    public string? UpdateCommandName { get; set; }
+
     /// <summary>Schema version string used by delivery metadata.</summary>
     public string Schema { get; set; } = "1.3";
 }
@@ -125,4 +146,3 @@ public sealed class DeliveryImportantLink
     /// <summary>Link URL.</summary>
     public string Url { get; set; } = string.Empty;
 }
-
