@@ -540,7 +540,7 @@ switch (cmd)
         var argv = filteredArgs.Skip(1).ToArray();
         if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]");
+            Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]");
             return 2;
         }
 
@@ -552,6 +552,15 @@ switch (cmd)
                 var subArgs = argv.Skip(1).ToArray();
                 var outputJson = IsJsonOutput(subArgs);
                 var planOnly = subArgs.Any(a => a.Equals("--plan", StringComparison.OrdinalIgnoreCase) || a.Equals("--dry-run", StringComparison.OrdinalIgnoreCase));
+                var validateOnly = subArgs.Any(a => a.Equals("--validate", StringComparison.OrdinalIgnoreCase));
+                var runPipeline = !planOnly && !validateOnly;
+
+                var overrideTargets = ParseCsvOptionValues(subArgs, "--target");
+                var overrideRids = ParseCsvOptionValues(subArgs, "--rid", "--runtime");
+                var overrideFrameworks = ParseCsvOptionValues(subArgs, "--framework");
+                var overrideStyle = TryGetOptionValue(subArgs, "--style");
+                var skipRestore = subArgs.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase));
+                var skipBuild = subArgs.Any(a => a.Equals("--skip-build", StringComparison.OrdinalIgnoreCase));
 
                 var configPath = TryGetOptionValue(subArgs, "--config");
                 if (string.IsNullOrWhiteSpace(configPath))
@@ -580,13 +589,13 @@ switch (cmd)
                         return 2;
                     }
 
-                    Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]");
+                    Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]");
                     return 2;
                 }
 
                 try
                 {
-                    var interactive = !planOnly && DotNetPublishConsoleUi.ShouldUseInteractiveView(outputJson, cli);
+                    var interactive = runPipeline && DotNetPublishConsoleUi.ShouldUseInteractiveView(outputJson, cli);
                     var (cmdLogger, logBuffer) = interactive
                         ? (new NullLogger { IsVerbose = cli.Verbose }, null)
                         : CreateCommandLogger(outputJson, cli, logger);
@@ -596,10 +605,46 @@ switch (cmd)
                     var specPath = loaded.FullPath;
 
                     var runner = new DotNetPublishPipelineRunner(cmdLogger);
+                    ApplyDotNetPublishOverrides(spec, overrideTargets, overrideRids, overrideFrameworks, overrideStyle);
                     var plan = runner.Plan(spec, specPath);
+                    ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
+
+                    if (validateOnly)
+                    {
+                        var errors = ValidateDotNetPublishPlan(plan);
+                        var validateExitCode = errors.Length == 0 ? 0 : 2;
+
+                        if (outputJson)
+                        {
+                            WriteJson(new CliJsonEnvelope
+                            {
+                                SchemaVersion = OutputSchemaVersion,
+                                Command = "dotnet.publish.validate",
+                                Success = validateExitCode == 0,
+                                ExitCode = validateExitCode,
+                                Error = validateExitCode == 0 ? null : string.Join("\n", errors),
+                                Config = "dotnetpublish",
+                                ConfigPath = specPath,
+                                Spec = CliJson.SerializeToElement(spec, CliJson.Context.DotNetPublishSpec),
+                                Plan = CliJson.SerializeToElement(plan, CliJson.Context.DotNetPublishPlan),
+                                Logs = LogsToJsonElement(logBuffer)
+                            });
+                            return validateExitCode;
+                        }
+
+                        if (validateExitCode == 0)
+                        {
+                            cmdLogger.Success($"Dotnet publish config is valid ({plan.Steps.Length} steps, {plan.Targets.Length} target(s)).");
+                            return 0;
+                        }
+
+                        cmdLogger.Error("Dotnet publish config validation failed.");
+                        foreach (var err in errors) cmdLogger.Error(err);
+                        return validateExitCode;
+                    }
 
                     DotNetPublishResult? result = null;
-                    if (!planOnly)
+                    if (runPipeline)
                     {
                         result = interactive
                             ? DotNetPublishConsoleUi.Run(runner, plan, specPath, outputJson, cli)
@@ -644,7 +689,11 @@ switch (cmd)
 
                     if (!result.Succeeded)
                     {
-                        logger.Error(result.ErrorMessage ?? "Dotnet publish failed.");
+                        if (!interactive)
+                        {
+                            logger.Error(result.ErrorMessage ?? "Dotnet publish failed.");
+                            WriteDotNetPublishFailureDetails(result, logger);
+                        }
                         return 1;
                     }
 
@@ -679,7 +728,7 @@ switch (cmd)
             }
             default:
             {
-                Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]");
+                Console.WriteLine("Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]");
                 return 2;
             }
         }
@@ -1379,7 +1428,7 @@ Usage:
   powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
   powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]
   powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
-  powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--output json]
+  powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]
   powerforge normalize <files...>   Normalize encodings and line endings [--output json]
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
   powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
@@ -1714,6 +1763,22 @@ static void WriteLogTail(BufferingLogger buffer, ILogger logger, int maxEntries 
     }
 }
 
+static void WriteDotNetPublishFailureDetails(DotNetPublishResult result, ILogger logger)
+{
+    if (result is null) return;
+    if (result.Failure is null) return;
+
+    var f = result.Failure;
+    logger.Warn($"Failure step: {f.StepKind} ({f.StepKey})");
+    if (!string.IsNullOrWhiteSpace(f.LogPath))
+        logger.Warn($"Failure log: {f.LogPath}");
+
+    if (!string.IsNullOrWhiteSpace(f.StdErrTail))
+        logger.Warn($"stderr (tail):{Environment.NewLine}{f.StdErrTail.TrimEnd()}");
+    else if (!string.IsNullOrWhiteSpace(f.StdOutTail))
+        logger.Warn($"stdout (tail):{Environment.NewLine}{f.StdOutTail.TrimEnd()}");
+}
+
 static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Func<T> action)
 {
     if (action is null) throw new ArgumentNullException(nameof(action));
@@ -1939,6 +2004,197 @@ static string[] SplitCsv(string value)
         .Select(s => s.Trim())
         .Where(s => !string.IsNullOrWhiteSpace(s))
         .ToArray();
+
+static string[] ParseCsvOptionValues(string[] argv, params string[] optionNames)
+{
+    if (argv is null || argv.Length == 0) return Array.Empty<string>();
+    if (optionNames is null || optionNames.Length == 0) return Array.Empty<string>();
+
+    var values = new List<string>();
+    for (int i = 0; i < argv.Length; i++)
+    {
+        var a = argv[i];
+        if (!optionNames.Any(o => a.Equals(o, StringComparison.OrdinalIgnoreCase)))
+            continue;
+
+        if (++i < argv.Length)
+            values.AddRange(SplitCsv(argv[i]));
+    }
+
+    return values
+        .Where(v => !string.IsNullOrWhiteSpace(v))
+        .Select(v => v.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
+static DotNetPublishStyle ParseDotNetPublishStyle(string? value)
+{
+    var raw = (value ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(raw))
+        throw new ArgumentException("Style must not be empty.", nameof(value));
+
+    if (Enum.TryParse(raw, ignoreCase: true, out DotNetPublishStyle style))
+        return style;
+
+    throw new ArgumentException($"Unknown style: {raw}. Expected one of: {string.Join(", ", Enum.GetNames(typeof(DotNetPublishStyle)))}", nameof(value));
+}
+
+static void ApplyDotNetPublishOverrides(
+    DotNetPublishSpec spec,
+    string[] overrideTargets,
+    string[] overrideRids,
+    string[] overrideFrameworks,
+    string? overrideStyle)
+{
+    if (spec is null) throw new ArgumentNullException(nameof(spec));
+
+    var targets = (spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+        .Where(t => t is not null)
+        .ToArray();
+
+    if (overrideTargets is { Length: > 0 })
+    {
+        var selected = new HashSet<string>(overrideTargets.Where(s => !string.IsNullOrWhiteSpace(s)), StringComparer.OrdinalIgnoreCase);
+        var missing = selected.Where(n => targets.All(t => !t.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToArray();
+        if (missing.Length > 0)
+            throw new ArgumentException($"Unknown target(s): {string.Join(", ", missing)}", nameof(overrideTargets));
+
+        targets = targets.Where(t => selected.Contains(t.Name)).ToArray();
+        if (targets.Length == 0)
+            throw new ArgumentException("No targets selected.", nameof(overrideTargets));
+
+        spec.Targets = targets;
+    }
+
+    if (overrideRids is { Length: > 0 })
+    {
+        spec.DotNet.Runtimes = overrideRids;
+        foreach (var t in targets)
+        {
+            if (t.Publish is null) continue;
+            t.Publish.Runtimes = overrideRids;
+        }
+    }
+
+    if (overrideFrameworks is { Length: > 0 })
+    {
+        var frameworks = overrideFrameworks
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (frameworks.Length == 0)
+            throw new ArgumentException("Frameworks must not be empty.", nameof(overrideFrameworks));
+
+        var tfm = frameworks[0];
+        foreach (var t in targets)
+        {
+            if (t.Publish is null) continue;
+            t.Publish.Framework = tfm;
+            t.Publish.Frameworks = frameworks;
+        }
+    }
+
+    if (!string.IsNullOrWhiteSpace(overrideStyle))
+    {
+        var style = ParseDotNetPublishStyle(overrideStyle);
+        foreach (var t in targets)
+        {
+            if (t.Publish is null) continue;
+            t.Publish.Style = style;
+        }
+    }
+}
+
+static void ApplyDotNetPublishSkipFlags(DotNetPublishPlan plan, bool skipRestore, bool skipBuild)
+{
+    if (plan is null) return;
+
+    var steps = plan.Steps ?? Array.Empty<DotNetPublishStep>();
+    if (skipRestore)
+    {
+        plan.NoRestoreInPublish = true;
+        steps = steps.Where(s => s.Kind != DotNetPublishStepKind.Restore).ToArray();
+    }
+
+    if (skipBuild)
+    {
+        plan.NoBuildInPublish = true;
+        steps = steps.Where(s => s.Kind != DotNetPublishStepKind.Build).ToArray();
+    }
+
+    plan.Steps = steps;
+}
+
+static string[] ValidateDotNetPublishPlan(DotNetPublishPlan plan)
+{
+    var errors = new List<string>();
+    if (plan is null)
+    {
+        errors.Add("Plan is null.");
+        return errors.ToArray();
+    }
+
+    if (string.IsNullOrWhiteSpace(plan.ProjectRoot) || !Directory.Exists(plan.ProjectRoot))
+        errors.Add($"ProjectRoot not found: {plan.ProjectRoot}");
+
+    if (!string.IsNullOrWhiteSpace(plan.SolutionPath) && !File.Exists(plan.SolutionPath))
+        errors.Add($"SolutionPath not found: {plan.SolutionPath}");
+
+    if (plan.Targets is null || plan.Targets.Length == 0)
+    {
+        errors.Add("Targets must not be empty.");
+    }
+    else
+    {
+        foreach (var t in plan.Targets)
+        {
+            if (t is null) continue;
+            if (string.IsNullOrWhiteSpace(t.Name))
+                errors.Add("Target.Name must not be empty.");
+            if (string.IsNullOrWhiteSpace(t.ProjectPath) || !File.Exists(t.ProjectPath))
+                errors.Add($"ProjectPath not found for target '{t.Name}': {t.ProjectPath}");
+
+            if (t.Publish is null)
+            {
+                errors.Add($"Target.Publish is required for target '{t.Name}'.");
+                continue;
+            }
+
+            var frameworks = (t.Publish.Frameworks ?? Array.Empty<string>())
+                .Where(f => !string.IsNullOrWhiteSpace(f))
+                .ToArray();
+            if (frameworks.Length == 0 && string.IsNullOrWhiteSpace(t.Publish.Framework))
+                errors.Add($"Target.Publish.Framework is required for target '{t.Name}' (or set Target.Publish.Frameworks).");
+
+            if (t.Publish.Runtimes is null || t.Publish.Runtimes.Length == 0 || t.Publish.Runtimes.All(string.IsNullOrWhiteSpace))
+                errors.Add($"Target.Publish.Runtimes is empty for target '{t.Name}'.");
+        }
+    }
+
+    if (plan.Steps is null || plan.Steps.Length == 0)
+    {
+        errors.Add("No steps planned.");
+    }
+    else
+    {
+        if (!plan.Steps.Any(s => s.Kind == DotNetPublishStepKind.Publish))
+            errors.Add("No publish steps planned.");
+
+        var dupKeys = plan.Steps
+            .Where(s => !string.IsNullOrWhiteSpace(s.Key))
+            .GroupBy(s => s.Key, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToArray();
+        if (dupKeys.Length > 0)
+            errors.Add($"Duplicate step keys: {string.Join(", ", dupKeys)}");
+    }
+
+    return errors.ToArray();
+}
 
 static string? TryGetOptionValue(string[] argv, string optionName)
 {

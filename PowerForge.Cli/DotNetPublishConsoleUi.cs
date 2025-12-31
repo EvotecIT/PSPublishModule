@@ -36,10 +36,10 @@ internal static class DotNetPublishConsoleUi
         int vw = 120;
         try { vw = Math.Max(60, Console.WindowWidth); } catch { }
 
-        bool includeBar = vw >= 120;
         bool includeElapsed = vw >= 100;
 
-        int barWidth = includeBar ? (vw >= 160 ? 40 : vw >= 140 ? 30 : 18) : 0;
+        int barWidth = ComputeBarWidth(vw);
+        bool includeBar = barWidth > 0;
 
         var startLookup = new ConcurrentDictionary<ProgressTask, DateTimeOffset>();
         var doneLookup = new ConcurrentDictionary<ProgressTask, TimeSpan>();
@@ -79,6 +79,16 @@ internal static class DotNetPublishConsoleUi
 
         WriteSummary(plan, result!);
         return result!;
+    }
+
+    private static int ComputeBarWidth(int viewportWidth)
+    {
+        if (viewportWidth >= 160) return 40;
+        if (viewportWidth >= 140) return 30;
+        if (viewportWidth >= 120) return 18;
+        if (viewportWidth >= 100) return 14;
+        if (viewportWidth >= 80) return 12;
+        return 10;
     }
 
     private static void WriteHeader(DotNetPublishPlan plan, string? configPath)
@@ -145,10 +155,43 @@ internal static class DotNetPublishConsoleUi
         summary.AddRow("Bytes", totalBytes.ToString("N0"));
         if (!string.IsNullOrWhiteSpace(result.ManifestJsonPath))
             summary.AddRow("Manifest", Markup.Escape(result.ManifestJsonPath));
+
+        if (!result.Succeeded && result.Failure is not null)
+        {
+            var step = $"{result.Failure.StepKind} ({result.Failure.StepKey})";
+            summary.AddRow("Step", Markup.Escape(step));
+            if (!string.IsNullOrWhiteSpace(result.Failure.LogPath))
+                summary.AddRow("Log", Markup.Escape(result.Failure.LogPath));
+        }
+
         if (!result.Succeeded && !string.IsNullOrWhiteSpace(result.ErrorMessage))
             summary.AddRow("Error", $"[red]{Markup.Escape(result.ErrorMessage)}[/]");
 
         AnsiConsole.Write(summary);
+
+        if (!result.Succeeded && result.Failure is not null)
+        {
+            var tail = !string.IsNullOrWhiteSpace(result.Failure.StdErrTail)
+                ? result.Failure.StdErrTail
+                : result.Failure.StdOutTail;
+
+            if (!string.IsNullOrWhiteSpace(tail))
+            {
+                var header = unicode ? "📄 Output tail" : "Output tail";
+                AnsiConsole.WriteLine();
+                AnsiConsole.Write(new Rule($"[grey]{Markup.Escape(header)}[/]") { Justification = Justify.Left });
+
+                var panel = new Panel(new Text(tail.TrimEnd()))
+                {
+                    Border = BoxBorder.Rounded,
+                    Padding = new Padding(1, 0, 1, 0)
+                };
+                panel.Header = new PanelHeader(string.IsNullOrWhiteSpace(result.Failure.StdErrTail) ? "stdout" : "stderr");
+
+                AnsiConsole.Write(panel);
+                AnsiConsole.WriteLine();
+            }
+        }
 
         if (result.Artefacts is null || result.Artefacts.Length == 0) return;
 
@@ -220,7 +263,7 @@ internal static class DotNetPublishConsoleUi
             var rid = step.Runtime ?? string.Empty;
 
             var tp = plan.Targets.FirstOrDefault(t => t.Name.Equals(target, StringComparison.OrdinalIgnoreCase));
-            var framework = tp?.Publish.Framework;
+            var framework = step.Framework ?? tp?.Publish.Framework;
             var style = tp?.Publish.Style.ToString();
 
             var details = new List<string>();

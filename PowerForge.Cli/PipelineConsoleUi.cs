@@ -41,10 +41,10 @@ internal static class PipelineConsoleUi
         int vw = 120;
         try { vw = Math.Max(60, Console.WindowWidth); } catch { }
 
-        bool includeBar = vw >= 120;
         bool includeElapsed = vw >= 100;
 
-        int barWidth = includeBar ? (vw >= 160 ? 40 : vw >= 140 ? 30 : 18) : 0;
+        int barWidth = ComputeBarWidth(vw);
+        bool includeBar = barWidth > 0;
         int percentWidth = 5;
         int elapsedWidth = includeElapsed ? 5 : 0;
         int spinnerWidth = 2;
@@ -89,6 +89,16 @@ internal static class PipelineConsoleUi
             });
 
         return result!;
+    }
+
+    private static int ComputeBarWidth(int viewportWidth)
+    {
+        if (viewportWidth >= 160) return 40;
+        if (viewportWidth >= 140) return 30;
+        if (viewportWidth >= 120) return 18;
+        if (viewportWidth >= 100) return 14;
+        if (viewportWidth >= 80) return 12;
+        return 10;
     }
 
     private static ProgressColumn[] BuildColumns(
@@ -181,6 +191,7 @@ internal static class PipelineConsoleUi
         {
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
             ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
+            ModulePipelineStepKind.Formatting => unicode ? "[mediumpurple3]🎨[/]" : "[mediumpurple3]FM[/]",
             ModulePipelineStepKind.Validation => unicode ? "[lightskyblue1]🔎[/]" : "[lightskyblue1]VA[/]",
             ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
             ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
