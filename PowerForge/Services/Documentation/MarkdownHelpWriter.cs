@@ -19,11 +19,14 @@ internal sealed class MarkdownHelpWriter
         if (string.IsNullOrWhiteSpace(docsPath)) throw new ArgumentException("DocsPath is required.", nameof(docsPath));
 
         Directory.CreateDirectory(docsPath);
+        var onlineVersion = !string.IsNullOrWhiteSpace(payload.HelpInfoUri)
+            ? payload.HelpInfoUri!.Trim()
+            : string.IsNullOrWhiteSpace(payload.ProjectUri) ? null : payload.ProjectUri!.Trim();
         foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
                      .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
                      .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var md = RenderCommandMarkdown(moduleName, cmd);
+            var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
             File.WriteAllText(path, md, Utf8NoBom);
         }
@@ -45,8 +48,14 @@ internal sealed class MarkdownHelpWriter
             sb.AppendLine($"Module Guid: {payload.ModuleGuid}");
         else
             sb.AppendLine("Module Guid: {{ Fill in module Guid }}");
-        sb.AppendLine("Download Help Link: {{ Update Download Link }}");
-        sb.AppendLine("Help Version: {{ Please enter version of help manually (X.X.X.X) format }}");
+        var downloadLink = !string.IsNullOrWhiteSpace(payload.HelpInfoUri)
+            ? payload.HelpInfoUri!.Trim()
+            : string.IsNullOrWhiteSpace(payload.ProjectUri) ? "{{ Update Download Link }}" : payload.ProjectUri!.Trim();
+        sb.AppendLine($"Download Help Link: {downloadLink}");
+        var helpVersion = string.IsNullOrWhiteSpace(payload.ModuleVersion)
+            ? "{{ Please enter version of help manually (X.X.X.X) format }}"
+            : payload.ModuleVersion!.Trim();
+        sb.AppendLine($"Help Version: {helpVersion}");
         sb.AppendLine("Locale: en-US");
         sb.AppendLine("---");
         sb.AppendLine($"# {moduleName} Module");
@@ -66,16 +75,46 @@ internal sealed class MarkdownHelpWriter
             sb.AppendLine();
         }
 
+        try
+        {
+            var aboutDir = Path.Combine(Path.GetFullPath(docsPath), "About");
+            if (Directory.Exists(aboutDir))
+            {
+                var aboutFiles = Directory.EnumerateFiles(aboutDir, "*.md", SearchOption.TopDirectoryOnly)
+                    .Select(Path.GetFullPath)
+                    .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (aboutFiles.Length > 0)
+                {
+                    sb.AppendLine($"## About Topics");
+                    sb.AppendLine();
+
+                    foreach (var f in aboutFiles)
+                    {
+                        var rel = GetRelativeLink(readmeDir, f);
+                        var title = Path.GetFileNameWithoutExtension(f);
+                        sb.AppendLine($"### [{title}]({rel})");
+                        sb.AppendLine();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // best effort
+        }
+
         File.WriteAllText(readmePath, sb.ToString(), Utf8NoBom);
     }
 
-    private static string RenderCommandMarkdown(string moduleName, DocumentationCommandHelp cmd)
+    private static string RenderCommandMarkdown(string moduleName, DocumentationCommandHelp cmd, string? onlineVersion)
     {
         var sb = new StringBuilder();
         sb.AppendLine("---");
         sb.AppendLine($"external help file: {moduleName}-help.xml");
         sb.AppendLine($"Module Name: {moduleName}");
-        sb.AppendLine("online version:");
+        sb.AppendLine(string.IsNullOrWhiteSpace(onlineVersion) ? "online version:" : $"online version: {onlineVersion!.Trim()}");
         sb.AppendLine("schema: 2.0.0");
         sb.AppendLine("---");
         sb.AppendLine($"# {cmd.Name.Trim()}");
@@ -89,7 +128,7 @@ internal sealed class MarkdownHelpWriter
             .ToArray();
         if (syntax.Length == 0)
         {
-            sb.AppendLine("```");
+            sb.AppendLine("```powershell");
             sb.AppendLine(cmd.Name.Trim());
             sb.AppendLine("```");
             sb.AppendLine();
@@ -101,7 +140,7 @@ internal sealed class MarkdownHelpWriter
                 var title = string.IsNullOrWhiteSpace(s.Name) ? "Default" : s.Name.Trim();
                 if (s.IsDefault) title += " (Default)";
                 sb.AppendLine($"### {title}");
-                sb.AppendLine("```");
+                sb.AppendLine("```powershell");
                 sb.AppendLine(s.Text.TrimEnd());
                 sb.AppendLine("```");
                 sb.AppendLine();
@@ -121,8 +160,8 @@ internal sealed class MarkdownHelpWriter
         if (examples.Length == 0)
         {
             sb.AppendLine("### EXAMPLE 1");
-            sb.AppendLine("```");
-            sb.AppendLine("An example");
+            sb.AppendLine("```powershell");
+            sb.AppendLine(cmd.Name.Trim());
             sb.AppendLine("```");
             sb.AppendLine();
         }
@@ -132,8 +171,8 @@ internal sealed class MarkdownHelpWriter
             {
                 var ex = examples[i];
                 sb.AppendLine($"### EXAMPLE {i + 1}");
-                sb.AppendLine("```");
-                sb.AppendLine(string.IsNullOrWhiteSpace(ex.Code) ? "An example" : ex.Code.Replace("\r\n", "\n").TrimEnd('\n', '\r').Replace("\n", Environment.NewLine));
+                sb.AppendLine("```powershell");
+                sb.AppendLine(string.IsNullOrWhiteSpace(ex.Code) ? cmd.Name.Trim() : ex.Code.Replace("\r\n", "\n").TrimEnd('\n', '\r').Replace("\n", Environment.NewLine));
                 sb.AppendLine("```");
                 if (!string.IsNullOrWhiteSpace(ex.Remarks))
                 {
@@ -177,6 +216,7 @@ internal sealed class MarkdownHelpWriter
         var inputs = (cmd.Inputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
+        if (inputs.Length == 0) sb.AppendLine("- `None`");
         foreach (var i in inputs)
         {
             var name = string.IsNullOrWhiteSpace(i.Name) ? "None" : i.Name.Trim();
@@ -190,6 +230,7 @@ internal sealed class MarkdownHelpWriter
         var outputs = (cmd.Outputs ?? Enumerable.Empty<DocumentationTypeHelp>())
             .Where(t => t is not null && (!string.IsNullOrWhiteSpace(t.Name) || !string.IsNullOrWhiteSpace(t.Description)))
             .ToArray();
+        if (outputs.Length == 0) sb.AppendLine("- `None`");
         foreach (var o in outputs)
         {
             var name = string.IsNullOrWhiteSpace(o.Name) ? "None" : o.Name.Trim();
@@ -198,15 +239,12 @@ internal sealed class MarkdownHelpWriter
         }
         sb.AppendLine();
 
-        sb.AppendLine("## NOTES");
-        sb.AppendLine("General notes");
-        sb.AppendLine();
-
         sb.AppendLine("## RELATED LINKS");
         sb.AppendLine();
         var links = (cmd.RelatedLinks ?? Enumerable.Empty<DocumentationLinkHelp>())
             .Where(l => l is not null && (!string.IsNullOrWhiteSpace(l.Text) || !string.IsNullOrWhiteSpace(l.Uri)))
             .ToArray();
+        if (links.Length == 0) sb.AppendLine("- None");
         foreach (var l in links)
         {
             var text = string.IsNullOrWhiteSpace(l.Text) ? l.Uri.Trim() : l.Text.Trim();

@@ -79,9 +79,9 @@ internal sealed class XmlDocCommentEnricher
                     if (!string.IsNullOrWhiteSpace(desc)) cmd.Description = desc!;
                 }
 
-                if ((cmd.Examples?.Count ?? 0) == 0 && typeMember.Examples.Length > 0)
+                if (!HasMeaningfulExamples(cmd.Examples) && typeMember.Examples.Length > 0)
                 {
-                    cmd.Examples ??= new List<DocumentationExampleHelp>();
+                    cmd.Examples ??= new List<DocumentationExampleHelp>();      
                     foreach (var ex in typeMember.Examples)
                     {
                         cmd.Examples.Add(new DocumentationExampleHelp
@@ -127,6 +127,20 @@ internal sealed class XmlDocCommentEnricher
                 if (!string.IsNullOrWhiteSpace(desc)) p.Description = desc!;
             }
         }
+    }
+
+    private static bool HasMeaningfulExamples(IReadOnlyList<DocumentationExampleHelp>? examples)
+    {
+        if (examples is null || examples.Count == 0) return false;
+
+        foreach (var ex in examples)
+        {
+            if (ex is null) continue;
+            if (!NeedsText(ex.Code)) return true;
+            if (!NeedsText(ex.Remarks)) return true;
+        }
+
+        return false;
     }
 
     private static bool NeedsText(string? value)

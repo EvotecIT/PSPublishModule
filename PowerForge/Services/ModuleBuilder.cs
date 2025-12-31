@@ -296,8 +296,8 @@ public sealed class ModuleBuilder
             if (string.IsNullOrWhiteSpace(fileName)) continue;
 
             var xmlFileName = Path.ChangeExtension(fileName, ".xml");
-            var xmlSource = Path.Combine(publishDir, xmlFileName);
-            if (!File.Exists(xmlSource)) continue;
+            var xmlSource = TryResolveXmlDocPath(publishDir, xmlFileName);
+            if (string.IsNullOrWhiteSpace(xmlSource) || !File.Exists(xmlSource)) continue;
 
             var xmlDest = Path.Combine(targetDir, xmlFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(xmlDest)!);
@@ -306,6 +306,51 @@ public sealed class ModuleBuilder
         }
 
         _logger.Verbose($"Copied {copied} binaries for {tfm} from '{publishDir}' to '{targetDir}'.");
+    }
+
+    private static string? TryResolveXmlDocPath(string publishDir, string xmlFileName)
+    {
+        if (string.IsNullOrWhiteSpace(publishDir) || string.IsNullOrWhiteSpace(xmlFileName))
+            return null;
+
+        var direct = Path.Combine(publishDir, xmlFileName);
+        if (File.Exists(direct)) return direct;
+
+        try
+        {
+            // dotnet publish outputs are typically:
+            // - <proj>/bin/<config>/<tfm>/publish
+            // - <artifacts>/publish/<tfm> (when isolated artifacts are enabled)
+            // In both cases, the documentation file is usually emitted in the parent "bin" output, not in publish output.
+
+            var publishFull = Path.GetFullPath(publishDir);
+            var current = new DirectoryInfo(publishFull);
+            DirectoryInfo? root = null;
+
+            while (current is not null)
+            {
+                if (current.Name.Equals("publish", StringComparison.OrdinalIgnoreCase) && current.Parent is not null)
+                {
+                    root = current.Parent;
+                    break;
+                }
+                current = current.Parent;
+            }
+
+            if (root is null) return null;
+
+            var candidates = Directory.EnumerateFiles(root.FullName, xmlFileName, SearchOption.AllDirectories)
+                .OrderByDescending(p => p.IndexOf(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0)
+                .ThenBy(p => p.Length)
+                .ThenBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            return candidates.Length > 0 ? candidates[0] : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static ISet<string> ResolveExportAssemblyFileNames(string moduleName, IReadOnlyList<string>? exportAssemblies)

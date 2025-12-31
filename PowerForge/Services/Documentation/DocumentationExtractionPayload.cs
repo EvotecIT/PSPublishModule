@@ -13,6 +13,10 @@ internal sealed class DocumentationExtractionPayload
     [DataMember(Name = "moduleName")]
     public string ModuleName { get; set; } = string.Empty;
 
+    /// <summary>Module version from the manifest, when available.</summary>
+    [DataMember(Name = "moduleVersion")]
+    public string? ModuleVersion { get; set; }
+
     /// <summary>Module GUID from the manifest, when available.</summary>
     [DataMember(Name = "moduleGuid")]
     public string? ModuleGuid { get; set; }
@@ -21,9 +25,17 @@ internal sealed class DocumentationExtractionPayload
     [DataMember(Name = "moduleDescription")]
     public string? ModuleDescription { get; set; }
 
+    /// <summary>HelpInfo URI from the manifest (for updatable help), when available.</summary>
+    [DataMember(Name = "helpInfoUri")]
+    public string? HelpInfoUri { get; set; }
+
+    /// <summary>Project URI (PrivateData.PSData.ProjectUri), when available.</summary>
+    [DataMember(Name = "projectUri")]
+    public string? ProjectUri { get; set; }
+
     /// <summary>Extracted command help entries.</summary>
     [DataMember(Name = "commands")]
-    public List<DocumentationCommandHelp> Commands { get; set; } = new();
+    public List<DocumentationCommandHelp> Commands { get; set; } = new();       
 }
 
 /// <summary>

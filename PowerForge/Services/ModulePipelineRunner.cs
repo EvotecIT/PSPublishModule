@@ -920,8 +920,9 @@ public sealed class ModulePipelineRunner
         }
 
         if (plan.DocumentationBuild.GenerateExternalHelp &&
+            plan.DocumentationBuild.SyncExternalHelpToProjectRoot &&
             !string.IsNullOrWhiteSpace(documentationResult.ExternalHelpFilePath) &&
-            File.Exists(documentationResult.ExternalHelpFilePath))
+            File.Exists(documentationResult.ExternalHelpFilePath))        
         {
             var externalHelpDir = Path.GetDirectoryName(Path.GetFullPath(documentationResult.ExternalHelpFilePath));
             var cultureFolder = string.IsNullOrWhiteSpace(externalHelpDir)

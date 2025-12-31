@@ -106,6 +106,7 @@ public sealed class DocumentationEngine
             if (startClean)
             {
                 SafeDeleteDocsFolder(stagingPath, docsPath);
+                SafeDeleteExistingExternalHelpFile(stagingPath, moduleName, buildDocumentation);
             }
 
             Directory.CreateDirectory(docsPath);
@@ -138,11 +139,31 @@ public sealed class DocumentationEngine
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
+            try
+            {
+                if (buildDocumentation.GenerateFallbackExamples)
+                    DocumentationFallbackEnricher.Enrich(extracted, _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Failed to apply documentation fallbacks. Error: {ex.Message}");
+                if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            }
+
             var writer = new MarkdownHelpWriter();
             SafeStart(writeStep);
             try
             {
                 writer.WriteCommandHelpFiles(extracted, moduleName, docsPath);
+                if (buildDocumentation.IncludeAboutTopics)
+                {
+                    try { new AboutTopicWriter().Write(stagingPath, docsPath); }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn($"Failed to write about_* topics. Error: {ex.Message}");
+                        if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+                    }
+                }
                 if (!string.IsNullOrWhiteSpace(readmePath))
                     writer.WriteModuleReadme(extracted, moduleName, readmePath, docsPath);
                 SafeDone(writeStep);
@@ -303,6 +324,38 @@ public sealed class DocumentationEngine
         try { Directory.Delete(fullDocs, recursive: true); } catch { /* best effort */ }
     }
 
+    private static void SafeDeleteExistingExternalHelpFile(
+        string stagingPath,
+        string moduleName,
+        BuildDocumentationConfiguration buildDocumentation)
+    {
+        try
+        {
+            if (!buildDocumentation.GenerateExternalHelp) return;
+            if (string.IsNullOrWhiteSpace(stagingPath)) return;
+            if (string.IsNullOrWhiteSpace(moduleName)) return;
+
+            var culture = NormalizeExternalHelpCulture(buildDocumentation.ExternalHelpCulture);
+            var externalHelpDir = Path.Combine(stagingPath, culture);
+            if (!Directory.Exists(externalHelpDir)) return;
+
+            var fileName = string.IsNullOrWhiteSpace(buildDocumentation.ExternalHelpFileName)
+                ? $"{moduleName}-help.xml"
+                : Path.GetFileName(buildDocumentation.ExternalHelpFileName.Trim());
+            if (string.IsNullOrWhiteSpace(fileName)) fileName = $"{moduleName}-help.xml";
+
+            var externalHelpFile = Path.Combine(externalHelpDir, fileName);
+            if (File.Exists(externalHelpFile))
+            {
+                try { File.Delete(externalHelpFile); } catch { /* best effort */ }
+            }
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
     private static string? ExtractError(string? stdout)
     {
         foreach (var line in SplitLines(stdout))
@@ -362,8 +415,11 @@ try {
 
   $result = [ordered]@{
     moduleName = [string]$moduleNameResolved
-    moduleGuid = if ($m -and $m.GUID) { [string]$m.GUID } else { $null }
+    moduleVersion = if ($m -and $m.ModuleVersion) { [string]$m.ModuleVersion } else { $null }
+    moduleGuid = if ($m -and $m.GUID) { [string]$m.GUID } else { $null }        
     moduleDescription = if ($m -and $m.Description) { [string]$m.Description } else { $null }
+    helpInfoUri = if ($m -and $m.HelpInfoURI) { [string]$m.HelpInfoURI } else { $null }
+    projectUri = $(try { if ($m -and $m.PrivateData -and $m.PrivateData.PSData -and $m.PrivateData.PSData.ProjectUri) { [string]$m.PrivateData.PSData.ProjectUri } else { $null } } catch { $null })
     commands = @()
   }
 
@@ -407,33 +463,96 @@ try {
       if ($help -and $help.Parameters -and $help.Parameters.Parameter) { $helpParameters = @($help.Parameters.Parameter) }
     } catch { $helpParameters = @() }
 
+    $helpParamByName = @{}
+    foreach ($hp in $helpParameters) {
+      try {
+        $n = [string]$hp.Name
+        if ($n) { $helpParamByName[$n] = $hp }
+      } catch { }
+    }
+
+    $commonParamNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable','InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
+    $paramNames = @()
+    try { if ($c -and $c.Parameters) { $paramNames = @($c.Parameters.Keys) } } catch { $paramNames = @() }
+    foreach ($hp in $helpParameters) { try { $paramNames += [string]$hp.Name } catch { } }
+    $paramNames = @($paramNames | Where-Object { $_ -and ($commonParamNames -notcontains $_) } | Sort-Object -Unique)
+
     $parameters = @()
-    foreach ($p in $helpParameters) {
-      $pn = [string]$p.Name
+    foreach ($pn in $paramNames) {
+      $pmeta = $null
+      try { $pmeta = $c.Parameters[$pn] } catch { $pmeta = $null }
+
       $aliases = @()
-      foreach ($a in @($p.Aliases)) { $aliases += [string]$a }
+      try { if ($pmeta -and $pmeta.Aliases) { foreach ($a in @($pmeta.Aliases)) { $aliases += [string]$a } } } catch { $aliases = @() }
+
+      $typeName = ''
+      try { if ($pmeta -and $pmeta.ParameterType) { $typeName = [string]$pmeta.ParameterType.Name } } catch { $typeName = '' }
+
+      $required = $false
+      $named = $true
+      $pos = $null
+      $pipeByValue = $false
+      $pipeByProp = $false
+      $defaultValue = ''
+      $acceptWild = $false
+
+      try {
+        if ($pmeta -and $pmeta.ParameterSets) {
+          foreach ($setName in @($pmeta.ParameterSets.Keys)) {
+            $psm = $pmeta.ParameterSets[$setName]
+            if ($psm) {
+              if ($psm.IsMandatory) { $required = $true }
+              $pPos = [int]$psm.Position
+              if ($pPos -ne -2147483648) {
+                $named = $false
+                if ($null -eq $pos -or $pPos -lt $pos) { $pos = $pPos }
+              }
+              if ($psm.ValueFromPipeline) { $pipeByValue = $true }
+              if ($psm.ValueFromPipelineByPropertyName) { $pipeByProp = $true }
+            }
+          }
+        }
+      } catch { }
 
       $desc = ''
-      foreach ($d in @($p.Description)) {
-        $t = (GetText $d).Trim()
-        if ($t) { if ($desc) { $desc += ""`n`n"" }; $desc += $t }
+      $hp = $null
+      try { if ($helpParamByName.ContainsKey($pn)) { $hp = $helpParamByName[$pn] } } catch { $hp = $null }
+      if ($hp) {
+        $desc = ''
+        foreach ($d in @($hp.Description)) {
+          $t = (GetText $d).Trim()
+          if ($t) { if ($desc) { $desc += ""`n`n"" }; $desc += $t }
+        }
+        if (-not $typeName) { try { $typeName = [string]$hp.Type.Name } catch { } }
+        if ((-not $aliases -or $aliases.Count -eq 0) -and $hp.Aliases) {
+          foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
+        }
+        try { $defaultValue = [string]$hp.DefaultValue } catch { $defaultValue = '' }
+        try { $acceptWild = [bool]$hp.Globbing } catch { $acceptWild = $false }
       }
 
       $sets = @()
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
       if (-not $sets -or $sets.Count -eq 0) { $sets = @('(All)') }
 
+      $positionText = if ($named -or $null -eq $pos) { 'named' } else { [string]$pos }
+
+      $pipelineInput = 'False'
+      if ($pipeByValue -and $pipeByProp) { $pipelineInput = 'True (ByValue, ByPropertyName)' }
+      elseif ($pipeByValue) { $pipelineInput = 'True (ByValue)' }
+      elseif ($pipeByProp) { $pipelineInput = 'True (ByPropertyName)' }
+
       $parameters += [ordered]@{
         name = $pn
-        type = $(try { [string]$p.Type.Name } catch { '' })
+        type = $typeName
         description = $desc
         parameterSets = @($sets)
         aliases = @($aliases)
-        required = $(try { [bool]$p.Required } catch { $false })
-        position = $(try { [string]$p.Position } catch { '' })
-        defaultValue = $(try { [string]$p.DefaultValue } catch { '' })
-        pipelineInput = $(try { [string]$p.PipelineInput } catch { '' })
-        acceptWildcardCharacters = $(try { [bool]$p.Globbing } catch { $false })
+        required = [bool]$required
+        position = $positionText
+        defaultValue = $defaultValue
+        pipelineInput = $pipelineInput
+        acceptWildcardCharacters = [bool]$acceptWild
       }
     }
 

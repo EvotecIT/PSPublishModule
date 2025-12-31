@@ -14,7 +14,7 @@ public sealed class ArtefactBuilder
     private static readonly string[] DefaultExcludeFromPackage = { ".*", "Ignore", "Examples", "package.json", "Publish", "Docs" };
     private static readonly string[] DefaultIncludeRoot = { "*.psm1", "*.psd1", "License*" };
     private static readonly string[] DefaultIncludePS1 = { "Private", "Public", "Enums", "Classes" };
-    private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "Data" };
+    private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "Data", "en-US" };
 
     private readonly ILogger _logger;
     private bool _skipPsResourceGetSave;
