@@ -77,8 +77,18 @@ public sealed class DotNetPublishPipelineRunner
                 throw new ArgumentException($"Target.ProjectPath is required for '{t.Name}'.", nameof(spec));
             if (t.Publish is null)
                 throw new ArgumentException($"Target.Publish is required for '{t.Name}'.", nameof(spec));
-            if (string.IsNullOrWhiteSpace(t.Publish.Framework))
-                throw new ArgumentException($"Target.Publish.Framework is required for '{t.Name}'.", nameof(spec));
+
+            var frameworks = (t.Publish.Frameworks ?? Array.Empty<string>())
+                .Where(f => !string.IsNullOrWhiteSpace(f))
+                .Select(f => f.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (frameworks.Length == 0)
+            {
+                if (string.IsNullOrWhiteSpace(t.Publish.Framework))
+                    throw new ArgumentException($"Target.Publish.Framework is required for '{t.Name}' (or set Target.Publish.Frameworks).", nameof(spec));
+                frameworks = new[] { t.Publish.Framework.Trim() };
+            }
 
             var projectPath = ResolvePath(projectRoot, t.ProjectPath);
             if (!File.Exists(projectPath))
@@ -97,7 +107,8 @@ public sealed class DotNetPublishPipelineRunner
             var publish = new DotNetPublishPublishOptions
             {
                 Style = t.Publish.Style,
-                Framework = t.Publish.Framework.Trim(),
+                Framework = frameworks[0],
+                Frameworks = frameworks,
                 Runtimes = rids,
                 OutputPath = t.Publish.OutputPath,
                 UseStaging = t.Publish.UseStaging,
@@ -189,17 +200,29 @@ public sealed class DotNetPublishPipelineRunner
 
         foreach (var t in targets)
         {
-            foreach (var rid in t.Publish.Runtimes)
+            var frameworks = (t.Publish.Frameworks ?? Array.Empty<string>())
+                .Where(f => !string.IsNullOrWhiteSpace(f))
+                .Select(f => f.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (frameworks.Length == 0 && !string.IsNullOrWhiteSpace(t.Publish.Framework))
+                frameworks = new[] { t.Publish.Framework.Trim() };
+
+            foreach (var framework in frameworks)
             {
-                var key = $"publish:{t.Name}:{rid}";
-                steps.Add(new DotNetPublishStep
+                foreach (var rid in t.Publish.Runtimes)
                 {
-                    Key = key,
-                    Kind = DotNetPublishStepKind.Publish,
-                    Title = "Publish",
-                    TargetName = t.Name,
-                    Runtime = rid
-                });
+                    var key = $"publish:{t.Name}:{framework}:{rid}";
+                    steps.Add(new DotNetPublishStep
+                    {
+                        Key = key,
+                        Kind = DotNetPublishStepKind.Publish,
+                        Title = "Publish",
+                        TargetName = t.Name,
+                        Framework = framework,
+                        Runtime = rid
+                    });
+                }
             }
         }
 
@@ -253,7 +276,7 @@ public sealed class DotNetPublishPipelineRunner
                             Build(plan, step.Runtime);
                             break;
                         case DotNetPublishStepKind.Publish:
-                            artefacts.Add(Publish(plan, step.TargetName!, step.Runtime!));
+                            artefacts.Add(Publish(plan, step.TargetName!, step.Framework ?? string.Empty, step.Runtime!));
                             break;
                         case DotNetPublishStepKind.Manifest:
                             (manifestJson, manifestText) = WriteManifests(plan, artefacts);
@@ -265,7 +288,7 @@ public sealed class DotNetPublishPipelineRunner
                 catch (Exception ex)
                 {
                     progress.StepFailed(step, ex);
-                    throw;
+                    throw new DotNetPublishStepException(step, ex);
                 }
             }
 
@@ -279,12 +302,15 @@ public sealed class DotNetPublishPipelineRunner
         }
         catch (Exception ex)
         {
-            _logger.Error(ex.Message);
+            var failure = BuildFailure(plan, ex, out var errorMessage);
+
+            _logger.Error(errorMessage);
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             return new DotNetPublishResult
             {
                 Succeeded = false,
-                ErrorMessage = ex.Message,
+                ErrorMessage = errorMessage,
+                Failure = failure,
                 Artefacts = artefacts.ToArray(),
                 ManifestJsonPath = manifestJson,
                 ManifestTextPath = manifestText
@@ -383,13 +409,13 @@ public sealed class DotNetPublishPipelineRunner
         }
     }
 
-    private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string rid)
+    private DotNetPublishArtefactResult Publish(DotNetPublishPlan plan, string targetName, string framework, string rid)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
 
         var cfg = plan.Configuration;
-        var tfm = target.Publish.Framework;
+        var tfm = string.IsNullOrWhiteSpace(framework) ? target.Publish.Framework : framework.Trim();
         var style = target.Publish.Style;
 
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -402,7 +428,7 @@ public sealed class DotNetPublishPipelineRunner
         };
 
         var outputDirTemplate = string.IsNullOrWhiteSpace(target.Publish.OutputPath)
-            ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{style}")
+            ? Path.Combine("Artifacts", "DotNetPublish", "{target}", "{rid}", "{framework}", "{style}")
             : target.Publish.OutputPath!;
 
         var outputDir = ResolvePath(plan.ProjectRoot, ApplyTemplate(outputDirTemplate, tokens));
@@ -894,11 +920,23 @@ public sealed class DotNetPublishPipelineRunner
         var result = RunProcess("dotnet", workingDir, args);
         if (result.ExitCode != 0)
         {
-            var stderr = (result.StdErr ?? string.Empty).Trim();
-            var stdout = (result.StdOut ?? string.Empty).Trim();
-            var msg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+            var stderr = (result.StdErr ?? string.Empty).TrimEnd();
+            var stdout = (result.StdOut ?? string.Empty).TrimEnd();
+
+            var stderrTail = TailLines(stderr, maxLines: 80, maxChars: 8000);
+            var stdoutTail = TailLines(stdout, maxLines: 80, maxChars: 8000);
+
+            var msg = ExtractLastNonEmptyLine(!string.IsNullOrWhiteSpace(stderrTail) ? stderrTail : stdoutTail);
             if (string.IsNullOrWhiteSpace(msg)) msg = "dotnet failed.";
-            throw new InvalidOperationException(msg);
+
+            throw new DotNetPublishCommandException(
+                message: msg,
+                fileName: "dotnet",
+                workingDirectory: string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
+                args: args,
+                exitCode: result.ExitCode,
+                stdOut: stdout,
+                stdErr: stderr);
         }
 
         if (_logger.IsVerbose)
@@ -983,6 +1021,141 @@ public sealed class DotNetPublishPipelineRunner
     }
 #endif
 
+    private static string? TailLines(string? text, int maxLines, int maxChars)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        var normalized = (text ?? string.Empty).Replace("\r\n", "\n");
+        var end = normalized.Length;
+        if (end == 0) return null;
+
+        maxLines = Math.Max(1, maxLines);
+        maxChars = Math.Max(1, maxChars);
+
+        int lines = 0;
+        int start = 0;
+        for (int i = end - 1; i >= 0; i--)
+        {
+            if (normalized[i] == '\n')
+            {
+                lines++;
+                if (lines > maxLines)
+                {
+                    start = i + 1;
+                    break;
+                }
+            }
+        }
+
+        var tail = normalized.Substring(start).TrimEnd();
+        if (tail.Length > maxChars)
+            tail = tail.Substring(tail.Length - maxChars);
+        return tail;
+    }
+
+    private static string ExtractLastNonEmptyLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        var lines = (text ?? string.Empty)
+            .Replace("\r\n", "\n")
+            .Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+        for (int i = lines.Length - 1; i >= 0; i--)
+        {
+            var line = (lines[i] ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(line)) return line;
+        }
+
+        return (text ?? string.Empty).Trim();
+    }
+
+    private static string ToSafeFileName(string? input, string fallback)
+    {
+        var s = string.IsNullOrWhiteSpace(input) ? fallback : input!.Trim();
+        if (string.IsNullOrWhiteSpace(s)) s = fallback;
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var sb = new StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            var c = ch == ':' ? '_' : ch;
+            if (Array.IndexOf(invalid, c) >= 0) sb.Append('_');
+            else sb.Append(c);
+        }
+
+        return sb.ToString();
+    }
+
+    private static DotNetPublishFailure? BuildFailure(DotNetPublishPlan plan, Exception ex, out string errorMessage)
+    {
+        errorMessage = ex?.Message ?? "dotnet publish failed.";
+
+        if (ex is not DotNetPublishStepException stepEx)
+            return null;
+
+        var inner = stepEx.InnerException ?? stepEx;
+        errorMessage = inner.Message;
+
+        var failure = new DotNetPublishFailure
+        {
+            StepKey = stepEx.Step.Key ?? string.Empty,
+            StepKind = stepEx.Step.Kind,
+            TargetName = stepEx.Step.TargetName,
+            Framework = stepEx.Step.Framework,
+            Runtime = stepEx.Step.Runtime,
+        };
+
+        if (inner is not DotNetPublishCommandException cmdEx)
+            return failure;
+
+        failure.ExitCode = cmdEx.ExitCode;
+        failure.CommandLine = cmdEx.CommandLine;
+        failure.WorkingDirectory = cmdEx.WorkingDirectory;
+        failure.StdOutTail = TailLines(cmdEx.StdOut, maxLines: 80, maxChars: 8000);
+        failure.StdErrTail = TailLines(cmdEx.StdErr, maxLines: 80, maxChars: 8000);
+        failure.LogPath = TryWriteFailureLog(plan, stepEx.Step, cmdEx);
+
+        return failure;
+    }
+
+    private static string? TryWriteFailureLog(DotNetPublishPlan plan, DotNetPublishStep step, DotNetPublishCommandException ex)
+    {
+        try
+        {
+            var logDir = Path.Combine(plan.ProjectRoot, "Artifacts", "DotNetPublish", "logs");
+            Directory.CreateDirectory(logDir);
+
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var safeKey = ToSafeFileName(step?.Key, "step");
+            var fileName = $"dotnetpublish-failure-{stamp}-{safeKey}.log";
+            var fullPath = Path.Combine(logDir, fileName);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("=== dotnet publish failure ===");
+            sb.AppendLine($"Step: {step?.Key} ({step?.Kind})");
+            if (!string.IsNullOrWhiteSpace(step?.TargetName)) sb.AppendLine($"Target: {step!.TargetName}");
+            if (!string.IsNullOrWhiteSpace(step?.Framework)) sb.AppendLine($"Framework: {step!.Framework}");
+            if (!string.IsNullOrWhiteSpace(step?.Runtime)) sb.AppendLine($"Runtime: {step!.Runtime}");
+            sb.AppendLine($"ExitCode: {ex.ExitCode}");
+            sb.AppendLine($"WorkingDirectory: {ex.WorkingDirectory}");
+            sb.AppendLine($"CommandLine: {ex.CommandLine}");
+            sb.AppendLine();
+            sb.AppendLine("--- stdout ---");
+            if (!string.IsNullOrWhiteSpace(ex.StdOut)) sb.AppendLine(ex.StdOut.TrimEnd());
+            sb.AppendLine();
+            sb.AppendLine("--- stderr ---");
+            if (!string.IsNullOrWhiteSpace(ex.StdErr)) sb.AppendLine(ex.StdErr.TrimEnd());
+
+            File.WriteAllText(fullPath, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            return fullPath;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static IEnumerable<string> BuildMsBuildPropertyArgs(IReadOnlyDictionary<string, string> props)
     {
         if (props is null || props.Count == 0) return Array.Empty<string>();
@@ -1020,7 +1193,7 @@ public sealed class DotNetPublishPipelineRunner
                 var mb = a.TotalBytes / 1024d / 1024d;
                 var exeMb = a.ExeBytes.HasValue ? (a.ExeBytes.Value / 1024d / 1024d) : 0;
                 var zip = string.IsNullOrWhiteSpace(a.ZipPath) ? string.Empty : $" zip={a.ZipPath}";
-                lines.Add($"{a.Target}@{a.Runtime} -> {a.OutputDir} ({a.Files} files, {mb:N1} MB; exe {exeMb:N1} MB){zip}");
+                lines.Add($"{a.Target} ({a.Framework}, {a.Runtime}) -> {a.OutputDir} ({a.Files} files, {mb:N1} MB; exe {exeMb:N1} MB){zip}");
             }
             File.WriteAllLines(txtPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
@@ -1035,5 +1208,67 @@ public sealed class DotNetPublishPipelineRunner
         public void StepStarting(DotNetPublishStep step) { }
         public void StepCompleted(DotNetPublishStep step) { }
         public void StepFailed(DotNetPublishStep step, Exception error) { }
+    }
+
+    private sealed class DotNetPublishStepException : Exception
+    {
+        public DotNetPublishStep Step { get; }
+
+        public DotNetPublishStepException(DotNetPublishStep step, Exception inner)
+            : base($"Step '{(step ?? throw new ArgumentNullException(nameof(step))).Key}' failed. {(inner ?? throw new ArgumentNullException(nameof(inner))).Message}", inner)
+        {
+            Step = step;
+        }
+    }
+
+    private sealed class DotNetPublishCommandException : Exception
+    {
+        public int ExitCode { get; }
+        public string FileName { get; }
+        public string WorkingDirectory { get; }
+        public string StdOut { get; }
+        public string StdErr { get; }
+        public string[] Args { get; }
+
+        public string CommandLine
+        {
+            get
+            {
+#if NET472
+                return FileName + " " + BuildWindowsArgumentString(Args);
+#else
+                return FileName + " " + string.Join(" ", Args.Select(EscapeForCommandLine));
+#endif
+            }
+        }
+
+        public DotNetPublishCommandException(
+            string message,
+            string fileName,
+            string workingDirectory,
+            IReadOnlyList<string> args,
+            int exitCode,
+            string stdOut,
+            string stdErr)
+            : base(message)
+        {
+            ExitCode = exitCode;
+            FileName = fileName ?? string.Empty;
+            WorkingDirectory = workingDirectory ?? string.Empty;
+            StdOut = stdOut ?? string.Empty;
+            StdErr = stdErr ?? string.Empty;
+            Args = args is null ? Array.Empty<string>() : args.ToArray();
+        }
+
+#if !NET472
+        private static string EscapeForCommandLine(string arg)
+        {
+            if (arg is null) return "\"\"";
+            if (arg.Length == 0) return "\"\"";
+            return arg.Any(char.IsWhiteSpace) || arg.Contains('"')
+                ? "\"" + arg.Replace("\"", "\\\"") + "\""
+                : arg;
+        }
+#endif
     }
 }

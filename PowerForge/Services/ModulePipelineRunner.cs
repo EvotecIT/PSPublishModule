@@ -79,6 +79,7 @@ public sealed class ModulePipelineRunner
         BuildDocumentationConfiguration? documentationBuild = null;
         CompatibilitySettings? compatibilitySettings = null;
         FileConsistencySettings? fileConsistencySettings = null;
+        ConfigurationFormattingSegment? formatting = null;
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
 
@@ -181,7 +182,12 @@ public sealed class ModulePipelineRunner
                 }
                 case ConfigurationFileConsistencySegment fileConsistency:
                 {
-                    fileConsistencySettings = fileConsistency.Settings;
+                    fileConsistencySettings = fileConsistency.Settings;   
+                    break;
+                }
+                case ConfigurationFormattingSegment formattingSegment:
+                {
+                    formatting = formattingSegment;
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -307,6 +313,7 @@ public sealed class ModulePipelineRunner
             documentationBuild: documentationBuild,
             compatibilitySettings: compatibilitySettings,
             fileConsistencySettings: fileConsistencySettings,
+            formatting: formatting,
             publishes: enabledPublishes,
             artefacts: enabledArtefacts,
             installEnabled: installEnabled,
@@ -351,7 +358,10 @@ public sealed class ModulePipelineRunner
         var docsExtractStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:extract", StringComparison.OrdinalIgnoreCase));
         var docsWriteStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:write", StringComparison.OrdinalIgnoreCase));
         var docsMamlStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:maml", StringComparison.OrdinalIgnoreCase));
+        var formatStagingStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:staging", StringComparison.OrdinalIgnoreCase));
+        var formatProjectStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:project", StringComparison.OrdinalIgnoreCase));
         var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));
+        var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
@@ -469,18 +479,71 @@ public sealed class ModulePipelineRunner
             }
         }
 
+        FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
+        FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
+
+        if (plan.Formatting is not null)
+        {
+            var formattingPipeline = new FormattingPipeline(_logger);
+
+            SafeStart(formatStagingStep);
+            try
+            {
+                formattingStagingResults = FormatPowerShellTree(
+                    rootPath: buildResult.StagingPath,
+                    moduleName: plan.ModuleName,
+                    manifestPath: buildResult.ManifestPath,
+                    includeMergeFormatting: true,
+                    formatting: plan.Formatting,
+                    pipeline: formattingPipeline);
+                SafeDone(formatStagingStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(formatStagingStep, ex);
+                throw;
+            }
+
+            if (plan.Formatting.Options.UpdateProjectRoot)
+            {
+                SafeStart(formatProjectStep);
+                try
+                {
+                    var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
+                    formattingProjectResults = FormatPowerShellTree(
+                        rootPath: plan.ProjectRoot,
+                        moduleName: plan.ModuleName,
+                        manifestPath: projectManifest,
+                        includeMergeFormatting: false,
+                        formatting: plan.Formatting,
+                        pipeline: formattingPipeline);
+                    SafeDone(formatProjectStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(formatProjectStep, ex);
+                    throw;
+                }
+            }
+        }
+
         ProjectConsistencyReport? fileConsistencyReport = null;
         CheckStatus? fileConsistencyStatus = null;
-        ProjectConversionResult? fileConsistencyEncodingFix = null;
-        ProjectConversionResult? fileConsistencyLineEndingFix = null;
-        PowerShellCompatibilityReport? compatibilityReport = null;
+        ProjectConversionResult? fileConsistencyEncodingFix = null;       
+        ProjectConversionResult? fileConsistencyLineEndingFix = null;     
+        ProjectConsistencyReport? projectFileConsistencyReport = null;
+        CheckStatus? projectFileConsistencyStatus = null;
+        ProjectConversionResult? projectFileConsistencyEncodingFix = null;
+        ProjectConversionResult? projectFileConsistencyLineEndingFix = null;
+        PowerShellCompatibilityReport? compatibilityReport = null;        
 
         if (plan.FileConsistencySettings?.Enable == true)
         {
+            var s = plan.FileConsistencySettings;
+
             SafeStart(fileConsistencyStep);
             try
             {
-                var s = plan.FileConsistencySettings;
                 var excludeDirs = MergeExcludeDirectories(
                     s.ExcludeDirectories,
                     new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
@@ -551,6 +614,84 @@ public sealed class ModulePipelineRunner
             {
                 SafeFail(fileConsistencyStep, ex);
                 throw;
+            }
+
+            if (s.UpdateProjectRoot)
+            {
+                SafeStart(projectFileConsistencyStep);
+                try
+                {
+                    var excludeDirs = MergeExcludeDirectories(
+                        s.ExcludeDirectories,
+                        new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+
+                    var enumeration = new ProjectEnumeration(
+                        rootPath: plan.ProjectRoot,
+                        kind: ProjectKind.Mixed,
+                        customExtensions: null,
+                        excludeDirectories: excludeDirs);
+
+                    var recommendedEncoding = MapEncoding(s.RequiredEncoding);
+                    var exportPath = s.ExportReport
+                        ? BuildArtefactsReportPath(plan.ProjectRoot, AddFileNameSuffix(s.ReportFileName, "Project"), fallbackFileName: "FileConsistencyReport.Project.csv")
+                        : null;
+
+                    var analyzer = new ProjectConsistencyAnalyzer(_logger);
+                    projectFileConsistencyReport = analyzer.Analyze(
+                        enumeration: enumeration,
+                        projectType: "Mixed",
+                        recommendedEncoding: recommendedEncoding,
+                        recommendedLineEnding: s.RequiredLineEnding,
+                        includeDetails: false,
+                        exportPath: exportPath);
+
+                    if (s.AutoFix)
+                    {
+                        var enc = new EncodingConverter();
+                        projectFileConsistencyEncodingFix = enc.Convert(new EncodingConversionOptions(
+                            enumeration: enumeration,
+                            sourceEncoding: TextEncodingKind.Any,
+                            targetEncoding: recommendedEncoding,
+                            createBackups: s.CreateBackups,
+                            backupDirectory: null,
+                            force: false,
+                            noRollbackOnMismatch: false,
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+
+                        var le = new LineEndingConverter();
+                        var target = s.RequiredLineEnding == FileConsistencyLineEnding.CRLF ? LineEnding.CRLF : LineEnding.LF;
+                        projectFileConsistencyLineEndingFix = le.Convert(new LineEndingConversionOptions(
+                            enumeration: enumeration,
+                            target: target,
+                            createBackups: s.CreateBackups,
+                            backupDirectory: null,
+                            force: false,
+                            onlyMixed: false,
+                            ensureFinalNewline: s.CheckMissingFinalNewline,
+                            onlyMissingNewline: false,
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+
+                        projectFileConsistencyReport = analyzer.Analyze(
+                            enumeration: enumeration,
+                            projectType: "Mixed",
+                            recommendedEncoding: recommendedEncoding,
+                            recommendedLineEnding: s.RequiredLineEnding,
+                            includeDetails: false,
+                            exportPath: exportPath);
+                    }
+
+                    var finalReport = projectFileConsistencyReport ?? throw new InvalidOperationException("Project-root file consistency analysis produced no report.");
+                    projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
+                    if (s.FailOnInconsistency && projectFileConsistencyStatus == CheckStatus.Fail)
+                        throw new InvalidOperationException($"File consistency (project) check failed. {BuildFileConsistencyMessage(finalReport, s)}");
+
+                    SafeDone(projectFileConsistencyStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(projectFileConsistencyStep, ex);
+                    throw;
+                }
             }
         }
 
@@ -680,7 +821,13 @@ public sealed class ModulePipelineRunner
             fileConsistencyLineEndingFix,
             compatibilityReport,
             publishResults.ToArray(),
-            artefactResults.ToArray());
+            artefactResults.ToArray(),
+            formattingStagingResults,
+            formattingProjectResults,
+            projectFileConsistencyReport,
+            projectFileConsistencyStatus,
+            projectFileConsistencyEncodingFix,
+            projectFileConsistencyLineEndingFix);
     }
 
     private void SyncGeneratedDocumentationToProjectRoot(ModulePipelinePlan plan, DocumentationBuildResult documentationResult)
@@ -1047,6 +1194,21 @@ exit 0
         return Path.GetFullPath(Path.Combine(artefacts, name));
     }
 
+    private static string? AddFileNameSuffix(string? fileName, string suffix)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return null;
+
+        var trimmedSuffix = (suffix ?? string.Empty).Trim().Trim('.');
+        var trimmed = fileName!.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedSuffix)) return trimmed;
+
+        var ext = Path.GetExtension(trimmed);
+        if (string.IsNullOrWhiteSpace(ext)) return trimmed + "." + trimmedSuffix;
+
+        var baseName = trimmed.Substring(0, trimmed.Length - ext.Length);
+        return baseName + "." + trimmedSuffix + ext;
+    }
+
     private static string[] MergeExcludeDirectories(IEnumerable<string>? primary, IEnumerable<string>? extra)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1056,6 +1218,100 @@ exit 0
             if (!string.IsNullOrWhiteSpace(s)) set.Add(s.Trim());
         return set.ToArray();
     }
+
+    private static FormatterResult[] FormatPowerShellTree(
+        string rootPath,
+        string moduleName,
+        string manifestPath,
+        bool includeMergeFormatting,
+        ConfigurationFormattingSegment formatting,
+        FormattingPipeline pipeline)
+    {
+        if (pipeline is null) throw new ArgumentNullException(nameof(pipeline));
+        if (formatting is null) return Array.Empty<FormatterResult>();
+
+        var cfg = formatting.Options ?? new FormattingOptions();
+
+        var excludeDirs = MergeExcludeDirectories(
+            primary: null,
+            extra: new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+
+        var enumeration = new ProjectEnumeration(
+            rootPath: rootPath,
+            kind: ProjectKind.PowerShell,
+            customExtensions: null,
+            excludeDirectories: excludeDirs);
+
+        var all = ProjectFileEnumerator.Enumerate(enumeration)
+            .Where(IsPowerShellSourceFile)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var rootPsm1 = Path.Combine(rootPath, $"{moduleName}.psm1");
+
+        string[] psFiles = all.Where(p => HasExtension(p, ".ps1", ".psm1")).ToArray();
+        string[] psd1Files = all.Where(p => HasExtension(p, ".psd1")).ToArray();
+
+        // Avoid formatting the same output file twice when merge settings are enabled.
+        if (includeMergeFormatting)
+        {
+            if (cfg.Merge.FormatCodePSM1?.Enabled == true)
+                psFiles = psFiles.Where(p => !string.Equals(p, rootPsm1, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+            if (cfg.Merge.FormatCodePSD1?.Enabled == true)
+                psd1Files = psd1Files.Where(p => !string.Equals(p, manifestPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }
+
+        var results = new List<FormatterResult>(all.Length + 4);
+
+        if (cfg.Standard.FormatCodePSM1?.Enabled == true && psFiles.Length > 0)
+            results.AddRange(pipeline.Run(psFiles, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
+
+        if (cfg.Standard.FormatCodePSD1?.Enabled == true && psd1Files.Length > 0)
+            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(cfg.Standard.FormatCodePSD1)));
+
+        if (includeMergeFormatting)
+        {
+            if (cfg.Merge.FormatCodePSM1?.Enabled == true && File.Exists(rootPsm1))
+                results.AddRange(pipeline.Run(new[] { rootPsm1 }, BuildFormatOptions(cfg.Merge.FormatCodePSM1)));
+
+            if (cfg.Merge.FormatCodePSD1?.Enabled == true && File.Exists(manifestPath))
+                results.AddRange(pipeline.Run(new[] { manifestPath }, BuildFormatOptions(cfg.Merge.FormatCodePSD1)));
+        }
+
+        return results.ToArray();
+
+        static bool IsPowerShellSourceFile(string path)
+            => HasExtension(path, ".ps1", ".psm1", ".psd1");
+
+        static bool HasExtension(string path, params string[] extensions)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+
+            var ext = Path.GetExtension(path);
+            if (string.IsNullOrWhiteSpace(ext)) return false;
+
+            foreach (var e in extensions)
+            {
+                if (ext.Equals(e, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+
+            return false;
+        }
+    }
+
+    private static FormatOptions BuildFormatOptions(FormatCodeOptions formatCode)
+        => new()
+        {
+            RemoveCommentsInParamBlock = formatCode.RemoveCommentsInParamBlock,
+            RemoveCommentsBeforeParamBlock = formatCode.RemoveCommentsBeforeParamBlock,
+            RemoveAllEmptyLines = formatCode.RemoveAllEmptyLines,
+            RemoveEmptyLines = formatCode.RemoveEmptyLines,
+            PssaSettingsJson = PssaFormattingDefaults.SerializeSettings(formatCode.FormatterSettings),
+            TimeoutSeconds = 120,
+            LineEnding = LineEnding.CRLF,
+            Utf8Bom = true
+        };
 
     private static CheckStatus EvaluateFileConsistency(ProjectConsistencyReport report, FileConsistencySettings settings)
     {

@@ -281,11 +281,24 @@ public sealed class DotNetReleaseBuildService
     {
         if (File.Exists(zipPath)) File.Delete(zipPath);
 
+        var zipFullPath = Path.GetFullPath(zipPath);
+
         using var fs = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         using var archive = new ZipArchive(fs, ZipArchiveMode.Create);
 
         foreach (var file in Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories))
         {
+            // Avoid trying to zip the zip file that we are currently writing (common when zipPath is under directoryPath).
+            try
+            {
+                if (string.Equals(Path.GetFullPath(file), zipFullPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+            }
+            catch
+            {
+                // best effort
+            }
+
             var rel = ComputeRelativePath(directoryPath, file);
             archive.CreateEntryFromFile(file, rel, CompressionLevel.Optimal);
         }

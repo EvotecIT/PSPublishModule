@@ -29,7 +29,7 @@ public sealed class PssaFormatter : IFormatter
     /// <inheritdoc />
     public IReadOnlyList<FormatterResult> FormatFilesWithSettings(IEnumerable<string> files, string? settingsJson, TimeSpan? timeout = null)
     {
-        var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();  
         if (list.Length == 0) return Array.Empty<FormatterResult>();
 
         var script = BuildScript();
@@ -60,6 +60,11 @@ public sealed class PssaFormatter : IFormatter
         {
             _logger.Warn("PSSA: Formatting timed out; skipping.");
             return list.Select(p => new FormatterResult(p, false, "Skipped: Timeout")).ToArray();
+        }
+        if (result.ExitCode == 3 || (result.StdOut ?? string.Empty).Contains("PSSA_NOT_FOUND", StringComparison.Ordinal))
+        {
+            _logger.Warn("PSSA: PSScriptAnalyzer not found; skipping formatting.");
+            return list.Select(p => new FormatterResult(p, false, "Skipped: PSScriptAnalyzer not found")).ToArray();
         }
 
         // Parse lines: FORMATTED::<path> | UNCHANGED::<path> | ERROR::<path>::<message>
@@ -95,7 +100,10 @@ public sealed class PssaFormatter : IFormatter
         {
             if (!outputs.Any(o => string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
             {
-                outputs.Add(new FormatterResult(p, false, "No result returned"));
+                if (result.ExitCode != 0)
+                    outputs.Add(new FormatterResult(p, false, $"Skipped: PSSA failed (exit {result.ExitCode})"));
+                else
+                    outputs.Add(new FormatterResult(p, false, "No result returned"));
             }
         }
 
@@ -130,6 +138,26 @@ if ($SettingsB64) {
     $settings = $null
   }
 }
+
+function ConvertTo-Hashtable {
+  param([object]$InputObject)
+  if ($null -eq $InputObject) { return $null }
+  if ($InputObject -is [System.Collections.IDictionary]) { return $InputObject }
+  if ($InputObject -is [pscustomobject]) {
+    $h = @{}
+    foreach ($p in $InputObject.PSObject.Properties) {
+      $h[$p.Name] = ConvertTo-Hashtable $p.Value
+    }
+    return $h
+  }
+  if ($InputObject -is [System.Collections.IEnumerable] -and -not ($InputObject -is [string])) {
+    $arr = @()
+    foreach ($i in $InputObject) { $arr += ConvertTo-Hashtable $i }
+    return ,$arr
+  }
+  return $InputObject
+}
+if ($null -ne $settings) { $settings = ConvertTo-Hashtable $settings }
 
 foreach ($f in $Files) {
   try {
