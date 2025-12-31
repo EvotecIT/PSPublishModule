@@ -6,6 +6,14 @@ namespace PSPublishModule;
 /// <summary>
 /// Enables or disables creation of documentation from the module using PowerForge.
 /// </summary>
+/// <example>
+/// <summary>Generate markdown docs and external help, and sync back to project root</summary>
+/// <code>New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot</code>
+/// </example>
+/// <example>
+/// <summary>Generate docs but skip about topics conversion and fallback examples</summary>
+/// <code>New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDocumentation")]
 public sealed class NewConfigurationDocumentationCommand : PSCmdlet
 {
@@ -21,11 +29,23 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
     /// </summary>
     [Parameter] public SwitchParameter UpdateWhenNew { get; set; }
 
+    /// <summary>
+    /// When enabled and <see cref="UpdateWhenNew"/> is set, the generated external help file is also synced
+    /// back to the project root (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>).
+    /// </summary>
+    [Parameter] public SwitchParameter SyncExternalHelpToProjectRoot { get; set; }
+
     /// <summary>Disable external help (MAML) generation.</summary>
     [Parameter] public SwitchParameter SkipExternalHelp { get; set; }
 
+    /// <summary>Disable conversion of about_* topics into markdown pages.</summary>
+    [Parameter] public SwitchParameter SkipAboutTopics { get; set; }
+
+    /// <summary>Disable generating basic fallback examples for cmdlets missing examples.</summary>
+    [Parameter] public SwitchParameter SkipFallbackExamples { get; set; }
+
     /// <summary>Culture folder for generated external help (default: en-US).</summary>
-    [Parameter] public string ExternalHelpCulture { get; set; } = "en-US";
+    [Parameter] public string ExternalHelpCulture { get; set; } = "en-US";      
 
     /// <summary>Optional file name override for external help (default: &lt;ModuleName&gt;-help.xml).</summary>
     [Parameter] public string ExternalHelpFileName { get; set; } = string.Empty;
@@ -55,7 +75,10 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
             Enable.IsPresent ||
             StartClean.IsPresent ||
             UpdateWhenNew.IsPresent ||
+            SyncExternalHelpToProjectRoot.IsPresent ||
             SkipExternalHelp.IsPresent ||
+            SkipAboutTopics.IsPresent ||
+            SkipFallbackExamples.IsPresent ||
             MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpCulture)) ||
             MyInvocation.BoundParameters.ContainsKey(nameof(ExternalHelpFileName));
 
@@ -68,7 +91,10 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
                     Enable = Enable.IsPresent,
                     StartClean = StartClean.IsPresent,
                     UpdateWhenNew = UpdateWhenNew.IsPresent,
+                    SyncExternalHelpToProjectRoot = SyncExternalHelpToProjectRoot.IsPresent,
                     Tool = PowerForge.DocumentationTool.PowerForge,
+                    IncludeAboutTopics = !SkipAboutTopics.IsPresent,
+                    GenerateFallbackExamples = !SkipFallbackExamples.IsPresent,
                     GenerateExternalHelp = !SkipExternalHelp.IsPresent,
                     ExternalHelpCulture = ExternalHelpCulture,
                     ExternalHelpFileName = ExternalHelpFileName

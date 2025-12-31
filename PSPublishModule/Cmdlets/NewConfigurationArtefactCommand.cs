@@ -12,6 +12,14 @@ namespace PSPublishModule;
 /// <summary>
 /// Tells the module to create an artefact of a specified type.
 /// </summary>
+/// <example>
+/// <summary>Create a packed ZIP artefact</summary>
+/// <code>New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'</code>
+/// </example>
+/// <example>
+/// <summary>Create an unpacked artefact including required modules</summary>
+/// <code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationArtefact")]
 public sealed class NewConfigurationArtefactCommand : PSCmdlet
 {

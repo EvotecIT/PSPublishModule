@@ -8,6 +8,14 @@ namespace PSPublishModule;
 /// <summary>
 /// Provides a way to configure publishing to PowerShell Gallery or GitHub.
 /// </summary>
+/// <example>
+/// <summary>Publish to PowerShell Gallery (API key from file)</summary>
+/// <code>New-ConfigurationPublish -Type PowerShellGallery -FilePath "$env:USERPROFILE\.secrets\psgallery.key" -Enabled</code>
+/// </example>
+/// <example>
+/// <summary>Publish to GitHub Releases (token from file)</summary>
+/// <code>New-ConfigurationPublish -Type GitHub -FilePath "$env:USERPROFILE\.secrets\github.token" -UserName 'EvotecIT' -RepositoryName 'MyModule' -Enabled</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPublish", DefaultParameterSetName = "ApiFromFile")]
 public sealed class NewConfigurationPublishCommand : PSCmdlet
 {

@@ -7,6 +7,10 @@ namespace PSPublishModule;
 /// <summary>
 /// Allows configuring the build process for a module.
 /// </summary>
+/// <example>
+/// <summary>Enable build and module merge, and keep a few installed versions</summary>
+/// <code>New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationBuild")]
 public sealed class NewConfigurationBuildCommand : PSCmdlet
 {

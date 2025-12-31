@@ -16,6 +16,14 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 /// </summary>
+/// <example>
+/// <summary>Build a module (DSL) and keep docs in sync</summary>
+/// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings { New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' }</code>
+/// </example>
+/// <example>
+/// <summary>Generate a PowerForge JSON pipeline without running the build</summary>
+/// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'</code>
+/// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
 [Alias("New-PrepareModule", "Build-Module", "Invoke-ModuleBuilder")]
 public sealed partial class InvokeModuleBuildCommand : PSCmdlet
@@ -114,7 +122,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// Folders from which to include all files in artefacts.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
-    public string[] IncludeAll { get; set; } = { "Images", "Resources", "Templates", "Bin", "Lib", "Data" };
+    public string[] IncludeAll { get; set; } = { "Images", "Resources", "Templates", "Bin", "Lib", "Data", "en-US" };
 
     /// <summary>
     /// Optional script block executed during staging that can add custom files/folders to the build.

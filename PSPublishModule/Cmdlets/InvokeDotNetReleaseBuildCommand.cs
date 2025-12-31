@@ -9,6 +9,14 @@ namespace PSPublishModule;
 /// <summary>
 /// Builds a .NET project in Release configuration and prepares release artefacts.
 /// </summary>
+/// <example>
+/// <summary>Build and pack a project (and its dependency projects)</summary>
+/// <code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDependencies</code>
+/// </example>
+/// <example>
+/// <summary>Build and sign a project (certificate thumbprint)</summary>
+/// <code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser</code>
+/// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "DotNetReleaseBuild", SupportsShouldProcess = true)]
 [OutputType(typeof(DotNetReleaseBuildResult))]
 public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
