@@ -189,7 +189,7 @@ internal static class SpectrePipelineConsoleUi
             table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
         }
 
-        if (res.FormattingStagingResults is { Length: > 0 } || res.FormattingProjectResults is { Length: > 0 })
+        if (res.Plan.Formatting is not null)
         {
             static string FormatCount(int changed, int total, string label)
             {
@@ -198,13 +198,13 @@ internal static class SpectrePipelineConsoleUi
             }
 
             var parts = new List<string>(2);
-            if (res.FormattingStagingResults is { Length: > 0 })
             {
                 var total = res.FormattingStagingResults.Length;
                 var changed = res.FormattingStagingResults.Count(r => r.Changed);
                 parts.Add(FormatCount(changed, total, "staging"));
             }
-            if (res.FormattingProjectResults is { Length: > 0 })
+
+            if (res.Plan.Formatting.Options.UpdateProjectRoot)
             {
                 var total = res.FormattingProjectResults.Length;
                 var changed = res.FormattingProjectResults.Count(r => r.Changed);

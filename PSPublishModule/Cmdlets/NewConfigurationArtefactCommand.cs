@@ -52,6 +52,22 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     [Parameter]
     public string? RequiredModulesPath { get; set; }
 
+    /// <summary>Repository name used when downloading required modules (Save-PSResource / Save-Module).</summary>
+    [Parameter]
+    public string? RequiredModulesRepository { get; set; }
+
+    /// <summary>Repository credential username (basic auth) used when downloading required modules.</summary>
+    [Parameter]
+    public string? RequiredModulesCredentialUserName { get; set; }
+
+    /// <summary>Repository credential secret (password/token) in clear text used when downloading required modules.</summary>
+    [Parameter]
+    public string? RequiredModulesCredentialSecret { get; set; }
+
+    /// <summary>Repository credential secret (password/token) in a clear-text file used when downloading required modules.</summary>
+    [Parameter]
+    public string? RequiredModulesCredentialSecretFilePath { get; set; }
+
     /// <summary>Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=&gt;destination) or <see cref="ArtefactCopyMapping"/>[]</summary>
     [Parameter]
     [ArtefactCopyMappingsTransformation]
@@ -118,6 +134,44 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesPath)) && RequiredModulesPath is not null)
             artefact.Configuration.RequiredModules.Path = NormalizePath(RequiredModulesPath);
+
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesRepository)) &&
+            !string.IsNullOrWhiteSpace(RequiredModulesRepository))
+        {
+            artefact.Configuration.RequiredModules.Repository = RequiredModulesRepository!.Trim();
+        }
+
+        var requiredModulesSecret = string.Empty;
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesCredentialSecretFilePath)) &&
+            !string.IsNullOrWhiteSpace(RequiredModulesCredentialSecretFilePath))
+        {
+            requiredModulesSecret = File.ReadAllText(RequiredModulesCredentialSecretFilePath!).Trim();
+        }
+        else if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesCredentialSecret)) &&
+                 !string.IsNullOrWhiteSpace(RequiredModulesCredentialSecret))
+        {
+            requiredModulesSecret = RequiredModulesCredentialSecret!.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModulesSecret) &&
+            string.IsNullOrWhiteSpace(RequiredModulesCredentialUserName))
+        {
+            throw new PSArgumentException(
+                "RequiredModulesCredentialUserName is required when RequiredModulesCredentialSecret/RequiredModulesCredentialSecretFilePath is provided.");
+        }
+
+        var hasRequiredModulesCredential =
+            !string.IsNullOrWhiteSpace(RequiredModulesCredentialUserName) &&
+            !string.IsNullOrWhiteSpace(requiredModulesSecret);
+
+        if (hasRequiredModulesCredential)
+        {
+            artefact.Configuration.RequiredModules.Credential = new RepositoryCredential
+            {
+                UserName = RequiredModulesCredentialUserName!.Trim(),
+                Secret = requiredModulesSecret
+            };
+        }
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(AddRequiredModules)))
             artefact.Configuration.RequiredModules.Enabled = true;

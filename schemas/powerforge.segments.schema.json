@@ -284,6 +284,10 @@
         "RepositoryPaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "RepositoryBranch": { "type": ["string", "null"] },
         "DocumentationOrder": { "type": ["array", "null"], "items": { "type": "string" } },
+        "GenerateInstallCommand": { "type": "boolean" },
+        "GenerateUpdateCommand": { "type": "boolean" },
+        "InstallCommandName": { "type": ["string", "null"] },
+        "UpdateCommandName": { "type": ["string", "null"] },
         "Schema": { "type": "string" }
       }
     },
@@ -498,7 +502,9 @@
       "properties": {
         "Enabled": { "type": ["boolean", "null"] },
         "Path": { "type": ["string", "null"] },
-        "ModulesPath": { "type": ["string", "null"] }
+        "ModulesPath": { "type": ["string", "null"] },
+        "Repository": { "type": ["string", "null"] },
+        "Credential": { "anyOf": [{ "$ref": "#/$defs/RepositoryCredential" }, { "type": "null" }] }
       }
     },
 

@@ -61,6 +61,26 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
     /// <summary>Optional file-name order for Internals\\Docs when rendering documentation.</summary>
     [Parameter] public string[]? DocumentationOrder { get; set; }
 
+    /// <summary>
+    /// When set, generates a public Install-&lt;ModuleName&gt; helper function during build that copies Internals to a destination folder.
+    /// </summary>
+    [Parameter] public SwitchParameter GenerateInstallCommand { get; set; }
+
+    /// <summary>
+    /// When set, generates a public Update-&lt;ModuleName&gt; helper function during build that delegates to the install command.
+    /// </summary>
+    [Parameter] public SwitchParameter GenerateUpdateCommand { get; set; }
+
+    /// <summary>
+    /// Optional override name for the generated install command. When empty, defaults to Install-&lt;ModuleName&gt;.
+    /// </summary>
+    [Parameter] public string? InstallCommandName { get; set; }
+
+    /// <summary>
+    /// Optional override name for the generated update command. When empty, defaults to Update-&lt;ModuleName&gt;.
+    /// </summary>
+    [Parameter] public string? UpdateCommandName { get; set; }
+
     /// <summary>Emits delivery configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -84,6 +104,10 @@ public sealed class NewConfigurationDeliveryCommand : PSCmdlet
             RepositoryPaths = RepositoryPaths,
             RepositoryBranch = RepositoryBranch,
             DocumentationOrder = DocumentationOrder,
+            GenerateInstallCommand = GenerateInstallCommand.IsPresent || !string.IsNullOrWhiteSpace(InstallCommandName),
+            GenerateUpdateCommand = GenerateUpdateCommand.IsPresent || !string.IsNullOrWhiteSpace(UpdateCommandName),
+            InstallCommandName = string.IsNullOrWhiteSpace(InstallCommandName) ? null : InstallCommandName!.Trim(),
+            UpdateCommandName = string.IsNullOrWhiteSpace(UpdateCommandName) ? null : UpdateCommandName!.Trim(),
             Schema = "1.3"
         };
 
