@@ -94,6 +94,38 @@ PSPublishModule can bundle your module's Internals (Scripts, Docs, Binaries, Con
   - Azure DevOps PAT (Code: Read): set once `setx PG_AZDO_PAT "your_pat"` or `Set-ModuleDocumentation -AzureDevOpsPat 'your_pat'`
   - Repo URL format for AzDO: `https://dev.azure.com/{organization}/{project}/_git/{repository}`
 
+### Documentation Generation (Markdown, External Help, about_*)
+
+PowerForge can generate PowerShell help from a built module:
+
+- Markdown help (PlatyPS-compatible): `Docs/*.md`
+- External help for `Get-Help` (MAML): `<culture>/<ModuleName>-help.xml` (default culture: `en-US`)
+- About topics (from `about_*.help.txt` / `about_*.txt`): converted to `Docs/About/*.md` and listed in `Docs/Readme.md`
+
+To enable it in your build config:
+
+- `New-ConfigurationDocumentation -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
+- `New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\\Readme.md'`
+- To also sync the generated external help file back into your project folder, add `-SyncExternalHelpToProjectRoot`
+
+Authoring C# cmdlets (recommended):
+
+- Ensure `<GenerateDocumentationFile>true</GenerateDocumentationFile>` in your `.csproj`.
+- Add `<example>` blocks to the cmdlet class XML docs (PowerForge reads the `.xml` next to the published `.dll`):
+
+```csharp
+/// <example>
+/// <summary>Build a module</summary>
+/// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\\Git\\MyModule'</code>
+/// </example>
+```
+
+Authoring `about_*` topics:
+
+- Create `en-US\\about_<Topic>.help.txt` in your module source (standard PowerShell about help format).
+- Keep the culture folder in your packaged output (PowerForge includes `en-US` by default).
+- Opt out by omitting `about_*` files or setting `BuildDocumentation.IncludeAboutTopics = false` (or using `New-ConfigurationDocumentation -SkipAboutTopics`).
+
 ### Usage
 
 ### CLI (PowerForge.Cli)
