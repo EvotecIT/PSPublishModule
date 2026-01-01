@@ -5,11 +5,21 @@ using System.Linq;
 namespace PowerForge;
 
 /// <summary>
-/// Public static facade for PowerForge services, intended to be called from PowerShell scripts.
+/// Convenience entry points for invoking PowerForge services without a DI container.
 /// </summary>
-/// <summary>
-/// Top-level static services for formatting, normalization, install, export detection and manifest edits.
-/// </summary>
+/// <remarks>
+/// <para>
+/// This type is primarily intended for calling from PowerShell build scripts via
+/// <c>[PowerForge.BuildServices]::SomeMethod(...)</c> once the PowerForge assembly is loaded.
+/// </para>
+/// <para>
+/// For configuration-driven workflows, prefer <see cref="ModulePipelineRunner"/> (JSON spec) or the PowerForge CLI.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Format files from PowerShell</summary>
+/// <code>[PowerForge.BuildServices]::FormatFiles(@('.\Build\Build-Module.ps1'), $null, 120)</code>
+/// </example>
 public static class BuildServices
 {
     /// <summary>Formats files using out-of-proc PSScriptAnalyzer with optional settings JSON.</summary>
