@@ -11,7 +11,7 @@ Complete module testing suite that handles dependencies, imports, and test execu
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-ModuleTestSuite [-ProjectPath <string>] [-AdditionalModules <string[]>] [-SkipModules <string[]>] [-TestPath <string>] [-OutputFormat <ModuleTestSuiteOutputFormat>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure] [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [-FailureSummaryFormat <ModuleTestSuiteFailureSummaryFormat>] [<CommonParameters>]
+Invoke-ModuleTestSuite [-ProjectPath <string>] [-AdditionalModules <string[]>] [-SkipModules <string[]>] [-TestPath <string>] [-OutputFormat <ModuleTestSuiteOutputFormat>] [-TimeoutSeconds <int>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure] [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [-FailureSummaryFormat <ModuleTestSuiteFailureSummaryFormat>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -245,6 +245,21 @@ Custom path to test files (defaults to Tests folder in project).
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TimeoutSeconds
+Timeout for the out-of-process test execution, in seconds.
+
+```yaml
+Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
 

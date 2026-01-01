@@ -2,6 +2,15 @@
 
 name: Test & Build Module
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
 # Controls when the workflow will run
 on:
   # Triggers the workflow on push or pull request events but only for the "master" branch
@@ -17,12 +26,21 @@ on:
 jobs:
   DependencyAudit:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
       - name: NuGet vulnerability audit (informational)
         shell: pwsh
@@ -31,6 +49,7 @@ jobs:
   WindowsBuild:
     # The type of runner that the job will run on
     runs-on: windows-latest
+    timeout-minutes: 15
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -40,16 +59,27 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Build Module
         shell: pwsh
+        timeout-minutes: 10
         run: .\Build\Build-Module.ps1
 
       - name: Test with Pester
         shell: pwsh
+        timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
   LinuxBuild:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -59,16 +89,27 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Build Module
         shell: pwsh
+        timeout-minutes: 10
         run: .\Build\Build-Module.ps1
 
       - name: Test with Pester
         shell: pwsh
+        timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
   MacOsBuild:
     # The type of runner that the job will run on
     runs-on: macos-latest
+    timeout-minutes: 15
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -78,10 +119,20 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Build Module
         shell: pwsh
+        timeout-minutes: 10
         run: .\Build\Build-Module.ps1
 
       - name: Test with Pester
         shell: pwsh
+        timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1

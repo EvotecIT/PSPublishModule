@@ -1,4 +1,7 @@
+using System;
 using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace PowerForge;
 
@@ -113,15 +116,60 @@ public sealed class PowerShellRunner : IPowerShellRunner
 #endif
 
         using var p = new Process { StartInfo = psi };
-        p.Start();
-        if (!p.WaitForExit((int)request.Timeout.TotalMilliseconds))
+
+        try { p.Start(); }
+        catch (Exception ex)
         {
-            try { p.Kill(); } catch { /* ignore */ }
-            return new PowerShellRunResult(124, p.StandardOutput.ReadToEnd(), "Timeout", exe);
+            return new PowerShellRunResult(127, string.Empty, ex.Message, exe);
         }
-        var stdout = p.StandardOutput.ReadToEnd();
-        var stderr = p.StandardError.ReadToEnd();
-        return new PowerShellRunResult(p.ExitCode, stdout, stderr, exe);
+
+        // Read output asynchronously to avoid deadlocks when the child process writes a lot of data.
+        // (Waiting for exit before draining stdout/stderr can cause the child process to block on full buffers.)
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+
+        var timeoutMs = (int)Math.Max(1, Math.Min(int.MaxValue, request.Timeout.TotalMilliseconds));
+        if (!p.WaitForExit(timeoutMs))
+        {
+            try
+            {
+#if NET472
+                p.Kill();
+#else
+                p.Kill(entireProcessTree: true);
+#endif
+            }
+            catch { /* ignore */ }
+
+            try { p.WaitForExit(5000); } catch { /* ignore */ }
+
+            var stdout = TryGetCompletedTaskResult(stdoutTask);
+            var stderr = TryGetCompletedTaskResult(stderrTask);
+            if (string.IsNullOrWhiteSpace(stderr)) stderr = "Timeout";
+
+            return new PowerShellRunResult(124, stdout, stderr, exe);
+        }
+
+        // Ensure the async readers have completed after process exit.
+        try { Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000); } catch { /* ignore */ }
+
+        var finalStdout = TryGetCompletedTaskResult(stdoutTask);
+        var finalStderr = TryGetCompletedTaskResult(stderrTask);
+        return new PowerShellRunResult(p.ExitCode, finalStdout, finalStderr, exe);
+    }
+
+    private static string TryGetCompletedTaskResult(Task<string> task)
+    {
+        if (task is null) return string.Empty;
+
+        try
+        {
+            if (task.Status == TaskStatus.RanToCompletion) return task.Result ?? string.Empty;
+            if (task.Wait(10_000)) return task.Result ?? string.Empty;
+        }
+        catch { /* ignore */ }
+
+        return string.Empty;
     }
 
     /// <summary>

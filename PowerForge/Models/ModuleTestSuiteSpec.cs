@@ -38,7 +38,6 @@ public sealed class ModuleTestSuiteSpec
     /// <summary>When true, prefers <c>pwsh</c> for out-of-process execution.</summary>
     public bool PreferPwsh { get; set; } = true;
 
-    /// <summary>Timeout for the test execution process, in seconds. Default is 1800 (30 minutes).</summary>
-    public int TimeoutSeconds { get; set; } = 1800;
+    /// <summary>Timeout for the test execution process, in seconds. Default is 600 (10 minutes).</summary>
+    public int TimeoutSeconds { get; set; } = 600;
 }
-

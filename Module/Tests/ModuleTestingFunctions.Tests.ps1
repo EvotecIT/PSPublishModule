@@ -29,9 +29,29 @@ Describe "Module Testing Functions" {
     }
 
     Context "Invoke-ModuleTestSuite" {
+        BeforeAll {
+            $script:moduleTestSuiteResult = $null
+            $script:moduleTestSuiteException = $null
+
+            $invokeParams = @{
+                ProjectPath      = (Join-Path -Path $PSScriptRoot -ChildPath '..')
+                SkipDependencies = $true
+                SkipImport       = $true
+                OutputFormat     = 'Minimal'
+                PassThru         = $true
+                TimeoutSeconds   = 600
+                TestPath         = "$PSScriptRoot\..\Tests\Build-Module.Tests.ps1"
+            }
+
+            try {
+                $script:moduleTestSuiteResult = Invoke-ModuleTestSuite @invokeParams
+            } catch {
+                $script:moduleTestSuiteException = $_
+            }
+        }
+
         It "Should execute complete test suite successfully" {
-            # Test the main public function with safe parameters and exclude our own test file to prevent recursion
-            { Invoke-ModuleTestSuite -ProjectPath $PSScriptRoot\.. -SkipDependencies -SkipImport -OutputFormat Minimal -PassThru -TestPath "$PSScriptRoot\..\Tests\Build-Module.Tests.ps1" } | Should -Not -Throw
+            $script:moduleTestSuiteException | Should -BeNullOrEmpty
         }
 
         It "Should handle invalid project path gracefully" {
@@ -39,9 +59,7 @@ Describe "Module Testing Functions" {
         }
 
         It "Should return test results when PassThru is specified" {
-            # For now, just test that PassThru doesn't break the function
-            # The main functionality of returning results is tested in the main test suite
-            { Invoke-ModuleTestSuite -ProjectPath $PSScriptRoot\.. -SkipDependencies -SkipImport -OutputFormat Minimal -PassThru -TestPath "$PSScriptRoot\..\Tests\Build-Module.Tests.ps1" } | Should -Not -Throw
+            $script:moduleTestSuiteResult | Should -Not -BeNullOrEmpty
         }
     }
 }

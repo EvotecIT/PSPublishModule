@@ -85,6 +85,11 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
     [Parameter]
     public ModuleTestSuiteOutputFormat OutputFormat { get; set; } = ModuleTestSuiteOutputFormat.Detailed;
 
+    /// <summary>Timeout for the out-of-process test execution, in seconds.</summary>
+    [Parameter]
+    [ValidateRange(1, int.MaxValue)]
+    public int TimeoutSeconds { get; set; } = 600;
+
     /// <summary>Enable code coverage analysis during tests.</summary>
     [Parameter]
     public SwitchParameter EnableCodeCoverage { get; set; }
@@ -166,7 +171,8 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
                 SkipDependencies = SkipDependencies.IsPresent,
                 SkipImport = SkipImport.IsPresent,
                 KeepResultsXml = false,
-                PreferPwsh = true
+                PreferPwsh = true,
+                TimeoutSeconds = TimeoutSeconds
             });
 
             // Emit captured Pester output if requested.
