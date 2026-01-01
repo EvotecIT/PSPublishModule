@@ -9,6 +9,32 @@ namespace PowerForge;
 /// <summary>
 /// Generates module documentation (markdown help) using the PowerForge built-in generator.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The documentation workflow is built around PowerShell-native help extraction:
+/// </para>
+/// <list type="bullet">
+/// <item><description>Imports the staged module and extracts command metadata via <c>Get-Help</c></description></item>
+/// <item><description>Enriches missing synopsis/description/examples using C# XML docs (<c>*.xml</c>) from the cmdlet assembly</description></item>
+/// <item><description>Writes markdown pages to <see cref="DocumentationConfiguration.Path"/> and optionally creates external help (MAML) under <c>en-US</c></description></item>
+/// </list>
+/// <para>
+/// The engine is used by the module build pipeline and is designed to work for script modules, binary modules, and mixed modules.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Generate markdown docs and external help for a staged module</summary>
+/// <code>
+/// var logger = new ConsoleLogger { IsVerbose = true };
+/// var engine = new DocumentationEngine(new PowerShellRunner(), logger);
+/// var result = engine.Build(
+///     moduleName: "MyModule",
+///     stagingPath: @"C:\Temp\PowerForge\build\MyModule",
+///     moduleManifestPath: @"C:\Temp\PowerForge\build\MyModule\MyModule.psd1",
+///     documentation: new DocumentationConfiguration { Path = "Docs", PathReadme = @"Docs\Readme.md" },
+///     buildDocumentation: new BuildDocumentationConfiguration { Enable = true, GenerateExternalHelp = true, ExternalHelpCulture = "en-US" });
+/// </code>
+/// </example>
 public sealed class DocumentationEngine
 {
     private readonly IPowerShellRunner _runner;

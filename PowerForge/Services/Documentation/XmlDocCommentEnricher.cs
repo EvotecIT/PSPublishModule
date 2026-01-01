@@ -72,7 +72,7 @@ internal sealed class XmlDocCommentEnricher
                 if (NeedsSynopsis(cmd.Name, cmd.Synopsis) && !string.IsNullOrWhiteSpace(typeMember.Summary))
                     cmd.Synopsis = typeMember.Summary!;
 
-                if (NeedsText(cmd.Description))
+                if (NeedsText(cmd.Description) || LooksLikeSynopsisOnly(cmd.Description, cmd.Synopsis))
                 {
                     var desc = typeMember.Remarks;
                     if (string.IsNullOrWhiteSpace(desc)) desc = typeMember.Summary;
@@ -148,10 +148,19 @@ internal sealed class XmlDocCommentEnricher
         if (string.IsNullOrWhiteSpace(value)) return true;
         var v = value!.Trim();
         if (v.StartsWith("{{", StringComparison.Ordinal)) return true;
+        if (v.Contains(@"C:\Path", StringComparison.OrdinalIgnoreCase)) return true;
+        if (v.Contains("C:/Path", StringComparison.OrdinalIgnoreCase)) return true;
         if (v.Contains("Fill in", StringComparison.OrdinalIgnoreCase)) return true;
         if (v.Contains("does not have", StringComparison.OrdinalIgnoreCase) && v.Contains("help", StringComparison.OrdinalIgnoreCase))
             return true;
         return false;
+    }
+
+    private static bool LooksLikeSynopsisOnly(string? description, string? synopsis)
+    {
+        if (string.IsNullOrWhiteSpace(description)) return true;
+        if (string.IsNullOrWhiteSpace(synopsis)) return false;
+        return string.Equals(description!.Trim(), synopsis!.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool NeedsSynopsis(string commandName, string? synopsis)
