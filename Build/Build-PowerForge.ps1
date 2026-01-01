@@ -19,8 +19,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Write-Header($t) { Write-Host "`n=== $t ===" -ForegroundColor Cyan }
-function Write-Ok($t) { Write-Host "[OK] $t" -ForegroundColor Green }
-function Write-Step($t) { Write-Host "[+] $t" -ForegroundColor Yellow }
+function Write-Ok($t) { Write-Host "✅ $t" -ForegroundColor Green }
+function Write-Step($t) { Write-Host "🛠️ $t" -ForegroundColor Yellow }
 
 $repoRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..')))).Path
 $proj = Join-Path $repoRoot 'PowerForge.Cli/PowerForge.Cli.csproj'

@@ -19,7 +19,7 @@ if ($Framework -eq 'auto') {
 }
 
 if (-not $NoBuild) {
-    Write-Host "[i] Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
+    Write-Host "ℹ️ Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
 
     $buildArgs = @('build', $cliProject, '-c', $Configuration, '-f', $Framework, '--nologo')
     if ($PSBoundParameters.ContainsKey('Verbose')) {
@@ -30,7 +30,7 @@ if (-not $NoBuild) {
         $buildArgs += @('--verbosity', 'quiet')
         $buildOutput = & dotnet @buildArgs 2>&1
         if ($LASTEXITCODE -ne 0) { $buildOutput | Out-Host; exit $LASTEXITCODE }
-        Write-Host "[+] Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
+        Write-Host "✅ Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
     }
 }
 
