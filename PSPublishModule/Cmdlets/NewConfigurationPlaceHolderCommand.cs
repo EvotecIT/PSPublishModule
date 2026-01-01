@@ -7,6 +7,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Helps define custom placeholders replacing content within a script or module during the build process.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)
+/// without hardcoding them into source files.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Replace a single placeholder token</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'</code>
+/// <para>Replaces all occurrences of <c>{{ModuleVersion}}</c> in merged content.</para>
+/// </example>
+/// <example>
+/// <summary>Provide multiple replacements</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }</code>
+/// <para>Emits multiple placeholder replacement segments in one call.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationPlaceHolder", DefaultParameterSetName = "FindAndReplace")]
 public sealed class NewConfigurationPlaceHolderCommand : PSCmdlet
 {

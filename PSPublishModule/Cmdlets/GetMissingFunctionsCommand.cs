@@ -7,6 +7,27 @@ namespace PSPublishModule;
 /// <summary>
 /// Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet parses PowerShell code and returns a list of referenced commands that look like missing local helpers.
+/// It is useful when building “portable” scripts/modules where you want to detect (and optionally inline) helper functions.
+/// </para>
+/// <para>
+/// When <c>-ApprovedModules</c> is specified, helper definitions are only accepted from those modules.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>List missing function dependencies for a script</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary</code>
+/// <para>Returns a list of functions referenced by the script that are not part of the script itself.</para>
+/// </example>
+/// <example>
+/// <summary>Analyze a scriptblock and return inlineable helper definitions</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'</code>
+/// <para>Returns a structured report that can include helper function bodies sourced from approved modules.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "MissingFunctions", DefaultParameterSetName = ParameterSetFile)]
 public sealed class GetMissingFunctionsCommand : PSCmdlet
 {
@@ -76,4 +97,3 @@ public sealed class GetMissingFunctionsCommand : PSCmdlet
             WriteObject(line, enumerateCollection: false);
     }
 }
-

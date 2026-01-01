@@ -6,6 +6,18 @@ namespace PSPublishModule;
 /// <summary>
 /// Provides a way to ignore certain commands or modules during build process and continue module building on errors.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Useful for optional dependencies where you want builds to succeed even if a tool module is not available
+/// (e.g. optional analyzers, formatters, helpers).
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Ignore an optional module and continue on missing dependency</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force</code>
+/// <para>Prevents build failure when the module is not installed in the environment.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationModuleSkip")]
 public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
 {

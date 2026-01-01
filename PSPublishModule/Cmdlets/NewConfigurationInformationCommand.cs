@@ -9,6 +9,28 @@ namespace PSPublishModule;
 /// <summary>
 /// Describes what to include/exclude in the module build and how libraries are organized.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This configuration segment controls:
+/// </para>
+/// <list type="bullet">
+/// <item><description>Which folders/files are staged into the build output</description></item>
+/// <item><description>Which folders are packaged into artefacts</description></item>
+/// <item><description>Where compiled libraries are expected (Lib/Core, Lib/Default, Lib/Standard)</description></item>
+/// </list>
+/// </remarks>
+/// <example>
+/// <summary>Customize include/exclude rules for packaging</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationInformation -ExcludeFromPackage 'Ignore','Examples','Docs' -IncludeRoot '*.psd1','*.psm1','LICENSE' -IncludeAll 'Bin','Lib','en-US'</code>
+/// <para>Controls what ends up in packaged artefacts while keeping staging lean.</para>
+/// </example>
+/// <example>
+/// <summary>Add custom files during staging</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationInformation -IncludeCustomCode { Copy-Item -Path '.\Extras\*' -Destination $StagingPath -Recurse -Force }</code>
+/// <para>Injects additional content into the staging folder before packaging.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationInformation")]
 public sealed class NewConfigurationInformationCommand : PSCmdlet
 {

@@ -13,6 +13,27 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates a new release for the given GitHub repository and optionally uploads assets.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by
+/// higher-level helpers (such as <c>Publish-GitHubReleaseAsset</c>) and can also be used directly in CI pipelines.
+/// </para>
+/// <para>
+/// Provide the token via an environment variable to avoid leaking secrets into logs or history.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Create a release and upload a ZIP asset</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'</code>
+/// <para>Creates the release and uploads the specified asset file.</para>
+/// </example>
+/// <example>
+/// <summary>Create a prerelease as a draft</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true</code>
+/// <para>Creates a draft prerelease that can be reviewed before publishing.</para>
+/// </example>
 [Cmdlet(VerbsCommunications.Send, "GitHubRelease")]
 public sealed class SendGitHubReleaseCommand : PSCmdlet
 {

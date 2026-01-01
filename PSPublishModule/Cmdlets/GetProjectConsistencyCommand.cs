@@ -10,6 +10,33 @@ namespace PSPublishModule;
 /// <summary>
 /// Provides comprehensive analysis of encoding and line ending consistency across a project.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.
+/// It is intended to be run before bulk conversions (encoding/line endings) and before packaging a module for release.
+/// </para>
+/// <para>
+/// For fixing issues after analysis, use <c>Convert-ProjectEncoding</c> and <c>Convert-ProjectLineEnding</c>.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Analyze a PowerShell project with defaults</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell</code>
+/// <para>Reports encoding and line ending consistency using PowerShell-friendly defaults.</para>
+/// </example>
+/// <example>
+/// <summary>Analyze with explicit recommendations and detailed output</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails</code>
+/// <para>Useful when you want to enforce a policy (e.g. UTF-8 BOM for PS 5.1 compatibility and LF for cross-platform repos).</para>
+/// </example>
+/// <example>
+/// <summary>Export a detailed report to CSV</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'</code>
+/// <para>Exports the per-file details so you can review issues outside the console.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "ProjectConsistency")]
 public sealed class GetProjectConsistencyCommand : PSCmdlet
 {
@@ -184,4 +211,3 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         }
     }
 }
-

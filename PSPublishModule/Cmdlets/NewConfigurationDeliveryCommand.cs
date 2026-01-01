@@ -8,6 +8,27 @@ namespace PSPublishModule;
 /// <summary>
 /// Configures delivery metadata for bundling and installing internal docs/examples.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally
+/// generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleName&gt;) that can copy these files to a target folder.
+/// </para>
+/// <para>
+/// This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Bundle Internals and generate Install/Update commands</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand</code>
+/// <para>Generates public Install/Update helpers and bundles README/CHANGELOG into the module.</para>
+/// </example>
+/// <example>
+/// <summary>Configure repository-backed docs display</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'</code>
+/// <para>Helps modules expose docs from a repository path in a consistent order.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDelivery")]
 public sealed class NewConfigurationDeliveryCommand : PSCmdlet
 {

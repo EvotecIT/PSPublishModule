@@ -11,6 +11,29 @@ namespace PSPublishModule;
 /// <summary>
 /// Gets the cmdlets and aliases in a .NET assembly by scanning for cmdlet-related attributes.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This is typically used by module build tooling to determine which cmdlets and aliases should be exported
+/// for binary modules (compiled cmdlets).
+/// </para>
+/// <para>
+/// Under the hood it uses <c>System.Reflection.MetadataLoadContext</c> to inspect the assembly in isolation.
+/// Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),
+/// especially when running under Windows PowerShell 5.1.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Inspect a compiled PowerShell module assembly</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'</code>
+/// <para>Returns discovered cmdlet and alias names based on PowerShell attributes.</para>
+/// </example>
+/// <example>
+/// <summary>Inspect an assembly in a build artifact folder</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'</code>
+/// <para>Useful when validating what will be exported before publishing.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "PowerShellAssemblyMetadata")]
 public sealed class GetPowerShellAssemblyMetadataCommand : PSCmdlet
 {

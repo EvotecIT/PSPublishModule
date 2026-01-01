@@ -9,6 +9,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Removes specific files and folders from a project directory with safety features.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)
+/// should be predictable and safe. Supports <c>-WhatIf</c>, retries and optional backups.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Preview cleanup of build artifacts</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf</code>
+/// <para>Shows what would be removed for the selected cleanup type.</para>
+/// </example>
+/// <example>
+/// <summary>Remove custom patterns with backups enabled</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'</code>
+/// <para>Creates backups before deletion and stores them under the backup directory.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Remove, "ProjectFiles", SupportsShouldProcess = true, DefaultParameterSetName = ParameterSetProjectType)]
 public sealed class RemoveProjectFilesCommand : PSCmdlet
 {
@@ -231,4 +249,3 @@ public sealed class RemoveProjectFilesCommand : PSCmdlet
         }
     }
 }
-

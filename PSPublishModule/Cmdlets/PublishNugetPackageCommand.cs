@@ -11,6 +11,26 @@ namespace PSPublishModule;
 /// <summary>
 /// Pushes NuGet packages to a feed using <c>dotnet nuget push</c>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Searches the provided <c>-Path</c> roots for <c>*.nupkg</c> files and pushes them using the .NET SDK.
+/// </para>
+/// <para>
+/// Use <c>-SkipDuplicate</c> for CI-friendly, idempotent runs.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Publish all packages from a Release folder</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate</code>
+/// <para>Publishes all .nupkg files under the folder; safe to rerun in CI.</para>
+/// </example>
+/// <example>
+/// <summary>Publish to a custom feed</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</code>
+/// <para>Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).</para>
+/// </example>
 [Cmdlet(VerbsData.Publish, "NugetPackage", SupportsShouldProcess = true)]
 public sealed class PublishNugetPackageCommand : PSCmdlet
 {

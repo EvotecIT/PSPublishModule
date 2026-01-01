@@ -12,6 +12,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.
+/// Useful as a preprocessing step when producing merged/packed scripts.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Remove comments from a file and write to a new file</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'</code>
+/// <para>Writes the cleaned content to the destination file.</para>
+/// </example>
+/// <example>
+/// <summary>Remove comments from content and return the processed text</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)</code>
+/// <para>Returns the processed content when no destination file is specified.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Remove, "Comments", DefaultParameterSetName = ParameterSetFilePath)]
 public sealed class RemoveCommentsCommand : PSCmdlet
 {

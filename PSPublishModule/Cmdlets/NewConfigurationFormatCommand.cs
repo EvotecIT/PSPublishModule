@@ -8,6 +8,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Builds formatting options for code and manifest generation during the build.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Produces a formatting configuration segment used by the build pipeline to normalize generated output
+/// (merged PSM1/PSD1) and optionally apply formatting back to the project root.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Remove comments and normalize whitespace during merge</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationFormat -ApplyTo OnMergePSM1,OnMergePSD1 -RemoveComments -RemoveEmptyLines</code>
+/// <para>Formats the merged module output and removes comments while keeping readability.</para>
+/// </example>
+/// <example>
+/// <summary>Also update files in the project root</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationFormat -ApplyTo DefaultPSM1,DefaultPSD1 -EnableFormatting -UpdateProjectRoot</code>
+/// <para>Applies formatting rules to the project sources as well as generated output.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationFormat")]
 public sealed class NewConfigurationFormatCommand : PSCmdlet
 {

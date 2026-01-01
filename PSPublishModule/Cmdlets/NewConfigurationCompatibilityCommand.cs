@@ -7,6 +7,18 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates configuration for PowerShell compatibility checking during module build.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Adds a compatibility validation step to the build pipeline. This can be used to enforce that the module source is compatible
+/// with Windows PowerShell 5.1 and/or PowerShell 7+.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Require cross-version compatibility and fail the build on issues</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport</code>
+/// <para>Enables validation and exports a CSV report when issues are detected.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationCompatibility")]
 public sealed class NewConfigurationCompatibilityCommand : PSCmdlet
 {

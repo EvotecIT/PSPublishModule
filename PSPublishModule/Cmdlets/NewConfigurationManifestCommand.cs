@@ -7,6 +7,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates a configuration manifest for a PowerShell module.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Emits a manifest configuration segment that is later applied to the module <c>.psd1</c> during a build.
+/// Use this to define identity and metadata (version, GUID, author, tags, links) in a build script / JSON pipeline.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Create a minimal manifest segment</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'</code>
+/// <para>Defines the core identity fields required for a module manifest.</para>
+/// </example>
+/// <example>
+/// <summary>Create a manifest with tags and links</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'</code>
+/// <para>Populates common PSGallery metadata that shows up on the gallery and in generated docs.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationManifest")]
 public sealed class NewConfigurationManifestCommand : PSCmdlet
 {

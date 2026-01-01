@@ -6,6 +6,18 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates a configuration for importing PowerShell modules.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).
+/// This is primarily used by test and documentation steps that execute PowerShell code.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Import the module under build and its RequiredModules</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationImportModule -ImportSelf -ImportRequiredModules</code>
+/// <para>Ensures the pipeline imports the module and required dependencies before running tests or generating docs.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationImportModule")]
 public sealed class NewConfigurationImportModuleCommand : PSCmdlet
 {

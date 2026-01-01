@@ -10,6 +10,32 @@ namespace PSPublishModule;
 /// <summary>
 /// Analyzes line ending consistency across all files in a project directory.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet is read-only: it reports CRLF/LF usage and can optionally detect mixed line endings.
+/// </para>
+/// <para>
+/// To normalize line endings after analysis, use <c>Convert-ProjectLineEnding</c>.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Analyze a PowerShell project</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType PowerShell</code>
+/// <para>Returns a summary of line endings used across PowerShell-related files.</para>
+/// </example>
+/// <example>
+/// <summary>Detect mixed line endings and show per-file details</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType Mixed -CheckMixed -ShowFiles</code>
+/// <para>Use this before enforcing a repository-wide LF/CRLF policy.</para>
+/// </example>
+/// <example>
+/// <summary>Export a detailed report to CSV</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\lineending-report.csv'</code>
+/// <para>Creates a CSV report that can be shared or used in CI artifacts.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "ProjectLineEnding")]
 public sealed class GetProjectLineEndingCommand : PSCmdlet
 {
@@ -214,4 +240,3 @@ public sealed class GetProjectLineEndingCommand : PSCmdlet
         }
     }
 }
-

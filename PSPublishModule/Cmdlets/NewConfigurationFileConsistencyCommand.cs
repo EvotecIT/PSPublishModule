@@ -7,6 +7,18 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates configuration for file consistency checking (encoding and line endings) during module build.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules
+/// and (optionally) auto-fix issues during a build.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Enforce UTF-8 BOM + CRLF and auto-fix during build</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport</code>
+/// <para>Enforces consistency and exports a CSV report; backups are created before fixes are applied.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationFileConsistency")]
 public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
 {

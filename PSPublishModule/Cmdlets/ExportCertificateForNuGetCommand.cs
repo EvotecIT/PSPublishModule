@@ -11,6 +11,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Exports a code-signing certificate to DER format for NuGet.org registration.
 /// </summary>
+/// <remarks>
+/// <para>
+/// NuGet.org requires uploading the public certificate (<c>.cer</c>) used for package signing.
+/// This cmdlet exports the selected certificate from the local certificate store.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Export by thumbprint</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'</code>
+/// <para>Exports the certificate in DER format to the given path.</para>
+/// </example>
+/// <example>
+/// <summary>Export by SHA256 hash</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'</code>
+/// <para>Useful when you have the SHA256 fingerprint but not the Windows thumbprint.</para>
+/// </example>
 [Cmdlet(VerbsData.Export, "CertificateForNuGet", DefaultParameterSetName = ParameterSetThumbprint)]
 public sealed class ExportCertificateForNuGetCommand : PSCmdlet
 {

@@ -7,6 +7,37 @@ namespace PSPublishModule;
 /// <summary>
 /// Steps a version based on an expected version pattern (supports the legacy <c>X</c> placeholder).
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet supports two common workflows:
+/// </para>
+/// <list type="bullet">
+/// <item><description>Local stepping using a module manifest (<c>-LocalPSD1</c>)</description></item>
+/// <item><description>Remote stepping based on the latest published module version (<c>-Module</c>)</description></item>
+/// </list>
+/// <para>
+/// When <c>-ExpectedVersion</c> contains an <c>X</c> placeholder (e.g. <c>1.2.X</c>),
+/// the cmdlet resolves the next patch version. When an exact version is provided, it is returned as-is.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Step a version using a local module manifest</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'</code>
+/// <para>Reads the current version from the PSD1 and returns the next patch version.</para>
+/// </example>
+/// <example>
+/// <summary>Return the full step result object</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced</code>
+/// <para>Returns a structured object that includes whether auto-versioning was used.</para>
+/// </example>
+/// <example>
+/// <summary>Step based on the latest published module</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'</code>
+/// <para>Resolves the next patch version by looking up the current version of the module.</para>
+/// </example>
 [Cmdlet("Step", "Version")]
 [OutputType(typeof(string))]
 [OutputType(typeof(ModuleVersionStepResult))]

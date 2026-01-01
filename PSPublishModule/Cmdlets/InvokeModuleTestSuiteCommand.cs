@@ -35,6 +35,33 @@ public enum ModuleTestSuiteFailureSummaryFormat
 /// <summary>
 /// Complete module testing suite that handles dependencies, imports, and test execution.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both
+/// local development and CI pipelines.
+/// </para>
+/// <para>
+/// For post-processing failures (e.g. emitting JSON summaries), combine it with <c>Get-ModuleTestFailures</c>.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Run the full test suite for a module</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'</code>
+/// <para>Runs tests under the module project folder, installs dependencies, and prints a summary.</para>
+/// </example>
+/// <example>
+/// <summary>Run in CI mode and return the result object</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru</code>
+/// <para>Optimizes output for CI and returns a structured result object.</para>
+/// </example>
+/// <example>
+/// <summary>Pipe results into Get-ModuleTestFailures</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary</code>
+/// <para>Produces a concise failure summary that can be used in CI logs.</para>
+/// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleTestSuite")]
 public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
 {
@@ -394,4 +421,3 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
         }
     }
 }
-

@@ -10,6 +10,31 @@ namespace PSPublishModule;
 /// <summary>
 /// Updates version numbers across multiple project files.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Updates version numbers in:
+/// <list type="bullet">
+/// <item><description>C# projects (<c>*.csproj</c>)</description></item>
+/// <item><description>PowerShell module manifests (<c>*.psd1</c>)</description></item>
+/// <item><description>PowerShell build scripts that reference <c>Invoke-ModuleBuild</c></description></item>
+/// </list>
+/// </para>
+/// <para>
+/// Use <c>-VersionType</c> to increment one component, or <c>-NewVersion</c> to set an explicit version.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Increment minor version across the repository</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Set-ProjectVersion -VersionType Minor -WhatIf</code>
+/// <para>Previews the version update for all discovered project files.</para>
+/// </example>
+/// <example>
+/// <summary>Set a specific version for one module</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'</code>
+/// <para>Updates only files related to the selected module name.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Set, "ProjectVersion", SupportsShouldProcess = true)]
 [OutputType(typeof(ProjectVersionUpdateResult))]
 public sealed class SetProjectVersionCommand : PSCmdlet

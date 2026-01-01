@@ -10,6 +10,27 @@ namespace PSPublishModule;
 /// <summary>
 /// Publishes a release asset to GitHub (creates a release and uploads a zip).
 /// </summary>
+/// <remarks>
+/// <para>
+/// Reads project metadata from <c>*.csproj</c>, resolves the release version (unless overridden),
+/// creates a GitHub release, and uploads the specified ZIP asset.
+/// </para>
+/// <para>
+/// For private repositories, use a token with the minimal required scope and prefer providing it via an environment variable.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Create a release and upload the default ZIP asset</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN</code>
+/// <para>Creates a GitHub release and uploads <c>bin\Release\&lt;Project&gt;.&lt;Version&gt;.zip</c>.</para>
+/// </example>
+/// <example>
+/// <summary>Publish a pre-release with a custom tag template</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'</code>
+/// <para>Useful when your repository uses a specific tag naming convention.</para>
+/// </example>
 [Cmdlet(VerbsData.Publish, "GitHubReleaseAsset", SupportsShouldProcess = true)]
 public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
 {

@@ -10,6 +10,24 @@ namespace PSPublishModule;
 /// <summary>
 /// Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
 /// </summary>
+/// <remarks>
+/// <para>
+/// Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.
+/// When running in CI, prefer using a certificate from the Windows certificate store and referencing it by thumbprint.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Sign a module using a certificate from the current user store</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf</code>
+/// <para>Previews which files would be signed.</para>
+/// </example>
+/// <example>
+/// <summary>Sign using a PFX file</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'</code>
+/// <para>Uses a PFX directly (useful for local testing; store-based is recommended for CI).</para>
+/// </example>
 [Cmdlet(VerbsLifecycle.Register, "Certificate", SupportsShouldProcess = true, DefaultParameterSetName = ParameterSetStore)]
 public sealed class RegisterCertificateCommand : PSCmdlet
 {

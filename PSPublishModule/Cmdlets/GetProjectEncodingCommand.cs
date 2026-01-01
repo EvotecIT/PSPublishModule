@@ -10,6 +10,32 @@ namespace PSPublishModule;
 /// <summary>
 /// Analyzes encoding consistency across all files in a project directory.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet is read-only: it does not modify files. Use it to audit a repository before converting encodings.
+/// </para>
+/// <para>
+/// To standardize file encodings after analysis, use <c>Convert-ProjectEncoding</c>.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Analyze a PowerShell project</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell</code>
+/// <para>Returns a summary of the encodings used in PowerShell-related files.</para>
+/// </example>
+/// <example>
+/// <summary>Show per-file details grouped by encoding</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -GroupByEncoding -ShowFiles</code>
+/// <para>Useful when you need to identify which files are outliers (e.g. ASCII vs UTF-8 BOM).</para>
+/// </example>
+/// <example>
+/// <summary>Export a detailed report to CSV</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\encoding-report.csv'</code>
+/// <para>Creates a CSV report that can be shared or used in CI artifacts.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "ProjectEncoding")]
 public sealed class GetProjectEncodingCommand : PSCmdlet
 {
@@ -161,4 +187,3 @@ public sealed class GetProjectEncodingCommand : PSCmdlet
         }
     }
 }
-

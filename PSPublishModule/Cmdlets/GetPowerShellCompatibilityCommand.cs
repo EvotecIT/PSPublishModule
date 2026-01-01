@@ -11,6 +11,34 @@ namespace PSPublishModule;
 /// <summary>
 /// Analyzes PowerShell files and folders to determine compatibility with Windows PowerShell 5.1 and PowerShell 7+.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Scans PowerShell files to detect patterns and constructs that can cause cross-version issues
+/// (Windows PowerShell 5.1 vs PowerShell 7+), and outputs a compatibility report.
+/// </para>
+/// <para>
+/// Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks
+/// when supporting Windows PowerShell 5.1.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Analyze a module folder</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-PowerShellCompatibility -Path 'C:\MyModule'</code>
+/// <para>Analyzes PowerShell files in the folder and returns a compatibility report.</para>
+/// </example>
+/// <example>
+/// <summary>Recursively analyze and include detailed findings</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails</code>
+/// <para>Useful when investigating why a module behaves differently in PS 5.1 vs PS 7+.</para>
+/// </example>
+/// <example>
+/// <summary>Export compatibility findings to CSV</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'</code>
+/// <para>Creates a report that can be attached to CI artifacts.</para>
+/// </example>
 [Cmdlet(VerbsCommon.Get, "PowerShellCompatibility")]
 public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
 {

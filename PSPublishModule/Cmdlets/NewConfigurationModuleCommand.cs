@@ -8,6 +8,30 @@ namespace PSPublishModule;
 /// <summary>
 /// Provides a way to configure required, external, or approved modules used in the project.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)
+/// install/package dependencies during a build.
+/// </para>
+/// </remarks>
+/// <example>
+/// <summary>Add a required module dependency</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'</code>
+/// <para>Declares a required dependency that is written into the manifest.</para>
+/// </example>
+/// <example>
+/// <summary>Add an external module (required but not packaged)</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'</code>
+/// <para>Declares a dependency that is expected to be installed separately (not bundled into artefacts).</para>
+/// </example>
+/// <example>
+/// <summary>Pin an exact required version</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'</code>
+/// <para>Uses RequiredVersion when an exact match is required.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationModule")]
 public sealed class NewConfigurationModuleCommand : PSCmdlet
 {
