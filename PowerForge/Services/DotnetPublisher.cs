@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -61,7 +62,29 @@ public sealed class DotnetPublisher
             Directory.CreateDirectory(Path.Combine(artifacts, "publish"));
         }
 
-        foreach (var tfm in frameworks ?? Array.Empty<string>())
+        var requestedFrameworks = (frameworks ?? Array.Empty<string>())
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(f => f.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        if (!isWindows)
+        {
+            var skipped = requestedFrameworks.Where(IsNetFrameworkTfm).ToArray();
+            if (skipped.Length > 0)
+            {
+                foreach (var tfm in skipped)
+                    _logger.Warn($"Skipping '{tfm}' publish on non-Windows (classic .NET Framework targets require Windows).");
+
+                requestedFrameworks.RemoveAll(IsNetFrameworkTfm);
+            }
+        }
+
+        if (requestedFrameworks.Count == 0)
+            throw new InvalidOperationException("No supported frameworks were provided for dotnet publish.");
+
+        foreach (var tfm in requestedFrameworks)
         {
             var publishDir = useIsolatedArtifacts
                 ? Path.Combine(artifacts!, "publish", tfm)
@@ -139,6 +162,20 @@ public sealed class DotnetPublisher
         }
 
         return result;
+    }
+
+    private static bool IsNetFrameworkTfm(string tfm)
+    {
+        if (string.IsNullOrWhiteSpace(tfm)) return false;
+        var value = tfm.Trim();
+        if (!value.StartsWith("net", StringComparison.OrdinalIgnoreCase)) return false;
+
+        // net472/net48/etc are classic .NET Framework TFMs and do not include a dot.
+        var suffix = value.Substring(3);
+        if (suffix.Length == 0 || suffix.Contains('.')) return false;
+        if (!suffix.All(char.IsDigit)) return false;
+        if (!int.TryParse(suffix, out var n)) return false;
+        return n > 0 && n < 500;
     }
 
 #if NET472
