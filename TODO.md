@@ -75,7 +75,7 @@
 - Out-of-proc PSScriptAnalyzer:
   - Spawn `pwsh`/`powershell.exe` `-NoProfile -NonInteractive` and run `Invoke-Formatter`.
   - Timeout + graceful fallback (skip formatting but keep normalization).
-- Logging adapter mapping to `[i]/[+]/[-]/[e]` style (no emojis).
+- Logging adapter mapping to emoji-first (fallback to `[i]/[+]/[-]/[e]` when Unicode is not available).
 
 **Phase 1a — PowerForge Core Packaging + Repo Abstractions**
 - Abstractions:

@@ -43,6 +43,7 @@
         "Enable": true,
         "StartClean": true,
         "UpdateWhenNew": true,
+        "SyncExternalHelpToProjectRoot": true,
         "Tool": "PowerForge",
         "GenerateExternalHelp": true,
         "ExternalHelpCulture": "en-US"
