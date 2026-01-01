@@ -340,13 +340,26 @@ internal static class PipelineConsoleUi
             if (_labels.TryGetValue(step.Key, out var label))
             {
                 // Keep it plain (no markup) to avoid rendering issues in live regions.
-                task.Description = $"{label} FAILED";
+                var safeLabel = label.TrimEnd();
+                var msg = NormalizeErrorMessage(error);
+                task.Description = string.IsNullOrWhiteSpace(msg)
+                    ? $"{safeLabel} FAILED"
+                    : $"{safeLabel} FAILED: {msg}";
             }
 
             task.StopTask();
 
             if (_startLookup.TryGetValue(task, out var start))
                 _doneLookup[task] = DateTimeOffset.Now - start;
+        }
+
+        private static string NormalizeErrorMessage(Exception error)
+        {
+            if (error is null) return string.Empty;
+            var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
+            msg = msg.Replace("\r\n", " ").Replace("\n", " ").Trim();
+            if (msg.Length <= 140) return msg;
+            return msg.Substring(0, 139) + "…";
         }
     }
 
