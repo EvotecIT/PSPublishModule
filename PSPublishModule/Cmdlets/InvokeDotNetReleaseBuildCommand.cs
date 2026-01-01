@@ -9,6 +9,16 @@ namespace PSPublishModule;
 /// <summary>
 /// Builds a .NET project in Release configuration and prepares release artefacts.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The cmdlet discovers the <c>.csproj</c> file (when a directory is provided), reads <c>VersionPrefix</c> from the
+/// project, then runs <c>dotnet build</c> and <c>dotnet pack</c> in Release (by default). It produces a ZIP snapshot of
+/// the release output and returns a typed result object for each input project path.
+/// </para>
+/// <para>
+/// Use <c>-WhatIf</c> to preview the planned outputs without running build/pack/sign operations.
+/// </para>
+/// </remarks>
 /// <example>
 /// <summary>Build and pack a project (and its dependency projects)</summary>
 /// <code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDependencies</code>
@@ -16,6 +26,14 @@ namespace PSPublishModule;
 /// <example>
 /// <summary>Build and sign a project (certificate thumbprint)</summary>
 /// <code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser</code>
+/// </example>
+/// <example>
+/// <summary>Preview the release build plan (no build)</summary>
+/// <code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary' -PackDependencies -WhatIf</code>
+/// </example>
+/// <example>
+/// <summary>Build multiple projects in one invocation</summary>
+/// <code>Invoke-DotNetReleaseBuild -ProjectPath '.\ProjectA\ProjectA.csproj', '.\ProjectB\ProjectB.csproj' -PackDependencies</code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "DotNetReleaseBuild", SupportsShouldProcess = true)]
 [OutputType(typeof(DotNetReleaseBuildResult))]

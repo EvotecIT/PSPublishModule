@@ -18,6 +18,11 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationImportModule -ImportSelf -ImportRequiredModules</code>
 /// <para>Ensures the pipeline imports the module and required dependencies before running tests or generating docs.</para>
 /// </example>
+/// <example>
+/// <summary>Import only the module under build</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationImportModule -ImportSelf</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationImportModule")]
 public sealed class NewConfigurationImportModuleCommand : PSCmdlet
 {

@@ -7,9 +7,19 @@ namespace PSPublishModule;
 /// <summary>
 /// Allows configuring the build process for a module.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet emits build configuration that is consumed by <c>Invoke-ModuleBuild</c> / <c>Build-Module</c>.
+/// It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.
+/// </para>
+/// </remarks>
 /// <example>
 /// <summary>Enable build and module merge, and keep a few installed versions</summary>
 /// <code>New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3</code>
+/// </example>
+/// <example>
+/// <summary>Enable signing and terminate locking processes before install</summary>
+/// <code>New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce</code>
 /// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationBuild")]
 public sealed class NewConfigurationBuildCommand : PSCmdlet

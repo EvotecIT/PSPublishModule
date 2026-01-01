@@ -8,6 +8,12 @@ namespace PSPublishModule;
 /// Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.
 /// Thin wrapper over PowerForge.LineEndingConverter.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Use <c>-WhatIf</c> to preview changes without modifying files. When conversion is performed, PowerForge preserves file encoding where possible
+/// and prefers UTF-8 BOM for PowerShell files to maintain Windows PowerShell 5.1 compatibility.
+/// </para>
+/// </remarks>
 /// <example>
 ///   <summary>Preview CRLF normalization for PowerShell files</summary>
 ///   <prefix>PS&gt; </prefix>

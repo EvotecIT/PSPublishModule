@@ -16,13 +16,51 @@ namespace PSPublishModule;
 /// <summary>
 /// Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 /// </summary>
+/// <remarks>
+/// <para>
+/// This is the primary entry point for building a PowerShell module using PSPublishModule.
+/// Configuration is provided via a DSL using <c>New-Configuration*</c> cmdlets (typically inside the <c>-Settings</c>
+/// scriptblock) and then executed by the PowerForge pipeline runner.
+/// </para>
+/// <para>
+/// To generate a reusable <c>powerforge.json</c> configuration file (for the PowerForge CLI) without running any build
+/// steps, use <c>-JsonOnly</c> with <c>-JsonPath</c>.
+/// </para>
+/// <para>
+/// When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+/// Redirect output or use <c>-Verbose</c> to force plain, line-by-line output (useful for CI logs).
+/// </para>
+/// </remarks>
 /// <example>
 /// <summary>Build a module (DSL) and keep docs in sync</summary>
-/// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings { New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' }</code>
+/// <code>
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
+///     New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+/// }
+/// </code>
 /// </example>
 /// <example>
 /// <summary>Generate a PowerForge JSON pipeline without running the build</summary>
-/// <code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'</code>
+/// <code>
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
+/// </code>
+/// </example>
+/// <example>
+/// <summary>Enforce consistency and compatibility during build (fail CI on issues)</summary>
+/// <code>
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -ExitCode -Settings {
+///     New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+///     New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+/// }
+/// </code>
+/// </example>
+/// <example>
+/// <summary>Publish a .NET project into the module as part of the build</summary>
+/// <code>
+/// Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+///     -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+///     -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
+/// </code>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleBuild", DefaultParameterSetName = ParameterSetModern)]
 [Alias("New-PrepareModule", "Build-Module", "Invoke-ModuleBuilder")]

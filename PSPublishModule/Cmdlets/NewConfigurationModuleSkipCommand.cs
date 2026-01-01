@@ -18,6 +18,11 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force</code>
 /// <para>Prevents build failure when the module is not installed in the environment.</para>
 /// </example>
+/// <example>
+/// <summary>Ignore specific functions for cross-platform builds</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationModuleSkip")]
 public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
 {

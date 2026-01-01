@@ -88,7 +88,7 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
         var patterns = ResolvePatterns(ProjectType, CustomExtensions);
         WriteVerbose($"Project type: {ProjectType} with patterns: {string.Join(", ", patterns)}");
 
-        HostWriteLineSafe("[i] Analyzing project consistency...", ConsoleColor.Cyan);
+        HostWriteLineSafe("🔎 Analyzing project consistency...", ConsoleColor.Cyan);
         HostWriteLineSafe($"Project: {root}");
         HostWriteLineSafe($"Type: {ProjectType}");
 

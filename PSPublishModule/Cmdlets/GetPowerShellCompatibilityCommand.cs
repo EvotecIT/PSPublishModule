@@ -76,13 +76,13 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
 
         if (!Internal.IsPresent)
         {
-            HostWriteLineSafe("[i] Analyzing PowerShell compatibility...", ConsoleColor.Cyan);
-            HostWriteLineSafe($"[i] Path: {inputPath}", ConsoleColor.White);
+            HostWriteLineSafe("🔎 Analyzing PowerShell compatibility...", ConsoleColor.Cyan);
+            HostWriteLineSafe($"📁 Path: {inputPath}", ConsoleColor.White);
 
             var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
             var psVersion = psVersionTable?["PSVersion"]?.ToString() ?? string.Empty;
             var psEdition = psVersionTable?["PSEdition"]?.ToString() ?? string.Empty;
-            HostWriteLineSafe($"[i] Current PowerShell: {psEdition} {psVersion}", ConsoleColor.White);
+            HostWriteLineSafe($"💻 Current PowerShell: {psEdition} {psVersion}", ConsoleColor.White);
         }
         else
         {
@@ -125,7 +125,7 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
         }
 
         if (!Internal.IsPresent)
-            HostWriteLineSafe($"[i] Found {report.Files.Length} PowerShell files to analyze", ConsoleColor.Yellow);
+            HostWriteLineSafe($"📄 Found {report.Files.Length} PowerShell files to analyze", ConsoleColor.Yellow);
         else
             WriteVerbose($"Found {report.Files.Length} PowerShell files to analyze");
 
@@ -159,11 +159,18 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
             _ => ConsoleColor.Red
         };
 
-        HostWriteLineSafe($"[i] Status: {summary.Status}", color);
-        HostWriteLineSafe($"[i] {summary.Message}", ConsoleColor.White);
-        HostWriteLineSafe($"[i] PS 5.1 compatible: {summary.PowerShell51Compatible}/{summary.TotalFiles}", ConsoleColor.White);
-        HostWriteLineSafe($"[i] PS 7 compatible:   {summary.PowerShell7Compatible}/{summary.TotalFiles}", ConsoleColor.White);
-        HostWriteLineSafe($"[i] Cross-compatible: {summary.CrossCompatible}/{summary.TotalFiles} ({summary.CrossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)", ConsoleColor.White);
+        var statusEmoji = summary.Status switch
+        {
+            CheckStatus.Pass => "✅",
+            CheckStatus.Warning => "⚠️",
+            _ => "❌"
+        };
+
+        HostWriteLineSafe($"{statusEmoji} Status: {summary.Status}", color);
+        HostWriteLineSafe(summary.Message, ConsoleColor.White);
+        HostWriteLineSafe($"PS 5.1 compatible: {summary.PowerShell51Compatible}/{summary.TotalFiles}", ConsoleColor.White);
+        HostWriteLineSafe($"PS 7 compatible:   {summary.PowerShell7Compatible}/{summary.TotalFiles}", ConsoleColor.White);
+        HostWriteLineSafe($"Cross-compatible: {summary.CrossCompatible}/{summary.TotalFiles} ({summary.CrossCompatibilityPercentage.ToString("0.0", CultureInfo.InvariantCulture)}%)", ConsoleColor.White);
 
         if (summary.Recommendations.Length > 0)
         {
@@ -234,14 +241,14 @@ public sealed class GetPowerShellCompatibilityCommand : PSCmdlet
             if (Internal.IsPresent)
                 WriteVerbose($"Failed to export detailed report to: {exportPath}");
             else
-                HostWriteLineSafe($"[e] Failed to export detailed report to: {exportPath}", ConsoleColor.Red);
+                HostWriteLineSafe($"❌ Failed to export detailed report to: {exportPath}", ConsoleColor.Red);
             return;
         }
 
         if (Internal.IsPresent)
             WriteVerbose($"Detailed report exported to: {exportPath}");
         else
-            HostWriteLineSafe($"[i] Detailed report exported to: {exportPath}", ConsoleColor.Green);
+            HostWriteLineSafe($"✅ Detailed report exported to: {exportPath}", ConsoleColor.Green);
     }
 
     private void HostWriteLineSafe(string text, ConsoleColor? fg = null)

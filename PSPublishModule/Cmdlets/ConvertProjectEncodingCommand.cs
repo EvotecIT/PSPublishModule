@@ -9,6 +9,19 @@ namespace PSPublishModule;
 /// Converts file encodings across a project. Thin wrapper over PowerForge.EncodingConverter.
 /// Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibility.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Use this cmdlet to standardize file encodings across a repository before packaging or publishing a module.
+/// It supports <c>-WhatIf</c>/<c>-Confirm</c> and optional backups via <c>-CreateBackups</c>.
+/// </para>
+/// <para>
+/// For PowerShell projects targeting Windows PowerShell 5.1, UTF-8 with BOM is commonly recommended to avoid
+/// encoding-related parsing issues. For cross-platform projects that do not need PS 5.1, UTF-8 (no BOM) may be preferred.
+/// </para>
+/// <para>
+/// For audit-only reporting, use <c>Get-ProjectEncoding</c>. For combined encoding + line-ending checks, use <c>Get-ProjectConsistency</c>.
+/// </para>
+/// </remarks>
 /// <example>
 ///   <summary>Preview conversion for a PowerShell project</summary>
 ///   <prefix>PS&gt; </prefix>

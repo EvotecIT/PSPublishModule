@@ -19,6 +19,11 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport</code>
 /// <para>Enables validation and exports a CSV report when issues are detected.</para>
 /// </example>
+/// <example>
+/// <summary>Require PowerShell 7 compatibility only</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationCompatibility")]
 public sealed class NewConfigurationCompatibilityCommand : PSCmdlet
 {

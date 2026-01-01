@@ -267,7 +267,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             if (!string.IsNullOrWhiteSpace(req)) versionInfo += $" (Required: {req})";
             if (!string.IsNullOrWhiteSpace(max)) versionInfo += $" (Max: {max})";
 
-            HostWriteLineSafe($"  [>] {name}{versionInfo}", ConsoleColor.Green);
+            HostWriteLineSafe($"  📦 {name}{versionInfo}", ConsoleColor.Green);
         }
     }
 
@@ -282,7 +282,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             if (SkipModules.Contains(m, StringComparer.OrdinalIgnoreCase))
                 continue;
 
-            HostWriteLineSafe($"  [+] {m}", ConsoleColor.Green);
+            HostWriteLineSafe($"  ✅ {m}", ConsoleColor.Green);
         }
     }
 
@@ -299,17 +299,20 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             switch (r.Status)
             {
                 case ModuleDependencyInstallStatus.Skipped:
-                    HostWriteLineSafe($"  [-] Skipping: {r.Name}", ConsoleColor.Gray);
+                    HostWriteLineSafe($"  ⏭️ Skipping: {r.Name}", ConsoleColor.Gray);
                     break;
                 case ModuleDependencyInstallStatus.Satisfied:
-                    HostWriteLineSafe($"  [+] {r.Name} OK (installed: {r.InstalledVersion ?? "unknown"})", ConsoleColor.Green);
+                    HostWriteLineSafe($"  ✅ {r.Name} OK (installed: {r.InstalledVersion ?? "unknown"})", ConsoleColor.Green);
                     break;
                 case ModuleDependencyInstallStatus.Installed:
                 case ModuleDependencyInstallStatus.Updated:
-                    HostWriteLineSafe($"  [>] {r.Name} {r.Status} via {r.Installer ?? "installer"} (resolved: {r.ResolvedVersion ?? "unknown"})", ConsoleColor.Green);
+                {
+                    var icon = r.Status == ModuleDependencyInstallStatus.Updated ? "🔄" : "📥";
+                    HostWriteLineSafe($"  {icon} {r.Name} {r.Status} via {r.Installer ?? "installer"} (resolved: {r.ResolvedVersion ?? "unknown"})", ConsoleColor.Green);
                     break;
+                }
                 case ModuleDependencyInstallStatus.Failed:
-                    HostWriteLineSafe($"  [e] {r.Name}: {r.Message}", ConsoleColor.Red);
+                    HostWriteLineSafe($"  ❌ {r.Name}: {r.Message}", ConsoleColor.Red);
                     break;
             }
         }

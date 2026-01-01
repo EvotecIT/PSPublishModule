@@ -8,6 +8,16 @@ namespace PSPublishModule;
 /// <summary>
 /// Provides a way to configure publishing to PowerShell Gallery or GitHub.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This cmdlet emits publish configuration consumed by <c>Invoke-ModuleBuild</c> / <c>Build-Module</c>.
+/// Use <c>-Type</c> to choose a destination. For repository publishing, <c>-Tool</c> selects the provider (PowerShellGet/PSResourceGet/Auto).
+/// </para>
+/// <para>
+/// For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.
+/// To avoid secrets in source control, pass API keys/tokens via <c>-FilePath</c> or environment-specific tooling.
+/// </para>
+/// </remarks>
 /// <example>
 /// <summary>Publish to PowerShell Gallery (API key from file)</summary>
 /// <code>New-ConfigurationPublish -Type PowerShellGallery -FilePath "$env:USERPROFILE\.secrets\psgallery.key" -Enabled</code>

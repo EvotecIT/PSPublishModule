@@ -19,8 +19,14 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport</code>
 /// <para>Enforces consistency and exports a CSV report; backups are created before fixes are applied.</para>
 /// </example>
+/// <example>
+/// <summary>Audit project root consistency (no fixes)</summary>
+/// <prefix>PS&gt; </prefix>
+/// <code>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -UpdateProjectRoot</code>
+/// <para>Runs validation on staging and project root, exports a report, and does not apply automatic fixes.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationFileConsistency")]
-public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
+public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet     
 {
     /// <summary>Enable file consistency checking during build.</summary>
     [Parameter] public SwitchParameter Enable { get; set; }

@@ -12,6 +12,19 @@ namespace PSPublishModule;
 /// <summary>
 /// Tells the module to create an artefact of a specified type.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Artefacts are created after the module is built into staging. Use <c>Packed</c> (ZIP) for distribution and
+/// <c>Unpacked</c> (folder) for inspection or offline installation.
+/// </para>
+/// <para>
+/// When <c>-AddRequiredModules</c> is enabled, required modules are downloaded (via <c>Save-PSResource</c>/<c>Save-Module</c>) and copied into
+/// the artefact so the output can be used in offline environments.
+/// </para>
+/// <para>
+/// Use <c>-ID</c> to link an artefact to a publish step (<c>New-ConfigurationPublish</c>) and publish only a specific artefact.
+/// </para>
+/// </remarks>
 /// <example>
 /// <summary>Create a packed ZIP artefact</summary>
 /// <code>New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'</code>
