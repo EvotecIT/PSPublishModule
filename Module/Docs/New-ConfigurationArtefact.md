@@ -1,421 +1,379 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationArtefact
-
 ## SYNOPSIS
-Tells the module to create artefact of specified type
+Tells the module to create an artefact of a specified type.
 
 ## SYNTAX
-
-```
-New-ConfigurationArtefact [[-PostScriptMerge] <ScriptBlock>] [[-PreScriptMerge] <ScriptBlock>] -Type <String>
- [-Enable] [-IncludeTagName] [-Path <String>] [-AddRequiredModules] [-ModulesPath <String>]
- [-RequiredModulesPath <String>] [-CopyDirectories <IDictionary>] [-CopyFiles <IDictionary>]
- [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <String>] [-ScriptName <String>]
- [-ID <String>] [-PostScriptMergePath <String>] [-PreScriptMergePath <String>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Tells the module to create artefact of specified type
-There can be multiple artefacts created (even of same type)
-At least one packed artefact is required for publishing to GitHub
+Tells the module to create an artefact of a specified type.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-New-ConfigurationArtefact -Type Unpacked -Enable -Path "$PSScriptRoot\..\Artefacts\Unpacked" -RequiredModulesPath "$PSScriptRoot\..\Artefacts\Unpacked\Modules"
+```powershell
+New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'
 ```
 
 ### EXAMPLE 2
-```
-# standard artefact, packed with tag name without any additional modules or required modules
-New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName
-```
-
-### EXAMPLE 3
-```
-# Create artefact in form of a script. This is useful for very simple modules that should be just single PS1 file
-New-ConfigurationArtefact -Type Script -Enable -Path "$PSScriptRoot\..\Artefacts\Script" -IncludeTagName
-```
-
-### EXAMPLE 4
-```
-# Create artefact in form of a script. This is useful for very simple modules that should be just single PS1 file
-# But additionally pack it into zip fileĄŚż$%#
-New-ConfigurationArtefact -Type ScriptPacked -Enable -Path "$PSScriptRoot\..\Artefacts\ScriptPacked" -ArtefactName "Script-<ModuleName>-$((Get-Date).ToString('yyyy-MM-dd')).zip"
+```powershell
+New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'
 ```
 
 ## PARAMETERS
 
+### -AddRequiredModules
+Add required modules to artefact by copying them over.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: RequiredModules
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ArtefactName
+The name of the artefact. If not specified, the default name will be used.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CopyDirectories
+Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or T:PowerForge.ArtefactCopyMapping[]
+
+```yaml
+Type: ArtefactCopyMapping[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CopyDirectoriesRelative
+Define if destination directories should be relative to artefact root.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CopyFiles
+Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source=>destination) or T:PowerForge.ArtefactCopyMapping[]
+
+```yaml
+Type: ArtefactCopyMapping[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CopyFilesRelative
+Define if destination files should be relative to artefact root.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DoNotClear
+Do not clear artefact output directory before creating artefact.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Enable
+Enable artefact creation. By default artefact creation is disabled.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ID
+Optional ID of the artefact (to be used by New-ConfigurationPublish).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeTagName
+Include tag name in artefact name. By default tag name is not included.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ModulesPath
+Path where main module (or required module) will be copied to.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+Path where artefact will be created.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -PostScriptMerge
-ScriptBlock that will be added in the end of the script.
-It's only applicable to type of Script, PackedScript.
-If useed with PostScriptMergePath, this will be ignored.
+ScriptBlock that will be added at the end of the script (Script / ScriptPacked).
 
 ```yaml
 Type: ScriptBlock
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PostScriptMergePath
+Path to file that will be added at the end of the script (Script / ScriptPacked).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PreScriptMerge
+ScriptBlock that will be added at the beginning of the script (Script / ScriptPacked).
+
+```yaml
+Type: ScriptBlock
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
 Position: 1
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -PreScriptMerge
-ScriptBlock that will be added in the beggining of the script.
-It's only applicable to type of Script, PackedScript.
-If useed with PreScriptMergePath, this will be ignored.
-
-```yaml
-Type: ScriptBlock
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Type
-There are 4 types of artefacts:
-- Unpacked - unpacked module (useful for testing)
-- Packed - packed module (as zip) - usually used for publishing to GitHub or copying somewhere
-- Script - script that is module in form of PS1 without PSD1 - only applicable to very simple modules
-- PackedScript - packed module (as zip) that is script that is module in form of PS1 without PSD1 - only applicable to very simple modules
+### -PreScriptMergePath
+Path to file that will be added at the beginning of the script (Script / ScriptPacked).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-Required: True
-Position: Named
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -Enable
-Enable artefact creation.
-By default artefact creation is disabled.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeTagName
-Include tag name in artefact name.
-By default tag name is not included.
-Alternatively you can provide ArtefactName parameter to specify your own artefact name (with or without TagName)
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Path
-Path where artefact will be created.
-Please choose a separate directory for each artefact type, as logic may be interfering one another.
-
-You can use following variables that will be replaced with actual values:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
+### -RequiredModulesCredentialSecret
+Repository credential secret (password/token) in clear text used when downloading required modules.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -AddRequiredModules
-Add required modules to artefact by copying them over.
-By default required modules are not added.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: RequiredModules
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ModulesPath
-Path where main module or required module (if not specified otherwise in RequiredModulesPath) will be copied to.
-By default it will be put in the Path folder if not specified
-You can use following variables that will be replaced with actual values:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
+### -RequiredModulesCredentialSecretFilePath
+Repository credential secret (password/token) in a clear-text file used when downloading required modules.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -RequiredModulesCredentialUserName
+Repository credential username (basic auth) used when downloading required modules.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -RequiredModulesPath
 Path where required modules will be copied to.
-By default it will be put in the Path folder if not specified.
-If ModulesPath is specified, but RequiredModulesPath is not specified it will be put into ModulesPath folder.
-You can use following variables that will be replaced with actual values:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -CopyDirectories
-Provide Hashtable of directories to copy to artefact.
-Key is source directory, value is destination directory.
-
-```yaml
-Type: IDictionary
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CopyFiles
-Provide Hashtable of files to copy to artefact.
-Key is source file, value is destination file.
-
-```yaml
-Type: IDictionary
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CopyDirectoriesRelative
-Define if destination directories should be relative to artefact root.
-By default they are not.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CopyFilesRelative
-Define if destination files should be relative to artefact root.
-By default they are not.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DoNotClear
-Do not clear artefact directory before creating artefact.
-By default artefact directory is cleared.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ArtefactName
-The name of the artefact.
-If not specified, the default name will be used.
-You can use following variables that will be replaced with actual values:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
+### -RequiredModulesRepository
+Repository name used when downloading required modules (Save-PSResource / Save-Module).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ScriptName
-The name of the script.
-If not specified, the default name will be used.
-Only applicable to Script and ScriptPacked artefacts.
-You can use following variables that will be replaced with actual values:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
+The name of the script artefact (alias: FileName).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
+Parameter Sets: __AllParameterSets
 Aliases: FileName
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ID
-Optional ID of the artefact.
-To be used by New-ConfigurationPublish cmdlet
-If not specified, the first packed artefact will be used for publishing to GitHub
+### -Type
+Artefact type to generate.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: ArtefactType
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-Required: False
-Position: Named
+Required: True
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -PostScriptMergePath
-Path to file that will be added in the end of the script.
-It's only applicable to type of Script, PackedScript.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -PreScriptMergePath
-Path to file that will be added in the beggining of the script.
-It's only applicable to type of Script, PackedScript.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -423,9 +381,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

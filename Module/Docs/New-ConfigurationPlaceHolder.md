@@ -1,64 +1,59 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationPlaceHolder
-
 ## SYNOPSIS
-Command helping define custom placeholders replacing content within a script or module during the build process.
+Helps define custom placeholders replacing content within a script or module during the build process.
 
 ## SYNTAX
-
 ### FindAndReplace (Default)
-```
-New-ConfigurationPlaceHolder -Find <String> -Replace <String> [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+```powershell
+New-ConfigurationPlaceHolder -Find <string> -Replace <string> [<CommonParameters>]
 ```
 
 ### CustomReplacement
-```
-New-ConfigurationPlaceHolder -CustomReplacement <IDictionary[]> [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+```powershell
+New-ConfigurationPlaceHolder -CustomReplacement <PlaceHolderReplacement[]> [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Command helping define custom placeholders replacing content within a script or module during the build process.
-It modifies only the content of the script or module (PSM1) and does not modify the sources.
+Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)
+without hardcoding them into source files.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-New-ConfigurationPlaceHolder -Find '{CustomName}' -Replace 'SpecialCase'
+```powershell
+PS>New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'
 ```
 
+Replaces all occurrences of {{ModuleVersion}} in merged content.
+
 ### EXAMPLE 2
+```powershell
+PS>New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }
 ```
-New-ConfigurationPlaceHolder -CustomReplacement @(
-    @{ Find = '{CustomName}'; Replace = 'SpecialCase' }
-    @{ Find = '{CustomVersion}'; Replace = '1.0.0' }
-)
-```
+
+Emits multiple placeholder replacement segments in one call.
 
 ## PARAMETERS
 
 ### -CustomReplacement
-Hashtable array with custom placeholders to replace.
-Each hashtable must contain two keys: Find and Replace.
+Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; Replace='..' }) or T:PowerForge.PlaceHolderReplacement[].
 
 ```yaml
-Type: IDictionary[]
+Type: PlaceHolderReplacement[]
 Parameter Sets: CustomReplacement
-Aliases:
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Find
@@ -67,13 +62,13 @@ The string to find in the script or module content.
 ```yaml
 Type: String
 Parameter Sets: FindAndReplace
-Aliases:
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Replace
@@ -82,28 +77,13 @@ The string to replace the Find string in the script or module content.
 ```yaml
 Type: String
 Parameter Sets: FindAndReplace
-Aliases:
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -111,9 +91,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

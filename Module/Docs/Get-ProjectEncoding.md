@@ -1,141 +1,77 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-ProjectEncoding
-
 ## SYNOPSIS
 Analyzes encoding consistency across all files in a project directory.
 
 ## SYNTAX
-
-```
-Get-ProjectEncoding [-Path] <String> [[-ProjectType] <String>] [[-CustomExtensions] <String[]>]
- [[-ExcludeDirectories] <String[]>] [-GroupByEncoding] [-ShowFiles] [[-ExportPath] <String>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Get-ProjectEncoding -Path <string> [-ProjectType <string>] [-CustomExtensions <string[]>] [-ExcludeDirectories <string[]>] [-GroupByEncoding] [-ShowFiles] [-ExportPath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Scans all relevant files in a project directory and provides a comprehensive report on file encodings.
-Identifies inconsistencies, potential issues, and provides recommendations for standardization.
-Useful for auditing projects before performing encoding conversions.
+This cmdlet is read-only: it does not modify files. Use it to audit a repository before converting encodings.
+
+To standardize file encodings after analysis, use Convert-ProjectEncoding.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell
 ```
-Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell
-Analyze encoding consistency in a PowerShell project.
-```
+
+Returns a summary of the encodings used in PowerShell-related files.
 
 ### EXAMPLE 2
-```
-Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -GroupByEncoding -ShowFiles
-Get detailed encoding report grouped by encoding type with individual file listings.
+```powershell
+PS>Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -GroupByEncoding -ShowFiles
 ```
 
+Useful when you need to identify which files are outliers (e.g. ASCII vs UTF-8 BOM).
+
 ### EXAMPLE 3
+```powershell
+PS>Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\encoding-report.csv'
 ```
-Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\encoding-report.csv'
-Analyze all file types and export detailed report to CSV.
-```
+
+Creates a CSV report that can be shared or used in CI artifacts.
 
 ## PARAMETERS
 
-### -Path
-Path to the project directory to analyze.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProjectType
-Type of project to analyze.
-Determines which file extensions are included.
-Valid values: 'PowerShell', 'CSharp', 'Mixed', 'All', 'Custom'
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: Mixed
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -CustomExtensions
-Custom file extensions to analyze when ProjectType is 'Custom'.
-Example: @('*.ps1', '*.psm1', '*.cs', '*.vb')
+Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs).
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ExcludeDirectories
-Directory names to exclude from analysis (e.g., '.git', 'bin', 'obj').
+Directory names to exclude from analysis (e.g., .git, bin, obj).
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 4
-Default value: @('.git', '.vs', 'bin', 'obj', 'packages', 'node_modules', '.vscode')
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -GroupByEncoding
-Group results by encoding type for easier analysis.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ShowFiles
-Include individual file details in the report.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ExportPath
@@ -143,29 +79,74 @@ Export the detailed report to a CSV file at the specified path.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ProgressAction
-{{ Fill ProgressAction Description }}
+### -GroupByEncoding
+Group results by encoding type.
 
 ```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Path
+Path to the project directory to analyze.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectType
+Type of project to analyze. Determines which file extensions are included.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ShowFiles
+Include individual file details in the report.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -173,10 +154,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-This function is read-only and does not modify any files.
-Use Convert-ProjectEncoding to standardize encodings.
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

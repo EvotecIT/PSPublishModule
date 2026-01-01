@@ -1,58 +1,46 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationExecute
-
 ## SYNOPSIS
 Reserved placeholder for future execution-time configuration.
 
 ## SYNTAX
-
-```
-New-ConfigurationExecute [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationExecute [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This cmdlet currently acts as a placeholder to keep backward compatibility with
-older build scripts that may reference it.
-It returns nothing and performs no action.
+This cmdlet currently exists only for backward compatibility with older build scripts.
+It emits no configuration segment and has no effect.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationExecute
 ```
-New-ConfigurationExecute
-Does nothing and returns no output.
-```
+
+No action is performed and nothing is emitted to the pipeline.
 
 ## PARAMETERS
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
 
 ### CommonParameters
 This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

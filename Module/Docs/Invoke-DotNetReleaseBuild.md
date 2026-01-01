@@ -1,156 +1,109 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Invoke-DotNetReleaseBuild
-
 ## SYNOPSIS
-{{ Fill in the Synopsis }}
+Builds a .NET project in Release configuration and prepares release artefacts.
 
 ## SYNTAX
-
-```
-Invoke-DotNetReleaseBuild [-ProjectPath] <String> [[-CertificateThumbprint] <String>] [[-LocalStore] <String>]
- [[-TimeStampServer] <String>] [-PackDependencies] [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm]
- [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Invoke-DotNetReleaseBuild -ProjectPath <string[]> [-CertificateThumbprint <string>] [-LocalStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-PackDependencies] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+Builds a .NET project in Release configuration and prepares release artefacts.
 
 ## EXAMPLES
 
-### Example 1
+### EXAMPLE 1
 ```powershell
-PS C:\> {{ Add example code here }}
+Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDependencies
 ```
 
-{{ Add example description here }}
+### EXAMPLE 2
+```powershell
+Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser
+```
 
 ## PARAMETERS
 
 ### -CertificateThumbprint
-{{ Fill CertificateThumbprint Description }}
+Optional certificate thumbprint used to sign assemblies and packages. When omitted, no signing is performed.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -LocalStore
-{{ Fill LocalStore Description }}
+Certificate store location used when searching for the signing certificate. Default: CurrentUser.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: CertificateStoreLocation
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -PackDependencies
-{{ Fill PackDependencies Description }}
+When enabled, also packs all project dependencies that have their own .csproj files.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ProjectPath
-{{ Fill ProjectPath Description }}
+Path to the folder containing the project (*.csproj) file (or the csproj file itself).
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 0
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -TimeStampServer
-{{ Fill TimeStampServer Description }}
+Timestamp server URL used while signing. Default: http://timestamp.digicert.com.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -WhatIf
-Shows what would happen if the cmdlet runs.
-The cmdlet is not run.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: wi
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -158,11 +111,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-### None
+- `None`
 
 ## OUTPUTS
 
-### System.Object
-## NOTES
+- `PowerForge.DotNetReleaseBuildResult`
 
 ## RELATED LINKS
+
+- None
+

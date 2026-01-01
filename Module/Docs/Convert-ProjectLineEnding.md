@@ -4,45 +4,53 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Remove-ProjectFiles
+# Convert-ProjectLineEnding
 ## SYNOPSIS
-Removes specific files and folders from a project directory with safety features.
+Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.
+Thin wrapper over PowerForge.LineEndingConverter.
 
 ## SYNTAX
 ### ProjectType (Default)
 ```powershell
-Remove-ProjectFiles -ProjectPath <string> [-ProjectType <ProjectCleanupType>] [-ExcludePatterns <string[]>] [-ExcludeDirectories <string[]>] [-DeleteMethod <ProjectDeleteMethod>] [-CreateBackups] [-BackupDirectory <string>] [-Retries <int>] [-Recurse] [-MaxDepth <int>] [-ShowProgress] [-PassThru] [-Internal] [-WhatIf] [-Confirm] [<CommonParameters>]
+Convert-ProjectLineEnding -Path <string> -TargetLineEnding <LineEnding> [-ProjectType <ProjectKind>] [-ExcludeDirectories <string[]>] [-CreateBackups] [-BackupDirectory <string>] [-Force] [-OnlyMixed] [-EnsureFinalNewline] [-OnlyMissingNewline] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Custom
 ```powershell
-Remove-ProjectFiles -ProjectPath <string> -IncludePatterns <string[]> [-ExcludePatterns <string[]>] [-ExcludeDirectories <string[]>] [-DeleteMethod <ProjectDeleteMethod>] [-CreateBackups] [-BackupDirectory <string>] [-Retries <int>] [-Recurse] [-MaxDepth <int>] [-ShowProgress] [-PassThru] [-Internal] [-WhatIf] [-Confirm] [<CommonParameters>]
+Convert-ProjectLineEnding -Path <string> -TargetLineEnding <LineEnding> [-ProjectType <ProjectKind>] [-CustomExtensions <string[]>] [-ExcludeDirectories <string[]>] [-CreateBackups] [-BackupDirectory <string>] [-Force] [-OnlyMixed] [-EnsureFinalNewline] [-OnlyMissingNewline] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)
-should be predictable and safe. Supports -WhatIf, retries and optional backups.
+Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.
+Thin wrapper over PowerForge.LineEndingConverter.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-PS>Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf
+PS>Convert-ProjectLineEnding -Path C:\Repo -ProjectType PowerShell -TargetLineEnding CRLF -WhatIf
 ```
 
-Shows what would be removed for the selected cleanup type.
+Shows which files would be normalized to Windows-style line endings.
 
 ### EXAMPLE 2
 ```powershell
-PS>Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'
+PS>Convert-ProjectLineEnding -Path . -ProjectType Mixed -TargetLineEnding LF -OnlyMixed -CreateBackups -BackupDirectory C:\Backups\Repo
 ```
 
-Creates backups before deletion and stores them under the backup directory.
+Converts only files that contain both CRLF and LF, backing up originals first.
+
+### EXAMPLE 3
+```powershell
+PS>Convert-ProjectLineEnding -Path . -ProjectType All -TargetLineEnding CRLF -OnlyMissingNewline -EnsureFinalNewline
+```
+
+Appends a final CRLF to files missing it without changing other files.
 
 ## PARAMETERS
 
 ### -BackupDirectory
-Directory where backups should be stored (optional).
+Root folder for mirrored backups; when null, .bak is used next to files.
 
 ```yaml
 Type: String
@@ -57,7 +65,7 @@ Accept wildcard characters: True
 ```
 
 ### -CreateBackups
-Create backup copies of items before deletion.
+Create backups prior to conversion.
 
 ```yaml
 Type: SwitchParameter
@@ -71,11 +79,26 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -DeleteMethod
-Method to use for deletion.
+### -CustomExtensions
+Custom extension patterns (e.g., *.ps1,*.psm1) when overriding defaults.
 
 ```yaml
-Type: ProjectDeleteMethod
+Type: String[]
+Parameter Sets: Custom
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -EnsureFinalNewline
+Ensure a final newline exists at the end of file.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
 
@@ -87,7 +110,7 @@ Accept wildcard characters: True
 ```
 
 ### -ExcludeDirectories
-Directory names to completely exclude from processing.
+Directory names to exclude from traversal.
 
 ```yaml
 Type: String[]
@@ -101,38 +124,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ExcludePatterns
-Patterns to exclude from deletion.
-
-```yaml
-Type: String[]
-Parameter Sets: ProjectType, Custom
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -IncludePatterns
-File/folder patterns to include for deletion when using the Custom parameter set.
-
-```yaml
-Type: String[]
-Parameter Sets: Custom
-Aliases: None
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Internal
-Suppress console output and use verbose/warning streams instead.
+### -Force
+Force conversion even if file appears to already match the target style.
 
 ```yaml
 Type: SwitchParameter
@@ -146,11 +139,26 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -MaxDepth
-Maximum recursion depth. Default is unlimited (-1).
+### -OnlyMissingNewline
+Only modify files that are missing the final newline.
 
 ```yaml
-Type: Int32
+Type: SwitchParameter
+Parameter Sets: ProjectType, Custom
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OnlyMixed
+Convert only files that contain mixed line endings.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: ProjectType, Custom
 Aliases: None
 
@@ -162,7 +170,7 @@ Accept wildcard characters: True
 ```
 
 ### -PassThru
-Return detailed results.
+Emit per-file results instead of a summary.
 
 ```yaml
 Type: SwitchParameter
@@ -176,8 +184,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProjectPath
-Path to the project directory to clean.
+### -Path
+Path to the project directory to process.
 
 ```yaml
 Type: String
@@ -192,25 +200,10 @@ Accept wildcard characters: True
 ```
 
 ### -ProjectType
-Type of project cleanup to perform.
+Project type used to derive default include patterns.
 
 ```yaml
-Type: ProjectCleanupType
-Parameter Sets: ProjectType
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Recurse
-Process subdirectories recursively. Defaults to true unless explicitly specified.
-
-```yaml
-Type: SwitchParameter
+Type: ProjectKind
 Parameter Sets: ProjectType, Custom
 Aliases: None
 
@@ -221,30 +214,15 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Retries
-Number of retry attempts for each deletion.
+### -TargetLineEnding
+Target line ending style to enforce.
 
 ```yaml
-Type: Int32
+Type: LineEnding
 Parameter Sets: ProjectType, Custom
 Aliases: None
 
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ShowProgress
-Display progress information during cleanup.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: ProjectType, Custom
-Aliases: None
-
-Required: False
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False

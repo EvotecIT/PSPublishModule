@@ -1,378 +1,341 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationDelivery
-
 ## SYNOPSIS
 Configures delivery metadata for bundling and installing internal docs/examples.
 
 ## SYNTAX
-
-```
-New-ConfigurationDelivery [-Enable] [[-InternalsPath] <String>] [-IncludeRootReadme] [-IncludeRootChangelog]
- [-IncludeRootLicense] [[-ReadmeDestination] <String>] [[-ChangelogDestination] <String>]
- [[-LicenseDestination] <String>] [[-ImportantLinks] <IDictionary[]>] [[-IntroText] <String[]>]
- [[-UpgradeText] <String[]>] [[-IntroFile] <String>] [[-UpgradeFile] <String>] [[-RepositoryPaths] <String[]>]
- [[-RepositoryBranch] <String>] [[-DocumentationOrder] <String[]>] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationDelivery [-Enable] [-InternalsPath <string>] [-IncludeRootReadme] [-IncludeRootChangelog] [-IncludeRootLicense] [-ReadmeDestination <DeliveryBundleDestination>] [-ChangelogDestination <DeliveryBundleDestination>] [-LicenseDestination <DeliveryBundleDestination>] [-ImportantLinks <DeliveryImportantLink[]>] [-IntroText <string[]>] [-UpgradeText <string[]>] [-IntroFile <string>] [-UpgradeFile <string>] [-RepositoryPaths <string[]>] [-RepositoryBranch <string>] [-DocumentationOrder <string[]>] [-GenerateInstallCommand] [-GenerateUpdateCommand] [-InstallCommandName <string>] [-UpdateCommandName <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Adds Delivery options to the PSPublishModule configuration so the build embeds
-runtime metadata in the manifest (PrivateData.PSData.Delivery and PrivateData.PSData.Repository)
-and so the Internals folder is easy to find post-install by helper cmdlets
-such as Install-ModuleDocumentation.
+Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally
+generate public helper commands (Install-<ModuleName> / Update-<ModuleName>) that can copy these files to a target folder.
 
-Typical usage is to call this in your Build\Manage-Module.ps1 alongside
-New-ConfigurationInformation -IncludeAll 'Internals\' so that the Internals
-directory is physically included in the shipped module and discoverable later.
+This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand
 ```
-New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog
-Emits Options.Delivery and causes PrivateData.PSData.Delivery/Repository to be written in the manifest.
-```
+
+Generates public Install/Update helpers and bundles README/CHANGELOG into the module.
 
 ### EXAMPLE 2
-```
-New-ConfigurationInformation -IncludeAll 'Internals\'
-PS> New-ConfigurationDelivery -Enable
-Minimal configuration that bundles Internals and exposes it to the installer.
+```powershell
+PS>New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'
 ```
 
-### EXAMPLE 3
-```
-# Include Internals and configure Docs ordering + repo docs
-New-ConfigurationInformation -IncludeAll 'Internals\'
-New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -DocumentationOrder '01-Intro.md','02-HowTo.md','99-FAQ.md' -RepositoryPaths 'docs' -RepositoryBranch 'main'
-# This causes:
-# - Internals\Docs to be bundled and shown in the UI in the given order (remaining files alphabetically)
-# - Repository Docs folder to be fetched/displayed when -PreferRepository is used, also respecting DocumentationOrder
-```
-
-### EXAMPLE 4
-```
-# GitHub: configure remote docs
-# 1) Set token once (Windows): setx PG_GITHUB_TOKEN "ghp_xxx"
-#    or call Set-ModuleDocumentation -GitHubToken 'ghp_xxx'
-# 2) In your build script, indicate where docs live in the repo
-New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch main
-# Then on the viewing side: Show-ModuleDocumentation -Name EFAdminManager -PreferRepository
-```
-
-### EXAMPLE 5
-```
-# Azure DevOps: configure remote docs
-# URL form: https://dev.azure.com/{organization}/{project}/_git/{repository}
-# PAT scope: Code (Read)
-# 1) Set token once (Windows): setx PG_AZDO_PAT "your_pat"
-#    or call Set-ModuleDocumentation -AzureDevOpsPat 'your_pat'
-# 2) In your build script, indicate repo docs path
-New-ConfigurationDelivery -Enable -RepositoryPaths 'Docs/en-US' -RepositoryBranch main
-# Then on the viewing side: Show-ModuleDocumentation -Name EFAdminManager -PreferRepository
-```
-
-### EXAMPLE 6
-```
-# Mix Intro/Upgrade from files with ImportantLinks and include LICENSE in both root and Internals
-New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IntroFile 'Docs\\Intro.md' -UpgradeFile 'Docs\\Upgrade.md' -ImportantLinks @(
-    @{ Title = 'Home'; Url = 'https://contoso.example/docs' },
-    @{ Title = 'Issues'; Url = 'https://contoso.example/issues' }
-) -IncludeRootLicense -LicenseDestination Both
-```
-
-### EXAMPLE 7
-```
-# Multiple repository docs roots and custom order
-New-ConfigurationDelivery -Enable -RepositoryPaths 'docs','guides' -RepositoryBranch main -DocumentationOrder '01-Intro.md','20-FAQ.md'
-```
+Helps modules expose docs from a repository path in a consistent order.
 
 ## PARAMETERS
 
-### -Enable
-Enables delivery metadata emission.
-If not specified, nothing is emitted.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -InternalsPath
-Relative path inside the module that contains internal deliverables
-(e.g.
-'Internals').
-Defaults to 'Internals'.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: Internals
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeRootReadme
-Include module root README.* during installation (if present).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeRootChangelog
-Include module root CHANGELOG.* during installation (if present).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeRootLicense
-Include module root LICENSE.* during installation (if present).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ReadmeDestination
-Where to bundle README.* within the built module.
-One of: Internals, Root, Both, None.
-Default: Internals.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: Internals
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -ChangelogDestination
 Where to bundle CHANGELOG.* within the built module.
-One of: Internals, Root, Both, None.
-Default: Internals.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: DeliveryBundleDestination
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
-Default value: Internals
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -LicenseDestination
-Where to bundle LICENSE.* within the built module.
-One of: Internals, Root, Both, None.
-Default: Internals.
+### -DocumentationOrder
+Optional file-name order for Internals\\Docs when rendering documentation.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 4
-Default value: Internals
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Enable
+Enables delivery metadata emission.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GenerateInstallCommand
+When set, generates a public Install-<ModuleName> helper function during build that copies Internals to a destination folder.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GenerateUpdateCommand
+When set, generates a public Update-<ModuleName> helper function during build that delegates to the install command.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -ImportantLinks
-One or more key/value pairs that represent important links to display to the user,
-for example @{ Title = 'Docs'; Url = 'https://...' }.
+Important links (Title/Url). Accepts legacy hashtable array (@{ Title='..'; Url='..' }) or T:PowerForge.DeliveryImportantLink[].
 
 ```yaml
-Type: IDictionary[]
-Parameter Sets: (All)
-Aliases:
+Type: DeliveryImportantLink[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -IncludeRootChangelog
+Include module root CHANGELOG.* during installation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeRootLicense
+Include module root LICENSE.* during installation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeRootReadme
+Include module root README.* during installation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallCommandName
+Optional override name for the generated install command. When empty, defaults to Install-<ModuleName>.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InternalsPath
+Relative path inside the module that contains internal deliverables.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IntroFile
+Relative path (within the module root) to a Markdown/text file to use as Intro content.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -IntroText
 Text lines shown to users after Install-ModuleDocumentation completes.
-Accepts a string array.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 6
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -UpgradeText
-Text lines with upgrade instructions shown when requested via Show-ModuleDocumentation -Upgrade.
+### -LicenseDestination
+Where to bundle LICENSE.* within the built module.
 
 ```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
+Type: DeliveryBundleDestination
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 7
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -IntroFile
-Relative path (within the module root) to a Markdown/text file to use as the Intro content.
-If provided, it is preferred over IntroText for display and is also copied by
-Install-ModuleDocumentation.
+### -ReadmeDestination
+Where to bundle README.* within the built module.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: DeliveryBundleDestination
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 8
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -UpgradeFile
-Relative path (within the module root) to a Markdown/text file to use for Upgrade instructions.
-If provided, it is preferred over UpgradeText for display and is also copied by
-Install-ModuleDocumentation.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 9
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RepositoryPaths
-One or more repository-relative paths (folders) from which to display remote documentation files
-directly from the git hosting provider (GitHub/Azure DevOps).
-This enables tools such as
-PSMaintenance to fetch and present docs straight from the repository when local copies are not
-present or when explicitly requested.
-Requires PrivateData.PSData.ProjectUri to be set in the manifest.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 10
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -RepositoryBranch
 Optional branch name to use when fetching remote documentation.
-If omitted, providers fall back to
-the repository default branch (e.g., main/master).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 11
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -DocumentationOrder
-Optional file-name order for Internals\Docs when rendering documentation.
-Provide names such as
-'Intro.md','HowTo.md','FAQ.md'; files not listed are appended alphabetically.
+### -RepositoryPaths
+One or more repository-relative paths from which to display remote documentation files.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 12
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ProgressAction
-{{ Fill ProgressAction Description }}
+### -UpdateCommandName
+Optional override name for the generated update command. When empty, defaults to Update-<ModuleName>.
 
 ```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -UpgradeFile
+Relative path (within the module root) to a Markdown/text file to use for Upgrade instructions.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UpgradeText
+Text lines with upgrade instructions shown when requested.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -380,10 +343,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-This emits a Type 'Options' object under Options.Delivery so it works with the
-existing New-PrepareStructure logic without further changes.
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

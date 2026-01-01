@@ -1,47 +1,153 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Remove-Comments
-
 ## SYNOPSIS
-Remove comments from PowerShell file
+Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
 ## SYNTAX
-
 ### FilePath (Default)
-```
-Remove-Comments -SourceFilePath <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines]
- [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock]
- [-DoNotRemoveSignatureBlock] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```powershell
+Remove-Comments -SourceFilePath <string> [-DestinationFilePath <string>] [-RemoveAllEmptyLines] [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock] [<CommonParameters>]
 ```
 
 ### Content
-```
-Remove-Comments -Content <String> [-DestinationFilePath <String>] [-RemoveAllEmptyLines] [-RemoveEmptyLines]
- [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```powershell
+Remove-Comments -Content <string> [-DestinationFilePath <string>] [-RemoveAllEmptyLines] [-RemoveEmptyLines] [-RemoveCommentsInParamBlock] [-RemoveCommentsBeforeParamBlock] [-DoNotRemoveSignatureBlock] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Remove comments from PowerShell file and optionally remove empty lines
-By default comments in param block are not removed
-By default comments before param block are not removed
+Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.
+Useful as a preprocessing step when producing merged/packed scripts.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'
 ```
-Remove-Comments -SourceFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript.ps1' -DestinationFilePath 'C:\Support\GitHub\PSPublishModule\Examples\TestScript1.ps1' -RemoveAllEmptyLines -RemoveCommentsInParamBlock -RemoveCommentsBeforeParamBlock
+
+Writes the cleaned content to the destination file.
+
+### EXAMPLE 2
+```powershell
+PS>$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)
 ```
+
+Returns the processed content when no destination file is specified.
 
 ## PARAMETERS
 
+### -Content
+Raw file content to process.
+
+```yaml
+Type: String
+Parameter Sets: Content
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DestinationFilePath
+File path to the destination file. If not provided, the content is returned.
+
+```yaml
+Type: String
+Parameter Sets: FilePath, Content
+Aliases: Destination, OutputFile, OutputFilePath
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DoNotRemoveSignatureBlock
+Do not remove a signature block, if present.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: FilePath, Content
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RemoveAllEmptyLines
+Remove all empty lines from the content.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: FilePath, Content
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RemoveCommentsBeforeParamBlock
+Remove comments before the param block. By default comments before the param block are not removed.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: FilePath, Content
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RemoveCommentsInParamBlock
+Remove comments in the param block. By default comments in the param block are not removed.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: FilePath, Content
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RemoveEmptyLines
+Remove empty lines if more than one empty line is found.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: FilePath, Content
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -SourceFilePath
-File path to the source file
+File path to the source file.
 
 ```yaml
 Type: String
@@ -49,133 +155,10 @@ Parameter Sets: FilePath
 Aliases: FilePath, Path, LiteralPath
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Content
-Content of the file
-
-```yaml
-Type: String
-Parameter Sets: Content
-Aliases:
-
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DestinationFilePath
-File path to the destination file.
-If not provided, the content will be returned
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases: Destination, OutputFile, OutputFilePath
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RemoveAllEmptyLines
-Remove all empty lines from the content
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RemoveEmptyLines
-Remove empty lines if more than one empty line is found
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RemoveCommentsInParamBlock
-Remove comments in param block.
-By default comments in param block are not removed
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RemoveCommentsBeforeParamBlock
-Remove comments before param block.
-By default comments before param block are not removed
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DoNotRemoveSignatureBlock
-{{ Fill DoNotRemoveSignatureBlock Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -183,9 +166,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-Most of the work done by Chris Dent, with improvements by Przemyslaw Klys
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

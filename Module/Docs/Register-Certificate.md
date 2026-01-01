@@ -1,91 +1,134 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Register-Certificate
-
 ## SYNOPSIS
 Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
 
 ## SYNTAX
+### Store (Default)
+```powershell
+Register-Certificate -LocalStore <CertificateStoreLocation> -Path <string> [-Thumbprint <string>] [-TimeStampServer <string>] [-IncludeChain <CertificateChainInclude>] [-Include <string[]>] [-ExcludePath <string[]>] [-HashAlgorithm <CertificateHashAlgorithm>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
 
 ### PFX
-```
-Register-Certificate -CertificatePFX <String> -Path <String> [-TimeStampServer <String>]
- [-IncludeChain <String>] [-Include <String[]>] [-ExcludePath <String[]>] [-HashAlgorithm <String>]
- [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
-```
-
-### Store
-```
-Register-Certificate -LocalStore <String> [-Thumbprint <String>] -Path <String> [-TimeStampServer <String>]
- [-IncludeChain <String>] [-Include <String[]>] [-ExcludePath <String[]>] [-HashAlgorithm <String>]
- [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```powershell
+Register-Certificate -CertificatePFX <string> -Path <string> [-TimeStampServer <string>] [-IncludeChain <CertificateChainInclude>] [-Include <string[]>] [-ExcludePath <string[]>] [-HashAlgorithm <CertificateHashAlgorithm>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Locates a code-signing certificate (by thumbprint from the Windows cert store or from a PFX)
-and applies Authenticode signatures to matching files under -Path.
-On Windows, uses Set-AuthenticodeSignature; on non-Windows, uses OpenAuthenticode module if available.
+Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.
+When running in CI, prefer using a certificate from the Windows certificate store and referencing it by thumbprint.
 
 ## EXAMPLES
 
-### Example 1
+### EXAMPLE 1
 ```powershell
-PS C:\> {{ Add example code here }}
+PS>Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf
 ```
 
-{{ Add example description here }}
+Previews which files would be signed.
+
+### EXAMPLE 2
+```powershell
+PS>Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'
+```
+
+Uses a PFX directly (useful for local testing; store-based is recommended for CI).
 
 ## PARAMETERS
 
 ### -CertificatePFX
-A PFX file to use for signing.
-Mutually exclusive with -LocalStore/-Thumbprint.
+A PFX file to use for signing (mutually exclusive with -LocalStore/-Thumbprint).
 
 ```yaml
 Type: String
 Parameter Sets: PFX
-Aliases:
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -ExcludePath
+One or more path substrings to exclude from signing.
+
+```yaml
+Type: String[]
+Parameter Sets: Store, PFX
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -HashAlgorithm
+Hash algorithm used for the signature. Default: SHA256.
+
+```yaml
+Type: CertificateHashAlgorithm
+Parameter Sets: Store, PFX
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Include
+File patterns to include during signing. Default: scripts only.
+
+```yaml
+Type: String[]
+Parameter Sets: Store, PFX
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeChain
+Which portion of the chain to include in the signature. Default: All.
+
+```yaml
+Type: CertificateChainInclude
+Parameter Sets: Store, PFX
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -LocalStore
-Certificate store to search ('LocalMachine' or 'CurrentUser') when using a certificate from the store.
+Certificate store to search when using a certificate from the store.
 
 ```yaml
-Type: String
+Type: CertificateStoreLocation
 Parameter Sets: Store
-Aliases:
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Thumbprint
-Certificate thumbprint to select a single certificate from the chosen -LocalStore.
-
-```yaml
-Type: String
-Parameter Sets: Store
-Aliases: CertificateThumbprint
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Path
@@ -93,141 +136,44 @@ Root directory containing files to sign.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: Store, PFX
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Thumbprint
+Certificate thumbprint to select a single certificate from the chosen store.
+
+```yaml
+Type: String
+Parameter Sets: Store
+Aliases: CertificateThumbprint
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -TimeStampServer
-RFC3161 timestamp server URL.
-Default: http://timestamp.digicert.com
+RFC3161 timestamp server URL. Default: http://timestamp.digicert.com.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: Store, PFX
+Aliases: None
 
 Required: False
-Position: Named
-Default value: Http://timestamp.digicert.com
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeChain
-Which portion of the chain to include in the signature: All, NotRoot, or Signer.
-Default: All.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: All
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Include
-File patterns to include during signing.
-Defaults to scripts only: '*.ps1','*.psd1','*.psm1'.
-You may pass additional patterns if needed (e.g., '*.dll').
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: @('*.ps1', '*.psd1', '*.psm1')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ExcludePath
-One or more path substrings to exclude from signing.
-Useful for skipping folders like 'Internals' unless opted-in.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -HashAlgorithm
-Hash algorithm for the signature.
-Default: SHA256.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: SHA256
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -WhatIf
-Shows what would happen if the cmdlet runs.
-The cmdlet is not run.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: wi
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -235,8 +181,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

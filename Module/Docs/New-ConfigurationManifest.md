@@ -1,87 +1,54 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationManifest
-
 ## SYNOPSIS
-Creates a new configuration manifest for a PowerShell module.
+Creates a configuration manifest for a PowerShell module.
 
 ## SYNTAX
-
-```
-New-ConfigurationManifest [-ModuleVersion] <String> [[-CompatiblePSEditions] <String[]>] [-GUID] <String>
- [-Author] <String> [[-CompanyName] <String>] [[-Copyright] <String>] [[-Description] <String>]
- [[-PowerShellVersion] <String>] [[-Tags] <String[]>] [[-IconUri] <String>] [[-ProjectUri] <String>]
- [[-DotNetFrameworkVersion] <String>] [[-LicenseUri] <String>] [-RequireLicenseAcceptance]
- [[-Prerelease] <String>] [[-FunctionsToExport] <String[]>] [[-CmdletsToExport] <String[]>]
- [[-AliasesToExport] <String[]>] [[-FormatsToProcess] <String[]>] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationManifest -ModuleVersion <string> -Guid <string> -Author <string> [-CompatiblePSEditions <string[]>] [-CompanyName <string>] [-Copyright <string>] [-Description <string>] [-PowerShellVersion <string>] [-Tags <string[]>] [-IconUri <string>] [-ProjectUri <string>] [-DotNetFrameworkVersion <string>] [-LicenseUri <string>] [-RequireLicenseAcceptance] [-Prerelease <string>] [-FunctionsToExport <string[]>] [-CmdletsToExport <string[]>] [-AliasesToExport <string[]>] [-FormatsToProcess <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This function generates a new configuration manifest for a PowerShell module.
-The manifest includes metadata about the module such as version, author, company, and other relevant information.
-It also allows specifying the functions, cmdlets, and aliases to export.
+Emits a manifest configuration segment that is later applied to the module .psd1 during a build.
+Use this to define identity and metadata (version, GUID, author, tags, links) in a build script / JSON pipeline.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'
 ```
-New-ConfigurationManifest -ModuleVersion '1.0.0' -GUID '12345678-1234-1234-1234-1234567890ab' -Author 'John Doe' -CompanyName 'Example Corp' -Description 'This is an example module.'
+
+Defines the core identity fields required for a module manifest.
+
+### EXAMPLE 2
+```powershell
+PS>New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'
 ```
+
+Populates common PSGallery metadata that shows up on the gallery and in generated docs.
 
 ## PARAMETERS
 
-### -ModuleVersion
-Specifies the version of the module.
-When multiple versions of a module exist on a system, the latest version is loaded by default when you run Import-Module.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CompatiblePSEditions
-Specifies the module's compatible PowerShell editions.
-Valid values are 'Desktop' and 'Core'.
+### -AliasesToExport
+Overrides aliases to export in the module manifest.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
-Default value: @('Desktop', 'Core')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -GUID
-Specifies a unique identifier for the module.
-The GUID is used to distinguish between modules with the same name.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Author
@@ -89,14 +56,29 @@ Identifies the module author.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 4
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -CmdletsToExport
+Overrides cmdlets to export in the module manifest.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -CompanyName
@@ -104,14 +86,29 @@ Identifies the company or vendor who created the module.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -CompatiblePSEditions
+Specifies the module's compatible PowerShell editions.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -Copyright
@@ -119,14 +116,14 @@ Specifies a copyright statement for the module.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 6
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Description
@@ -134,75 +131,14 @@ Describes the module at a high level.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 7
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -PowerShellVersion
-Specifies the minimum version of PowerShell this module requires.
-Default is '5.1'.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 8
-Default value: 5.1
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Tags
-Specifies tags for the module.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 9
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IconUri
-Specifies the URI for the module's icon.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 10
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProjectUri
-Specifies the URI for the module's project page.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 11
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -DotNetFrameworkVersion
@@ -210,109 +146,14 @@ Specifies the minimum version of the Microsoft .NET Framework that the module re
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 12
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -LicenseUri
-Specifies the URI for the module's license.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 13
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RequireLicenseAcceptance
-When set, indicates the module requires explicit user license acceptance (PowerShellGet).
-If enabled, ensure a license file exists at the module root; the builder will
-normalize any LICENSE/License.md to 'license.txt' in the final package.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Prerelease
-Specifies the prerelease tag for the module.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases: PrereleaseTag
-
-Required: False
-Position: 14
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -FunctionsToExport
-Defines functions to export in the module manifest.
-By default, functions are auto-detected, but this allows you to override that.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 15
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CmdletsToExport
-Defines cmdlets to export in the module manifest.
-By default, cmdlets are auto-detected, but this allows you to override that.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 16
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -AliasesToExport
-Defines aliases to export in the module manifest.
-By default, aliases are auto-detected, but this allows you to override that.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 17
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -FormatsToProcess
@@ -320,29 +161,164 @@ Specifies formatting files (.ps1xml) that run when the module is imported.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 18
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ProgressAction
-{{ Fill ProgressAction Description }}
+### -FunctionsToExport
+Overrides functions to export in the module manifest.
 
 ```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Guid
+Specifies a unique identifier for the module.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IconUri
+Specifies the URI for the module's icon.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LicenseUri
+Specifies the URI for the module's license.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ModuleVersion
+Specifies the version of the module.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PowerShellVersion
+Specifies the minimum version of PowerShell this module requires.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Prerelease
+Specifies the prerelease tag for the module.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: PrereleaseTag
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectUri
+Specifies the URI for the module's project page.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequireLicenseAcceptance
+When set, indicates the module requires explicit user license acceptance (PowerShellGet).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Tags
+Specifies tags for the module.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -350,9 +326,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-This function helps in creating a standardized module manifest for PowerShell modules.
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

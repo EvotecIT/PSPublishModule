@@ -1,113 +1,64 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-PowerShellCompatibility
-
 ## SYNOPSIS
-Analyzes PowerShell files and folders to determine compatibility with PowerShell 5.1 and PowerShell 7.
+Analyzes PowerShell files and folders to determine compatibility with Windows PowerShell 5.1 and PowerShell 7+.
 
 ## SYNTAX
-
-```
-Get-PowerShellCompatibility [-Path] <String> [-Recurse] [[-ExcludeDirectories] <String[]>] [-ShowDetails]
- [[-ExportPath] <String>] [-Internal] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Get-PowerShellCompatibility -Path <string> [-Recurse] [-ExcludeDirectories <string[]>] [-ShowDetails] [-ExportPath <string>] [-Internal] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Scans PowerShell files to detect features, cmdlets, and patterns that are specific to PowerShell 5.1 (Windows PowerShell)
-or PowerShell 7 (PowerShell Core).
-Identifies potential compatibility issues and provides recommendations for cross-version support.
+Scans PowerShell files to detect patterns and constructs that can cause cross-version issues
+(Windows PowerShell 5.1 vs PowerShell 7+), and outputs a compatibility report.
+
+Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks
+when supporting Windows PowerShell 5.1.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Get-PowerShellCompatibility -Path 'C:\MyModule'
 ```
-Get-PowerShellCompatibility -Path 'C:\MyModule'
-Analyzes all PowerShell files in the specified directory for compatibility issues.
-```
+
+Analyzes PowerShell files in the folder and returns a compatibility report.
 
 ### EXAMPLE 2
+```powershell
+PS>Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails
 ```
-Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails
-Recursively analyzes all PowerShell files with detailed compatibility information.
-```
+
+Useful when investigating why a module behaves differently in PS 5.1 vs PS 7+.
 
 ### EXAMPLE 3
-```
-Get-PowerShellCompatibility -Path 'C:\MyModule\MyScript.ps1' -ShowDetails
-Analyzes a specific PowerShell file for compatibility issues.
+```powershell
+PS>Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'
 ```
 
-### EXAMPLE 4
-```
-Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'
-Analyzes compatibility and exports detailed results to a CSV file.
-```
+Creates a report that can be attached to CI artifacts.
 
 ## PARAMETERS
 
-### -Path
-Path to the file or directory to analyze for PowerShell compatibility.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Recurse
-When analyzing a directory, recursively analyze all subdirectories.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -ExcludeDirectories
-Directory names to exclude from analysis (e.g., '.git', 'bin', 'obj', 'Artefacts').
+Directory names to exclude from analysis.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
-Default value: @('.git', '.vs', 'bin', 'obj', 'packages', 'node_modules', '.vscode', 'Artefacts', 'Ignore')
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ShowDetails
-Include detailed analysis of each file with specific compatibility issues found.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ExportPath
@@ -115,44 +66,74 @@ Export the detailed report to a CSV file at the specified path.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Internal
-{{ Fill Internal Description }}
+Internal mode used by build pipelines to suppress host output.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Path
+Path to the file or directory to analyze for PowerShell compatibility.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Recurse
+When analyzing a directory, recursively analyze all subdirectories.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ShowDetails
+Include detailed analysis of each file with specific compatibility issues found.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -160,25 +141,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-This function identifies:
-- PowerShell 5.1 specific features (Windows PowerShell Desktop edition)
-- PowerShell 7 specific features (PowerShell Core)
-- Encoding issues that affect cross-version compatibility
-- .NET Framework vs .NET Core dependencies
-- Edition-specific cmdlets and parameters
-- Cross-platform compatibility concerns
-
-PowerShell 5.1 typically requires:
-- UTF8BOM encoding for proper character handling
-- Windows-specific cmdlets and .NET Framework
-- Desktop edition specific features
-
-PowerShell 7 supports:
-- UTF8 encoding (BOM optional)
-- Cross-platform cmdlets and .NET Core/.NET 5+
-- Enhanced language features and performance
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

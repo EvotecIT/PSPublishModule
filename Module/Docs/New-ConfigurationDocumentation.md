@@ -1,84 +1,79 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationDocumentation
-
 ## SYNOPSIS
-Enables or disables creation of documentation from the module using PowerForge
+Enables or disables creation of documentation from the module using PowerForge.
 
 ## SYNTAX
-
-```
-New-ConfigurationDocumentation [-Enable] [-StartClean] [-UpdateWhenNew] [-Path] <String> [-PathReadme] <String>
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-Tool <DocumentationTool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Enables or disables creation of documentation from the module using PowerForge
+Enables or disables creation of documentation from the module using PowerForge.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-New-ConfigurationDocumentation -Enable:$false -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
+```powershell
+New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot
 ```
 
 ### EXAMPLE 2
-```
-New-ConfigurationDocumentation -Enable -PathReadme 'Docs\Readme.md' -Path 'Docs'
+```powershell
+New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples
 ```
 
 ## PARAMETERS
 
 ### -Enable
 Enables creation of documentation from the module.
-If not specified, the documentation will not be created.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -StartClean
-Removes all files from the documentation folder before creating new documentation.
-Otherwise the \`Update-MarkdownHelpModule\` will be used to update the documentation.
+### -ExternalHelpCulture
+Culture folder for generated external help (default: en-US).
 
 ```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -UpdateWhenNew
-Legacy compatibility switch; ignored by the PowerForge generator.
+### -ExternalHelpFileName
+Optional file name override for external help (default: <ModuleName>-help.xml).
 
 ```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Path
@@ -86,14 +81,14 @@ Path to the folder where documentation will be created.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -PathReadme
@@ -101,29 +96,121 @@ Path to the readme file that will be used for the documentation.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 2
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ProgressAction
-{{ Fill ProgressAction Description }}
+### -SkipAboutTopics
+Disable conversion of about_* topics into markdown pages.
 
 ```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -SkipExternalHelp
+Disable external help (MAML) generation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipFallbackExamples
+Disable generating basic fallback examples for cmdlets missing examples.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -StartClean
+Removes all files from the documentation folder before creating new documentation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SyncExternalHelpToProjectRoot
+When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced
+back to the project root (e.g. en-US\<ModuleName>-help.xml).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Tool
+Documentation engine (legacy parameter; kept for compatibility).
+
+```yaml
+Type: DocumentationTool
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UpdateWhenNew
+When enabled, generated documentation is also synced back to the project folder
+(not only to the staging build output).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -131,9 +218,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

@@ -1,73 +1,56 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Set-ProjectVersion
-
 ## SYNOPSIS
 Updates version numbers across multiple project files.
 
 ## SYNTAX
-
-```
-Set-ProjectVersion [[-VersionType] <String>] [[-NewVersion] <String>] [[-ModuleName] <String>]
- [[-Path] <String>] [[-ExcludeFolders] <String[]>] [-PassThru] [-ProgressAction <ActionPreference>] [-WhatIf]
- [-Confirm] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Set-ProjectVersion [-VersionType <ProjectVersionIncrementKind>] [-NewVersion <string>] [-ModuleName <string>] [-Path <string>] [-ExcludeFolders <string[]>] [-PassThru] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Updates version numbers in C# projects (.csproj), PowerShell modules (.psd1),
-and PowerShell build scripts that contain 'Invoke-ModuleBuild'.
-Can increment
-version components or set a specific version.
+Updates version numbers in:
+C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scripts that reference Invoke-ModuleBuild
+
+Use -VersionType to increment one component, or -NewVersion to set an explicit version.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-Set-ProjectVersion -VersionType Minor
-Increments the minor version in all project files.
+```powershell
+PS>Set-ProjectVersion -VersionType Minor -WhatIf
 ```
 
+Previews the version update for all discovered project files.
+
 ### EXAMPLE 2
+```powershell
+PS>Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'
 ```
-Set-ProjectVersion -NewVersion "2.1.0" -ModuleName "MyModule"
-Sets the version to 2.1.0 for the specific module.
-```
+
+Updates only files related to the selected module name.
 
 ## PARAMETERS
 
-### -VersionType
-The type of version increment: Major, Minor, Build, or Revision.
+### -ExcludeFolders
+Path fragments (or folder names) to exclude from the search (in addition to default 'obj' and 'bin'). This matches against the full path, case-insensitively.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NewVersion
-Specific version number to set (format: x.x.x or x.x.x.x).
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ModuleName
@@ -75,106 +58,74 @@ Optional module name to filter updates to specific projects/modules.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -Path
-The root path to search for project files.
-Defaults to current location.
+### -NewVersion
+Specific version number to set (format: x.x.x or x.x.x.x).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 4
-Default value: (Get-Location).Path
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ExcludeFolders
-Array of folder names to exclude from the search (in addition to default 'obj' and 'bin').
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 5
-Default value: @()
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -PassThru
-Returns the update results when specified.
+Returns per-file update results when specified.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -WhatIf
-Shows what would happen if the cmdlet runs.
-The cmdlet is not run.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: wi
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
+### -Path
+The root path to search for project files. Defaults to current directory.
 
 ```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ProgressAction
-{{ Fill ProgressAction Description }}
+### -VersionType
+The type of version increment: Major, Minor, Build, or Revision.
 
 ```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -182,10 +133,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-### PSCustomObject[]
-### When PassThru is specified, returns update results for each modified file.
-## NOTES
+- `PSPublishModule.ProjectVersionUpdateResult`
 
 ## RELATED LINKS
+
+- None
+

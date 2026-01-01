@@ -1,78 +1,62 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationImportModule
-
 ## SYNOPSIS
 Creates a configuration for importing PowerShell modules.
 
 ## SYNTAX
-
-```
-New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-This function generates a configuration object for importing PowerShell modules.
-It allows specifying whether to import the current module itself and/or any required modules.
+Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).
+This is primarily used by test and documentation steps that execute PowerShell code.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
+```powershell
+PS>New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 ```
 
+Ensures the pipeline imports the module and required dependencies before running tests or generating docs.
+
 ## PARAMETERS
+
+### -ImportRequiredModules
+Indicates whether to import required modules from the manifest.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -ImportSelf
 Indicates whether to import the current module itself.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ImportRequiredModules
-Indicates whether to import any required modules specified in the module manifest.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -80,9 +64,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-This function helps in creating a standardized import configuration for PowerShell modules.
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

@@ -1,233 +1,369 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationPublish
-
 ## SYNOPSIS
-Provide a way to configure publishing to PowerShell Gallery or GitHub
+Provides a way to configure publishing to PowerShell Gallery or GitHub.
 
 ## SYNTAX
-
-### ApiFromFile
-```
-New-ConfigurationPublish -Type <String> -FilePath <String> [-UserName <String>] [-RepositoryName <String>]
- [-Enabled] [-OverwriteTagName <String>] [-Force] [-ID <String>] [-DoNotMarkAsPreRelease]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### ApiFromFile (Default)
+```powershell
+New-ConfigurationPublish -Type <PublishDestination> -FilePath <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [<CommonParameters>]
 ```
 
 ### ApiKey
-```
-New-ConfigurationPublish -Type <String> -ApiKey <String> [-UserName <String>] [-RepositoryName <String>]
- [-Enabled] [-OverwriteTagName <String>] [-Force] [-ID <String>] [-DoNotMarkAsPreRelease]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```powershell
+New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <int>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Provide a way to configure publishing to PowerShell Gallery or GitHub
-You can configure publishing to both at the same time
-You can publish to multiple PowerShellGalleries at the same time as well
-You can have multiple GitHub configurations at the same time as well
+Provides a way to configure publishing to PowerShell Gallery or GitHub.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-New-ConfigurationPublish -Type PowerShellGallery -FilePath 'C:\Support\Important\PowerShellGalleryAPI.txt' -Enabled:$true
+```powershell
+New-ConfigurationPublish -Type PowerShellGallery -FilePath "$env:USERPROFILE\.secrets\psgallery.key" -Enabled
 ```
 
 ### EXAMPLE 2
-```
-New-ConfigurationPublish -Type GitHub -FilePath 'C:\Support\Important\GitHubAPI.txt' -UserName 'EvotecIT' -Enabled:$true -ID 'ToGitHub'
+```powershell
+New-ConfigurationPublish -Type GitHub -FilePath "$env:USERPROFILE\.secrets\github.token" -UserName 'EvotecIT' -RepositoryName 'MyModule' -Enabled
 ```
 
 ## PARAMETERS
 
-### -Type
-Choose between PowerShellGallery and GitHub
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -FilePath
-API Key to be used for publishing to GitHub or PowerShell Gallery in clear text in file
-
-```yaml
-Type: String
-Parameter Sets: ApiFromFile
-Aliases:
-
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -ApiKey
-API Key to be used for publishing to GitHub or PowerShell Gallery in clear text
+API key to be used for publishing in clear text.
 
 ```yaml
 Type: String
 Parameter Sets: ApiKey
-Aliases:
+Aliases: None
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -UserName
-When used for GitHub this parameter is required to know to which repository to publish.
-This parameter is not used for PSGallery publishing
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -RepositoryName
-When used for PowerShellGallery publishing this parameter provides a way to overwrite default PowerShellGallery and publish to a different repository
-When not used, the default PSGallery will be used.
-When used for GitHub publishing this parameter provides a way to overwrite default repository name and publish to a different repository
-When not used, the default repository name will be used, that matches the module name
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Enabled
-Enable publishing to GitHub or PowerShell Gallery
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -OverwriteTagName
-Allow to overwrite tag name when publishing to GitHub.
-By default "v\<ModuleVersion\>" will be used i.e v1.0.0
-
-You can use following variables that will be replaced with actual values:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Force
-Allow to publish lower version of module on PowerShell Gallery.
-By default it will fail if module with higher version already exists.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ID
-Optional ID of the artefact.
-If not specified, the default packed artefact will be used.
-If no packed artefact is specified, the first packed artefact will be used (if enabled)
-If no packed artefact is enabled, the publishing will fail
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -DoNotMarkAsPreRelease
-Allow to publish to GitHub as release even if pre-release tag is set on the module version.
-By default it will be published as pre-release if pre-release tag is set.
-This setting prevents it.
+Publish GitHub release as a release even if module prerelease is set.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Enabled
+Enable publishing to the chosen destination.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -EnsureRepositoryRegistered
+When true, registers/updates the repository before publishing. Default: true.
+
+```yaml
+Type: Boolean
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FilePath
+API key to be used for publishing in clear text in a file.
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Force
+Allow publishing lower version of a module on a PowerShell repository.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ID
+Optional ID of the artefact used for publishing.
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OverwriteTagName
+Override tag name used for GitHub publishing.
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryApiVersion
+Repository API version for PSResourceGet registration (v2/v3).
+
+```yaml
+Type: RepositoryApiVersion
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryCredentialSecret
+Repository credential secret (password/token) in clear text.
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryCredentialSecretFilePath
+Repository credential secret (password/token) in a clear-text file.
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryCredentialUserName
+Repository credential username (basic auth).
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryName
+Repository name override (GitHub or PowerShell repository name).
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryPriority
+Repository priority for PSResourceGet (lower is higher priority).
+
+```yaml
+Type: Nullable`1
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryPublishUri
+Repository publish URI (PowerShellGet PublishLocation).
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositorySourceUri
+Repository source URI (PowerShellGet SourceLocation).
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryTrusted
+Whether to mark the repository as trusted (avoids prompts). Default: true.
+
+```yaml
+Type: Boolean
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RepositoryUri
+Repository base URI (used for both source and publish unless overridden).
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Tool
+Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.
+
+```yaml
+Type: PublishTool
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Type
+Choose between PowerShellGallery and GitHub.
+
+```yaml
+Type: PublishDestination
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UnregisterRepositoryAfterPublish
+When set, unregisters the repository after publish if it was created by this run.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UserName
+GitHub username (required for GitHub publishing).
+
+```yaml
+Type: String
+Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -235,9 +371,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

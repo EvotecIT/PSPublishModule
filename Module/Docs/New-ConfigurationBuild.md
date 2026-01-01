@@ -1,243 +1,149 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationBuild
-
 ## SYNOPSIS
-Allows to configure build process for the module
+Allows configuring the build process for a module.
 
 ## SYNTAX
-
-```
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild]
- [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries]
- [-SignIncludeExe] [[-SignCustomInclude] <String[]>] [[-SignExcludePaths] <String[]>] [-DotSourceClasses]
- [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions]
- [-LocalVersioning] [[-VersionedInstallStrategy] <String>] [[-VersionedInstallKeep] <Int32>]
- [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [[-CertificateThumbprint] <String>]
- [[-CertificatePFXPath] <String>] [[-CertificatePFXBase64] <String>] [[-CertificatePFXPassword] <String>]
- [[-NETProjectPath] <String>] [[-NETConfiguration] <String>] [[-NETFramework] <String[]>]
- [[-NETProjectName] <String>] [-NETExcludeMainLibrary] [[-NETExcludeLibraryFilter] <String[]>]
- [[-NETIgnoreLibraryOnLoad] <String[]>] [[-NETBinaryModule] <String[]>] [-NETHandleAssemblyWithSameName]
- [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging]
- [-NETResolveBinaryConflicts] [[-NETResolveBinaryConflictsName] <String>] [-NETBinaryModuleDocumentation]
- [-NETDoNotCopyLibrariesRecursively] [[-NETSearchClass] <String>] [-NETHandleRuntimes]
- [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Allows to configure build process for the module
+Allows configuring the build process for a module.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3
 ```
-$newConfigurationBuildSplat = @{
-    Enable                            = $true
-    SignModule                        = $true
-    MergeModuleOnBuild                = $true
-    MergeFunctionsFromApprovedModules = $true
-    CertificateThumbprint             = '483292C9E317AA1'
-    NETResolveBinaryConflicts            = $true
-    NETResolveBinaryConflictsName        = 'Transferetto'
-    NETProjectName                    = 'Transferetto'
-    NETConfiguration                  = 'Release'
-    NETFramework                      = 'netstandard2.0'
-    DotSourceLibraries                = $true
-    DotSourceClasses                  = $true
-    DeleteTargetModuleBeforeBuild     = $true
-}
-```
-
-New-ConfigurationBuild @newConfigurationBuildSplat
 
 ## PARAMETERS
 
-### -Enable
-Enable build process
+### -AutoSwitchExactOnPublish
+Auto switch VersionedInstallStrategy to Exact when publishing.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -CertificatePFXBase64
+Base64 string of a PFX containing a code-signing certificate.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CertificatePFXPassword
+Password for the PFX provided via CertificatePFXPath or CertificatePFXBase64.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CertificatePFXPath
+Path to a PFX containing a code-signing certificate.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CertificateThumbprint
+Thumbprint of a code-signing certificate from the local cert store.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -DeleteTargetModuleBeforeBuild
-Delete target module before build
+Delete target module before build.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeModuleOnBuild
-Merge module on build.
-Combines Private/Public/Classes/Enums into a single PSM1 and prepares PSD1 accordingly.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -MergeFunctionsFromApprovedModules
-When merging, also include functions from ApprovedModules referenced by the module.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SignModule
-Enables code-signing for the built module output.
-When enabled alone, only merged
-scripts are signed (psm1/psd1/ps1) and Internals are excluded.
-Use the SignInclude*
-switches to opt-in to additional content.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SignIncludeInternals
-When signing is enabled, also sign scripts that reside under the Internals folder.
-Default: disabled (Internals are skipped).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SignIncludeBinaries
-When signing is enabled, include binary files (e.g., .dll, .cat) in signing.
-Default: disabled.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SignIncludeExe
-When signing is enabled, include .exe files.
-Default: disabled.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SignCustomInclude
-Overrides the include patterns passed to the signer.
-If provided, this replaces
-the defaults entirely.
-Example: '*.psm1','*.psd1','*.ps1','*.dll'.
-Use with
-caution; it disables the default safe set.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -SignExcludePaths
-Additional path substrings to exclude from signing (relative matches).
-Example:
-'Examples','SomeFolder'.
-Internals are excluded by default unless
--SignIncludeInternals is specified.
+### -DoNotAttemptToFixRelativePaths
+Do not attempt to fix relative paths during merge.
 
 ```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -DotSourceClasses
-Keep classes in a separate dot-sourced file instead of merging them into the main PSM1.
+Keep classes in a separate dot-sourced file instead of merging into the main PSM1.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -DotSourceLibraries
@@ -245,60 +151,59 @@ Keep library-loading code in a separate dot-sourced file.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -SeparateFileLibraries
-Write library-loading code into a distinct file and reference it via ScriptsToProcess/DotSource.
+### -Enable
+Enable build process.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -RefreshPSD1Only
-Only regenerate the manifest (PSD1) without rebuilding/merging other artifacts.
+### -KillLockersBeforeInstall
+Kill locking processes before install.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -UseWildcardForFunctions
-Export all functions/aliases via wildcard in PSD1.
-Useful for debugging non-merged builds.
+### -KillLockersForce
+Force killing locking processes before install.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -LocalVersioning
@@ -306,501 +211,494 @@ Use local versioning (bump PSD1 version on each build without querying PSGallery
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -MergeFunctionsFromApprovedModules
+When merging, also include functions from ApprovedModules referenced by the module.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MergeModuleOnBuild
+Merge module on build (combine Private/Public/Classes/Enums into one PSM1).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETBinaryModule
+Binary module names (DLL file names) to import in the module.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETBinaryModuleCmdletScanDisabled
+Disable cmdlet scanning for the binary module.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETBinaryModuleDocumentation
+Enable binary module documentation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: NETDocumentation, NETBinaryModuleDocumenation
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETConfiguration
+Build configuration for .NET projects (Release or Debug).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETDoNotCopyLibrariesRecursively
+Do not copy libraries recursively (legacy option).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETExcludeLibraryFilter
+Filters for libraries that should be excluded from build output.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETExcludeMainLibrary
+Exclude main library from build output.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETFramework
+Target frameworks for .NET build.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETHandleAssemblyWithSameName
+Handle 'assembly with same name is already loaded' by wrapping Add-Type logic.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: HandleAssemblyWithSameName
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETHandleRuntimes
+Handle runtimes folder when copying libraries.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETIgnoreLibraryOnLoad
+Exclude libraries from being loaded by PSM1/Libraries.ps1.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETLineByLineAddType
+Add-Type libraries line by line (legacy debugging option).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETMergeLibraryDebugging
+Debug DLL merge (legacy setting).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: MergeLibraryDebugging
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETProjectName
+Project name for the .NET project (required when NETProjectPath is provided).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETProjectPath
+Path to the .NET project to build (useful when not in Sources folder).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETResolveBinaryConflicts
+Enable resolving binary conflicts.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: ResolveBinaryConflicts
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETResolveBinaryConflictsName
+Project name used when resolving binary conflicts.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: ResolveBinaryConflictsName
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NETSearchClass
+Search class (legacy option).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RefreshPSD1Only
+Only regenerate the manifest (PSD1) without rebuilding/merging other artefacts.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SeparateFileLibraries
+Write library-loading code into a distinct file and reference it via ScriptsToProcess/DotSource.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignCustomInclude
+Override include patterns passed to the signer.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignExcludePaths
+Additional path substrings to exclude from signing.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignIncludeBinaries
+When signing is enabled, include binary files (e.g., .dll, .cat) in signing.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignIncludeExe
+When signing is enabled, include .exe files in signing.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignIncludeInternals
+When signing is enabled, also sign scripts that reside under the Internals folder.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SignModule
+Enable code-signing for the built module output.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipBuiltinReplacements
+Disables built-in replacements done by the module builder.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -UseWildcardForFunctions
+Export all functions/aliases via wildcard in PSD1.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -VersionedInstallKeep
+How many versions to keep per module when using versioned installs.
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -VersionedInstallStrategy
 Controls how the module is installed into user Module roots after build.
-- Exact: installs to \<Modules\>\Name\\\<ModuleVersion\> (overwrites existing contents if it already exists)
-- AutoRevision: installs to \<Modules\>\Name\\\<ModuleVersion\>.\<n\> choosing the next free revision.
-Recommended for development iterations to avoid folder-in-use issues.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -VersionedInstallKeep
-How many versions to keep per module when using versioned installs (default 3).
-Older ones are pruned.
-
-```yaml
-Type: Int32
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 4
-Default value: 0
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SkipBuiltinReplacements
-Skip builtin replacements option disables builtin replacements that are done by module builder.
-This is useful if you use any of known replacements and you don't want them to be replaced by module builder.
-This has to be used on the PSPublishModule by default, as it would break the module on publish.
-
-Current known replacements are:
-- \<ModuleName\> / {ModuleName} - the name of the module i.e PSPublishModule
-- \<ModuleVersion\> / {ModuleVersion} - the version of the module i.e 1.0.0
-- \<ModuleVersionWithPreRelease\> / {ModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e 1.0.0-Preview1
-- \<TagModuleVersionWithPreRelease\> / {TagModuleVersionWithPreRelease} - the version of the module with pre-release tag i.e v1.0.0-Preview1
-- \<TagName\> / {TagName} - the name of the tag - i.e.
-v1.0.0
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -DoNotAttemptToFixRelativePaths
-Configures module builder to not replace $PSScriptRoot\..\ with $PSScriptRoot\
-This is useful if you have a module that has a lot of relative paths that are required when using Private/Public folders,
-but for merge process those are not supposed to be there as the paths change.
-By default module builder will attempt to fix it.
-This option disables this functionality.
-Best practice is to use $MyInvocation.MyCommand.Module.ModuleBase or similar instead of relative paths.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificateThumbprint
-Thumbprint of a code-signing certificate from the local cert store to sign module files.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 5
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXPath
-Path to a PFX containing a code-signing certificate used for signing.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 6
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXBase64
-Base64 string of a PFX (e.g., provided via CI secrets) used for signing.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 7
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CertificatePFXPassword
-Password for the PFX provided via -CertificatePFXPath or -CertificatePFXBase64.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 8
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETProjectPath
-Path to the project that you want to build.
-This is useful if it's not in Sources folder directly within module directory
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 9
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETConfiguration
-Build configuration for .NET projects ('Release' or 'Debug').
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 10
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETFramework
-Target frameworks for .NET build (e.g., 'netstandard2.0','net6.0').
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 11
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETProjectName
-By default it will assume same name as project name, but you can provide different name if needed.
-It's required if NETProjectPath is provided
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 12
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETExcludeMainLibrary
-Exclude main library from build, this is useful if you have C# project that you want to build
-that is used mostly for generating libraries that are used in PowerShell module
-It won't include main library in the build, but it will include all other libraries
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETExcludeLibraryFilter
-Provide list of filters for libraries that you want to exclude from build, this is useful if you have C# project that you want to build, but don't want to include all libraries for some reason
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 13
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETIgnoreLibraryOnLoad
-This is to exclude libraries from being loaded in PowerShell by PSM1/Librarties.ps1 files.
-This is useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
-For example library that's not NET based and is as dependency for other libraries
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 14
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETBinaryModule
-Provide list of binary modules that you want to import-module in the module.
-This is useful if you're building a module that has binary modules and you want to import them in the module.
-In here you provide one or more binrary module names that you want to import in the module.
-Just the DLL name with extension without path.
-Path is assumed to be $PSScriptRoot\Lib\Standard or $PSScriptRoot\Lib\Default or $PSScriptRoot\Lib\Core
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 15
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETHandleAssemblyWithSameName
-Adds try/catch block to handle assembly with same name is already loaded exception and ignore it.
-It's useful in PowerShell 7, as it's more strict about this than Windows PowerShell, and usually everything should work as expected.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: HandleAssemblyWithSameName
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETLineByLineAddType
-Adds Add-Type line by line, this is useful if you have a lot of libraries and you want to see which one is causing the issue.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETBinaryModuleCmdletScanDisabled
-This is to disable scanning for cmdlets in binary modules, this is useful if you have a lot of binary modules and you don't want to scan them for cmdlets.
-By default it will scan for cmdlets/aliases in binary modules and add them to the module PSD1/PSM1 files.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETMergeLibraryDebugging
-Add special logic to simplify debugging of merged libraries, this is useful if you have a lot of libraries and you want to see which one is causing the issue.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: MergeLibraryDebugging
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETResolveBinaryConflicts
-Add special logic to resolve binary conflicts.
-It uses by defalt the project name.
-If you want to use different name use NETResolveBinaryConflictsName
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: ResolveBinaryConflicts
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETResolveBinaryConflictsName
-Add special logic to resolve binary conflicts for specific project name.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases: ResolveBinaryConflictsName
-
-Required: False
-Position: 16
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETBinaryModuleDocumentation
-Include documentation for binary modules, this is useful if you have a lot of binary modules and you want to include documentation for them (if available in XML format)
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: NETDocumentation, NETBinaryModuleDocumenation
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETDoNotCopyLibrariesRecursively
-Do not copy libraries recursively.
-Normally all libraries are copied recursively, but this option disables that functionality so it won't copy subfolders of libraries.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETSearchClass
-Provide a name for class when using NETResolveBinaryConflicts or NETResolveBinaryConflictsName.
-By default it uses \`$LibraryName.Initialize\` however that may not be always the case
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 17
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -NETHandleRuntimes
-Add special logic to handle runtimes.
-It's useful if you have a library that is not supposed to be loaded in PowerShell, but you still need it
-For example library that's not NET based and is as dependency for other libraries
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -KillLockersBeforeInstall
-{{ Fill KillLockersBeforeInstall Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -KillLockersForce
-{{ Fill KillLockersForce Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -AutoSwitchExactOnPublish
-{{ Fill AutoSwitchExactOnPublish Description }}
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -808,9 +706,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

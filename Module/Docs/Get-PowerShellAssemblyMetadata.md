@@ -1,30 +1,42 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-PowerShellAssemblyMetadata
-
 ## SYNOPSIS
-Gets the cmdlets and aliases in a dotnet assembly.
+Gets the cmdlets and aliases in a .NET assembly by scanning for cmdlet-related attributes.
 
 ## SYNTAX
-
-```
-Get-PowerShellAssemblyMetadata [-Path] <String> [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Get-PowerShellAssemblyMetadata -Path <string> [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-{{ Fill in the Description }}
+This is typically used by module build tooling to determine which cmdlets and aliases should be exported
+for binary modules (compiled cmdlets).
+
+Under the hood it uses System.Reflection.MetadataLoadContext to inspect the assembly in isolation.
+Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),
+especially when running under Windows PowerShell 5.1.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'
 ```
-Get-PowerShellAssemblyMetadata -Path MyModule.dll
+
+Returns discovered cmdlet and alias names based on PowerShell attributes.
+
+### EXAMPLE 2
+```powershell
+PS>Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'
 ```
+
+Useful when validating what will be exported before publishing.
 
 ## PARAMETERS
 
@@ -33,29 +45,14 @@ The assembly to inspect.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -63,20 +60,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-This requires the System.Reflection.MetadataLoadContext assembly to be
-loaded through Add-Type.
-WinPS (5.1) will also need to load its deps
-    System.Memory
-    System.Collections.Immutable
-    System.Reflection.Metadata
-    System.Runtime.CompilerServices.Unsafe
-
-https://www.nuget.org/packages/System.Reflection.MetadataLoadContext
-
-Copyright: (c) 2024, Jordan Borean (@jborean93) \<jborean93@gmail.com\>
-MIT License (see LICENSE or https://opensource.org/licenses/MIT)
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

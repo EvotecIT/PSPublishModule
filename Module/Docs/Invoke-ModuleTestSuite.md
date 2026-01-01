@@ -1,288 +1,258 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Invoke-ModuleTestSuite
-
 ## SYNOPSIS
-Complete module testing suite that handles dependencies, imports, and test execution
+Complete module testing suite that handles dependencies, imports, and test execution.
 
 ## SYNTAX
-
-```
-Invoke-ModuleTestSuite [[-ProjectPath] <String>] [[-AdditionalModules] <String[]>] [[-SkipModules] <String[]>]
- [[-TestPath] <String>] [[-OutputFormat] <String>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure]
- [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [[-FailureSummaryFormat] <String>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Invoke-ModuleTestSuite [-ProjectPath <string>] [-AdditionalModules <string[]>] [-SkipModules <string[]>] [-TestPath <string>] [-OutputFormat <ModuleTestSuiteOutputFormat>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure] [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [-FailureSummaryFormat <ModuleTestSuiteFailureSummaryFormat>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-A comprehensive function that combines module information gathering, dependency management,
-module importing, and test execution into a single, easy-to-use command.
-This is the
-primary function users should call to test their modules.
+Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both
+local development and CI pipelines.
+
+For post-processing failures (e.g. emitting JSON summaries), combine it with Get-ModuleTestFailures.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'
 ```
-# Basic usage - test current module
-Invoke-ModuleTestSuite
-```
+
+Runs tests under the module project folder, installs dependencies, and prints a summary.
 
 ### EXAMPLE 2
+```powershell
+PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru
 ```
-# Test with additional modules and custom settings
-Invoke-ModuleTestSuite -AdditionalModules @('Pester', 'PSWriteColor') -SkipModules @('CertNoob') -EnableCodeCoverage
-```
+
+Optimizes output for CI and returns a structured result object.
 
 ### EXAMPLE 3
-```
-# Test different project with minimal output
-Invoke-ModuleTestSuite -ProjectPath "C:\MyModule" -OutputFormat Minimal -Force
-```
-
-### EXAMPLE 4
-```
-# CI/CD optimized testing
-Invoke-ModuleTestSuite -CICD -EnableCodeCoverage
+```powershell
+PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary
 ```
 
-### EXAMPLE 5
-```
-# Get test results for further processing
-$results = Invoke-ModuleTestSuite -PassThru
-Write-Host "Test duration: $($results.Duration)"
-```
+Produces a concise failure summary that can be used in CI logs.
 
 ## PARAMETERS
 
-### -ProjectPath
-Path to the PowerShell module project directory (defaults to current script root)
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: $PSScriptRoot
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -AdditionalModules
-Additional modules to install beyond those specified in the manifest
+Additional modules to install beyond those specified in the manifest.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
-Default value: @('Pester', 'PSWriteColor')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SkipModules
-Array of module names to skip during installation
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
-Default value: @()
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -TestPath
-Custom path to test files (defaults to Tests folder in project)
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 4
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -OutputFormat
-Test output format (Detailed, Normal, Minimal)
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 5
-Default value: Detailed
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -EnableCodeCoverage
-Enable code coverage analysis during tests
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Force
-Force reinstall of modules and reimport of the target module
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ExitOnFailure
-Exit PowerShell session if tests fail
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SkipDependencies
-Skip dependency checking and installation
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -SkipImport
-Skip module import step
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -PassThru
-Return test results object
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -CICD
-Enable CI/CD mode with optimized settings and output
+Enable CI/CD mode with optimized settings and output.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ShowFailureSummary
-Display detailed failure analysis when tests fail
+### -EnableCodeCoverage
+Enable code coverage analysis during tests.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -ExitOnFailure
+Set a non-zero process exit code when tests fail.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -FailureSummaryFormat
-Format for failure summary display (Summary, Detailed)
+Format for failure summary display.
+
+```yaml
+Type: ModuleTestSuiteFailureSummaryFormat
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Force
+Force reinstall of modules and reimport of the target module.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -OutputFormat
+Test output format.
+
+```yaml
+Type: ModuleTestSuiteOutputFormat
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PassThru
+Return the test suite result object.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectPath
+Path to the PowerShell module project directory.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 6
-Default value: Summary
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -ShowFailureSummary
+Display detailed failure analysis when tests fail.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipDependencies
+Skip dependency checking and installation.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipImport
+Skip module import step.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipModules
+Array of module names to skip during installation.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TestPath
+Custom path to test files (defaults to Tests folder in project).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -290,8 +260,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

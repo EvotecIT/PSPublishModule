@@ -1,151 +1,68 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-ModuleTestFailures
-
 ## SYNOPSIS
-Analyzes and summarizes failed Pester tests from various sources.
+Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
 
 ## SYNTAX
-
 ### Path (Default)
-```
-Get-ModuleTestFailures [-Path <String>] [-ProjectPath <String>] [-OutputFormat <String>] [-ShowSuccessful]
- [-PassThru] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```powershell
+Get-ModuleTestFailures [-Path <string>] [-ProjectPath <string>] [-OutputFormat <ModuleTestFailureOutputFormat>] [-ShowSuccessful] [-PassThru] [<CommonParameters>]
 ```
 
 ### TestResults
-```
-Get-ModuleTestFailures -TestResults <Object> [-ProjectPath <String>] [-OutputFormat <String>] [-ShowSuccessful]
- [-PassThru] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```powershell
+Get-ModuleTestFailures -TestResults <Object> [-ProjectPath <string>] [-OutputFormat <ModuleTestFailureOutputFormat>] [-ShowSuccessful] [-PassThru] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Reads Pester test results and provides a concise summary of failing tests.
-Supports both NUnit XML result files and Pester result objects directly.
-Integrates with the existing PSPublishModule testing framework.
+This cmdlet is designed to make CI output and local troubleshooting easier by summarizing failures from:
+
+Use -OutputFormat to control whether the cmdlet writes a concise host summary, detailed messages,
+or emits JSON to the pipeline.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Get-ModuleTestFailures
 ```
-# Analyze test failures from default location
-Get-ModuleTestFailures
-```
+
+Searches for TestResults.xml under the project and prints a detailed failure report.
 
 ### EXAMPLE 2
+```powershell
+PS>Get-ModuleTestFailures -Path 'Tests\TestResults.xml' -OutputFormat Summary
 ```
-# Analyze failures from specific XML file
-Get-ModuleTestFailures -Path 'Tests\TestResults.xml'
-```
+
+Writes a compact summary that is suitable for CI logs.
 
 ### EXAMPLE 3
-```
-# Analyze failures from Pester results object
-$testResults = Invoke-ModuleTestSuite -PassThru
-Get-ModuleTestFailures -TestResults $testResults
+```powershell
+PS>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' | Get-ModuleTestFailures -OutputFormat Detailed -PassThru
 ```
 
-### EXAMPLE 4
-```
-# Get detailed failure information
-Get-ModuleTestFailures -OutputFormat Detailed
-```
-
-### EXAMPLE 5
-```
-# Get results for further processing
-$failures = Get-ModuleTestFailures -PassThru
-if ($failures.FailedCount -gt 0) {
-    # Process failures...
-}
-```
+Uses the in-memory results and returns the analysis object for further processing.
 
 ## PARAMETERS
 
-### -Path
-Path to the NUnit XML test results file.
-If not specified, looks for TestResults.xml
-in the standard locations relative to the current project.
-
-```yaml
-Type: String
-Parameter Sets: Path
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -TestResults
-Pester test results object from Invoke-Pester, a PowerForge ModuleTestSuiteResult from Invoke-ModuleTestSuite, or a PowerForge ModuleTestFailureAnalysis.        
-
-```yaml
-Type: Object
-Parameter Sets: TestResults
-Aliases:
-
-Required: True
-Position: Named
-Default value: None
-Accept pipeline input: True
-Accept wildcard characters: False
-```
-
-### -ProjectPath
-Path to the project directory (defaults to current script root).
-Used to locate test results when Path is not specified.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: $PSScriptRoot
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -OutputFormat
 Format for displaying test failures.
-- Summary: Shows only test names and counts
-- Detailed: Shows test names with error messages
-- JSON: Returns results as JSON object
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: ModuleTestFailureOutputFormat
+Parameter Sets: Path, TestResults
+Aliases: None
 
 Required: False
-Position: Named
-Default value: Detailed
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ShowSuccessful
-Include successful tests in the output (only applies to Summary format).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -PassThru
@@ -153,29 +70,75 @@ Return the failure analysis object for further processing.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: Path, TestResults
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Path
+Path to the NUnit XML test results file. If not specified, searches for TestResults.xml under ProjectPath.
+
+```yaml
+Type: String
+Parameter Sets: Path
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectPath
+Path to the project directory used to locate test results when Path is not specified.
+
+```yaml
+Type: String
+Parameter Sets: Path, TestResults
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ShowSuccessful
+Include successful tests in the output (only applies to Summary format).
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Path, TestResults
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TestResults
+Pester test results object from Invoke-Pester, a T:PowerForge.ModuleTestSuiteResult from Invoke-ModuleTestSuite,
+or a precomputed T:PowerForge.ModuleTestFailureAnalysis.
+
+```yaml
+Type: Object
+Parameter Sets: TestResults
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: True (ByValue)
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -183,12 +146,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
-## OUTPUTS
-- `PowerForge.ModuleTestFailureAnalysis` when `-PassThru` is used.
-- `String` when `-OutputFormat Json` is used.
+- `System.Object`
 
-## NOTES
-This function integrates with the PSPublishModule testing framework and supports
-both Pester v4 and v5+ result formats.
+## OUTPUTS
+
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

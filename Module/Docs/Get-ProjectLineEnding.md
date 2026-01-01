@@ -1,156 +1,92 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-ProjectLineEnding
-
 ## SYNOPSIS
 Analyzes line ending consistency across all files in a project directory.
 
 ## SYNTAX
-
-```
-Get-ProjectLineEnding [-Path] <String> [[-ProjectType] <String>] [[-CustomExtensions] <String[]>]
- [[-ExcludeDirectories] <String[]>] [-GroupByLineEnding] [-ShowFiles] [-CheckMixed] [[-ExportPath] <String>]
- [-Internal] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Get-ProjectLineEnding -Path <string> [-ProjectType <string>] [-CustomExtensions <string[]>] [-ExcludeDirectories <string[]>] [-GroupByLineEnding] [-ShowFiles] [-CheckMixed] [-ExportPath <string>] [-Internal] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Scans all relevant files in a project directory and provides a comprehensive report on line endings.
-Identifies inconsistencies between CRLF (Windows), LF (Unix/Linux), and mixed line endings.
-Helps ensure consistency across development environments and prevent Git issues.
+This cmdlet is read-only: it reports CRLF/LF usage and can optionally detect mixed line endings.
+
+To normalize line endings after analysis, use Convert-ProjectLineEnding.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType PowerShell
 ```
-Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType PowerShell
-Analyze line ending consistency in a PowerShell project.
-```
+
+Returns a summary of line endings used across PowerShell-related files.
 
 ### EXAMPLE 2
-```
-Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType Mixed -CheckMixed -ShowFiles
-Get detailed line ending report including mixed line ending detection.
+```powershell
+PS>Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType Mixed -CheckMixed -ShowFiles
 ```
 
+Use this before enforcing a repository-wide LF/CRLF policy.
+
 ### EXAMPLE 3
+```powershell
+PS>Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\lineending-report.csv'
 ```
-Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\lineending-report.csv'
-Analyze all file types and export detailed report to CSV.
-```
+
+Creates a CSV report that can be shared or used in CI artifacts.
 
 ## PARAMETERS
 
-### -Path
-Path to the project directory to analyze.
+### -CheckMixed
+Additionally check for files with mixed line endings.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProjectType
-Type of project to analyze.
-Determines which file extensions are included.
-Valid values: 'PowerShell', 'CSharp', 'Mixed', 'All', 'Custom'
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
-Default value: Mixed
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -CustomExtensions
-Custom file extensions to analyze when ProjectType is 'Custom'.
-Example: @('*.ps1', '*.psm1', '*.cs', '*.vb')
+Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs).
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ExcludeDirectories
-Directory names to exclude from analysis (e.g., '.git', 'bin', 'obj').
+Directory names to exclude from analysis (e.g., .git, bin, obj).
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 4
-Default value: @('.git', '.vs', 'bin', 'obj', 'packages', 'node_modules', '.vscode')
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -GroupByLineEnding
-Group results by line ending type for easier analysis.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ShowFiles
-Include individual file details in the report.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -CheckMixed
-Additionally check for files with mixed line endings (both CRLF and LF in same file).
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ExportPath
@@ -158,44 +94,89 @@ Export the detailed report to a CSV file at the specified path.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -Internal
-{{ Fill Internal Description }}
+### -GroupByLineEnding
+Group results by line ending type.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Internal
+Internal mode: avoid host output; use verbose messages instead.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+Path to the project directory to analyze.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectType
+Type of project to analyze. Determines which file extensions are included.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ShowFiles
+Include individual file details in the report.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -203,14 +184,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-Line ending types:
-- CRLF: Windows style (\\\\r\\\\n)
-- LF: Unix/Linux style (\\\\n)
-- CR: Classic Mac style (\\\\r) - rarely used
-- Mixed: File contains multiple line ending types
-- None: Empty file or single line without line ending
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

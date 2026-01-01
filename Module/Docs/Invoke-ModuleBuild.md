@@ -1,81 +1,420 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Invoke-ModuleBuild
-
 ## SYNOPSIS
-Command to create new module or update existing one.
-It will create new module structure and everything around it, or update existing one.
+Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 
 ## SYNTAX
-
 ### Modern (Default)
-```
-Invoke-ModuleBuild [[-Settings] <ScriptBlock>] [-Path <String>] -ModuleName <String>
- [-FunctionsToExportFolder <String>] [-AliasesToExportFolder <String>] [-ExcludeFromPackage <String[]>]
- [-IncludeRoot <String[]>] [-IncludePS1 <String[]>] [-IncludeAll <String[]>] [-IncludeCustomCode <ScriptBlock>]
- [-IncludeToArray <IDictionary>] [-LibrariesCore <String>] [-LibrariesDefault <String>]
- [-LibrariesStandard <String>] [-ExitCode] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+```powershell
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Configuration
-```
-Invoke-ModuleBuild -Configuration <IDictionary> [-ExitCode] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+```powershell
+Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-JsonOnly] [-JsonPath <string>] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Command to create new module or update existing one.
-It will create new module structure and everything around it, or update existing one.
+Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings { New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' }
 ```
-An example
+
+### EXAMPLE 2
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
 ```
 
 ## PARAMETERS
 
-### -Settings
-Provide settings for the module in form of scriptblock.
-It's using DSL to define settings for the module.
-
-```yaml
-Type: ScriptBlock
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Path
-Path to the folder where new project will be created, or existing project will be updated.
-If not provided it will be created in one up folder from the location of build script.
+### -AliasesToExportFolder
+Folder name containing aliases to export. Default: Public.
 
 ```yaml
 Type: String
 Parameter Sets: Modern
-Aliases:
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -Configuration
+Legacy configuration dictionary for backwards compatibility.
+
+```yaml
+Type: IDictionary
+Parameter Sets: Configuration
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CsprojPath
+Optional path to a .NET project (.csproj) to publish into the module.
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DotNetConfiguration
+Build configuration for publishing the .NET project (Release or Debug).
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -DotNetFramework
+Target frameworks to publish (e.g., net472, net8.0).
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExcludeDirectories
+Directory names excluded from staging copy (matched by directory name, not by path).
+
+```yaml
+Type: String[]
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExcludeFiles
+File names excluded from staging copy (matched by file name, not by path).
+
+```yaml
+Type: String[]
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExcludeFromPackage
+Exclude patterns for artefact packaging.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExitCode
+When specified, requests the host to exit with code 0 on success and 1 on failure.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FunctionsToExportFolder
+Folder name containing functions to export. Default: Public.
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeAll
+Folders from which to include all files in artefacts.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeCustomCode
+Optional script block executed during staging that can add custom files/folders to the build.
+
+```yaml
+Type: ScriptBlock
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludePS1
+Folders from which to include .ps1 files in artefacts.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeRoot
+Include patterns for root files in artefacts.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IncludeToArray
+Advanced hashtable form for includes (maps IncludeRoot/IncludePS1/IncludeAll etc).
+
+```yaml
+Type: IDictionary
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallRoots
+Destination module roots for install. When omitted, defaults are used.
+
+```yaml
+Type: String[]
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -InstallStrategy
+Installation strategy used when installing the module.
+
+```yaml
+Type: InstallationStrategy
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JsonOnly
+Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
+Intended for migrating legacy DSL scripts to powerforge CLI configuration.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -JsonPath
+Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).
+Defaults to powerforge.json in the project root.
+
+```yaml
+Type: String
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -KeepStaging
+Keep staging directory after build/install.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -KeepVersions
+Number of versions to keep per module root when installing.
+
+```yaml
+Type: Int32
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Legacy
+Compatibility switch. Historically forced the PowerShell-script build pipeline; the build now always runs through the C# PowerForge pipeline.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LibrariesCore
+Alternate relative path for .NET Core-targeted libraries folder. Default: Lib/Core.
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LibrariesDefault
+Alternate relative path for .NET Framework-targeted libraries folder. Default: Lib/Default.
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LibrariesStandard
+Alternate relative path for .NET Standard-targeted libraries folder. Default: Lib/Standard.
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -ModuleName
-Provide name of the module.
-It's required parameter.
+Name of the module being built.
 
 ```yaml
 Type: String
@@ -83,244 +422,70 @@ Parameter Sets: Modern
 Aliases: ProjectName
 
 Required: True
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -FunctionsToExportFolder
-Public functions folder name.
-Default is 'Public'.
-It will be used as part of PSD1 and PSM1 to export only functions from this folder.
+### -Path
+Path to the folder where the project exists or should be created. When omitted, uses the parent of the calling script directory.
 
 ```yaml
 Type: String
 Parameter Sets: Modern
-Aliases:
+Aliases: None
 
 Required: False
-Position: Named
-Default value: Public
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -AliasesToExportFolder
-Public aliases folder name.
-Default is 'Public'.
-It will be used as part of PSD1 and PSM1 to export only aliases from this folder.
-
-```yaml
-Type: String
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: Public
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Configuration
-Provides a way to configure module using hashtable.
-It's the old way of configuring module, that requires knowledge of inner workings of the module to name proper key/value pairs
-It's required for compatibility with older versions of the module.
-
-```yaml
-Type: IDictionary
-Parameter Sets: Configuration
-Aliases:
-
-Required: True
-Position: Named
-Default value: [ordered] @{}
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ExcludeFromPackage
-Exclude files from Artefacts.
-Default is '.*, 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs'.
-
-```yaml
-Type: String[]
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: @('.*', 'Ignore', 'Examples', 'package.json', 'Publish', 'Docs')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeRoot
-Include files in the Artefacts from root of the project.
-Default is '*.psm1', '*.psd1', 'License*' files.
-Other files will be ignored.
-
-```yaml
-Type: String[]
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: @('*.psm1', '*.psd1', 'License*')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludePS1
-Include *.ps1 files in the Artefacts from given folders.
-Default are 'Private', 'Public', 'Enums', 'Classes' folders.
-If the folder doesn't exists it will be ignored.
-
-```yaml
-Type: String[]
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: @('Private', 'Public', 'Enums', 'Classes')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeAll
-Include all files in the Artefacts from given folders.
-Default are 'Images', 'Resources', 'Templates', 'Bin', 'Lib', 'Data' folders.
-
-```yaml
-Type: String[]
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: @('Images', 'Resources', 'Templates', 'Bin', 'Lib', 'Data')
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IncludeCustomCode
-Optional scriptblock executed during staging that can add custom files/folders
-to the build.
-Use helper functions like Add-Directory/Copy-Item to place extra
-content into the temporary module structure before merge/packaging.
+### -Settings
+Provides settings for the module in the form of a script block (DSL).
 
 ```yaml
 Type: ScriptBlock
 Parameter Sets: Modern
-Aliases:
+Aliases: None
 
 Required: False
-Position: Named
+Position: 0
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -IncludeToArray
-Advanced hashtable form for includes.
-Supports keys matching IncludeRoot,
-IncludePS1, IncludeAll etc.
-Prefer the dedicated parameters unless you need
-to pass a single structured object.
-
-```yaml
-Type: IDictionary
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -LibrariesCore
-Alternate relative path for .NET Core-targeted libraries folder.
-Default: 'Lib/Core'.
-
-```yaml
-Type: String
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: [io.path]::Combine("Lib", "Core")
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -LibrariesDefault
-Alternate relative path for classic .NET Framework-targeted libraries folder.
-Default: 'Lib/Default'.
-
-```yaml
-Type: String
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: [io.path]::Combine("Lib", "Default")
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -LibrariesStandard
-Alternate relative path for .NET Standard-targeted libraries folder.
-Default: 'Lib/Standard'.
-
-```yaml
-Type: String
-Parameter Sets: Modern
-Aliases:
-
-Required: False
-Position: Named
-Default value: [io.path]::Combine("Lib", "Standard")
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ExitCode
-Exit code to be returned to the caller.
-If not provided, it will not exit the script, but finish gracefully.
-Exit code 0 means success, 1 means failure.
+### -SkipInstall
+Skips installing the module after build.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: Modern
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -StagingPath
+Staging directory for the PowerForge pipeline. When omitted, a temporary folder is generated.
+
+```yaml
+Type: String
+Parameter Sets: Modern
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -328,9 +493,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

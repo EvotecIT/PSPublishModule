@@ -1,101 +1,87 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-ProjectVersion
-
 ## SYNOPSIS
-Retrieves project version information from various project files.
+Retrieves project version information from .csproj, .psd1, and build scripts.
 
 ## SYNTAX
-
-```
-Get-ProjectVersion [[-ModuleName] <String>] [[-Path] <String>] [[-ExcludeFolders] <String[]>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Get-ProjectVersion [-ModuleName <string>] [-Path <string>] [-ExcludeFolders <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Scans the specified path for C# projects (.csproj), PowerShell modules (.psd1),
-and PowerShell build scripts that contain 'Invoke-ModuleBuild' to extract version information.
+Scans the specified path for:
+*.csproj files*.psd1 filesPowerShell build scripts (*.ps1) that contain Invoke-ModuleBuild
+and returns one record per discovered version entry.
+
+This is useful for multi-project repositories where you want to quickly verify version alignment across projects/modules.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-Get-ProjectVersion
-Gets version information from all project files in the current directory.
+```powershell
+PS>Get-ProjectVersion
 ```
 
+Returns entries for discovered .csproj/.psd1/build scripts under the current folder.
+
 ### EXAMPLE 2
+```powershell
+PS>Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'
 ```
-Get-ProjectVersion -ModuleName "MyModule" -Path "C:\Projects"
-Gets version information for the specific module from the specified path.
-```
+
+Useful when a repository contains multiple modules/projects but you need only one.
 
 ## PARAMETERS
 
-### -ModuleName
-Optional module name to filter results to specific projects/modules.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Path
-The root path to search for project files.
-Defaults to current location.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: (Get-Location).Path
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -ExcludeFolders
-Array of folder names to exclude from the search (in addition to default 'obj' and 'bin').
+Path fragments (or folder names) to exclude from the search (in addition to default 'obj' and 'bin'). This matches against the full path, case-insensitively.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 3
-Default value: @()
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -ModuleName
+Optional module name to filter .csproj and .psd1 results.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Path
+The root path to search for project files. Defaults to current directory.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -103,10 +89,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-### PSCustomObject[]
-### Returns objects with Version, Source, and Type properties for each found project file.
-## NOTES
+- `PSPublishModule.ProjectVersionInfo`
 
 ## RELATED LINKS
+
+- None
+

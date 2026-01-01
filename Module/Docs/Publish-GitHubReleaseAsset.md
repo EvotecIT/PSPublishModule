@@ -1,79 +1,56 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Publish-GitHubReleaseAsset
-
 ## SYNOPSIS
-Publishes a release asset to GitHub.
+Publishes a release asset to GitHub (creates a release and uploads a zip).
 
 ## SYNTAX
-
-```
-Publish-GitHubReleaseAsset [-ProjectPath] <String> [-GitHubUsername] <String> [-GitHubRepositoryName] <String>
- [-GitHubAccessToken] <String> [-IsPreRelease] [[-Version] <String>] [[-TagName] <String>]
- [[-TagTemplate] <String>] [[-ReleaseName] <String>] [-IncludeProjectNameInTag] [[-ZipPath] <String>]
- [-ProgressAction <ActionPreference>] [-WhatIf] [-Confirm] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Publish-GitHubReleaseAsset -ProjectPath <string[]> -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> [-IsPreRelease] [-Version <string>] [-TagName <string>] [-TagTemplate <string>] [-ReleaseName <string>] [-IncludeProjectNameInTag] [-ZipPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Uses \`Send-GitHubRelease\` to create or update a GitHub release based on the
-project version and upload the generated zip archive.
+Reads project metadata from *.csproj, resolves the release version (unless overridden),
+creates a GitHub release, and uploads the specified ZIP asset.
+
+For private repositories, use a token with the minimal required scope and prefer providing it via an environment variable.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN
 ```
-Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\MyProject' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyRepo' -GitHubAccessToken $Token
-Uploads the current project zip to the specified GitHub repository.
-```
+
+Creates a GitHub release and uploads bin\Release\<Project>.<Version>.zip.
 
 ### EXAMPLE 2
-```
-# Multiple packages in one repo can share the same version.
-# Use a custom tag to avoid conflicts (e.g., include project name).
-Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\OfficeIMO\OfficeIMO.Markdown' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'OfficeIMO' -GitHubAccessToken $Token -IncludeProjectNameInTag
+```powershell
+PS>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'
 ```
 
-### EXAMPLE 3
-```
-# Override version and tag explicitly
-Publish-GitHubReleaseAsset -ProjectPath 'C:\Git\OfficeIMO\OfficeIMO.Excel' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'OfficeIMO' -GitHubAccessToken $Token -Version '1.2.3' -TagName 'OfficeIMO.Excel-v1.2.3'
-```
+Useful when your repository uses a specific tag naming convention.
 
 ## PARAMETERS
 
-### -ProjectPath
-Path to the project folder containing the *.csproj file.
+### -GitHubAccessToken
+Personal access token used for authentication.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -GitHubUsername
-GitHub account name owning the repository.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -GitHubRepositoryName
@@ -81,29 +58,44 @@ Name of the GitHub repository.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -GitHubAccessToken
-Personal access token used for authentication.
+### -GitHubUsername
+GitHub account name owning the repository.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 4
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -IncludeProjectNameInTag
+When set, generates tag name as <Project>-v<Version>.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -IsPreRelease
@@ -111,150 +103,104 @@ Publish the release as a pre-release.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Version
-{{ Fill Version Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -TagName
-{{ Fill TagName Description }}
+### -ProjectPath
+Path to the project folder containing the *.csproj file.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-Required: False
-Position: 6
+Required: True
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -TagTemplate
-{{ Fill TagTemplate Description }}
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 7
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ReleaseName
-{{ Fill ReleaseName Description }}
+Optional release name override (defaults to TagName).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 8
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -IncludeProjectNameInTag
-{{ Fill IncludeProjectNameInTag Description }}
+### -TagName
+Optional tag name override.
 
 ```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -TagTemplate
+Optional tag template (supports {Project} and {Version}).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Optional version override (otherwise read from VersionPrefix).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -ZipPath
-{{ Fill ZipPath Description }}
+Optional zip path override (defaults to bin/Release/<Project>.<Version>.zip).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 9
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -WhatIf
-Shows what would happen if the cmdlet runs.
-The cmdlet is not run.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: wi
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Confirm
-Prompts you for confirmation before running the cmdlet.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: (All)
-Aliases: cf
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -262,8 +208,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

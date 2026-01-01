@@ -1,96 +1,84 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationTest
-
 ## SYNOPSIS
 Configures running Pester tests as part of the build.
 
 ## SYNTAX
-
-```
-New-ConfigurationTest [-TestsPath] <String> [-Enable] [-Force] [-ProgressAction <ActionPreference>]
- [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationTest -TestsPath <string> [-Enable] [-Force] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Emits test configuration that the builder uses to run tests.
-Currently, tests
-are triggered AfterMerge.
-When -Enable is not provided, nothing is emitted.
+Emits a test configuration segment that instructs the pipeline to run Pester tests after the module is merged/built.
+Use this when you want builds to fail fast on test failures.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationTest -Enable -TestsPath 'Tests'
 ```
-New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
-Configures tests to run after merge from the 'Tests' folder.
+
+Runs tests from the Tests folder after the build/merge step.
+
+### EXAMPLE 2
+```powershell
+PS>New-ConfigurationTest -Enable -TestsPath 'Tests' -Force
 ```
+
+Useful in CI when you always want a fresh test run.
 
 ## PARAMETERS
-
-### -TestsPath
-Path to the folder containing Pester tests.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: True
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
 
 ### -Enable
 Enable test execution in the build.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Force
-Force running tests even if they already ran or when caching would skip them.
+Force running tests even if caching would skip them.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -TestsPath
+Path to the folder containing Pester tests.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -98,8 +86,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

@@ -4,72 +4,49 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# Publish-NugetPackage
+# Step-Version
 ## SYNOPSIS
-Pushes NuGet packages to a feed using dotnet nuget push.
+Steps a version based on an expected version pattern (supports the legacy X placeholder).
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-NugetPackage -Path <string[]> -ApiKey <string> [-Source <string>] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
+Step-Version -ExpectedVersion <string> [-Module <string>] [-Advanced] [-LocalPSD1 <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Searches the provided -Path roots for *.nupkg files and pushes them using the .NET SDK.
+This cmdlet supports two common workflows:
 
-Use -SkipDuplicate for CI-friendly, idempotent runs.
+When -ExpectedVersion contains an X placeholder (e.g. 1.2.X),
+the cmdlet resolves the next patch version. When an exact version is provided, it is returned as-is.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-PS>Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate
+PS>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'
 ```
 
-Publishes all .nupkg files under the folder; safe to rerun in CI.
+Reads the current version from the PSD1 and returns the next patch version.
 
 ### EXAMPLE 2
 ```powershell
-PS>Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'
+PS>Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced
 ```
 
-Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).
+Returns a structured object that includes whether auto-versioning was used.
+
+### EXAMPLE 3
+```powershell
+PS>Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'
+```
+
+Resolves the next patch version by looking up the current version of the module.
 
 ## PARAMETERS
 
-### -ApiKey
-API key used to authenticate against the NuGet feed.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -Path
-Directory to search for NuGet packages.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: True
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -SkipDuplicate
-When set, passes --skip-duplicate to dotnet nuget push.
-This makes repeated publishing runs idempotent when the package already exists.
+### -Advanced
+When set, returns a typed result instead of only the version string.
 
 ```yaml
 Type: SwitchParameter
@@ -83,8 +60,38 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Source
-NuGet feed URL.
+### -ExpectedVersion
+Expected version (exact or pattern like 0.1.X).
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LocalPSD1
+Optional local PSD1 path used to resolve current version.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Module
+Optional module name used to resolve current version from PSGallery.
 
 ```yaml
 Type: String
@@ -107,7 +114,8 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## OUTPUTS
 
-- `System.Object`
+- `System.String
+PowerForge.ModuleVersionStepResult`
 
 ## RELATED LINKS
 

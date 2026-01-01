@@ -1,78 +1,69 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationCommand
-
 ## SYNOPSIS
 Defines a command import configuration for the build pipeline.
 
 ## SYNTAX
-
-```
-New-ConfigurationCommand [[-ModuleName] <String>] [[-CommandName] <String[]>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationCommand [-ModuleName <string>] [-CommandName <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Creates a configuration object that specifies a module and one or more command names
-to reference during the build process (for discovery, linking, or documentation).
+Used by the build pipeline to declare which commands should be imported from an external module at build time.
+This helps make build scripts deterministic and explicit about their dependencies.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationCommand -ModuleName 'Pester' -CommandName 'Invoke-Pester'
 ```
-New-ConfigurationCommand -ModuleName 'PSSharedGoods' -CommandName 'Write-Text','Remove-EmptyValue'
+
+Declares a dependency on Invoke-Pester from the Pester module.
+
+### EXAMPLE 2
+```powershell
+PS>New-ConfigurationCommand -ModuleName 'PSWriteColor' -CommandName 'Write-Color','Write-Text'
 ```
+
+Declares multiple command references from the same module.
 
 ## PARAMETERS
-
-### -ModuleName
-Name of the module that contains the commands.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
 
 ### -CommandName
 One or more command names to reference from the module.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 2
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -ProgressAction
-{{ Fill ProgressAction Description }}
+### -ModuleName
+Name of the module that contains the commands.
 
 ```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -80,8 +71,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

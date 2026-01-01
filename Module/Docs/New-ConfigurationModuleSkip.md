@@ -1,97 +1,77 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationModuleSkip
-
 ## SYNOPSIS
 Provides a way to ignore certain commands or modules during build process and continue module building on errors.
 
 ## SYNTAX
-
-```
-New-ConfigurationModuleSkip [[-IgnoreModuleName] <String[]>] [[-IgnoreFunctionName] <String[]>] [-Force]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationModuleSkip [-IgnoreModuleName <string[]>] [-IgnoreFunctionName <string[]>] [-Force] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Provides a way to ignore certain commands or modules during build process and continue module building on errors.
-During build if a build module can't find require module or command it will fail the build process to prevent incomplete module from being created.
-This option allows to skip certain modules or commands and continue building the module.
-This is useful for commands we know are not available on all systems, or we get them different way.
+Useful for optional dependencies where you want builds to succeed even if a tool module is not available
+(e.g. optional analyzers, formatters, helpers).
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force
 ```
-New-ConfigurationModuleSkip -IgnoreFunctionName 'Invoke-Formatter', 'Find-Module'
-```
+
+Prevents build failure when the module is not installed in the environment.
 
 ## PARAMETERS
 
-### -IgnoreModuleName
-Ignore module name or names.
-If the module is not available on the system it will be ignored and build process will continue.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IgnoreFunctionName
-Ignore function name or names.
-If the function is not available in the module it will be ignored and build process will continue.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -Force
-This switch will force build process to continue even if the module or command is not available (aka you know what you are doing)
+Force build process to continue even if the module or command is not available.
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: Named
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -IgnoreFunctionName
+Ignore function name(s). If the function is not available it will be ignored.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IgnoreModuleName
+Ignore module name(s). If the module is not available it will be ignored.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -99,9 +79,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

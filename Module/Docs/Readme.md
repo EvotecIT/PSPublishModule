@@ -1,126 +1,134 @@
 ---
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
-Download Help Link: {{ Update Download Link }}
-Help Version: {{ Please enter version of help manually (X.X.X.X) format }}
+Download Help Link: https://github.com/EvotecIT/PSPublishModule
+Help Version: 2.0.27
 Locale: en-US
 ---
-
 # PSPublishModule Module
 ## Description
-{{ Fill in the Description }}
+Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
 
 ## PSPublishModule Cmdlets
+### [Convert-ProjectEncoding](Convert-ProjectEncoding.md)
+Converts file encodings across a project. Thin wrapper over PowerForge.EncodingConverter.
+Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibility.
+
+### [Convert-ProjectLineEnding](Convert-ProjectLineEnding.md)
+Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.
+Thin wrapper over PowerForge.LineEndingConverter.
+
 ### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
-{{ Fill in the Description }}
+Exports a code-signing certificate to DER format for NuGet.org registration.
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
-{{ Fill in the Description }}
+Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
 
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
-{{ Fill in the Description }}
+Gets module manifest information from a project directory.
 
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
-{{ Fill in the Description }}
+Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
 
 ### [Get-PowerShellAssemblyMetadata](Get-PowerShellAssemblyMetadata.md)
-{{ Fill in the Description }}
+Gets the cmdlets and aliases in a .NET assembly by scanning for cmdlet-related attributes.
 
 ### [Get-PowerShellCompatibility](Get-PowerShellCompatibility.md)
-{{ Fill in the Description }}
+Analyzes PowerShell files and folders to determine compatibility with Windows PowerShell 5.1 and PowerShell 7+.
 
 ### [Get-ProjectConsistency](Get-ProjectConsistency.md)
-{{ Fill in the Description }}
+Provides comprehensive analysis of encoding and line ending consistency across a project.
 
 ### [Get-ProjectEncoding](Get-ProjectEncoding.md)
-{{ Fill in the Description }}
+Analyzes encoding consistency across all files in a project directory.
 
 ### [Get-ProjectLineEnding](Get-ProjectLineEnding.md)
-{{ Fill in the Description }}
+Analyzes line ending consistency across all files in a project directory.
 
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
-{{ Fill in the Description }}
+Retrieves project version information from .csproj, .psd1, and build scripts.
 
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
-{{ Fill in the Description }}
+Builds a .NET project in Release configuration and prepares release artefacts.
 
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
-{{ Fill in the Description }}
+Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
-{{ Fill in the Description }}
+Complete module testing suite that handles dependencies, imports, and test execution.
 
 ### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
-{{ Fill in the Description }}
+Tells the module to create an artefact of a specified type.
 
 ### [New-ConfigurationBuild](New-ConfigurationBuild.md)
-{{ Fill in the Description }}
+Allows configuring the build process for a module.
 
 ### [New-ConfigurationCommand](New-ConfigurationCommand.md)
-{{ Fill in the Description }}
+Defines a command import configuration for the build pipeline.
 
 ### [New-ConfigurationCompatibility](New-ConfigurationCompatibility.md)
-{{ Fill in the Description }}
+Creates configuration for PowerShell compatibility checking during module build.
 
 ### [New-ConfigurationDelivery](New-ConfigurationDelivery.md)
-{{ Fill in the Description }}
+Configures delivery metadata for bundling and installing internal docs/examples.
 
 ### [New-ConfigurationDocumentation](New-ConfigurationDocumentation.md)
-{{ Fill in the Description }}
+Enables or disables creation of documentation from the module using PowerForge.
 
 ### [New-ConfigurationExecute](New-ConfigurationExecute.md)
-{{ Fill in the Description }}
+Reserved placeholder for future execution-time configuration.
 
 ### [New-ConfigurationFileConsistency](New-ConfigurationFileConsistency.md)
-{{ Fill in the Description }}
+Creates configuration for file consistency checking (encoding and line endings) during module build.
 
 ### [New-ConfigurationFormat](New-ConfigurationFormat.md)
-{{ Fill in the Description }}
+Builds formatting options for code and manifest generation during the build.
 
 ### [New-ConfigurationImportModule](New-ConfigurationImportModule.md)
-{{ Fill in the Description }}
+Creates a configuration for importing PowerShell modules.
 
 ### [New-ConfigurationInformation](New-ConfigurationInformation.md)
-{{ Fill in the Description }}
+Describes what to include/exclude in the module build and how libraries are organized.
 
 ### [New-ConfigurationManifest](New-ConfigurationManifest.md)
-{{ Fill in the Description }}
+Creates a configuration manifest for a PowerShell module.
 
 ### [New-ConfigurationModule](New-ConfigurationModule.md)
-{{ Fill in the Description }}
+Provides a way to configure required, external, or approved modules used in the project.
 
 ### [New-ConfigurationModuleSkip](New-ConfigurationModuleSkip.md)
-{{ Fill in the Description }}
+Provides a way to ignore certain commands or modules during build process and continue module building on errors.
 
 ### [New-ConfigurationPlaceHolder](New-ConfigurationPlaceHolder.md)
-{{ Fill in the Description }}
+Helps define custom placeholders replacing content within a script or module during the build process.
 
 ### [New-ConfigurationPublish](New-ConfigurationPublish.md)
-{{ Fill in the Description }}
+Provides a way to configure publishing to PowerShell Gallery or GitHub.
 
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
-{{ Fill in the Description }}
+Configures running Pester tests as part of the build.
 
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
-{{ Fill in the Description }}
+Publishes a release asset to GitHub (creates a release and uploads a zip).
 
 ### [Publish-NugetPackage](Publish-NugetPackage.md)
-{{ Fill in the Description }}
+Pushes NuGet packages to a feed using dotnet nuget push.
 
 ### [Register-Certificate](Register-Certificate.md)
-{{ Fill in the Description }}
+Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).
 
 ### [Remove-Comments](Remove-Comments.md)
-{{ Fill in the Description }}
+Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.
 
 ### [Remove-ProjectFiles](Remove-ProjectFiles.md)
-{{ Fill in the Description }}
+Removes specific files and folders from a project directory with safety features.
 
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
-{{ Fill in the Description }}
+Creates a new release for the given GitHub repository and optionally uploads assets.
 
 ### [Set-ProjectVersion](Set-ProjectVersion.md)
-{{ Fill in the Description }}
+Updates version numbers across multiple project files.
 
-{{ Fill in the Description }}
+### [Step-Version](Step-Version.md)
+Steps a version based on an expected version pattern (supports the legacy X placeholder).
 

@@ -1,156 +1,161 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Send-GitHubRelease
-
 ## SYNOPSIS
-Creates a new Release for the given GitHub repository.
+Creates a new release for the given GitHub repository and optionally uploads assets.
 
 ## SYNTAX
-
-```
-Send-GitHubRelease [-GitHubUsername] <String> [-GitHubRepositoryName] <String> [-GitHubAccessToken] <String>
- [-TagName] <String> [[-ReleaseName] <String>] [[-ReleaseNotes] <String>] [[-AssetFilePaths] <String[]>]
- [[-Commitish] <String>] [[-IsDraft] <Boolean>] [[-IsPreRelease] <Boolean>]
- [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Uses the GitHub API to create a new Release for a given repository.
-Allows you to specify all of the Release properties, such as the Tag, Name, Assets, and if it's a Draft or Prerelease or not.
+This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by
+higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used directly in CI pipelines.
+
+Provide the token via an environment variable to avoid leaking secrets into logs or history.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'
 ```
-# Import the module dynamically from the PowerShell Gallery. Use CurrentUser scope to avoid having to run as admin.
-Import-Module -Name New-GitHubRelease -Scope CurrentUser
+
+Creates the release and uploads the specified asset file.
+
+### EXAMPLE 2
+```powershell
+PS>Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true
 ```
 
-# Specify the parameters required to create the release.
-Do it as a hash table for easier readability.
-$newGitHubReleaseParameters =
-@{
-    GitHubUsername = 'deadlydog'
-    GitHubRepositoryName = 'New-GitHubRelease'
-    GitHubAccessToken = 'SomeLongHexidecimalString'
-    ReleaseName = "New-GitHubRelease v1.0.0"
-    TagName = "v1.0.0"
-    ReleaseNotes = "This release contains the following changes: ..."
-    AssetFilePaths = @('C:\MyProject\Installer.exe','C:\MyProject\Documentation.md')
-    IsPreRelease = $false
-    IsDraft = $true	# Set to true when testing so we don't publish a real release (visible to everyone) by accident.
-}
-
-# Try to create the Release on GitHub and save the results.
-$result = New-GitHubRelease @newGitHubReleaseParameters
-
-# Provide some feedback to the user based on the results.
-if ($result.Succeeded -eq $true)
-{
-    Write-Output "Release published successfully!
-View it at $($result.ReleaseUrl)"
-}
-elseif ($result.ReleaseCreationSucceeded -eq $false)
-{
-    Write-Error "The release was not created.
-Error message is: $($result.ErrorMessage)"
-}
-elseif ($result.AllAssetUploadsSucceeded -eq $false)
-{
-    Write-Error "The release was created, but not all of the assets were uploaded to it.
-View it at $($result.ReleaseUrl).
-Error message is: $($result.ErrorMessage)"
-}
-
-Attempt to create a new Release on GitHub, and provide feedback to the user indicating if it succeeded or not.
+Creates a draft prerelease that can be reviewed before publishing.
 
 ## PARAMETERS
 
-### -GitHubUsername
-The username that the GitHub repository exists under.
-e.g.
-For the repository https://github.com/deadlydog/New-GitHubRelease, the username is 'deadlydog'.
+### -AssetFilePaths
+The full paths of the files to include as release assets.
 
 ```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-Required: True
-Position: 1
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -GitHubRepositoryName
-The name of the repository to create the Release for.
-e.g.
-For the repository https://github.com/deadlydog/New-GitHubRelease, the repository name is 'New-GitHubRelease'.
+### -Commitish
+Commitish value that determines where the Git tag is created from.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-Required: True
-Position: 2
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -GitHubAccessToken
-The Access Token to use as credentials for GitHub.
-Access tokens can be generated at https://github.com/settings/tokens.
-The access token will need to have the repo/public_repo permission on it for it to be allowed to create a new Release.
+GitHub personal access token used for authentication.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 3
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -TagName
-The name of the tag to create at the Commitish.
+### -GitHubRepositoryName
+GitHub repository name.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 4
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
+```
+
+### -GitHubUsername
+GitHub username owning the repository.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IsDraft
+True to create a draft (unpublished) release.
+
+```yaml
+Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -IsPreRelease
+True to identify the release as a prerelease.
+
+```yaml
+Type: Boolean
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
 ```
 
 ### -ReleaseName
-The name to use for the new release.
-If blank, the TagName will be used.
+The name of the release. If omitted, TagName is used.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -ReleaseNotes
@@ -158,95 +163,29 @@ The text describing the contents of the release.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 6
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -AssetFilePaths
-The full paths of the files to include in the release.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 7
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Commitish
-Specifies the commitish value that determines where the Git tag is created from.
-Can be any branch or commit SHA.
-Unused if the Git tag already exists.
-Default: the repository's default branch (usually master).
+### -TagName
+The tag name used for the release.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-Required: False
-Position: 8
+Required: True
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IsDraft
-True to create a draft (unpublished) release, false to create a published one.
-Default: false
-
-```yaml
-Type: Boolean
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 9
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -IsPreRelease
-True to identify the release as a prerelease.
-false to identify the release as a full release.
-Default: false
-
-```yaml
-Type: Boolean
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 10
-Default value: False
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -254,21 +193,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-### A hash table with the following properties is returned:
-### Succeeded = $true if the Release was created successfully and all assets were uploaded to it, $false if some part of the process failed.
-### ReleaseCreationSucceeded = $true if the Release was created successfully (does not include asset uploads), $false if the Release was not created.
-### AllAssetUploadsSucceeded = $true if all assets were uploaded to the Release successfully, $false if one of them failed, $null if there were no assets to upload.
-### ReleaseUrl = The URL of the new Release that was created.
-### ErrorMessage = A message describing what went wrong in the case that Succeeded is $false.
-## NOTES
-Name:   New-GitHubRelease
-Author: Daniel Schroeder (originally based on the script at https://github.com/majkinetor/au/blob/master/scripts/Github-CreateRelease.ps1)
-GitHub Release API Documentation: https://developer.github.com/v3/repos/releases/#create-a-release
-Version: 1.0.2
+- `System.Object`
 
 ## RELATED LINKS
 
-[Project home: https://github.com/deadlydog/New-GitHubRelease]()
+- None
 

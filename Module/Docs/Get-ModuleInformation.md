@@ -1,68 +1,57 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # Get-ModuleInformation
-
 ## SYNOPSIS
-Gets module manifest information from a project directory
+Gets module manifest information from a project directory.
 
 ## SYNTAX
-
-```
-Get-ModuleInformation [-Path] <String> [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+Get-ModuleInformation -Path <string> [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Retrieves module manifest (.psd1) file information from the specified path.
-Validates that exactly one manifest file exists and returns the parsed information.
+This is a lightweight helper used by build/publish commands.
+It finds the module manifest (*.psd1) under -Path and returns a structured object
+containing common fields such as module name, version, required modules, and the manifest path.
+
+Use it in build scripts to avoid re-implementing manifest discovery logic.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
-```
-Get-ModuleInformation -Path "C:\MyModule"
+```powershell
+PS>Get-ModuleInformation -Path 'C:\Git\MyModule\Module'
 ```
 
+Returns the parsed manifest and convenience properties such as module name and version.
+
 ### EXAMPLE 2
+```powershell
+PS>$moduleInfo = Get-ModuleInformation -Path $PSScriptRoot; $moduleInfo.ManifestPath
 ```
-$moduleInfo = Get-ModuleInformation -Path $PSScriptRoot
-Write-Output "Module: $($moduleInfo.ModuleName) Version: $($moduleInfo.ModuleVersion)"
-```
+
+Loads the manifest from the folder where the build script resides.
 
 ## PARAMETERS
 
 ### -Path
-The path to the directory containing the module manifest file
+The path to the directory containing the module manifest file.
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 1
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -70,8 +59,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+

@@ -1,147 +1,121 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version:
+online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-
 # New-ConfigurationModule
-
 ## SYNOPSIS
-Provides a way to configure Required Modules or External Modules that will be used in the project.
+Provides a way to configure required, external, or approved modules used in the project.
 
 ## SYNTAX
-
-```
-New-ConfigurationModule [[-Type] <Object>] [-Name] <String[]> [[-Version] <String>]
- [[-RequiredVersion] <String>] [[-Guid] <String>] [-ProgressAction <ActionPreference>] [<CommonParameters>]
+### __AllParameterSets
+```powershell
+New-ConfigurationModule -Name <string[]> [-Type <ModuleDependencyKind>] [-Version <string>] [-RequiredVersion <string>] [-Guid <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Provides a way to configure Required Modules or External Modules that will be used in the project.
+Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)
+install/package dependencies during a build.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
+```powershell
+PS>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'
 ```
-# Add standard module dependencies (directly, but can be used with loop as well)
-New-ConfigurationModule -Type RequiredModule -Name 'powershellget' -Guid 'Auto' -Version 'Latest'
-New-ConfigurationModule -Type RequiredModule -Name 'PSScriptAnalyzer' -Guid 'Auto' -Version 'Latest'
-```
+
+Declares a required dependency that is written into the manifest.
 
 ### EXAMPLE 2
-```
-# Add external module dependencies, using loop for simplicity
-foreach ($Module in @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Archive', 'Microsoft.PowerShell.Management', 'Microsoft.PowerShell.Security')) {
-    New-ConfigurationModule -Type ExternalModule -Name $Module
-}
+```powershell
+PS>New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'
 ```
 
+Declares a dependency that is expected to be installed separately (not bundled into artefacts).
+
 ### EXAMPLE 3
+```powershell
+PS>New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'
 ```
-# Add approved modules, that can be used as a dependency, but only when specific function from those modules is used
-# And on that time only that function and dependant functions will be copied over
-# Keep in mind it has it's limits when "copying" functions such as it should not depend on DLLs or other external files
-New-ConfigurationModule -Type ApprovedModule -Name 'PSSharedGoods', 'PSWriteColor', 'Connectimo', 'PSUnifi', 'PSWebToolbox', 'PSMyPassword'
-```
+
+Uses RequiredVersion when an exact match is required.
 
 ## PARAMETERS
 
-### -Type
-Choose between RequiredModule, ExternalModule and ApprovedModule, where RequiredModule is the default.
+### -Guid
+GUID of the dependency module (or 'Auto').
 
 ```yaml
-Type: Object
-Parameter Sets: (All)
-Aliases:
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 1
-Default value: RequiredModule
+Position: named
+Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -Name
-Name of PowerShell module that you want your module to depend on.
+Name of the PowerShell module(s) that your module depends on.
 
 ```yaml
 Type: String[]
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: True
-Position: 2
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -Version
-Version of PowerShell module that you want your module to depend on.
-If you don't specify a version, any version of the module is acceptable.
-You can also use word 'Latest' to specify that you want to use the latest version of the module, and the module will be pickup up latest version available on the system.
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### -RequiredVersion
-RequiredVersion of PowerShell module that you want your module to depend on.
-This forces the module to require this specific version.
-When using Version, the module will be picked up if it's equal or higher than the version specified.
-When using RequiredVersion, the module will be picked up only if it's equal to the version specified.
+Required version of the dependency module (exact match).
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 4
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
-### -Guid
-Guid of PowerShell module that you want your module to depend on.
-If you don't specify a Guid, any Guid of the module is acceptable, but it is recommended to specify it.
-Alternatively you can use word 'Auto' to specify that you want to use the Guid of the module, and the module GUID
+### -Type
+Choose between RequiredModule, ExternalModule and ApprovedModule.
+
+```yaml
+Type: ModuleDependencyKind
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Version
+Minimum version of the dependency module (or 'Latest').
 
 ```yaml
 Type: String
-Parameter Sets: (All)
-Aliases:
+Parameter Sets: __AllParameterSets
+Aliases: None
 
 Required: False
-Position: 5
+Position: named
 Default value: None
 Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -ProgressAction
-{{ Fill ProgressAction Description }}
-
-```yaml
-Type: ActionPreference
-Parameter Sets: (All)
-Aliases: proga
-
-Required: False
-Position: Named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
+Accept wildcard characters: True
 ```
 
 ### CommonParameters
@@ -149,9 +123,13 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 
 ## INPUTS
 
+- `None`
+
 ## OUTPUTS
 
-## NOTES
-General notes
+- `System.Object`
 
 ## RELATED LINKS
+
+- None
+
