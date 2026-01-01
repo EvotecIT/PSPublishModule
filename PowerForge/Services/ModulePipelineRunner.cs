@@ -868,7 +868,7 @@ public sealed class ModulePipelineRunner
         if (plan.DeleteGeneratedStagingAfterRun)
         {
             SafeStart(cleanupStep);
-            try { Directory.Delete(buildResult.StagingPath, recursive: true); }
+            try { DeleteDirectoryWithRetries(buildResult.StagingPath); }
             catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
             SafeDone(cleanupStep);
         }
@@ -891,6 +891,55 @@ public sealed class ModulePipelineRunner
             projectFileConsistencyStatus,
             projectFileConsistencyEncodingFix,
             projectFileConsistencyLineEndingFix);
+    }
+
+    private static void DeleteDirectoryWithRetries(string path, int maxAttempts = 10, int initialDelayMs = 250)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        var full = Path.GetFullPath(path.Trim().Trim('"'));
+        if (!Directory.Exists(full)) return;
+
+        maxAttempts = Math.Max(1, maxAttempts);
+        initialDelayMs = Math.Max(0, initialDelayMs);
+
+        Exception? last = null;
+        var delayMs = initialDelayMs;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                Directory.Delete(full, recursive: true);
+                return;
+            }
+            catch (IOException ex)
+            {
+                last = ex;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                last = ex;
+            }
+
+            if (attempt >= maxAttempts)
+                throw last ?? new IOException("Failed to delete directory.");
+
+            // If the directory contains assemblies loaded in a collectible ALC, forcing GC helps release file locks.
+            try
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+            catch
+            {
+                // best effort only
+            }
+
+            if (delayMs > 0)
+                System.Threading.Thread.Sleep(delayMs);
+
+            delayMs = delayMs <= 0 ? 0 : Math.Min(delayMs * 2, 3000);
+        }
     }
 
     private void SyncGeneratedDocumentationToProjectRoot(ModulePipelinePlan plan, DocumentationBuildResult documentationResult)

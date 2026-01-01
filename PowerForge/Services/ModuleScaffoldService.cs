@@ -62,7 +62,7 @@ public sealed class ModuleScaffoldService
         {
             if (File.Exists(f.Dest)) continue;
 
-            _logger.Info($"   [+] Copying '{Path.GetFileName(f.Dest)}' file ({f.Source})");
+            _logger.Info($"   📄 Copying '{Path.GetFileName(f.Dest)}' ({f.Source})");
             File.Copy(f.Source, f.Dest, overwrite: false);
 
             if (f.Patch)
