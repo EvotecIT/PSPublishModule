@@ -21,8 +21,13 @@ Convert-ProjectEncoding -Path <string> -CustomExtensions <string[]> [-SourceEnco
 ```
 
 ## DESCRIPTION
-Converts file encodings across a project. Thin wrapper over PowerForge.EncodingConverter.
-Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibility.
+Use this cmdlet to standardize file encodings across a repository before packaging or publishing a module.
+It supports -WhatIf/-Confirm and optional backups via -CreateBackups.
+
+For PowerShell projects targeting Windows PowerShell 5.1, UTF-8 with BOM is commonly recommended to avoid
+encoding-related parsing issues. For cross-platform projects that do not need PS 5.1, UTF-8 (no BOM) may be preferred.
+
+For audit-only reporting, use Get-ProjectEncoding. For combined encoding + line-ending checks, use Get-ProjectConsistency.
 
 ## EXAMPLES
 

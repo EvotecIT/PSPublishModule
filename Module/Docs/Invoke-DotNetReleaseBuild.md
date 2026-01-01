@@ -15,7 +15,11 @@ Invoke-DotNetReleaseBuild -ProjectPath <string[]> [-CertificateThumbprint <strin
 ```
 
 ## DESCRIPTION
-Builds a .NET project in Release configuration and prepares release artefacts.
+The cmdlet discovers the .csproj file (when a directory is provided), reads VersionPrefix from the
+project, then runs dotnet build and dotnet pack in Release (by default). It produces a ZIP snapshot of
+the release output and returns a typed result object for each input project path.
+
+Use -WhatIf to preview the planned outputs without running build/pack/sign operations.
 
 ## EXAMPLES
 
@@ -27,6 +31,16 @@ Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDepen
 ### EXAMPLE 2
 ```powershell
 Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser
+```
+
+### EXAMPLE 3
+```powershell
+Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary' -PackDependencies -WhatIf
+```
+
+### EXAMPLE 4
+```powershell
+Invoke-DotNetReleaseBuild -ProjectPath '.\ProjectA\ProjectA.csproj', '.\ProjectB\ProjectB.csproj' -PackDependencies
 ```
 
 ## PARAMETERS

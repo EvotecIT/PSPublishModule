@@ -21,8 +21,8 @@ Convert-ProjectLineEnding -Path <string> -TargetLineEnding <LineEnding> [-Projec
 ```
 
 ## DESCRIPTION
-Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.
-Thin wrapper over PowerForge.LineEndingConverter.
+Use -WhatIf to preview changes without modifying files. When conversion is performed, PowerForge preserves file encoding where possible
+and prefers UTF-8 BOM for PowerShell files to maintain Windows PowerShell 5.1 compatibility.
 
 ## EXAMPLES
 

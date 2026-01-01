@@ -20,18 +20,43 @@ Invoke-ModuleBuild -Configuration <IDictionary> [-ExcludeDirectories <string[]>]
 ```
 
 ## DESCRIPTION
-Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
+This is the primary entry point for building a PowerShell module using PSPublishModule.
+Configuration is provided via a DSL using New-Configuration* cmdlets (typically inside the -Settings
+scriptblock) and then executed by the PowerForge pipeline runner.
+
+To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build
+steps, use -JsonOnly with -JsonPath.
+
+When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings { New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' }
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
+New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+}
 ```
 
 ### EXAMPLE 2
 ```powershell
 Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'
+```
+
+### EXAMPLE 3
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -ExitCode -Settings {
+New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+}
+```
+
+### EXAMPLE 4
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+-CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+-Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }
 ```
 
 ## PARAMETERS

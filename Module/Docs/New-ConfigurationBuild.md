@@ -15,13 +15,19 @@ New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleO
 ```
 
 ## DESCRIPTION
-Allows configuring the build process for a module.
+This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.
+It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
 New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3
+```
+
+### EXAMPLE 2
+```powershell
+New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce
 ```
 
 ## PARAMETERS

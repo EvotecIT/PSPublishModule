@@ -20,7 +20,11 @@ New-ConfigurationPublish -Type <PublishDestination> -ApiKey <string> [-UserName 
 ```
 
 ## DESCRIPTION
-Provides a way to configure publishing to PowerShell Gallery or GitHub.
+This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.
+Use -Type to choose a destination. For repository publishing, -Tool selects the provider (PowerShellGet/PSResourceGet/Auto).
+
+For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.
+To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.
 
 ## EXAMPLES
 

@@ -15,7 +15,13 @@ New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] 
 ```
 
 ## DESCRIPTION
-Tells the module to create an artefact of a specified type.
+Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and
+Unpacked (folder) for inspection or offline installation.
+
+When -AddRequiredModules is enabled, required modules are downloaded (via Save-PSResource/Save-Module) and copied into
+the artefact so the output can be used in offline environments.
+
+Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.
 
 ## EXAMPLES
 

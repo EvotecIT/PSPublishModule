@@ -27,6 +27,11 @@ PS>New-ConfigurationImportModule -ImportSelf -ImportRequiredModules
 
 Ensures the pipeline imports the module and required dependencies before running tests or generating docs.
 
+### EXAMPLE 2
+```powershell
+PS>New-ConfigurationImportModule -ImportSelf
+```
+
 ## PARAMETERS
 
 ### -ImportRequiredModules

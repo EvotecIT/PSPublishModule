@@ -27,6 +27,11 @@ PS>New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnInco
 
 Enables validation and exports a CSV report when issues are detected.
 
+### EXAMPLE 2
+```powershell
+PS>New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport
+```
+
 ## PARAMETERS
 
 ### -Enable

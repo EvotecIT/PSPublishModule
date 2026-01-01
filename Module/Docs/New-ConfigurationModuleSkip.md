@@ -27,6 +27,11 @@ PS>New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force
 
 Prevents build failure when the module is not installed in the environment.
 
+### EXAMPLE 2
+```powershell
+PS>New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force
+```
+
 ## PARAMETERS
 
 ### -Force

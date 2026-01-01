@@ -11,8 +11,11 @@ Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibil
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Converts file encodings across a project. Thin wrapper over PowerForge.EncodingConverter.&#xD;
-Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibility.</maml:para>
+      <maml:para>Use this cmdlet to standardize file encodings across a repository before packaging or publishing a module.&#xD;
+It supports -WhatIf/-Confirm and optional backups via -CreateBackups.</maml:para>
+      <maml:para>For PowerShell projects targeting Windows PowerShell 5.1, UTF-8 with BOM is commonly recommended to avoid&#xD;
+encoding-related parsing issues. For cross-platform projects that do not need PS 5.1, UTF-8 (no BOM) may be preferred.</maml:para>
+      <maml:para>For audit-only reporting, use Get-ProjectEncoding. For combined encoding + line-ending checks, use Get-ProjectConsistency.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -451,8 +454,8 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.&#xD;
-Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
+      <maml:para>Use -WhatIf to preview changes without modifying files. When conversion is performed, PowerForge preserves file encoding where possible&#xD;
+and prefers UTF-8 BOM for PowerShell files to maintain Windows PowerShell 5.1 compatibility.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -938,7 +941,8 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Exports a code-signing certificate to DER format for NuGet.org registration.</maml:para>
+      <maml:para>NuGet.org requires uploading the public certificate (.cer) used for package signing.&#xD;
+This cmdlet exports the selected certificate from the local certificate store.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -1091,17 +1095,17 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF'</dev:code>
+        <maml:title>Export by thumbprint</maml:title>
+        <dev:code>PS&gt;Export-CertificateForNuGet -CertificateThumbprint '0123456789ABCDEF' -OutputPath 'C:\Temp\NuGetSigning.cer'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Exports the certificate in DER format to the given path.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Export-CertificateForNuGet -CertificateSha256 'Value'</dev:code>
+        <maml:title>Export by SHA256 hash</maml:title>
+        <dev:code>PS&gt;Export-CertificateForNuGet -CertificateSha256 '0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Useful when you have the SHA256 fingerprint but not the Windows thumbprint.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -1117,7 +1121,9 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Analyzes a script or scriptblock and reports functions/commands it calls that are not present.</maml:para>
+      <maml:para>This cmdlet parses PowerShell code and returns a list of referenced commands that look like missing local helpers.&#xD;
+It is useful when building “portable” scripts/modules where you want to detect (and optionally inline) helper functions.</maml:para>
+      <maml:para>When -ApprovedModules is specified, helper definitions are only accepted from those modules.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -1378,10 +1384,17 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-MissingFunctions -FilePath 'C:\Path'</dev:code>
+        <maml:title>List missing function dependencies for a script</maml:title>
+        <dev:code>PS&gt;Get-MissingFunctions -FilePath '.\Build\Build-Module.ps1' -Summary</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns a list of functions referenced by the script that are not part of the script itself.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Analyze a scriptblock and return inlineable helper definitions</maml:title>
+        <dev:code>PS&gt;$sb = { Invoke-ModuleBuild -ModuleName 'MyModule' }; Get-MissingFunctions -Code $sb -SummaryWithCommands -ApprovedModules 'PSSharedGoods','PSPublishModule'</dev:code>
+        <dev:remarks>
+          <maml:para>Returns a structured report that can include helper function bodies sourced from approved modules.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -1397,7 +1410,10 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Gets module manifest information from a project directory.</maml:para>
+      <maml:para>This is a lightweight helper used by build/publish commands.&#xD;
+It finds the module manifest (*.psd1) under -Path and returns a structured object&#xD;
+containing common fields such as module name, version, required modules, and the manifest path.</maml:para>
+      <maml:para>Use it in build scripts to avoid re-implementing manifest discovery logic.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -1451,10 +1467,17 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ModuleInformation -Path 'C:\Path'</dev:code>
+        <maml:title>Read module information from a module folder</maml:title>
+        <dev:code>PS&gt;Get-ModuleInformation -Path 'C:\Git\MyModule\Module'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns the parsed manifest and convenience properties such as module name and version.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Use in a build script (relative to the script root)</maml:title>
+        <dev:code>PS&gt;$moduleInfo = Get-ModuleInformation -Path $PSScriptRoot; $moduleInfo.ManifestPath</dev:code>
+        <dev:remarks>
+          <maml:para>Loads the manifest from the folder where the build script resides.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -1470,7 +1493,9 @@ Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.</maml:para>
+      <maml:para>This cmdlet is designed to make CI output and local troubleshooting easier by summarizing failures from:</maml:para>
+      <maml:para>Use -OutputFormat to control whether the cmdlet writes a concise host summary, detailed messages,&#xD;
+or emits JSON to the pipeline.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -1697,17 +1722,24 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ModuleTestFailures -Path 'C:\Path'</dev:code>
+        <maml:title>Analyze test failures from the default results location</maml:title>
+        <dev:code>PS&gt;Get-ModuleTestFailures</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Searches for TestResults.xml under the project and prints a detailed failure report.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Get-ModuleTestFailures -TestResults 'Value'</dev:code>
+        <maml:title>Analyze failures from a specific NUnit XML file</maml:title>
+        <dev:code>PS&gt;Get-ModuleTestFailures -Path 'Tests\TestResults.xml' -OutputFormat Summary</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Writes a compact summary that is suitable for CI logs.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Pipe results from Invoke-ModuleTestSuite</maml:title>
+        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' | Get-ModuleTestFailures -OutputFormat Detailed -PassThru</dev:code>
+        <dev:remarks>
+          <maml:para>Uses the in-memory results and returns the analysis object for further processing.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -1723,7 +1755,11 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Gets the cmdlets and aliases in a .NET assembly by scanning for cmdlet-related attributes.</maml:para>
+      <maml:para>This is typically used by module build tooling to determine which cmdlets and aliases should be exported&#xD;
+for binary modules (compiled cmdlets).</maml:para>
+      <maml:para>Under the hood it uses System.Reflection.MetadataLoadContext to inspect the assembly in isolation.&#xD;
+Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),&#xD;
+especially when running under Windows PowerShell 5.1.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -1777,10 +1813,17 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-PowerShellAssemblyMetadata -Path 'C:\Path'</dev:code>
+        <maml:title>Inspect a compiled PowerShell module assembly</maml:title>
+        <dev:code>PS&gt;Get-PowerShellAssemblyMetadata -Path '.\bin\Release\net8.0\MyModule.dll'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns discovered cmdlet and alias names based on PowerShell attributes.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Inspect an assembly in a build artifact folder</maml:title>
+        <dev:code>PS&gt;Get-PowerShellAssemblyMetadata -Path 'C:\Artifacts\MyModule\Bin\MyModule.dll'</dev:code>
+        <dev:remarks>
+          <maml:para>Useful when validating what will be exported before publishing.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -1796,7 +1839,10 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Analyzes PowerShell files and folders to determine compatibility with Windows PowerShell 5.1 and PowerShell 7+.</maml:para>
+      <maml:para>Scans PowerShell files to detect patterns and constructs that can cause cross-version issues&#xD;
+(Windows PowerShell 5.1 vs PowerShell 7+), and outputs a compatibility report.</maml:para>
+      <maml:para>Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks&#xD;
+when supporting Windows PowerShell 5.1.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -1970,10 +2016,24 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-PowerShellCompatibility -Path 'C:\Path'</dev:code>
+        <maml:title>Analyze a module folder</maml:title>
+        <dev:code>PS&gt;Get-PowerShellCompatibility -Path 'C:\MyModule'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Analyzes PowerShell files in the folder and returns a compatibility report.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Recursively analyze and include detailed findings</maml:title>
+        <dev:code>PS&gt;Get-PowerShellCompatibility -Path 'C:\MyModule' -Recurse -ShowDetails</dev:code>
+        <dev:remarks>
+          <maml:para>Useful when investigating why a module behaves differently in PS 5.1 vs PS 7+.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Export compatibility findings to CSV</maml:title>
+        <dev:code>PS&gt;Get-PowerShellCompatibility -Path 'C:\MyModule' -ExportPath 'C:\Reports\compatibility.csv'</dev:code>
+        <dev:remarks>
+          <maml:para>Creates a report that can be attached to CI artifacts.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -1989,7 +2049,9 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Provides comprehensive analysis of encoding and line ending consistency across a project.</maml:para>
+      <maml:para>This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.&#xD;
+It is intended to be run before bulk conversions (encoding/line endings) and before packaging a module for release.</maml:para>
+      <maml:para>For fixing issues after analysis, use Convert-ProjectEncoding and Convert-ProjectLineEnding.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2211,10 +2273,24 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ProjectConsistency -Path 'C:\Path'</dev:code>
+        <maml:title>Analyze a PowerShell project with defaults</maml:title>
+        <dev:code>PS&gt;Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Reports encoding and line ending consistency using PowerShell-friendly defaults.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Analyze with explicit recommendations and detailed output</maml:title>
+        <dev:code>PS&gt;Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType Mixed -RecommendedEncoding UTF8BOM -RecommendedLineEnding LF -ShowDetails</dev:code>
+        <dev:remarks>
+          <maml:para>Useful when you want to enforce a policy (e.g. UTF-8 BOM for PS 5.1 compatibility and LF for cross-platform repos).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Export a detailed report to CSV</maml:title>
+        <dev:code>PS&gt;Get-ProjectConsistency -Path 'C:\MyProject' -ProjectType CSharp -RecommendedEncoding UTF8 -ExportPath 'C:\Reports\consistency-report.csv'</dev:code>
+        <dev:remarks>
+          <maml:para>Exports the per-file details so you can review issues outside the console.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -2230,7 +2306,8 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Analyzes encoding consistency across all files in a project directory.</maml:para>
+      <maml:para>This cmdlet is read-only: it does not modify files. Use it to audit a repository before converting encodings.</maml:para>
+      <maml:para>To standardize file encodings after analysis, use Convert-ProjectEncoding.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2428,10 +2505,24 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ProjectEncoding -Path 'C:\Path'</dev:code>
+        <maml:title>Analyze a PowerShell project</maml:title>
+        <dev:code>PS&gt;Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns a summary of the encodings used in PowerShell-related files.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Show per-file details grouped by encoding</maml:title>
+        <dev:code>PS&gt;Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -GroupByEncoding -ShowFiles</dev:code>
+        <dev:remarks>
+          <maml:para>Useful when you need to identify which files are outliers (e.g. ASCII vs UTF-8 BOM).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Export a detailed report to CSV</maml:title>
+        <dev:code>PS&gt;Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\encoding-report.csv'</dev:code>
+        <dev:remarks>
+          <maml:para>Creates a CSV report that can be shared or used in CI artifacts.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -2447,7 +2538,8 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Analyzes line ending consistency across all files in a project directory.</maml:para>
+      <maml:para>This cmdlet is read-only: it reports CRLF/LF usage and can optionally detect mixed line endings.</maml:para>
+      <maml:para>To normalize line endings after analysis, use Convert-ProjectLineEnding.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2693,10 +2785,24 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ProjectLineEnding -Path 'C:\Path'</dev:code>
+        <maml:title>Analyze a PowerShell project</maml:title>
+        <dev:code>PS&gt;Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns a summary of line endings used across PowerShell-related files.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Detect mixed line endings and show per-file details</maml:title>
+        <dev:code>PS&gt;Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType Mixed -CheckMixed -ShowFiles</dev:code>
+        <dev:remarks>
+          <maml:para>Use this before enforcing a repository-wide LF/CRLF policy.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Export a detailed report to CSV</maml:title>
+        <dev:code>PS&gt;Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\lineending-report.csv'</dev:code>
+        <dev:remarks>
+          <maml:para>Creates a CSV report that can be shared or used in CI artifacts.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -2712,7 +2818,10 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Retrieves project version information from .csproj, .psd1, and build scripts.</maml:para>
+      <maml:para>Scans the specified path for:&#xD;
+*.csproj files*.psd1 filesPowerShell build scripts (*.ps1) that contain Invoke-ModuleBuild&#xD;
+and returns one record per discovered version entry.</maml:para>
+      <maml:para>This is useful for multi-project repositories where you want to quickly verify version alignment across projects/modules.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2814,10 +2923,17 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-ProjectVersion -Path 'C:\Path'</dev:code>
+        <maml:title>Get version information for all projects in the current directory</maml:title>
+        <dev:code>PS&gt;Get-ProjectVersion</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns entries for discovered .csproj/.psd1/build scripts under the current folder.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Filter results to one module name</maml:title>
+        <dev:code>PS&gt;Get-ProjectVersion -ModuleName 'MyModule' -Path 'C:\Projects'</dev:code>
+        <dev:remarks>
+          <maml:para>Useful when a repository contains multiple modules/projects but you need only one.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -2833,7 +2949,10 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Builds a .NET project in Release configuration and prepares release artefacts.</maml:para>
+      <maml:para>The cmdlet discovers the .csproj file (when a directory is provided), reads VersionPrefix from the&#xD;
+project, then runs dotnet build and dotnet pack in Release (by default). It produces a ZIP snapshot of&#xD;
+the release output and returns a typed result object for each input project path.</maml:para>
+      <maml:para>Use -WhatIf to preview the planned outputs without running build/pack/sign operations.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2996,6 +3115,20 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
+      <command:example>
+        <maml:title>Preview the release build plan (no build)</maml:title>
+        <dev:code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary' -PackDependencies -WhatIf</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Build multiple projects in one invocation</maml:title>
+        <dev:code>Invoke-DotNetReleaseBuild -ProjectPath '.\ProjectA\ProjectA.csproj', '.\ProjectB\ProjectB.csproj' -PackDependencies</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
     </command:examples>
     <command:relatedLinks />
   </command:command>
@@ -3009,7 +3142,13 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).</maml:para>
+      <maml:para>This is the primary entry point for building a PowerShell module using PSPublishModule.&#xD;
+Configuration is provided via a DSL using New-Configuration* cmdlets (typically inside the -Settings&#xD;
+scriptblock) and then executed by the PowerForge pipeline runner.</maml:para>
+      <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build&#xD;
+steps, use -JsonOnly with -JsonPath.</maml:para>
+      <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.&#xD;
+Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -3841,7 +3980,9 @@ Defaults to powerforge.json in the project root.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Build a module (DSL) and keep docs in sync</maml:title>
-        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings { New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' }</dev:code>
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -Settings {
+New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
+}</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -3849,6 +3990,25 @@ Defaults to powerforge.json in the project root.</maml:para>
       <command:example>
         <maml:title>Generate a PowerForge JSON pipeline without running the build</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Enforce consistency and compatibility during build (fail CI on issues)</maml:title>
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -ExitCode -Settings {
+New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBackups -ExportReport
+New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
+}</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish a .NET project into the module as part of the build</maml:title>
+        <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' `
+-CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
+-Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -3866,7 +4026,9 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Complete module testing suite that handles dependencies, imports, and test execution.</maml:para>
+      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both&#xD;
+local development and CI pipelines.</maml:para>
+      <maml:para>For post-processing failures (e.g. emitting JSON summaries), combine it with Get-ModuleTestFailures.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -4232,10 +4394,24 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Invoke-ModuleTestSuite -ProjectPath 'C:\Path'</dev:code>
+        <maml:title>Run the full test suite for a module</maml:title>
+        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Runs tests under the module project folder, installs dependencies, and prints a summary.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Run in CI mode and return the result object</maml:title>
+        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -CICD -PassThru</dev:code>
+        <dev:remarks>
+          <maml:para>Optimizes output for CI and returns a structured result object.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Pipe results into Get-ModuleTestFailures</maml:title>
+        <dev:code>PS&gt;Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary</dev:code>
+        <dev:remarks>
+          <maml:para>Produces a concise failure summary that can be used in CI logs.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -4251,7 +4427,11 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Tells the module to create an artefact of a specified type.</maml:para>
+      <maml:para>Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and&#xD;
+Unpacked (folder) for inspection or offline installation.</maml:para>
+      <maml:para>When -AddRequiredModules is enabled, required modules are downloaded (via Save-PSResource/Save-Module) and copied into&#xD;
+the artefact so the output can be used in offline environments.</maml:para>
+      <maml:para>Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -4859,7 +5039,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Allows configuring the build process for a module.</maml:para>
+      <maml:para>This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -5975,6 +6156,13 @@ Defaults to powerforge.json in the project root.</maml:para>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
+      <command:example>
+        <maml:title>Enable signing and terminate locking processes before install</maml:title>
+        <dev:code>New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
     </command:examples>
     <command:relatedLinks />
   </command:command>
@@ -5988,7 +6176,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Defines a command import configuration for the build pipeline.</maml:para>
+      <maml:para>Used by the build pipeline to declare which commands should be imported from an external module at build time.&#xD;
+This helps make build scripts deterministic and explicit about their dependencies.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -6066,10 +6255,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationCommand -ModuleName 'MyModule'</dev:code>
+        <maml:title>Reference a single command from a module</maml:title>
+        <dev:code>PS&gt;New-ConfigurationCommand -ModuleName 'Pester' -CommandName 'Invoke-Pester'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Declares a dependency on Invoke-Pester from the Pester module.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Reference multiple commands</maml:title>
+        <dev:code>PS&gt;New-ConfigurationCommand -ModuleName 'PSWriteColor' -CommandName 'Write-Color','Write-Text'</dev:code>
+        <dev:remarks>
+          <maml:para>Declares multiple command references from the same module.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -6085,7 +6281,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates configuration for PowerShell compatibility checking during module build.</maml:para>
+      <maml:para>Adds a compatibility validation step to the build pipeline. This can be used to enforce that the module source is compatible&#xD;
+with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -6331,8 +6528,15 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationCompatibility -Enable</dev:code>
+        <maml:title>Require cross-version compatibility and fail the build on issues</maml:title>
+        <dev:code>PS&gt;New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -MinimumCompatibilityPercentage 95 -ExportReport</dev:code>
+        <dev:remarks>
+          <maml:para>Enables validation and exports a CSV report when issues are detected.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Require PowerShell 7 compatibility only</maml:title>
+        <dev:code>PS&gt;New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -6350,7 +6554,9 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Configures delivery metadata for bundling and installing internal docs/examples.</maml:para>
+      <maml:para>Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally&#xD;
+generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleName&gt;) that can copy these files to a target folder.</maml:para>
+      <maml:para>This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -6860,10 +7066,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationDelivery -InternalsPath 'C:\Path'</dev:code>
+        <maml:title>Bundle Internals and generate Install/Update commands</maml:title>
+        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -InternalsPath 'Internals' -IncludeRootReadme -IncludeRootChangelog -GenerateInstallCommand -GenerateUpdateCommand</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Generates public Install/Update helpers and bundles README/CHANGELOG into the module.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Configure repository-backed docs display</maml:title>
+        <dev:code>PS&gt;New-ConfigurationDelivery -Enable -RepositoryPaths 'docs' -RepositoryBranch 'main' -DocumentationOrder '01-Intro.md','02-HowTo.md'</dev:code>
+        <dev:remarks>
+          <maml:para>Helps modules expose docs from a repository path in a consistent order.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -6879,7 +7092,11 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Enables or disables creation of documentation from the module using PowerForge.</maml:para>
+      <maml:para>This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\&lt;ModuleName&gt;-help.xml),&#xD;
+and whether generated documentation should be synced back to the project root.</maml:para>
+      <maml:para>About topics are supported via about_*.help.txt / about_*.txt files present in the module source. When enabled,&#xD;
+these are converted into markdown pages under Docs\About.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -6984,6 +7201,19 @@ Defaults to powerforge.json in the project root.</maml:para>
           <maml:name>StartClean</maml:name>
           <maml:description>
             <maml:para>Removes all files from the documentation folder before creating new documentation.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SyncExternalHelpToProjectRoot</maml:name>
+          <maml:description>
+            <maml:para>When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced&#xD;
+back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -7129,6 +7359,19 @@ Defaults to powerforge.json in the project root.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SyncExternalHelpToProjectRoot</maml:name>
+        <maml:description>
+          <maml:para>When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced&#xD;
+back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Tool</maml:name>
         <maml:description>
           <maml:para>Documentation engine (legacy parameter; kept for compatibility).</maml:para>
@@ -7176,7 +7419,7 @@ Defaults to powerforge.json in the project root.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>Generate markdown docs and external help, and sync back to project root</maml:title>
-        <dev:code>New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'</dev:code>
+        <dev:code>New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -7201,7 +7444,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Reserved placeholder for future execution-time configuration.</maml:para>
+      <maml:para>This cmdlet currently exists only for backward compatibility with older build scripts.&#xD;
+It emits no configuration segment and has no effect.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -7230,10 +7474,10 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationExecute</dev:code>
+        <maml:title>Call the placeholder cmdlet (no output)</maml:title>
+        <dev:code>PS&gt;New-ConfigurationExecute</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>No action is performed and nothing is emitted to the pipeline.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -7249,7 +7493,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates configuration for file consistency checking (encoding and line endings) during module build.</maml:para>
+      <maml:para>Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules&#xD;
+and (optionally) auto-fix issues during a build.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -7591,10 +7836,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationFileConsistency -Enable</dev:code>
+        <maml:title>Enforce UTF-8 BOM + CRLF and auto-fix during build</maml:title>
+        <dev:code>PS&gt;New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Enforces consistency and exports a CSV report; backups are created before fixes are applied.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Audit project root consistency (no fixes)</maml:title>
+        <dev:code>PS&gt;New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -UpdateProjectRoot</dev:code>
+        <dev:remarks>
+          <maml:para>Runs validation on staging and project root, exports a report, and does not apply automatic fixes.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -7610,7 +7862,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Builds formatting options for code and manifest generation during the build.</maml:para>
+      <maml:para>Produces a formatting configuration segment used by the build pipeline to normalize generated output&#xD;
+(merged PSM1/PSD1) and optionally apply formatting back to the project root.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -8408,10 +8661,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationFormat -ApplyTo @('Value')</dev:code>
+        <maml:title>Remove comments and normalize whitespace during merge</maml:title>
+        <dev:code>PS&gt;New-ConfigurationFormat -ApplyTo OnMergePSM1,OnMergePSD1 -RemoveComments -RemoveEmptyLines</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Formats the merged module output and removes comments while keeping readability.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Also update files in the project root</maml:title>
+        <dev:code>PS&gt;New-ConfigurationFormat -ApplyTo DefaultPSM1,DefaultPSD1 -EnableFormatting -UpdateProjectRoot</dev:code>
+        <dev:remarks>
+          <maml:para>Applies formatting rules to the project sources as well as generated output.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -8427,7 +8687,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates a configuration for importing PowerShell modules.</maml:para>
+      <maml:para>Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).&#xD;
+This is primarily used by test and documentation steps that execute PowerShell code.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -8505,8 +8766,15 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationImportModule -ImportRequiredModules</dev:code>
+        <maml:title>Import the module under build and its RequiredModules</maml:title>
+        <dev:code>PS&gt;New-ConfigurationImportModule -ImportSelf -ImportRequiredModules</dev:code>
+        <dev:remarks>
+          <maml:para>Ensures the pipeline imports the module and required dependencies before running tests or generating docs.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Import only the module under build</maml:title>
+        <dev:code>PS&gt;New-ConfigurationImportModule -ImportSelf</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -8524,7 +8792,7 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Describes what to include/exclude in the module build and how libraries are organized.</maml:para>
+      <maml:para>This configuration segment controls:</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -8818,10 +9086,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationInformation -AliasesToExportFolder 'Value'</dev:code>
+        <maml:title>Customize include/exclude rules for packaging</maml:title>
+        <dev:code>PS&gt;New-ConfigurationInformation -ExcludeFromPackage 'Ignore','Examples','Docs' -IncludeRoot '*.psd1','*.psm1','LICENSE' -IncludeAll 'Bin','Lib','en-US'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Controls what ends up in packaged artefacts while keeping staging lean.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Add custom files during staging</maml:title>
+        <dev:code>PS&gt;New-ConfigurationInformation -IncludeCustomCode { Copy-Item -Path '.\Extras\*' -Destination $StagingPath -Recurse -Force }</dev:code>
+        <dev:remarks>
+          <maml:para>Injects additional content into the staging folder before packaging.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -8837,7 +9112,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates a configuration manifest for a PowerShell module.</maml:para>
+      <maml:para>Emits a manifest configuration segment that is later applied to the module .psd1 during a build.&#xD;
+Use this to define identity and metadata (version, GUID, author, tags, links) in a build script / JSON pipeline.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -9323,10 +9599,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'Value' -Author 'Value'</dev:code>
+        <maml:title>Create a minimal manifest segment</maml:title>
+        <dev:code>PS&gt;New-ConfigurationManifest -ModuleVersion '1.0.0' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Defines the core identity fields required for a module manifest.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Create a manifest with tags and links</maml:title>
+        <dev:code>PS&gt;New-ConfigurationManifest -ModuleVersion '1.0.X' -Guid 'eb76426a-1992-40a5-82cd-6480f883ef4d' -Author 'YourName' -Tags 'PowerShell','Build' -ProjectUri 'https://github.com/YourOrg/YourRepo' -LicenseUri 'https://opensource.org/licenses/MIT'</dev:code>
+        <dev:remarks>
+          <maml:para>Populates common PSGallery metadata that shows up on the gallery and in generated docs.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -9342,7 +9625,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Provides a way to configure required, external, or approved modules used in the project.</maml:para>
+      <maml:para>Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)&#xD;
+install/package dependencies during a build.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -9492,10 +9776,24 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationModule -Name @('Name')</dev:code>
+        <maml:title>Add a required module dependency</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version '5.6.1'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Declares a required dependency that is written into the manifest.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Add an external module (required but not packaged)</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModule -Type ExternalModule -Name 'Az.Accounts' -Version 'Latest'</dev:code>
+        <dev:remarks>
+          <maml:para>Declares a dependency that is expected to be installed separately (not bundled into artefacts).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Pin an exact required version</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModule -Type RequiredModule -Name 'PSWriteColor' -RequiredVersion '1.0.0'</dev:code>
+        <dev:remarks>
+          <maml:para>Uses RequiredVersion when an exact match is required.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -9511,7 +9809,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Provides a way to ignore certain commands or modules during build process and continue module building on errors.</maml:para>
+      <maml:para>Useful for optional dependencies where you want builds to succeed even if a tool module is not available&#xD;
+(e.g. optional analyzers, formatters, helpers).</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -9613,8 +9912,15 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationModuleSkip -Force</dev:code>
+        <maml:title>Ignore an optional module and continue on missing dependency</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModuleSkip -IgnoreModuleName 'PSScriptAnalyzer' -Force</dev:code>
+        <dev:remarks>
+          <maml:para>Prevents build failure when the module is not installed in the environment.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Ignore specific functions for cross-platform builds</maml:title>
+        <dev:code>PS&gt;New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -9632,7 +9938,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Helps define custom placeholders replacing content within a script or module during the build process.</maml:para>
+      <maml:para>Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)&#xD;
+without hardcoding them into source files.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -9737,17 +10044,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationPlaceHolder -Find 'Value' -Replace 'Value'</dev:code>
+        <maml:title>Replace a single placeholder token</maml:title>
+        <dev:code>PS&gt;New-ConfigurationPlaceHolder -Find '{{ModuleVersion}}' -Replace '1.2.3'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Replaces all occurrences of {{ModuleVersion}} in merged content.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>New-ConfigurationPlaceHolder -CustomReplacement @('Value')</dev:code>
+        <maml:title>Provide multiple replacements</maml:title>
+        <dev:code>PS&gt;New-ConfigurationPlaceHolder -CustomReplacement @{ Find='{{Company}}'; Replace='Evotec' }, @{ Find='{{Year}}'; Replace='2025' }</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Emits multiple placeholder replacement segments in one call.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -9763,7 +10070,10 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Provides a way to configure publishing to PowerShell Gallery or GitHub.</maml:para>
+      <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+Use -Type to choose a destination. For repository publishing, -Tool selects the provider (PowerShellGet/PSResourceGet/Auto).</maml:para>
+      <maml:para>For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.&#xD;
+To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -10590,7 +10900,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Configures running Pester tests as part of the build.</maml:para>
+      <maml:para>Emits a test configuration segment that instructs the pipeline to run Pester tests after the module is merged/built.&#xD;
+Use this when you want builds to fail fast on test failures.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -10692,10 +11003,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ConfigurationTest -TestsPath 'C:\Path'</dev:code>
+        <maml:title>Enable Pester tests during the build</maml:title>
+        <dev:code>PS&gt;New-ConfigurationTest -Enable -TestsPath 'Tests'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Runs tests from the Tests folder after the build/merge step.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Force test execution (ignore caching)</maml:title>
+        <dev:code>PS&gt;New-ConfigurationTest -Enable -TestsPath 'Tests' -Force</dev:code>
+        <dev:remarks>
+          <maml:para>Useful in CI when you always want a fresh test run.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -10711,7 +11029,9 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Publishes a release asset to GitHub (creates a release and uploads a zip).</maml:para>
+      <maml:para>Reads project metadata from *.csproj, resolves the release version (unless overridden),&#xD;
+creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
+      <maml:para>For private repositories, use a token with the minimal required scope and prefer providing it via an environment variable.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -11005,10 +11325,17 @@ Defaults to powerforge.json in the project root.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Publish-GitHubReleaseAsset -ProjectPath @('C:\Path') -GitHubUsername 'Name' -GitHubRepositoryName 'Name' -GitHubAccessToken 'Value'</dev:code>
+        <maml:title>Create a release and upload the default ZIP asset</maml:title>
+        <dev:code>PS&gt;Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Creates a GitHub release and uploads bin\Release\&lt;Project&gt;.&lt;Version&gt;.zip.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish a pre-release with a custom tag template</maml:title>
+        <dev:code>PS&gt;Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -IsPreRelease -TagTemplate '{Project}-v{Version}'</dev:code>
+        <dev:remarks>
+          <maml:para>Useful when your repository uses a specific tag naming convention.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -11024,7 +11351,8 @@ Defaults to powerforge.json in the project root.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Pushes NuGet packages to a feed using dotnet nuget push.</maml:para>
+      <maml:para>Searches the provided -Path roots for *.nupkg files and pushes them using the .NET SDK.</maml:para>
+      <maml:para>Use -SkipDuplicate for CI-friendly, idempotent runs.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -11152,10 +11480,17 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Publish-NugetPackage -Path @('C:\Path') -ApiKey 'Value'</dev:code>
+        <maml:title>Publish all packages from a Release folder</maml:title>
+        <dev:code>PS&gt;Publish-NugetPackage -Path '.\bin\Release' -ApiKey $env:NUGET_API_KEY -SkipDuplicate</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Publishes all .nupkg files under the folder; safe to rerun in CI.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Publish to a custom feed</maml:title>
+        <dev:code>PS&gt;Publish-NugetPackage -Path '.\artifacts' -ApiKey 'YOUR_KEY' -Source 'https://api.nuget.org/v3/index.json'</dev:code>
+        <dev:remarks>
+          <maml:para>Use a different source URL for private feeds (e.g. GitHub Packages, Azure Artifacts).</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -11171,7 +11506,8 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Signs files in a path using a code-signing certificate (Windows and PowerShell Core supported).</maml:para>
+      <maml:para>Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.&#xD;
+When running in CI, prefer using a certificate from the Windows certificate store and referencing it by thumbprint.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -11492,17 +11828,17 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Register-Certificate -LocalStore 'Value' -Path 'C:\Path'</dev:code>
+        <maml:title>Sign a module using a certificate from the current user store</maml:title>
+        <dev:code>PS&gt;Register-Certificate -Path 'C:\Git\MyModule\Module' -LocalStore CurrentUser -Thumbprint '0123456789ABCDEF' -WhatIf</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Previews which files would be signed.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Register-Certificate -CertificatePFX 'Value' -Path 'C:\Path'</dev:code>
+        <maml:title>Sign using a PFX file</maml:title>
+        <dev:code>PS&gt;Register-Certificate -CertificatePFX 'C:\Secrets\codesign.pfx' -Path 'C:\Git\MyModule\Module' -Include '*.ps1','*.psm1','*.psd1'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Uses a PFX directly (useful for local testing; store-based is recommended for CI).</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -11518,7 +11854,8 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Removes PowerShell comments from a script file or provided content, with optional empty-line normalization.</maml:para>
+      <maml:para>Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.&#xD;
+Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -11815,17 +12152,17 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Remove-Comments -SourceFilePath 'C:\Path'</dev:code>
+        <maml:title>Remove comments from a file and write to a new file</maml:title>
+        <dev:code>PS&gt;Remove-Comments -SourceFilePath '.\Public\Get-Thing.ps1' -DestinationFilePath '.\Public\Get-Thing.nocomments.ps1'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Writes the cleaned content to the destination file.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Remove-Comments -Content 'Value'</dev:code>
+        <maml:title>Remove comments from content and return the processed text</maml:title>
+        <dev:code>PS&gt;$clean = Remove-Comments -Content (Get-Content -Raw .\script.ps1)</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Returns the processed content when no destination file is specified.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -11841,7 +12178,8 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Removes specific files and folders from a project directory with safety features.</maml:para>
+      <maml:para>Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)&#xD;
+should be predictable and safe. Supports -WhatIf, retries and optional backups.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -12354,17 +12692,17 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Remove-ProjectFiles -ProjectPath 'C:\Path'</dev:code>
+        <maml:title>Preview cleanup of build artifacts</maml:title>
+        <dev:code>PS&gt;Remove-ProjectFiles -ProjectPath '.' -ProjectType Build -WhatIf</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Shows what would be removed for the selected cleanup type.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
-        <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Remove-ProjectFiles -ProjectPath 'C:\Path' -IncludePatterns @('Value')</dev:code>
+        <maml:title>Remove custom patterns with backups enabled</maml:title>
+        <dev:code>PS&gt;Remove-ProjectFiles -ProjectPath '.' -IncludePatterns 'bin','obj','*.nupkg' -CreateBackups -BackupDirectory 'C:\Backups\MyRepo'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Creates backups before deletion and stores them under the backup directory.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -12380,7 +12718,9 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Creates a new release for the given GitHub repository and optionally uploads assets.</maml:para>
+      <maml:para>This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by&#xD;
+higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used directly in CI pipelines.</maml:para>
+      <maml:para>Provide the token via an environment variable to avoid leaking secrets into logs or history.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -12650,10 +12990,17 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Send-GitHubRelease -GitHubUsername 'Name' -GitHubRepositoryName 'Name' -GitHubAccessToken 'Value' -TagName 'Name'</dev:code>
+        <maml:title>Create a release and upload a ZIP asset</maml:title>
+        <dev:code>PS&gt;Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3' -ReleaseNotes 'Bug fixes' -AssetFilePaths 'C:\Artifacts\MyProject.zip'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Creates the release and uploads the specified asset file.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Create a prerelease as a draft</maml:title>
+        <dev:code>PS&gt;Send-GitHubRelease -GitHubUsername 'EvotecIT' -GitHubRepositoryName 'MyProject' -GitHubAccessToken $env:GITHUB_TOKEN -TagName 'v1.2.3-preview.1' -IsDraft $true -IsPreRelease $true</dev:code>
+        <dev:remarks>
+          <maml:para>Creates a draft prerelease that can be reviewed before publishing.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -12669,7 +13016,9 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Updates version numbers across multiple project files.</maml:para>
+      <maml:para>Updates version numbers in:&#xD;
+C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scripts that reference Invoke-ModuleBuild</maml:para>
+      <maml:para>Use -VersionType to increment one component, or -NewVersion to set an explicit version.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -12843,10 +13192,17 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Set-ProjectVersion -Path 'C:\Path'</dev:code>
+        <maml:title>Increment minor version across the repository</maml:title>
+        <dev:code>PS&gt;Set-ProjectVersion -VersionType Minor -WhatIf</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Previews the version update for all discovered project files.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Set a specific version for one module</maml:title>
+        <dev:code>PS&gt;Set-ProjectVersion -NewVersion '2.1.0' -ModuleName 'MyModule' -Path 'C:\Projects'</dev:code>
+        <dev:remarks>
+          <maml:para>Updates only files related to the selected module name.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -12862,7 +13218,9 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Steps a version based on an expected version pattern (supports the legacy X placeholder).</maml:para>
+      <maml:para>This cmdlet supports two common workflows:</maml:para>
+      <maml:para>When -ExpectedVersion contains an X placeholder (e.g. 1.2.X),&#xD;
+the cmdlet resolves the next patch version. When an exact version is provided, it is returned as-is.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -12989,10 +13347,24 @@ PowerForge.ModuleVersionStepResult</maml:name>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Step-Version -ExpectedVersion '1.0.0'</dev:code>
+        <maml:title>Step a version using a local module manifest</maml:title>
+        <dev:code>PS&gt;Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 'C:\Git\MyModule\MyModule.psd1'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Reads the current version from the PSD1 and returns the next patch version.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Return the full step result object</maml:title>
+        <dev:code>PS&gt;Step-Version -ExpectedVersion '1.0.X' -LocalPSD1 '.\MyModule.psd1' -Advanced</dev:code>
+        <dev:remarks>
+          <maml:para>Returns a structured object that includes whether auto-versioning was used.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Step based on the latest published module</maml:title>
+        <dev:code>PS&gt;Step-Version -ExpectedVersion '1.0.X' -Module 'MyModule'</dev:code>
+        <dev:remarks>
+          <maml:para>Resolves the next patch version by looking up the current version of the module.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
