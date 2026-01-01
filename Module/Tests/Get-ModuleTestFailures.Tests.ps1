@@ -167,7 +167,7 @@
         }
 
         It "Should handle missing test results file gracefully" {
-            $nonExistentPath = "C:\NonExistent\TestResults.xml"
+            $nonExistentPath = Join-Path -Path (Join-Path -Path $TestDrive -ChildPath 'NonExistent') -ChildPath 'TestResults.xml'
             { Get-ModuleTestFailures -Path $nonExistentPath } | Should -Not -Throw
         }
 

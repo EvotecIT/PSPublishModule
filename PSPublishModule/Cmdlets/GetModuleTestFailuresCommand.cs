@@ -110,11 +110,10 @@ public sealed class GetModuleTestFailuresCommand : PSCmdlet
 
                 if (!File.Exists(resultsPath))
                 {
-                    WriteError(new ErrorRecord(
-                        new FileNotFoundException($"Test results file not found:: {resultsPath}", resultsPath),
-                        "TestResultsFileNotFound",
-                        ErrorCategory.ObjectNotFound,
-                        resultsPath));
+                    // Missing results file should be non-fatal (for example: first run, partial pipelines).
+                    // Use a warning rather than an error to avoid turning this into a terminating exception
+                    // when ErrorActionPreference is set to Stop (common in CI/test runners).
+                    WriteWarning($"Test results file not found: {resultsPath}");
                     return;
                 }
 

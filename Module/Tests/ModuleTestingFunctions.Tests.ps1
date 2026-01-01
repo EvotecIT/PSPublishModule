@@ -4,7 +4,8 @@ Describe "Module Testing Functions" {
         Get-Module PSPublishModule | Remove-Module -Force -ErrorAction SilentlyContinue
 
         # Import the module fresh
-        Import-Module $PSScriptRoot\..\PSPublishModule.psd1 -Force
+        $moduleManifest = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath '..') -ChildPath 'PSPublishModule.psd1'
+        Import-Module $moduleManifest -Force
     }
 
     AfterAll {
@@ -14,7 +15,7 @@ Describe "Module Testing Functions" {
 
     Context "Get-ModuleInformation" {
         It "Should retrieve module information correctly" {
-            $result = Get-ModuleInformation -Path $PSScriptRoot\..
+            $result = Get-ModuleInformation -Path (Join-Path -Path $PSScriptRoot -ChildPath '..')
 
             $result | Should -Not -BeNullOrEmpty
             $result.ModuleName | Should -Be 'PSPublishModule'
@@ -24,7 +25,8 @@ Describe "Module Testing Functions" {
         }
 
         It "Should throw error for invalid path" {
-            { Get-ModuleInformation -Path "C:\NonExistentPath" } | Should -Throw
+            $invalidPath = Join-Path -Path $TestDrive -ChildPath 'NonExistentPath'
+            { Get-ModuleInformation -Path $invalidPath } | Should -Throw
         }
     }
 
@@ -40,7 +42,7 @@ Describe "Module Testing Functions" {
                 OutputFormat     = 'Minimal'
                 PassThru         = $true
                 TimeoutSeconds   = 600
-                TestPath         = "$PSScriptRoot\..\Tests\Build-Module.Tests.ps1"
+                TestPath         = [IO.Path]::Combine($PSScriptRoot, '..', 'Tests', 'Build-Module.Tests.ps1')
             }
 
             try {
@@ -55,7 +57,8 @@ Describe "Module Testing Functions" {
         }
 
         It "Should handle invalid project path gracefully" {
-            { Invoke-ModuleTestSuite -ProjectPath "C:\NonExistentPath" -SkipDependencies -SkipImport -OutputFormat Minimal } | Should -Throw
+            $invalidProjectPath = Join-Path -Path $TestDrive -ChildPath 'NonExistentProjectPath'
+            { Invoke-ModuleTestSuite -ProjectPath $invalidProjectPath -SkipDependencies -SkipImport -OutputFormat Minimal } | Should -Throw
         }
 
         It "Should return test results when PassThru is specified" {
