@@ -1,5 +1,16 @@
 <Project>
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Company>Evotec</Company>
+    <Authors>Przemyslaw Klys</Authors>
+    <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(CI)' == 'true' ">
+    <RestoreLockedMode>true</RestoreLockedMode>
   </PropertyGroup>
 </Project>

@@ -15,6 +15,19 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  DependencyAudit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: NuGet vulnerability audit (informational)
+        shell: pwsh
+        continue-on-error: true
+        run: dotnet list ./PSPublishModule.sln package --vulnerable --include-transitive
   WindowsBuild:
     # The type of runner that the job will run on
     runs-on: windows-latest
@@ -23,6 +36,9 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Build Module
         shell: pwsh
@@ -39,6 +55,9 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Build Module
         shell: pwsh
@@ -55,6 +74,9 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Build Module
         shell: pwsh

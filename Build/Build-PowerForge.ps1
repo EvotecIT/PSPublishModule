@@ -110,7 +110,7 @@ foreach ($rid in $rids) {
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    dotnet.exe @publishArgs
+    dotnet @publishArgs
     if ($LASTEXITCODE -ne 0) { throw "Publish failed ($LASTEXITCODE)" }
 
     if (-not $KeepSymbols) {
