@@ -50,7 +50,8 @@ internal static class ModuleBootstrapperGenerator
 
     private static string[] ResolveExportAssemblyFileNames(string moduleName, IReadOnlyList<string>? exportAssemblies)
     {
-        var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ordered = new List<string>();
 
         var specified = (exportAssemblies ?? Array.Empty<string>())
             .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -64,10 +65,11 @@ internal static class ModuleBootstrapperGenerator
             var name = entry.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? entry : entry + ".dll";
             name = Path.GetFileName(name);
             if (string.IsNullOrWhiteSpace(name)) continue;
-            fileNames.Add(name);
+            if (seen.Add(name))
+                ordered.Add(name);
         }
 
-        return fileNames.ToArray();
+        return ordered.ToArray();
     }
 
     private static void WritePowerShellFile(string path, string content)
@@ -220,7 +222,7 @@ internal static class ModuleBootstrapperGenerator
         static string RelativeLibPath(string? folder, string fileName)
         {
             var parts = new List<string> { "Lib" };
-            if (!string.IsNullOrWhiteSpace(folder)) parts.Add(folder);
+            if (!string.IsNullOrWhiteSpace(folder)) parts.Add(folder!);
             parts.Add(fileName);
             return string.Join("\\", parts);
         }

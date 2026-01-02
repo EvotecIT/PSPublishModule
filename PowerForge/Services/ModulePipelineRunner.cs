@@ -908,10 +908,13 @@ public sealed class ModulePipelineRunner
             projectFileConsistencyLineEndingFix);
     }
 
-    private static void DeleteDirectoryWithRetries(string path, int maxAttempts = 10, int initialDelayMs = 250)
+    private static void DeleteDirectoryWithRetries(string? path, int maxAttempts = 10, int initialDelayMs = 250)
     {
-        if (string.IsNullOrWhiteSpace(path)) return;
-        var full = Path.GetFullPath(path.Trim().Trim('"'));
+        if (path is null) return;
+        var trimmed = path.Trim().Trim('"');
+        if (trimmed.Length == 0) return;
+
+        var full = Path.GetFullPath(trimmed);
         if (!Directory.Exists(full)) return;
 
         maxAttempts = Math.Max(1, maxAttempts);

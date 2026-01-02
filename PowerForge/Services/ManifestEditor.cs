@@ -312,22 +312,59 @@ public static class ManifestEditor
             // @(...)
             if (ae.SubExpression is StatementBlockAst sb)
             {
-                var vals = sb.Statements
-                    .Select(s => AsExpression(s) as ExpressionAst)
-                    .Select(x => x is StringConstantExpressionAst s ? s.Value : (x is ConstantExpressionAst c && c.Value is string str ? str : null))
-                    .Where(x => x != null)
-                    .ToArray();
-                if (vals.Length > 0) return vals!;
+                var list = new System.Collections.Generic.List<string>();
+                var hasNonString = false;
+
+                foreach (var st in sb.Statements)
+                {
+                    var inner = AsExpression(st);
+                    ExtractStringArrayItem(inner, list, ref hasNonString);
+                }
+
+                if (hasNonString) return null;
+                return list.ToArray();
             }
         }
         else if (e2 is ArrayLiteralAst al2)
         {
-            var list = al2.Elements
-                .Select(e => e is StringConstantExpressionAst s ? s.Value : (e is ConstantExpressionAst c && c.Value is string str ? str : null))
-                .ToArray();
-            if (list.All(x => x != null)) return list!;
+            var list = new System.Collections.Generic.List<string>();
+            var hasNonString = false;
+            foreach (var e in al2.Elements)
+                ExtractStringArrayItem(e, list, ref hasNonString);
+            if (hasNonString) return null;
+            return list.ToArray();
         }
         return null;
+    }
+
+    private static void ExtractStringArrayItem(ExpressionAst? expr, System.Collections.Generic.List<string> list, ref bool hasNonString)
+    {
+        if (expr is null)
+        {
+            hasNonString = true;
+            return;
+        }
+
+        switch (expr)
+        {
+            case StringConstantExpressionAst s:
+                list.Add(s.Value);
+                return;
+            case ConstantExpressionAst c when c.Value is string str:
+                list.Add(str);
+                return;
+            case ArrayLiteralAst al:
+                foreach (var e in al.Elements)
+                    ExtractStringArrayItem(e, list, ref hasNonString);
+                return;
+            case ArrayExpressionAst ae when ae.SubExpression is StatementBlockAst sb:
+                foreach (var st in sb.Statements)
+                    ExtractStringArrayItem(AsExpression(st), list, ref hasNonString);
+                return;
+            default:
+                hasNonString = true;
+                return;
+        }
     }
 
     private static RequiredModule[]? ExtractRequiredModules(Ast? expr)    
