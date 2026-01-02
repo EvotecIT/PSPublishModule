@@ -12,7 +12,7 @@ namespace PowerForge;
 public sealed class ArtefactBuilder
 {
     private static readonly string[] DefaultExcludeFromPackage = { ".*", "Ignore", "Examples", "package.json", "Publish", "Docs" };
-    private static readonly string[] DefaultIncludeRoot = { "*.psm1", "*.psd1", "License*" };
+    private static readonly string[] DefaultIncludeRoot = { "*.psm1", "*.psd1", "*.Libraries.ps1", "License*" };
     private static readonly string[] DefaultIncludePS1 = { "Private", "Public", "Enums", "Classes" };
     private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "Data", "en-US" };
 
@@ -63,6 +63,15 @@ public sealed class ArtefactBuilder
             ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information),
             _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported yet.")
         };
+    }
+
+    internal static void CopyModulePackageForInstall(
+        string stagingRoot,
+        string destinationModuleRoot,
+        InformationConfiguration? information)
+    {
+        var include = ResolvePackagingInformation(information);
+        CopyModulePackage(stagingRoot, destinationModuleRoot, include);
     }
 
     private ArtefactBuildResult BuildUnpacked(

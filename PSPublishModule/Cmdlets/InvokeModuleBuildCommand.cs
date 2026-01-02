@@ -148,7 +148,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// Include patterns for root files in artefacts.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
-    public string[] IncludeRoot { get; set; } = { "*.psm1", "*.psd1", "License*" };
+    public string[] IncludeRoot { get; set; } = { "*.psm1", "*.psd1", "*.Libraries.ps1", "License*" };
 
     /// <summary>
     /// Folders from which to include <c>.ps1</c> files in artefacts.

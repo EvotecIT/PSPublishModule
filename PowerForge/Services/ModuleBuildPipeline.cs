@@ -113,6 +113,11 @@ public sealed class ModuleBuildPipeline
             throw new FileNotFoundException($"Manifest not found after build: {psd1}");
 
         var exports = ReadExportsFromManifest(psd1);
+
+        // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
+        // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
+        ModuleBootstrapperGenerator.Generate(staging, spec.Name, exports, spec.ExportAssemblies);
+
         return new ModuleBuildResult(staging, psd1, exports);
     }
 

@@ -844,13 +844,20 @@ public sealed class ModulePipelineRunner
         if (plan.InstallEnabled)
         {
             SafeStart(installStep);
+            string? installPackagePath = null;
             try
             {
+                // Install should reflect the packaged module layout (not the full staged repo copy).
+                // This prevents shipping repo metadata (e.g., .github/.editorconfig/Sources) to end users.
+                installPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "install", $"{plan.ModuleName}_{Guid.NewGuid():N}");
+                Directory.CreateDirectory(installPackagePath);
+                ArtefactBuilder.CopyModulePackageForInstall(buildResult.StagingPath, installPackagePath, plan.Information);
+
                 var installSpec = new ModuleInstallSpec
                 {
                     Name = plan.ModuleName,
                     Version = plan.ResolvedVersion,
-                    StagingPath = buildResult.StagingPath,
+                    StagingPath = installPackagePath,
                     Strategy = plan.InstallStrategy,
                     KeepVersions = plan.InstallKeepVersions,
                     Roots = plan.InstallRoots
@@ -862,6 +869,14 @@ public sealed class ModulePipelineRunner
             {
                 SafeFail(installStep, ex);
                 throw;
+            }
+            finally
+            {
+                if (!string.IsNullOrWhiteSpace(installPackagePath))
+                {
+                    try { DeleteDirectoryWithRetries(installPackagePath); }
+                    catch (Exception ex) { _logger.Warn($"Failed to delete install package folder: {ex.Message}"); }
+                }
             }
         }
 
