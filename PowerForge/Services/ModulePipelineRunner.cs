@@ -434,177 +434,182 @@ public sealed class ModulePipelineRunner
         }
 
         var pipeline = new ModuleBuildPipeline(_logger);
+        string? stagingPathForCleanup = plan.BuildSpec.StagingPath;
 
-        ModuleBuildPipeline.StagingResult staged;
-        SafeStart(stageStep);
         try
         {
-            staged = pipeline.StageToStaging(plan.BuildSpec);
-            SafeDone(stageStep);
-        }
-        catch (Exception ex)
-        {
-            SafeFail(stageStep, ex);
-            throw;
-        }
-
-        ModuleBuildResult buildResult;
-        SafeStart(buildStep);
-        try
-        {
-            buildResult = pipeline.BuildInStaging(plan.BuildSpec, staged.StagingPath);
-            SafeDone(buildStep);
-        }
-        catch (Exception ex)
-        {
-            SafeFail(buildStep, ex);
-            throw;
-        }
-
-        SafeStart(manifestStep);
-        try
-        {
-            if (plan.CompatiblePSEditions is { Length: > 0 })
-                ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
-
-            if (plan.RequiredModules is { Length: > 0 })
-                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
-
-            if (!string.IsNullOrWhiteSpace(plan.PreRelease))
-                ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
-
-            if (plan.Delivery is not null && plan.Delivery.Enable)
+            ModuleBuildPipeline.StagingResult staged;
+            SafeStart(stageStep);
+            try
             {
-                ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
+                staged = pipeline.StageToStaging(plan.BuildSpec);
+                stagingPathForCleanup = staged.StagingPath;
+                SafeDone(stageStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(stageStep, ex);
+                stagingPathForCleanup ??= plan.BuildSpec.StagingPath;
+                throw;
+            }
 
-                if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
+            ModuleBuildResult buildResult;
+            SafeStart(buildStep);
+            try
+            {
+                buildResult = pipeline.BuildInStaging(plan.BuildSpec, staged.StagingPath);
+                SafeDone(buildStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(buildStep, ex);
+                throw;
+            }
+
+            SafeStart(manifestStep);
+            try
+            {
+                if (plan.CompatiblePSEditions is { Length: > 0 })
+                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
+
+                if (plan.RequiredModules is { Length: > 0 })
+                    ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
+
+                if (!string.IsNullOrWhiteSpace(plan.PreRelease))
+                    ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+
+                if (plan.Delivery is not null && plan.Delivery.Enable)
                 {
-                    var generator = new DeliveryCommandGenerator(_logger);
-                    var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery);
+                    ApplyDeliveryMetadata(buildResult.ManifestPath, plan.Delivery);
 
-                    if (generated.Length > 0)
+                    if (plan.Delivery.GenerateInstallCommand || plan.Delivery.GenerateUpdateCommand)
+                    {
+                        var generator = new DeliveryCommandGenerator(_logger);
+                        var generated = generator.Generate(buildResult.StagingPath, plan.ModuleName, plan.Delivery);
+
+                        if (generated.Length > 0)
+                        {
+                            try
+                            {
+                                var publicFolder = Path.Combine(buildResult.StagingPath, "Public");
+                                if (Directory.Exists(publicFolder))
+                                {
+                                    var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
+                                    var functions = ExportDetector.DetectScriptFunctions(scripts);
+                                    BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warn($"Failed to update manifest exports after generating delivery commands. Error: {ex.Message}");
+                                if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+                            }
+                        }
+                    }
+                }
+
+                SafeDone(manifestStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(manifestStep, ex);
+                throw;
+            }
+
+            DocumentationBuildResult? documentationResult = null;
+            if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
+            {
+                try
+                {
+                    var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
+                    documentationResult = engine.BuildWithProgress(
+                        moduleName: plan.ModuleName,
+                        stagingPath: buildResult.StagingPath,
+                        moduleManifestPath: buildResult.ManifestPath,
+                        documentation: plan.Documentation,
+                        buildDocumentation: plan.DocumentationBuild!,
+                        timeout: null,
+                        progress: reporter,
+                        extractStep: docsExtractStep,
+                        writeStep: docsWriteStep,
+                        externalHelpStep: docsMamlStep);
+
+                    if (documentationResult is not null && !documentationResult.Succeeded)
+                        throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
+
+                    // Legacy: "UpdateWhenNew" historically updated documentation in the project folder.
+                    // When enabled, keep the repo Docs/Readme.md and external help in sync (not just staging).
+                    if (documentationResult is not null &&
+                        documentationResult.Succeeded &&
+                        plan.DocumentationBuild?.UpdateWhenNew == true)
                     {
                         try
                         {
-                            var publicFolder = Path.Combine(buildResult.StagingPath, "Public");
-                            if (Directory.Exists(publicFolder))
-                            {
-                                var scripts = Directory.GetFiles(publicFolder, "*.ps1", SearchOption.AllDirectories);
-                                var functions = ExportDetector.DetectScriptFunctions(scripts);
-                                BuildServices.SetManifestExports(buildResult.ManifestPath, functions, cmdlets: null, aliases: null);
-                            }
+                            SyncGeneratedDocumentationToProjectRoot(plan, documentationResult);
                         }
                         catch (Exception ex)
                         {
-                            _logger.Warn($"Failed to update manifest exports after generating delivery commands. Error: {ex.Message}");
+                            _logger.Warn($"Failed to update project docs folder. Error: {ex.Message}");
                             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
                         }
                     }
                 }
-            }
-
-            SafeDone(manifestStep);
-        }
-        catch (Exception ex)
-        {
-            SafeFail(manifestStep, ex);
-            throw;
-        }
-
-        DocumentationBuildResult? documentationResult = null;
-        if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
-        {
-            try
-            {
-                var engine = new DocumentationEngine(new PowerShellRunner(), _logger);
-                documentationResult = engine.BuildWithProgress(
-                    moduleName: plan.ModuleName,
-                    stagingPath: buildResult.StagingPath,
-                    moduleManifestPath: buildResult.ManifestPath,
-                    documentation: plan.Documentation,
-                    buildDocumentation: plan.DocumentationBuild!,
-                    timeout: null,
-                    progress: reporter,
-                    extractStep: docsExtractStep,
-                    writeStep: docsWriteStep,
-                    externalHelpStep: docsMamlStep);
-
-                if (documentationResult is not null && !documentationResult.Succeeded)
-                    throw new InvalidOperationException($"Documentation generation failed. {documentationResult.ErrorMessage}");
-
-                // Legacy: "UpdateWhenNew" historically updated documentation in the project folder.
-                // When enabled, keep the repo Docs/Readme.md and external help in sync (not just staging).
-                if (documentationResult is not null &&
-                    documentationResult.Succeeded &&
-                    plan.DocumentationBuild?.UpdateWhenNew == true)
-                {
-                    try
-                    {
-                        SyncGeneratedDocumentationToProjectRoot(plan, documentationResult);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warn($"Failed to update project docs folder. Error: {ex.Message}");
-                        if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                SafeFail(docsExtractStep, ex);
-                SafeFail(docsWriteStep, ex);
-                SafeFail(docsMamlStep, ex);
-                throw;
-            }
-        }
-
-        FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
-        FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
-
-        if (plan.Formatting is not null)
-        {
-            var formattingPipeline = new FormattingPipeline(_logger);
-
-            SafeStart(formatStagingStep);
-            try
-            {
-                formattingStagingResults = FormatPowerShellTree(
-                    rootPath: buildResult.StagingPath,
-                    moduleName: plan.ModuleName,
-                    manifestPath: buildResult.ManifestPath,
-                    includeMergeFormatting: true,
-                    formatting: plan.Formatting,
-                    pipeline: formattingPipeline);
-                SafeDone(formatStagingStep);
-            }
-            catch (Exception ex)
-            {
-                SafeFail(formatStagingStep, ex);
-                throw;
-            }
-
-            if (plan.Formatting.Options.UpdateProjectRoot)
-            {
-                SafeStart(formatProjectStep);
-                try
-                {
-                    var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
-                    formattingProjectResults = FormatPowerShellTree(
-                        rootPath: plan.ProjectRoot,
-                        moduleName: plan.ModuleName,
-                        manifestPath: projectManifest,
-                        includeMergeFormatting: false,
-                        formatting: plan.Formatting,
-                        pipeline: formattingPipeline);
-                    SafeDone(formatProjectStep);
-                }
                 catch (Exception ex)
                 {
-                    SafeFail(formatProjectStep, ex);
+                    SafeFail(docsExtractStep, ex);
+                    SafeFail(docsWriteStep, ex);
+                    SafeFail(docsMamlStep, ex);
                     throw;
                 }
             }
-        }
+
+            FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
+            FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
+
+            if (plan.Formatting is not null)
+            {
+                var formattingPipeline = new FormattingPipeline(_logger);
+
+                SafeStart(formatStagingStep);
+                try
+                {
+                    formattingStagingResults = FormatPowerShellTree(
+                        rootPath: buildResult.StagingPath,
+                        moduleName: plan.ModuleName,
+                        manifestPath: buildResult.ManifestPath,
+                        includeMergeFormatting: true,
+                        formatting: plan.Formatting,
+                        pipeline: formattingPipeline);
+                    SafeDone(formatStagingStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(formatStagingStep, ex);
+                    throw;
+                }
+
+                if (plan.Formatting.Options.UpdateProjectRoot)
+                {
+                    SafeStart(formatProjectStep);
+                    try
+                    {
+                        var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
+                        formattingProjectResults = FormatPowerShellTree(
+                            rootPath: plan.ProjectRoot,
+                            moduleName: plan.ModuleName,
+                            manifestPath: projectManifest,
+                            includeMergeFormatting: false,
+                            formatting: plan.Formatting,
+                            pipeline: formattingPipeline);
+                        SafeDone(formatProjectStep);
+                    }
+                    catch (Exception ex)
+                    {
+                        SafeFail(formatProjectStep, ex);
+                        throw;
+                    }
+                }
+            }
 
         ProjectConsistencyReport? fileConsistencyReport = null;
         CheckStatus? fileConsistencyStatus = null;
@@ -896,32 +901,35 @@ public sealed class ModulePipelineRunner
             }
         }
 
-        if (plan.DeleteGeneratedStagingAfterRun)
-        {
-            SafeStart(cleanupStep);
-            try { DeleteDirectoryWithRetries(buildResult.StagingPath); }
-            catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
-            SafeDone(cleanupStep);
+            return new ModulePipelineResult(
+                plan,
+                buildResult,
+                installResult,
+                documentationResult,
+                fileConsistencyReport,
+                fileConsistencyStatus,
+                fileConsistencyEncodingFix,
+                fileConsistencyLineEndingFix,
+                compatibilityReport,
+                publishResults.ToArray(),
+                artefactResults.ToArray(),
+                formattingStagingResults,
+                formattingProjectResults,
+                projectFileConsistencyReport,
+                projectFileConsistencyStatus,
+                projectFileConsistencyEncodingFix,
+                projectFileConsistencyLineEndingFix);
         }
-
-        return new ModulePipelineResult(
-            plan,
-            buildResult,
-            installResult,
-            documentationResult,
-            fileConsistencyReport,
-            fileConsistencyStatus,
-            fileConsistencyEncodingFix,
-            fileConsistencyLineEndingFix,
-            compatibilityReport,
-            publishResults.ToArray(),
-            artefactResults.ToArray(),
-            formattingStagingResults,
-            formattingProjectResults,
-            projectFileConsistencyReport,
-            projectFileConsistencyStatus,
-            projectFileConsistencyEncodingFix,
-            projectFileConsistencyLineEndingFix);
+        finally
+        {
+            if (plan.DeleteGeneratedStagingAfterRun)
+            {
+                SafeStart(cleanupStep);
+                try { DeleteDirectoryWithRetries(stagingPathForCleanup); }
+                catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
+                SafeDone(cleanupStep);
+            }
+        }
     }
 
     private static void DeleteDirectoryWithRetries(string? path, int maxAttempts = 10, int initialDelayMs = 250)

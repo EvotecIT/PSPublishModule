@@ -16,8 +16,13 @@ public sealed class ArtefactBuilder
     private static readonly string[] DefaultIncludePS1 = { "Private", "Public", "Enums", "Classes" };
     private static readonly string[] DefaultIncludeAll = { "Images", "Resources", "Templates", "Bin", "Lib", "Data", "en-US" };
 
+    private const string PSGalleryName = "PSGallery";
+    private const string PSGalleryUriV2 = "https://www.powershellgallery.com/api/v2";
+
     private readonly ILogger _logger;
     private bool _skipPsResourceGetSave;
+    private bool _ensuredPowerShellGetRepository;
+    private bool _ensuredPsResourceGetRepository;
 
     /// <summary>
     /// Creates a new builder that logs progress via <paramref name="logger"/>.
@@ -229,6 +234,7 @@ public sealed class ArtefactBuilder
                 prerelease: false,
                 acceptLicense: true,
                 credential: credential);
+            TryEnsurePowerShellGetDefaultRepository(psg, repository);
 
             if (_skipPsResourceGetSave)
             {
@@ -236,7 +242,7 @@ public sealed class ArtefactBuilder
             }
             else
             {
-                var psrg = new PSResourceGetClient(runner, _logger);      
+                var psrg = new PSResourceGetClient(runner, _logger);
                 var psrgOpts = new PSResourceSaveOptions(
                     name: name,
                     destinationPath: tempRoot,
@@ -250,6 +256,7 @@ public sealed class ArtefactBuilder
 
                 try
                 {
+                    TryEnsurePsResourceGetDefaultRepository(psrg, repository);
                     saved = psrg.Save(psrgOpts, timeout: TimeSpan.FromMinutes(10));
                 }
                 catch (Exception ex)
@@ -346,6 +353,11 @@ public sealed class ArtefactBuilder
         catch (Exception ex)
         {
             var raw = ex.GetBaseException().Message ?? ex.Message ?? string.Empty;
+            if (ShouldTryEnsurePowerShellGetDefaultRepository(raw, options.Repository))
+            {
+                try { client.EnsureRepositoryRegistered(PSGalleryName, PSGalleryUriV2, PSGalleryUriV2, trusted: true, timeout: TimeSpan.FromMinutes(2)); } catch { }
+                try { return client.Save(options, timeout: TimeSpan.FromMinutes(10)); } catch (Exception retryEx) { ex = retryEx; raw = retryEx.GetBaseException().Message ?? retryEx.Message ?? string.Empty; }
+            }
             var reason = SimplifyPowerShellGetFailureMessage(raw);
             var hint = BuildPowerShellGetRepositoryHint(raw);
 
@@ -358,6 +370,70 @@ public sealed class ArtefactBuilder
 
             throw new InvalidOperationException(msg, ex);
         }
+    }
+
+    private void TryEnsurePsResourceGetDefaultRepository(PSResourceGetClient client, string? repositoryName)
+    {
+        if (client is null) return;
+
+        var repo = string.IsNullOrWhiteSpace(repositoryName) ? PSGalleryName : repositoryName!.Trim();
+        if (!repo.Equals(PSGalleryName, StringComparison.OrdinalIgnoreCase)) return;
+        if (_ensuredPsResourceGetRepository) return;
+
+        try
+        {
+            client.EnsureRepositoryRegistered(
+                name: PSGalleryName,
+                uri: PSGalleryUriV2,
+                trusted: true,
+                priority: null,
+                apiVersion: RepositoryApiVersion.Auto,
+                timeout: TimeSpan.FromMinutes(2));
+            _ensuredPsResourceGetRepository = true;
+        }
+        catch (Exception ex)
+        {
+            if (_logger.IsVerbose)
+                _logger.Verbose($"Failed to ensure PSResourceGet repository '{PSGalleryName}' is registered: {ex.Message}");
+        }
+    }
+
+    private void TryEnsurePowerShellGetDefaultRepository(PowerShellGetClient client, string? repositoryName)
+    {
+        if (client is null) return;
+
+        var repo = string.IsNullOrWhiteSpace(repositoryName) ? PSGalleryName : repositoryName!.Trim();
+        if (!repo.Equals(PSGalleryName, StringComparison.OrdinalIgnoreCase)) return;
+        if (_ensuredPowerShellGetRepository) return;
+
+        try
+        {
+            client.EnsureRepositoryRegistered(
+                name: PSGalleryName,
+                sourceUri: PSGalleryUriV2,
+                publishUri: PSGalleryUriV2,
+                trusted: true,
+                timeout: TimeSpan.FromMinutes(2));
+            _ensuredPowerShellGetRepository = true;
+        }
+        catch (Exception ex)
+        {
+            if (_logger.IsVerbose)
+                _logger.Verbose($"Failed to ensure PowerShellGet repository '{PSGalleryName}' is registered: {ex.Message}");
+        }
+    }
+
+    private static bool ShouldTryEnsurePowerShellGetDefaultRepository(string message, string? repository)
+    {
+        if (!string.IsNullOrWhiteSpace(repository) && !repository!.Trim().Equals(PSGalleryName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(message)) return false;
+
+        return message.IndexOf("Try Get-PSRepository", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("No match was found for the specified search criteria", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Unable to find module repositories", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("Unable to find repository", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static string SimplifyPowerShellGetFailureMessage(string message)

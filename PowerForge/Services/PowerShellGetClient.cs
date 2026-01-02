@@ -611,11 +611,21 @@ $policy = if ($TrustedFlag -eq '1') { 'Trusted' } else { 'Untrusted' }
 
 try {
   $created = $false
-  if ($existing) {
-    Set-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
+
+  if ($Name -eq 'PSGallery') {
+    # PSGallery has pre-defined locations; Register-PSRepository requires -Default and Set-PSRepository does not allow PublishLocation.
+    if (-not $existing) {
+      $created = $true
+      Register-PSRepository -Default -ErrorAction Stop | Out-Null
+    }
+    Set-PSRepository -Name 'PSGallery' -InstallationPolicy $policy -ErrorAction Stop | Out-Null
   } else {
-    $created = $true
-    Register-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
+    if ($existing) {
+      Set-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
+    } else {
+      $created = $true
+      Register-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
+    }
   }
   Write-Output ('PFPWSGET::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))
   exit 0

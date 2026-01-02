@@ -267,6 +267,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         var sw = Stopwatch.StartNew();
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
+        var exitCodeMode = ExitCode.IsPresent ||
+                           (boundParameters?.TryGetValue(nameof(ExitCode), out var exitCodeValue) == true && IsTrue(exitCodeValue));
 
         ConsoleEncoding.EnsureUtf8();
         try
@@ -293,7 +295,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             if (!Directory.Exists(basePathForScaffold))
             {
                 logger.Error($"Path '{basePathForScaffold}' does not exist. Please create it before continuing.");
-                if (ExitCode.IsPresent) Host.SetShouldExit(1);
+                if (exitCodeMode) Host.SetShouldExit(1);
                 return;
             }
 
@@ -396,7 +398,14 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
         catch (Exception ex)
         {
-            WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
+            // When -ExitCode is used, treat the cmdlet as an "app-like" command:
+            // print friendly output and set the host exit code, but avoid emitting a PowerShell error record
+            // (which adds noisy invocation context like script line numbers).
+            // Additionally, avoid emitting a PowerShell error record when using the interactive Spectre.Console view
+            // because it breaks the live UI experience with the default PowerShell formatting.
+            var emitErrorRecord = !exitCodeMode && !usedInteractiveView;
+            if (emitErrorRecord)
+                WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
             if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
                 WriteLogTail(interactiveBuffer, logger);
             if (usedInteractiveView && lastPlan is not null)
@@ -416,18 +425,26 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             logger.Success(JsonOnly.IsPresent
                 ? $"Pipeline config generated in {elapsedText}"
                 : $"Module build completed in {elapsedText}");
-            if (ExitCode.IsPresent) Host.SetShouldExit(0);
+            if (exitCodeMode) Host.SetShouldExit(0);
         }
         else
         {
             logger.Error(JsonOnly.IsPresent
                 ? $"Pipeline config generation failed in {elapsedText}"
                 : $"Module build failed in {elapsedText}");
-            if (ExitCode.IsPresent) Host.SetShouldExit(1);
+            if (exitCodeMode) Host.SetShouldExit(1);
         }
 
         return;
     }
+
+    private static bool IsTrue(object? value)
+        => value switch
+        {
+            SwitchParameter sp => sp.IsPresent,
+            bool b => b,
+            _ => false
+        };
 
     private (string ProjectRoot, string? BasePathForScaffold) ResolveProjectPaths(string moduleName)
     {

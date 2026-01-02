@@ -57,6 +57,10 @@ public sealed class ModuleBuildPipeline
             ? Path.Combine(Path.GetTempPath(), "PowerForge", "build", $"{spec.Name}_{Guid.NewGuid():N}")
             : Path.GetFullPath(spec.StagingPath);
 
+        // Persist resolved staging path on the spec. This enables best-effort cleanup even when staging fails mid-copy.
+        // (Important for callers that want to always clean up generated staging directories on failure.)
+        spec.StagingPath = staging;
+
         if (IsChildPath(staging, source))
             throw new InvalidOperationException($"Staging path must not be under SourcePath. SourcePath='{source}', StagingPath='{staging}'.");
 

@@ -39,7 +39,12 @@ internal static class ModuleBootstrapperGenerator
         }
 
         var psm1Path = Path.Combine(root, $"{moduleName}.psm1");
-        var psm1Content = BuildBootstrapperPsm1(moduleName, primaryLibraryName, exports, includeBinaryLoader: hasLib);
+        var psm1Content = BuildBootstrapperPsm1(
+            moduleName,
+            primaryLibraryName,
+            exports,
+            includeBinaryLoader: hasLib,
+            includeScriptLoader: hasScriptFolders);
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
@@ -241,7 +246,12 @@ internal static class ModuleBootstrapperGenerator
     private static string EscapePsSingleQuoted(string value)
         => (value ?? string.Empty).Replace("'", "''");
 
-    private static string BuildBootstrapperPsm1(string moduleName, string libraryName, ExportSet exports, bool includeBinaryLoader)
+    private static string BuildBootstrapperPsm1(
+        string moduleName,
+        string libraryName,
+        ExportSet exports,
+        bool includeBinaryLoader,
+        bool includeScriptLoader)
     {
         var sb = new StringBuilder(8192);
         sb.AppendLine($"# {moduleName} bootstrapper");
@@ -328,32 +338,35 @@ internal static class ModuleBootstrapperGenerator
             sb.AppendLine();
         }
 
-        sb.AppendLine("# Get public and private function definition files.");
-        sb.AppendLine("$Public  = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
-        sb.AppendLine("$Private = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
-        sb.AppendLine("$Classes = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
-        sb.AppendLine("$Enums   = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
-        sb.AppendLine();
+        if (includeScriptLoader)
+        {
+            sb.AppendLine("# Get public and private function definition files.");
+            sb.AppendLine("$Public  = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
+            sb.AppendLine("$Private = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
+            sb.AppendLine("$Classes = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
+            sb.AppendLine("$Enums   = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)");
+            sb.AppendLine();
 
-        sb.AppendLine("$FoundErrors = @(");
-        sb.AppendLine("    # Dot source the files (Classes/Enums first).");
-        sb.AppendLine("    foreach ($Import in @($Classes + $Enums + $Private + $Public)) {");
-        sb.AppendLine("        try {");
-        sb.AppendLine("            . $Import.Fullname");
-        sb.AppendLine("        } catch {");
-        sb.AppendLine("            Write-Error -Message \"Failed to import functions from $($import.Fullname): $_\"");
-        sb.AppendLine("            $true");
-        sb.AppendLine("        }");
-        sb.AppendLine("    }");
-        sb.AppendLine(")");
-        sb.AppendLine();
+            sb.AppendLine("$FoundErrors = @(");
+            sb.AppendLine("    # Dot source the files (Classes/Enums first).");
+            sb.AppendLine("    foreach ($Import in @($Classes + $Enums + $Private + $Public)) {");
+            sb.AppendLine("        try {");
+            sb.AppendLine("            . $Import.Fullname");
+            sb.AppendLine("        } catch {");
+            sb.AppendLine("            Write-Error -Message \"Failed to import functions from $($import.Fullname): $_\"");
+            sb.AppendLine("            $true");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine(")");
+            sb.AppendLine();
 
-        sb.AppendLine("if ($FoundErrors.Count -gt 0) {");
-        sb.AppendLine("    $ModuleName = (Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, '*.psd1'))).BaseName");
-        sb.AppendLine("    Write-Warning \"Importing module $ModuleName failed. Fix errors before continuing.\"");
-        sb.AppendLine("    break");
-        sb.AppendLine("}");
-        sb.AppendLine();
+            sb.AppendLine("if ($FoundErrors.Count -gt 0) {");
+            sb.AppendLine("    $ModuleName = (Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, '*.psd1'))).BaseName");
+            sb.AppendLine("    Write-Warning \"Importing module $ModuleName failed. Fix errors before continuing.\"");
+            sb.AppendLine("    break");
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
 
         // Export lists (explicit, deterministic).
         sb.AppendLine("$FunctionsToExport = " + FormatPsStringList(exports.Functions));

@@ -22,7 +22,7 @@ if ($JsonOnly) {
     $buildParams.JsonPath = $JsonPath
 }
 
-Build-Module @buildParams {
+Build-Module @buildParams -Settings {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
         ModuleVersion          = '2.0.X'
