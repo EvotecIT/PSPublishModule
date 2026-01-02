@@ -97,6 +97,7 @@ public sealed class ModulePipelineRunner
         string? netProjectPath = null;
         string[]? exportAssembliesFromSegments = null;
         bool? disableBinaryCmdletScanFromSegments = null;
+        string? resolveBinaryConflictsProjectName = null;
 
         InformationConfiguration? information = null;
         DocumentationConfiguration? documentation = null;
@@ -138,6 +139,8 @@ public sealed class ModulePipelineRunner
                     if (b.LocalVersion.HasValue) localVersioning = b.LocalVersion.Value;
                     if (b.VersionedInstallStrategy.HasValue) installStrategyFromSegments = b.VersionedInstallStrategy.Value;
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
+                    if (!string.IsNullOrWhiteSpace(b.ResolveBinaryConflicts?.ProjectName))
+                        resolveBinaryConflictsProjectName = b.ResolveBinaryConflicts!.ProjectName;
                     break;
                 }
                 case ConfigurationBuildLibrariesSegment buildLibraries:
@@ -279,6 +282,19 @@ public sealed class ModulePipelineRunner
             ? dotnetFrameworksFromSegments
             : (spec.Build.Frameworks ?? Array.Empty<string>());
 
+        var exportAssemblies = exportAssembliesFromSegments ?? spec.Build.ExportAssemblies ?? Array.Empty<string>();
+        if (!exportAssemblies.Any(s => !string.IsNullOrWhiteSpace(s)))
+        {
+            // Legacy behavior: when no explicit NETBinaryModule/ExportAssemblies is set, infer the primary export
+            // assembly from the build configuration (ResolveBinaryConflictsName / NETProjectName).
+            var inferred =
+                resolveBinaryConflictsProjectName?.Trim()
+                ?? netProjectName?.Trim();
+
+            if (!string.IsNullOrWhiteSpace(inferred))
+                exportAssemblies = new[] { inferred! };
+        }
+
         var buildSpec = new ModuleBuildSpec
         {
             Name = moduleName,
@@ -296,7 +312,7 @@ public sealed class ModulePipelineRunner
             ProjectUri = projectUri ?? spec.Build.ProjectUri,
             ExcludeDirectories = spec.Build.ExcludeDirectories ?? Array.Empty<string>(),
             ExcludeFiles = spec.Build.ExcludeFiles ?? Array.Empty<string>(),
-            ExportAssemblies = exportAssembliesFromSegments ?? spec.Build.ExportAssemblies ?? Array.Empty<string>(),
+            ExportAssemblies = exportAssemblies,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
             KeepStaging = spec.Build.KeepStaging
         };
