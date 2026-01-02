@@ -316,6 +316,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
         var success = false;
         BufferingLogger? interactiveBuffer = null;
+        ModulePipelinePlan? lastPlan = null;
+        bool usedInteractiveView = false;
         try
         {
             if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
@@ -375,8 +377,10 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             {
                 var planningRunner = new ModulePipelineRunner(logger);
                 var plan = planningRunner.Plan(pipelineSpec);
+                lastPlan = plan;
 
                 var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                usedInteractiveView = interactive;
                 var result = interactive
                     ? SpectrePipelineConsoleUi.RunInteractive(
                         runner: new ModulePipelineRunner(interactiveBuffer = new BufferingLogger { IsVerbose = isVerbose }),
@@ -395,6 +399,11 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             WriteError(new ErrorRecord(ex, useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed", ErrorCategory.NotSpecified, null));
             if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
                 WriteLogTail(interactiveBuffer, logger);
+            if (usedInteractiveView && lastPlan is not null)
+            {
+                try { SpectrePipelineConsoleUi.WriteFailureSummary(lastPlan, ex); }
+                catch { /* best effort */ }
+            }
             success = false;
         }
 #pragma warning restore CA1031
@@ -589,4 +598,3 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         return $"{elapsed.Milliseconds}ms";
     }
 }
-

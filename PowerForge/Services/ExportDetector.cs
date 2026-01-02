@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation.Language;
-using System.Reflection;
-#if NET8_0_OR_GREATER
-using System.Runtime.Loader;
-#endif
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 
 namespace PowerForge;
 
@@ -68,254 +66,232 @@ public static class ExportDetector
     private static IEnumerable<string> ScanAssemblyForCmdlets(string assemblyPath)
     {
         var list = new List<string>();
-#if NET8_0_OR_GREATER
         try
         {
-            var runtimeAssemblies = Directory.GetFiles(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "*.dll");
-            var dir = Path.GetDirectoryName(assemblyPath);
-            var localAssemblies = string.IsNullOrWhiteSpace(dir) ? Array.Empty<string>() : Directory.GetFiles(dir, "*.dll");
-            using var ralc = new System.Reflection.MetadataLoadContext(
-                new System.Reflection.PathAssemblyResolver(
-                    runtimeAssemblies.Concat(localAssemblies).Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
-            var asm = ralc.LoadFromAssemblyPath(assemblyPath);
-            foreach (var t in asm.GetTypes())
+            using var stream = File.OpenRead(assemblyPath);
+            using var pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
+            if (!pe.HasMetadata) return list;
+
+            var reader = pe.GetMetadataReader();
+            foreach (var tHandle in reader.TypeDefinitions)
             {
-                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))  
+                var t = reader.GetTypeDefinition(tHandle);
+                foreach (var caHandle in t.GetCustomAttributes())
                 {
-                    if (ca.AttributeType.FullName == "System.Management.Automation.CmdletAttribute")
-                    {
-                        if (ca.ConstructorArguments.Count >= 2)
-                        {
-                            var verb = ca.ConstructorArguments[0].Value?.ToString() ?? string.Empty;
-                            var noun = ca.ConstructorArguments[1].Value?.ToString() ?? string.Empty;
-                            if (!string.IsNullOrWhiteSpace(verb) && !string.IsNullOrWhiteSpace(noun))
-                                list.Add(verb + "-" + noun);
-                        }
-                    }
+                    var ca = reader.GetCustomAttribute(caHandle);
+                    var fullName = GetCustomAttributeTypeFullName(reader, ca);
+                    if (!string.Equals(fullName, "System.Management.Automation.CmdletAttribute", StringComparison.Ordinal))
+                        continue;
+
+                    if (TryReadCmdletAttribute(reader, ca, out var verb, out var noun))
+                        list.Add(verb + "-" + noun);
                 }
             }
         }
-        catch
-        {
-            // Fallback: load into an isolated ALC and reflect
-            try
-            {
-                var alc = new AssemblyLoadContext("ExportDetector", isCollectible: true);
-                var baseDir = Path.GetDirectoryName(assemblyPath);
-                if (!string.IsNullOrWhiteSpace(baseDir))
-                {
-                    alc.Resolving += (_, name) =>
-                    {
-                        try
-                        {
-                            var candidate = Path.Combine(baseDir!, name.Name + ".dll");
-                            return File.Exists(candidate) ? alc.LoadFromAssemblyPath(candidate) : null;
-                        }
-                        catch { return null; }
-                    };
-                }
-                var asm = alc.LoadFromAssemblyPath(assemblyPath);
-                foreach (var t in asm.GetTypes())
-                {
-                    foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
-                    {
-                        if (ca.AttributeType.FullName == "System.Management.Automation.CmdletAttribute")
-                        {
-                            if (ca.ConstructorArguments.Count >= 2)
-                            {
-                                var verb = ca.ConstructorArguments[0].Value?.ToString() ?? string.Empty;
-                                var noun = ca.ConstructorArguments[1].Value?.ToString() ?? string.Empty;
-                                if (!string.IsNullOrWhiteSpace(verb) && !string.IsNullOrWhiteSpace(noun))
-                                    list.Add(verb + "-" + noun);
-                            }
-                        }
-                    }
-                }
-                alc.Unload();
-            }
-            catch { }
-        }
-#else
-        try
-        {
-            ResolveEventHandler? handler = null;
-            var baseDir = Path.GetDirectoryName(assemblyPath);
-            handler = (_, args) =>
-            {
-                try
-                {
-                    if (string.IsNullOrWhiteSpace(baseDir)) return null;
-                    var an = new AssemblyName(args.Name);
-                    var candidate = Path.Combine(baseDir!, an.Name + ".dll");
-                    return File.Exists(candidate) ? Assembly.ReflectionOnlyLoadFrom(candidate) : null;
-                }
-                catch { return null; }
-            };
-            AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += handler;
-            try
-            {
-                var asm = Assembly.ReflectionOnlyLoadFrom(assemblyPath);
-                foreach (var t in asm.GetTypes())
-                {
-                    foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
-                    {
-                        if (ca.AttributeType.FullName == "System.Management.Automation.CmdletAttribute")
-                        {
-                            if (ca.ConstructorArguments.Count >= 2)
-                            {
-                                var verb = ca.ConstructorArguments[0].Value?.ToString() ?? string.Empty;
-                                var noun = ca.ConstructorArguments[1].Value?.ToString() ?? string.Empty;
-                                if (!string.IsNullOrWhiteSpace(verb) && !string.IsNullOrWhiteSpace(noun))
-                                    list.Add(verb + "-" + noun);
-                            }
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve -= handler;
-            }
-        }
-        catch { }
-#endif
+        catch { /* best effort */ }
         return list;
     }
 
     private static IEnumerable<string> ScanAssemblyForAliases(string assemblyPath)
     {
         var list = new List<string>();
-#if NET8_0_OR_GREATER
         try
         {
-            var runtimeAssemblies = Directory.GetFiles(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "*.dll");
-            var dir = Path.GetDirectoryName(assemblyPath);
-            var localAssemblies = string.IsNullOrWhiteSpace(dir) ? Array.Empty<string>() : Directory.GetFiles(dir, "*.dll");
-            using var ralc = new System.Reflection.MetadataLoadContext(
-                new System.Reflection.PathAssemblyResolver(
-                    runtimeAssemblies.Concat(localAssemblies).Append(assemblyPath).Distinct(StringComparer.OrdinalIgnoreCase)));
-            var asm = ralc.LoadFromAssemblyPath(assemblyPath);
-            foreach (var t in asm.GetTypes())
+            using var stream = File.OpenRead(assemblyPath);
+            using var pe = new PEReader(stream, PEStreamOptions.LeaveOpen);
+            if (!pe.HasMetadata) return list;
+
+            var reader = pe.GetMetadataReader();
+            foreach (var tHandle in reader.TypeDefinitions)
             {
-                foreach (var ca in CustomAttributeData.GetCustomAttributes(t))  
+                var t = reader.GetTypeDefinition(tHandle);
+                foreach (var caHandle in t.GetCustomAttributes())
                 {
-                    if (ca.AttributeType.FullName == "System.Management.Automation.AliasAttribute")
-                    {
-                        foreach (var arg in ca.ConstructorArguments)
-                        {
-                            if (arg.Value is IEnumerable<CustomAttributeTypedArgument> arr)
-                            {
-                                foreach (var v in arr)
-                                {
-                                    var s = v.Value?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
-                                }
-                            }
-                            else if (arg.Value is string sa && !string.IsNullOrWhiteSpace(sa))
-                            {
-                                list.Add(sa);
-                            }
-                        }
-                    }
+                    var ca = reader.GetCustomAttribute(caHandle);
+                    var fullName = GetCustomAttributeTypeFullName(reader, ca);
+                    if (!string.Equals(fullName, "System.Management.Automation.AliasAttribute", StringComparison.Ordinal))
+                        continue;
+
+                    foreach (var alias in ReadAliasAttribute(reader, ca))
+                        list.Add(alias);
                 }
+            }
+        }
+        catch { /* best effort */ }
+        return list;
+    }
+
+    private static string GetCustomAttributeTypeFullName(MetadataReader reader, CustomAttribute attribute)
+    {
+        try
+        {
+            var ctor = attribute.Constructor;
+            return ctor.Kind switch
+            {
+                HandleKind.MemberReference => GetTypeFullName(reader, reader.GetMemberReference((MemberReferenceHandle)ctor).Parent),
+                HandleKind.MethodDefinition => GetTypeFullName(reader, reader.GetMethodDefinition((MethodDefinitionHandle)ctor).GetDeclaringType()),
+                _ => string.Empty
+            };
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string GetTypeFullName(MetadataReader reader, EntityHandle typeHandle)
+    {
+        try
+        {
+            return typeHandle.Kind switch
+            {
+                HandleKind.TypeReference => CombineNamespaceAndName(reader, reader.GetTypeReference((TypeReferenceHandle)typeHandle)),
+                HandleKind.TypeDefinition => CombineNamespaceAndName(reader, reader.GetTypeDefinition((TypeDefinitionHandle)typeHandle)),
+                _ => string.Empty
+            };
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string CombineNamespaceAndName(MetadataReader reader, TypeReference type)
+        => CombineNamespaceAndName(type.Namespace.IsNil ? string.Empty : reader.GetString(type.Namespace),
+            type.Name.IsNil ? string.Empty : reader.GetString(type.Name));
+
+    private static string CombineNamespaceAndName(MetadataReader reader, TypeDefinition type)
+        => CombineNamespaceAndName(type.Namespace.IsNil ? string.Empty : reader.GetString(type.Namespace),
+            type.Name.IsNil ? string.Empty : reader.GetString(type.Name));
+
+    private static string CombineNamespaceAndName(string? ns, string? name)
+    {
+        ns ??= string.Empty;
+        name ??= string.Empty;
+        if (ns.Length == 0) return name;
+        if (name.Length == 0) return ns;
+        return ns + "." + name;
+    }
+
+    private static bool TryReadCmdletAttribute(MetadataReader reader, CustomAttribute attribute, out string verb, out string noun)
+    {
+        verb = string.Empty;
+        noun = string.Empty;
+        try
+        {
+            var br = reader.GetBlobReader(attribute.Value);
+            if (br.ReadUInt16() != 1) return false;
+
+            var v = br.ReadSerializedString();
+            var n = br.ReadSerializedString();
+            if (string.IsNullOrWhiteSpace(v) || string.IsNullOrWhiteSpace(n)) return false;
+
+            verb = v!;
+            noun = n!;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private enum AliasConstructorKind
+    {
+        Unknown,
+        String,
+        StringArray
+    }
+
+    private static IEnumerable<string> ReadAliasAttribute(MetadataReader reader, CustomAttribute attribute)
+    {
+        var list = new List<string>();
+
+        try
+        {
+            var kind = GetAliasConstructorKind(reader, attribute.Constructor);
+            if (kind == AliasConstructorKind.String)
+            {
+                var br = reader.GetBlobReader(attribute.Value);
+                if (br.ReadUInt16() != 1) return list;
+                var s = br.ReadSerializedString();
+                if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
+                return list;
+            }
+
+            // Default: string[] (params)
+            {
+                var br = reader.GetBlobReader(attribute.Value);
+                if (br.ReadUInt16() != 1) return list;
+                var count = br.ReadInt32();
+                if (count <= 0) return list;
+                if (count > 10_000) return list; // sanity guard
+
+                for (var i = 0; i < count; i++)
+                {
+                    var s = br.ReadSerializedString();
+                    if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
+                }
+
+                return list;
             }
         }
         catch
         {
-            try
-            {
-                var alc = new AssemblyLoadContext("ExportDetector", isCollectible: true);
-                var baseDir = Path.GetDirectoryName(assemblyPath);
-                if (!string.IsNullOrWhiteSpace(baseDir))
-                {
-                    alc.Resolving += (_, name) =>
-                    {
-                        try
-                        {
-                            var candidate = Path.Combine(baseDir!, name.Name + ".dll");
-                            return File.Exists(candidate) ? alc.LoadFromAssemblyPath(candidate) : null;
-                        }
-                        catch { return null; }
-                    };
-                }
-                var asm = alc.LoadFromAssemblyPath(assemblyPath);
-                foreach (var t in asm.GetTypes())
-                {
-                    foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
-                    {
-                        if (ca.AttributeType.FullName == "System.Management.Automation.AliasAttribute")
-                        {
-                            foreach (var arg in ca.ConstructorArguments)
-                            {
-                                if (arg.Value is IEnumerable<CustomAttributeTypedArgument> arr)
-                                {
-                                    foreach (var v in arr)
-                                    {
-                                        var s = v.Value?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
-                                    }
-                                }
-                                else if (arg.Value is string sa && !string.IsNullOrWhiteSpace(sa))
-                                {
-                                    list.Add(sa);
-                                }
-                            }
-                        }
-                    }
-                }
-                alc.Unload();
-            }
-            catch { }
+            return list;
         }
-#else
+    }
+
+    private static AliasConstructorKind GetAliasConstructorKind(MetadataReader reader, EntityHandle ctorHandle)
+    {
         try
         {
-            ResolveEventHandler? handler = null;
-            var baseDir = Path.GetDirectoryName(assemblyPath);
-            handler = (_, args) =>
+            BlobReader sig = ctorHandle.Kind switch
             {
-                try
-                {
-                    if (string.IsNullOrWhiteSpace(baseDir)) return null;
-                    var an = new AssemblyName(args.Name);
-                    var candidate = Path.Combine(baseDir!, an.Name + ".dll");
-                    return File.Exists(candidate) ? Assembly.ReflectionOnlyLoadFrom(candidate) : null;
-                }
-                catch { return null; }
+                HandleKind.MemberReference => reader.GetBlobReader(reader.GetMemberReference((MemberReferenceHandle)ctorHandle).Signature),
+                HandleKind.MethodDefinition => reader.GetBlobReader(reader.GetMethodDefinition((MethodDefinitionHandle)ctorHandle).Signature),
+                _ => default
             };
-            AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += handler;
-            try
-            {
-                var asm = Assembly.ReflectionOnlyLoadFrom(assemblyPath);
-                foreach (var t in asm.GetTypes())
-                {
-                    foreach (var ca in CustomAttributeData.GetCustomAttributes(t))
-                    {
-                        if (ca.AttributeType.FullName == "System.Management.Automation.AliasAttribute")
-                        {
-                            foreach (var arg in ca.ConstructorArguments)
-                            {
-                                if (arg.Value is IEnumerable<CustomAttributeTypedArgument> arr)
-                                {
-                                    foreach (var v in arr)
-                                    {
-                                        var s = v.Value?.ToString(); if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
-                                    }
-                                }
-                                else if (arg.Value is string sa && !string.IsNullOrWhiteSpace(sa))
-                                {
-                                    list.Add(sa);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve -= handler;
-            }
+
+            if (sig.Length == 0) return AliasConstructorKind.Unknown;
+
+            _ = sig.ReadByte(); // calling convention
+            var paramCount = sig.ReadCompressedInteger();
+
+            // return type (constructors are void)
+            if (sig.Offset < sig.Length) _ = sig.ReadByte();
+
+            if (paramCount <= 0) return AliasConstructorKind.Unknown;
+
+            return ReadAliasParamKind(sig);
         }
-        catch { }
-#endif
-        return list;
+        catch
+        {
+            return AliasConstructorKind.Unknown;
+        }
+    }
+
+    private static AliasConstructorKind ReadAliasParamKind(BlobReader signature)
+    {
+        try
+        {
+            if (signature.Offset >= signature.Length) return AliasConstructorKind.Unknown;
+
+            // ELEMENT_TYPE_STRING (0x0e) or ELEMENT_TYPE_SZARRAY (0x1d) of string
+            var typeCode = signature.ReadByte();
+            if (typeCode == 0x0e) return AliasConstructorKind.String;
+            if (typeCode == 0x1d)
+            {
+                if (signature.Offset >= signature.Length) return AliasConstructorKind.Unknown;
+                var element = signature.ReadByte();
+                return element == 0x0e ? AliasConstructorKind.StringArray : AliasConstructorKind.Unknown;
+            }
+
+            return AliasConstructorKind.Unknown;
+        }
+        catch
+        {
+            return AliasConstructorKind.Unknown;
+        }
     }
 }

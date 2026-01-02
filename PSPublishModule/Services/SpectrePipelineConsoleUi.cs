@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using PowerForge;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -49,6 +50,7 @@ internal static class SpectrePipelineConsoleUi
         var doneLookup = new ConcurrentDictionary<ProgressTask, TimeSpan>();
         var iconLookup = new ConcurrentDictionary<ProgressTask, string>();
 
+        Exception? failure = null;
         ModulePipelineResult? result = null;
         AnsiConsole.Progress()
             .AutoRefresh(true)
@@ -77,8 +79,20 @@ internal static class SpectrePipelineConsoleUi
                 }
 
                 var reporter = new SpectrePipelineProgressReporter(tasksByKey, labelsByKey, startLookup, doneLookup);
-                result = runner.Run(spec, plan, reporter);
+
+                try
+                {
+                    result = runner.Run(spec, plan, reporter);
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                    AbortRemainingTasks(tasksByKey, labelsByKey, startLookup, doneLookup, ex);
+                }
             });
+
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
 
         return result!;
     }
@@ -250,6 +264,40 @@ internal static class SpectrePipelineConsoleUi
             foreach (var path in res.InstallResult.InstalledPaths)
                 AnsiConsole.MarkupLine($"  [grey]{(unicode ? "→" : "->")}[/] {Esc(path)}");
         }
+    }
+
+    public static void WriteFailureSummary(ModulePipelinePlan plan, Exception error)
+    {
+        if (plan is null) return;
+        if (error is null) return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
+
+        AnsiConsole.Write(new Rule($"[red]{(unicode ? "❌" : "!!")} Summary[/]").LeftJustified());
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Item").NoWrap())
+            .AddColumn(new TableColumn("Value"));
+
+        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(plan.ModuleName)} [grey]{Esc(plan.ResolvedVersion)}[/]");
+        table.AddRow($"{(unicode ? "📁" : "*")} Project", Esc(plan.ProjectRoot));
+
+        var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
+        table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(stagingText));
+
+        var message = NormalizeFailureMessage(error, maxLength: 220);
+        if (!string.IsNullOrWhiteSpace(message))
+            table.AddRow($"{(unicode ? "💥" : "*")} Error", Esc(message));
+
+        var hint = BuildHint(message);
+        if (!string.IsNullOrWhiteSpace(hint))
+            table.AddRow($"{(unicode ? "💡" : "*")} Hint", Esc(hint));
+
+        AnsiConsole.Write(table);
     }
 
     private static ProgressColumn[] BuildColumns(
@@ -505,6 +553,75 @@ internal static class SpectrePipelineConsoleUi
             if (msg.Length <= 140) return msg;
             return msg.Substring(0, 139) + "…";
         }
+    }
+
+    private static void AbortRemainingTasks(
+        IReadOnlyDictionary<string, ProgressTask> tasksByKey,
+        IReadOnlyDictionary<string, string> labelsByKey,
+        ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
+        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup,
+        Exception error)
+    {
+        if (tasksByKey is null) return;
+        if (labelsByKey is null) return;
+        if (startLookup is null) return;
+        if (doneLookup is null) return;
+
+        var msg = NormalizeFailureMessage(error);
+
+        // Stop any running step and mark the rest as skipped. This ensures the interactive UI closes cleanly
+        // and does not leave indeterminate spinners running when an exception escapes the pipeline runner.
+        foreach (var entry in tasksByKey)
+        {
+            var key = entry.Key;
+            var task = entry.Value;
+
+            if (task is null) continue;
+
+            var label = labelsByKey.TryGetValue(key, out var l) ? l.TrimEnd() : (task.Description ?? string.Empty).TrimEnd();
+
+            if (startLookup.ContainsKey(task))
+            {
+                if (!doneLookup.ContainsKey(task))
+                {
+                    task.IsIndeterminate = false;
+                    task.Value = task.MaxValue;
+                    task.Description = string.IsNullOrWhiteSpace(msg) ? $"{label} FAILED" : $"{label} FAILED: {msg}";
+                    try { task.StopTask(); } catch { /* best effort */ }
+
+                    if (startLookup.TryGetValue(task, out var start))
+                        doneLookup[task] = DateTimeOffset.Now - start;
+                }
+
+                continue;
+            }
+
+            task.Description = $"{label} SKIPPED";
+        }
+    }
+
+    private static string NormalizeFailureMessage(Exception error, int maxLength = 140)
+    {
+        if (error is null) return string.Empty;
+        maxLength = Math.Max(40, maxLength);
+
+        var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
+        msg = msg.Replace("\r\n", " ").Replace("\n", " ").Trim();
+        if (msg.Length <= maxLength) return msg;
+        return msg.Substring(0, maxLength - 1) + "…";
+    }
+
+    private static string BuildHint(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return string.Empty;
+
+        if (message.IndexOf("Get-PSRepository", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("No match was found for the specified search criteria", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return "Verify a repository is registered and reachable (Get-PSRepository). If PSGallery is missing, run Register-PSRepository -Default.";
+        }
+
+        return string.Empty;
     }
 
     private sealed class StepIconColumn : ProgressColumn

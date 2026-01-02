@@ -150,6 +150,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
+          "System.Reflection.Metadata": "[8.0.0, )",
           "System.Text.Json": "[9.0.0, )"
         }
       }

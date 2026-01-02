@@ -204,8 +204,18 @@ public sealed class ModuleBuilder
             }
             else
             {
-                cmdletsToSet = ExportDetector.DetectBinaryCmdlets(exportDlls);
-                aliasesToSet = ExportDetector.DetectBinaryAliases(exportDlls);
+                var detectedCmdlets = ExportDetector.DetectBinaryCmdlets(exportDlls);
+                var detectedAliases = ExportDetector.DetectBinaryAliases(exportDlls);
+
+                if (detectedCmdlets.Count == 0 && detectedAliases.Count == 0)
+                {
+                    _logger.Warn($"No cmdlets/aliases detected in export assemblies for '{opts.ModuleName}'; keeping existing CmdletsToExport/AliasesToExport.");
+                }
+                else
+                {
+                    if (detectedCmdlets.Count > 0) cmdletsToSet = detectedCmdlets;
+                    if (detectedAliases.Count > 0) aliasesToSet = detectedAliases;
+                }
             }
         }
 

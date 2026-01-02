@@ -232,7 +232,7 @@ public sealed class ArtefactBuilder
 
             if (_skipPsResourceGetSave)
             {
-                saved = psg.Save(psgOpts, timeout: TimeSpan.FromMinutes(10));
+                saved = SaveRequiredModuleWithPowerShellGet(psg, psgOpts, name);
             }
             else
             {
@@ -279,7 +279,7 @@ public sealed class ArtefactBuilder
                     if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(raw))
                         _logger.Verbose(raw.Trim());
 
-                    saved = psg.Save(psgOpts, timeout: TimeSpan.FromMinutes(10));
+                    saved = SaveRequiredModuleWithPowerShellGet(psg, psgOpts, name);
                 }
             }
             var resolved = saved.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -332,6 +332,63 @@ public sealed class ArtefactBuilder
         }
 
         return trimmed;
+    }
+
+    private IReadOnlyList<PSResourceInfo> SaveRequiredModuleWithPowerShellGet(
+        PowerShellGetClient client,
+        PowerShellGetSaveOptions options,
+        string moduleName)
+    {
+        try
+        {
+            return client.Save(options, timeout: TimeSpan.FromMinutes(10));
+        }
+        catch (Exception ex)
+        {
+            var raw = ex.GetBaseException().Message ?? ex.Message ?? string.Empty;
+            var reason = SimplifyPowerShellGetFailureMessage(raw);
+            var hint = BuildPowerShellGetRepositoryHint(raw);
+
+            var msg = string.IsNullOrWhiteSpace(reason)
+                ? $"Save-Module failed while downloading required module '{moduleName}'."
+                : $"Save-Module failed while downloading required module '{moduleName}'. {reason}";
+
+            if (!string.IsNullOrWhiteSpace(hint))
+                msg = $"{msg} {hint}";
+
+            throw new InvalidOperationException(msg, ex);
+        }
+    }
+
+    private static string SimplifyPowerShellGetFailureMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return string.Empty;
+
+        var trimmed = message.Trim();
+
+        // "Save-Module failed (exit X). <reason>" -> "<reason>"
+        if (trimmed.StartsWith("Save-Module failed", StringComparison.OrdinalIgnoreCase))
+        {
+            var marker = "). ";
+            var idx = trimmed.IndexOf(marker, StringComparison.Ordinal);
+            if (idx >= 0 && idx + marker.Length < trimmed.Length)
+                return trimmed.Substring(idx + marker.Length).Trim();
+        }
+
+        return trimmed;
+    }
+
+    private static string BuildPowerShellGetRepositoryHint(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return string.Empty;
+
+        if (message.IndexOf("Get-PSRepository", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("No match was found for the specified search criteria", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return "Verify a repository is registered and reachable (Get-PSRepository). If PSGallery is missing, run Register-PSRepository -Default.";
+        }
+
+        return string.Empty;
     }
 
     private static string? NormalizeVersionArgument(string? value)
