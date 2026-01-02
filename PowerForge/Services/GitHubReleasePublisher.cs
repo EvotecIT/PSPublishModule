@@ -73,12 +73,15 @@ public sealed class GitHubReleasePublisher
         using var client = CreateHttpClient(token);
 
         var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases");
+
+        var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
+        var normalizedReleaseNotes = string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
         var body = new CreateReleaseRequest
         {
             TagName = tagName,
-            TargetCommitish = commitish,
+            TargetCommitish = normalizedCommitish,
             Name = releaseName,
-            Body = releaseNotes,
+            Body = normalizedReleaseNotes,
             Draft = isDraft,
             Prerelease = isPreRelease
         };
@@ -173,13 +176,13 @@ public sealed class GitHubReleasePublisher
         [DataMember(Name = "tag_name", EmitDefaultValue = true)]
         public string TagName { get; set; } = string.Empty;
 
-        [DataMember(Name = "target_commitish", EmitDefaultValue = true)]
+        [DataMember(Name = "target_commitish", EmitDefaultValue = false)]
         public string? TargetCommitish { get; set; }
 
         [DataMember(Name = "name", EmitDefaultValue = true)]
         public string Name { get; set; } = string.Empty;
 
-        [DataMember(Name = "body", EmitDefaultValue = true)]
+        [DataMember(Name = "body", EmitDefaultValue = false)]
         public string? Body { get; set; }
 
         [DataMember(Name = "draft", EmitDefaultValue = true)]
