@@ -33,6 +33,7 @@ public sealed class GitHubReleasePublisher
         string releaseName,
         string? releaseNotes,
         string? commitish,
+        bool generateReleaseNotes,
         bool isDraft,
         bool isPreRelease,
         IReadOnlyList<string> assetFilePaths)
@@ -42,8 +43,10 @@ public sealed class GitHubReleasePublisher
         if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Token is required.", nameof(token));
         if (string.IsNullOrWhiteSpace(tagName)) throw new ArgumentException("TagName is required.", nameof(tagName));
         if (string.IsNullOrWhiteSpace(releaseName)) releaseName = tagName;
+        if (generateReleaseNotes && !string.IsNullOrWhiteSpace(releaseNotes))
+            throw new ArgumentException("ReleaseNotes cannot be provided when GenerateReleaseNotes is enabled.", nameof(releaseNotes));
 
-        var created = CreateRelease(owner, repo, token, tagName, releaseName, releaseNotes, commitish, isDraft, isPreRelease);
+        var created = CreateRelease(owner, repo, token, tagName, releaseName, releaseNotes, commitish, generateReleaseNotes, isDraft, isPreRelease);
         var uploadUrl = RemoveUploadUrlTemplate(created.UploadUrl);
 
         var assets = (assetFilePaths ?? Array.Empty<string>())
@@ -67,6 +70,7 @@ public sealed class GitHubReleasePublisher
         string releaseName,
         string? releaseNotes,
         string? commitish,
+        bool generateReleaseNotes,
         bool isDraft,
         bool isPreRelease)
     {
@@ -76,12 +80,14 @@ public sealed class GitHubReleasePublisher
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
         var normalizedReleaseNotes = string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
+        if (generateReleaseNotes) normalizedReleaseNotes = null;
         var body = new CreateReleaseRequest
         {
             TagName = tagName,
             TargetCommitish = normalizedCommitish,
             Name = releaseName,
             Body = normalizedReleaseNotes,
+            GenerateReleaseNotes = generateReleaseNotes,
             Draft = isDraft,
             Prerelease = isPreRelease
         };
@@ -184,6 +190,9 @@ public sealed class GitHubReleasePublisher
 
         [DataMember(Name = "body", EmitDefaultValue = false)]
         public string? Body { get; set; }
+
+        [DataMember(Name = "generate_release_notes", EmitDefaultValue = false)]
+        public bool GenerateReleaseNotes { get; set; }
 
         [DataMember(Name = "draft", EmitDefaultValue = true)]
         public bool Draft { get; set; }

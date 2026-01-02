@@ -11,7 +11,7 @@ Publishes a release asset to GitHub (creates a release and uploads a zip).
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-GitHubReleaseAsset -ProjectPath <string[]> -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> [-IsPreRelease] [-Version <string>] [-TagName <string>] [-TagTemplate <string>] [-ReleaseName <string>] [-IncludeProjectNameInTag] [-ZipPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Publish-GitHubReleaseAsset -ProjectPath <string[]> -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> [-IsPreRelease] [-GenerateReleaseNotes] [-Version <string>] [-TagName <string>] [-TagTemplate <string>] [-ReleaseName <string>] [-IncludeProjectNameInTag] [-ZipPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -37,6 +37,21 @@ PS>Publish-GitHubReleaseAsset -ProjectPath '.\MyProject\MyProject.csproj' -GitHu
 Useful when your repository uses a specific tag naming convention.
 
 ## PARAMETERS
+
+### -GenerateReleaseNotes
+When set, asks GitHub to generate release notes automatically.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -GitHubAccessToken
 Personal access token used for authentication.

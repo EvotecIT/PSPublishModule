@@ -58,6 +58,10 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
     [Parameter]
     public SwitchParameter IsPreRelease { get; set; }
 
+    /// <summary>When set, asks GitHub to generate release notes automatically.</summary>
+    [Parameter]
+    public SwitchParameter GenerateReleaseNotes { get; set; }
+
     /// <summary>Optional version override (otherwise read from VersionPrefix).</summary>
     [Parameter]
     public string? Version { get; set; }
@@ -102,6 +106,7 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
         var tagTemplate = TagTemplate;
         var includeProjectInTag = IncludeProjectNameInTag.IsPresent;
         var isPreRelease = IsPreRelease.IsPresent;
+        var generateReleaseNotes = GenerateReleaseNotes.IsPresent;
 
         var projectPaths = ProjectPath ?? Array.Empty<string>();
         if (projectPaths.Length > 1 && !string.IsNullOrWhiteSpace(zipOverride))
@@ -199,8 +204,8 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
                 return;
 
             var sb = ScriptBlock.Create(@"
-param($u,$r,$t,$tag,$name,$asset,$pre)
-Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToken $t -TagName $tag -ReleaseName $name -AssetFilePaths $asset -IsPreRelease:$pre
+param($u,$r,$t,$tag,$name,$asset,$pre,$gen)
+Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToken $t -TagName $tag -ReleaseName $name -AssetFilePaths $asset -IsPreRelease:$pre -GenerateReleaseNotes:$gen
 ");
 
             foreach (var group in entries.GroupBy(e => e.TagName, StringComparer.OrdinalIgnoreCase))
@@ -223,7 +228,7 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                 {
                     // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
                     // in the binary module context, so we must invoke directly.
-                    var output = sb.Invoke(GitHubUsername, GitHubRepositoryName, GitHubAccessToken, tag, relName, assets, isPreRelease);
+                    var output = sb.Invoke(GitHubUsername, GitHubRepositoryName, GitHubAccessToken, tag, relName, assets, isPreRelease, generateReleaseNotes);
                     var status = output.Count > 0 ? output[0]?.BaseObject : null;
 
                     succeeded = false;

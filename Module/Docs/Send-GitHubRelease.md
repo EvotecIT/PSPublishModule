@@ -11,7 +11,7 @@ Creates a new release for the given GitHub repository and optionally uploads ass
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [<CommonParameters>]
+Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-GenerateReleaseNotes] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -58,6 +58,21 @@ Commitish value that determines where the Git tag is created from.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -GenerateReleaseNotes
+When set, asks GitHub to generate release notes automatically (cannot be used with ReleaseNotes).
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 

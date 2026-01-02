@@ -328,6 +328,7 @@ public sealed class ModulePublisher
             releaseName: tag,
             releaseNotes: null,
             commitish: null,
+            generateReleaseNotes: publish.GenerateReleaseNotes,
             isDraft: false,
             isPreRelease: isPreRelease,
             assetFilePaths: assets);

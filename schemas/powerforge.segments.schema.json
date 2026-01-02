@@ -238,6 +238,7 @@
         "Force": { "type": "boolean" },
         "OverwriteTagName": { "type": ["string", "null"] },
         "DoNotMarkAsPreRelease": { "type": "boolean" },
+        "GenerateReleaseNotes": { "type": "boolean" },
         "Verbose": { "type": "boolean" }
       }
     },

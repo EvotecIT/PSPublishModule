@@ -57,6 +57,9 @@ public sealed class PublishConfiguration
     /// <summary>Publish GitHub release as a release even if prerelease is set.</summary>
     public bool DoNotMarkAsPreRelease { get; set; }
 
+    /// <summary>When true, asks GitHub to generate release notes automatically.</summary>
+    public bool GenerateReleaseNotes { get; set; }
+
     /// <summary>Verbose mode requested.</summary>
     public bool Verbose { get; set; }
 }

@@ -10163,6 +10163,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>GenerateReleaseNotes</maml:name>
+          <maml:description>
+            <maml:para>When set, asks GitHub to generate release notes automatically.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ID</maml:name>
           <maml:description>
             <maml:para>Optional ID of the artefact used for publishing.</maml:para>
@@ -10409,6 +10421,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
           <maml:name>Force</maml:name>
           <maml:description>
             <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>GenerateReleaseNotes</maml:name>
+          <maml:description>
+            <maml:para>When set, asks GitHub to generate release notes automatically.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -10676,6 +10700,18 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <maml:name>Force</maml:name>
         <maml:description>
           <maml:para>Allow publishing lower version of a module on a PowerShell repository.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>GenerateReleaseNotes</maml:name>
+        <maml:description>
+          <maml:para>When set, asks GitHub to generate release notes automatically.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -11060,6 +11096,18 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
     <command:syntax>
       <command:syntaxItem>
         <maml:name>Publish-GitHubReleaseAsset</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>GenerateReleaseNotes</maml:name>
+          <maml:description>
+            <maml:para>When set, asks GitHub to generate release notes automatically.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>GitHubAccessToken</maml:name>
           <maml:description>
@@ -11195,6 +11243,18 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>GenerateReleaseNotes</maml:name>
+        <maml:description>
+          <maml:para>When set, asks GitHub to generate release notes automatically.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>GitHubAccessToken</maml:name>
         <maml:description>
@@ -12773,6 +12833,18 @@ higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used d
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>GenerateReleaseNotes</maml:name>
+          <maml:description>
+            <maml:para>When set, asks GitHub to generate release notes automatically (cannot be used with ReleaseNotes).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>GitHubAccessToken</maml:name>
           <maml:description>
@@ -12892,6 +12964,18 @@ higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used d
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>GenerateReleaseNotes</maml:name>
+        <maml:description>
+          <maml:para>When set, asks GitHub to generate release notes automatically (cannot be used with ReleaseNotes).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

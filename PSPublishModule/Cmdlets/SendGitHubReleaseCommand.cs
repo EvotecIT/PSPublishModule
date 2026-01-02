@@ -65,6 +65,10 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
     [Parameter]
     public string? ReleaseNotes { get; set; }
 
+    /// <summary>When set, asks GitHub to generate release notes automatically (cannot be used with ReleaseNotes).</summary>
+    [Parameter]
+    public SwitchParameter GenerateReleaseNotes { get; set; }
+
     /// <summary>The full paths of the files to include as release assets.</summary>
     [Parameter]
     public string[]? AssetFilePaths { get; set; }
@@ -107,10 +111,15 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         ValidateAssetFilePathsOrThrow(assets);
 
+        if (GenerateReleaseNotes.IsPresent && !string.IsNullOrWhiteSpace(ReleaseNotes))
+        {
+            throw new PSArgumentException($"{nameof(ReleaseNotes)} cannot be used when {nameof(GenerateReleaseNotes)} is set.");
+        }
+
         try
         {
             var release = CreateRelease(GitHubUsername, GitHubRepositoryName, GitHubAccessToken,
-                TagName, ReleaseName!, ReleaseNotes, Commitish, IsDraft, IsPreRelease);
+                TagName, ReleaseName!, ReleaseNotes, Commitish, GenerateReleaseNotes.IsPresent, IsDraft, IsPreRelease);
 
             result.ReleaseCreationSucceeded = true;
             result.ReleaseUrl = release.HtmlUrl;
@@ -161,6 +170,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         string releaseName,
         string? releaseNotes,
         string? commitish,
+        bool generateReleaseNotes,
         bool isDraft,
         bool isPreRelease)
     {
@@ -170,12 +180,14 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
         var normalizedReleaseNotes = string.IsNullOrWhiteSpace(releaseNotes) ? null : releaseNotes;
+        if (generateReleaseNotes) normalizedReleaseNotes = null;
         var body = new CreateReleaseRequest
         {
             TagName = tagName,
             TargetCommitish = normalizedCommitish,
             Name = releaseName,
             Body = normalizedReleaseNotes,
+            GenerateReleaseNotes = generateReleaseNotes,
             Draft = isDraft,
             Prerelease = isPreRelease
         };
@@ -276,6 +288,9 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         [DataMember(Name = "body", EmitDefaultValue = false)]
         public string? Body { get; set; }
+
+        [DataMember(Name = "generate_release_notes", EmitDefaultValue = false)]
+        public bool GenerateReleaseNotes { get; set; }
 
         [DataMember(Name = "draft", EmitDefaultValue = true)]
         public bool Draft { get; set; }

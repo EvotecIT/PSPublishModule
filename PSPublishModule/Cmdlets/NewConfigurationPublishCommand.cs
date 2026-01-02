@@ -137,7 +137,12 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "ApiFromFile")]
     public SwitchParameter DoNotMarkAsPreRelease { get; set; }
 
-    /// <summary>Emits publish configuration for the build pipeline.</summary>
+    /// <summary>When set, asks GitHub to generate release notes automatically.</summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    public SwitchParameter GenerateReleaseNotes { get; set; }
+
+    /// <summary>Emits publish configuration for the build pipeline.</summary>  
     protected override void ProcessRecord()
     {
         var apiKeyToUse = ParameterSetName == "ApiFromFile"
@@ -217,7 +222,8 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             Force = Force.IsPresent,
             OverwriteTagName = OverwriteTagName,
             DoNotMarkAsPreRelease = DoNotMarkAsPreRelease.IsPresent,
-            Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
+            GenerateReleaseNotes = GenerateReleaseNotes.IsPresent,
+            Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")       
         };
 
         var settings = new ConfigurationPublishSegment
