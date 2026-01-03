@@ -29,9 +29,9 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.New, "ConfigurationFormat")]
 public sealed class NewConfigurationFormatCommand : PSCmdlet
 {
-    /// <summary>Targets to apply formatting to (OnMergePSM1, OnMergePSD1, DefaultPSM1, DefaultPSD1).</summary>
+    /// <summary>Targets to apply formatting to (OnMergePSM1, OnMergePSD1, DefaultPS1, DefaultPSM1, DefaultPSD1).</summary>
     [Parameter(Mandatory = true)]
-    [ValidateSet("OnMergePSM1", "OnMergePSD1", "DefaultPSM1", "DefaultPSD1")]
+    [ValidateSet("OnMergePSM1", "OnMergePSD1", "DefaultPS1", "DefaultPSM1", "DefaultPSD1")]
     public string[] ApplyTo { get; set; } = Array.Empty<string>();
 
     /// <summary>Enables formatting for the chosen ApplyTo targets even if no specific rule switches are provided.</summary>
@@ -309,6 +309,9 @@ public sealed class NewConfigurationFormatCommand : PSCmdlet
                         break;
                     case "DefaultPSM1":
                         options.Standard.FormatCodePSM1 = formatting;
+                        break;
+                    case "DefaultPS1":
+                        options.Standard.FormatCodePS1 = formatting;
                         break;
                     case "DefaultPSD1":
                         options.Standard.FormatCodePSD1 = formatting;

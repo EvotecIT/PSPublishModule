@@ -18,8 +18,8 @@ namespace PSPublishModule;
 /// <c>Unpacked</c> (folder) for inspection or offline installation.
 /// </para>
 /// <para>
-/// When <c>-AddRequiredModules</c> is enabled, required modules are downloaded (via <c>Save-PSResource</c>/<c>Save-Module</c>) and copied into
-/// the artefact so the output can be used in offline environments.
+/// When <c>-AddRequiredModules</c> is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,
+/// when configured, downloaded (via <c>Save-PSResource</c>/<c>Save-Module</c>) before being copied into the artefact.
 /// </para>
 /// <para>
 /// Use <c>-ID</c> to link an artefact to a publish step (<c>New-ConfigurationPublish</c>) and publish only a specific artefact.
@@ -80,6 +80,10 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     /// <summary>Tool used when downloading required modules (Save-PSResource / Save-Module).</summary>
     [Parameter]
     public ModuleSaveTool RequiredModulesTool { get; set; }
+
+    /// <summary>Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).</summary>
+    [Parameter]
+    public RequiredModulesSource RequiredModulesSource { get; set; }
 
     /// <summary>Repository credential username (basic auth) used when downloading required modules.</summary>
     [Parameter]
@@ -168,6 +172,9 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesTool)))
             artefact.Configuration.RequiredModules.Tool = RequiredModulesTool;
+
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesSource)))
+            artefact.Configuration.RequiredModules.Source = RequiredModulesSource;
 
         var requiredModulesSecret = string.Empty;
         if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesCredentialSecretFilePath)) &&
