@@ -1001,8 +1001,8 @@ public sealed class ModulePipelineRunner
             return;
         }
 
-        var targetDocs = ResolvePath(projectRoot, plan.Documentation.Path);
-        var targetReadme = ResolvePath(projectRoot, plan.Documentation.PathReadme);
+        var targetDocs = ResolvePath(projectRoot, plan.Documentation.Path);     
+        var targetReadme = ResolvePath(projectRoot, plan.Documentation.PathReadme, optional: true);
 
         var fullTargetDocs = Path.GetFullPath(targetDocs).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullProjectRoot = projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -1054,10 +1054,10 @@ public sealed class ModulePipelineRunner
         _logger.Success($"Updated project documentation at '{targetDocs}'.");
     }
 
-    private static string ResolvePath(string baseDir, string path)
+    private static string ResolvePath(string baseDir, string path, bool optional = false)
     {
         var p = (path ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(p)) return Path.GetFullPath(baseDir);
+        if (string.IsNullOrWhiteSpace(p)) return optional ? string.Empty : Path.GetFullPath(baseDir);
         if (Path.IsPathRooted(p)) return Path.GetFullPath(p);
         return Path.GetFullPath(Path.Combine(baseDir, p));
     }
@@ -1404,14 +1404,15 @@ exit 0
 
         var rootPsm1 = Path.Combine(rootPath, $"{moduleName}.psm1");
 
-        string[] psFiles = all.Where(p => HasExtension(p, ".ps1", ".psm1")).ToArray();
+        string[] ps1Files = all.Where(p => HasExtension(p, ".ps1")).ToArray();
+        string[] psm1Files = all.Where(p => HasExtension(p, ".psm1")).ToArray();
         string[] psd1Files = all.Where(p => HasExtension(p, ".psd1")).ToArray();
 
         // Avoid formatting the same output file twice when merge settings are enabled.
         if (includeMergeFormatting)
         {
             if (cfg.Merge.FormatCodePSM1?.Enabled == true)
-                psFiles = psFiles.Where(p => !string.Equals(p, rootPsm1, StringComparison.OrdinalIgnoreCase)).ToArray();
+                psm1Files = psm1Files.Where(p => !string.Equals(p, rootPsm1, StringComparison.OrdinalIgnoreCase)).ToArray();
 
             if (cfg.Merge.FormatCodePSD1?.Enabled == true)
                 psd1Files = psd1Files.Where(p => !string.Equals(p, manifestPath, StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -1419,11 +1420,15 @@ exit 0
 
         var results = new List<FormatterResult>(all.Length + 4);
 
-        if (cfg.Standard.FormatCodePSM1?.Enabled == true && psFiles.Length > 0)
-            results.AddRange(pipeline.Run(psFiles, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
+        var standardPs1 = cfg.Standard.FormatCodePS1 ?? cfg.Standard.FormatCodePSM1;
+        if (standardPs1?.Enabled == true && ps1Files.Length > 0)
+            results.AddRange(pipeline.Run(ps1Files, BuildFormatOptions(standardPs1)));
+
+        if (cfg.Standard.FormatCodePSM1?.Enabled == true && psm1Files.Length > 0)
+            results.AddRange(pipeline.Run(psm1Files, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
 
         if (cfg.Standard.FormatCodePSD1?.Enabled == true && psd1Files.Length > 0)
-            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(cfg.Standard.FormatCodePSD1)));
+            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(cfg.Standard.FormatCodePSD1)));        
 
         if (includeMergeFormatting)
         {

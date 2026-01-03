@@ -405,267 +405,27 @@ public sealed class PowerShellGetClient
 
     private static string BuildFindScript()
     {
-        return @"
-param(
-  [string]$NamesB64,
-  [string]$ReposB64,
-  [string]$PrereleaseFlag,
-  [string]$CredentialUser,
-  [string]$CredentialSecret
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-function DecodeLines([string]$b64) {
-  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
-  $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
-  return $text -split ""`n"" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        return EmbeddedScripts.Load("Scripts/PowerShellGet/Find-Module.ps1");
 }
-
-function Enc([string]$s) {
-  return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
-}
-
-try {
-  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
-} catch {
-  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 3
-}
-
-$names = DecodeLines $NamesB64
-$repos = DecodeLines $ReposB64
-$prerelease = ($PrereleaseFlag -eq '1')
-
-$params = @{ ErrorAction = 'Stop' }
-if ($names.Count -gt 0) { $params.Name = $names }
-if ($repos.Count -gt 0) { $params.Repository = $repos[0] }
-$params.AllVersions = $true
-if ($prerelease) { $params.AllowPrerelease = $true }
-if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
-  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
-  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
-}
-
-try {
-  $results = Find-Module @params
-  foreach ($r in @($results)) {
-    $name = [string]$r.Name
-    $ver = [string]$r.Version
-    $repo = [string]$r.Repository
-    $fields = @($name, $ver, $repo) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$_))) }
-    Write-Output ('PFPWSGET::ITEM::' + ($fields -join '::'))
-  }
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  if ($msg -match 'No match was found') { exit 0 }
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
 
     private static string BuildPublishScript()
     {
-        return @"
-param(
-  [string]$Path,
-  [string]$Repository,
-  [string]$ApiKey,
-  [string]$CredentialUser,
-  [string]$CredentialSecret
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-try {
-  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
-} catch {
-  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 3
+        return EmbeddedScripts.Load("Scripts/PowerShellGet/Publish-Module.ps1");
 }
-
-$params = @{ ErrorAction = 'Stop' }
-$params.Path = $Path
-if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
-if (-not [string]::IsNullOrWhiteSpace($ApiKey)) { $params.NuGetApiKey = $ApiKey }
-if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
-  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
-  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
-}
-
-try {
-  Publish-Module @params | Out-Null
-  Write-Output 'PFPWSGET::PUBLISH::OK'
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
 
     private static string BuildSaveScript()
     {
-        return @"
-param(
-  [string]$Name,
-  [string]$MinimumVersion,
-  [string]$RequiredVersion,
-  [string]$Repository,
-  [string]$Path,
-  [string]$PrereleaseFlag,
-  [string]$AcceptLicenseFlag,
-  [string]$CredentialUser,
-  [string]$CredentialSecret
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-function Enc([string]$s) {
-  return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
+        return EmbeddedScripts.Load("Scripts/PowerShellGet/Save-Module.ps1");
 }
-
-try {
-  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
-} catch {
-  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
-  $b64 = Enc $msg
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 3
-}
-
-$saveCmd = Get-Command Save-Module -ErrorAction Stop
-$params = @{ ErrorAction = 'Stop' }
-$params.Name = $Name
-$params.Path = $Path
-$params.Force = $true
-if (-not [string]::IsNullOrWhiteSpace($RequiredVersion) -and $saveCmd.Parameters.ContainsKey('RequiredVersion')) { $params.RequiredVersion = $RequiredVersion }
-elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion) -and $saveCmd.Parameters.ContainsKey('MinimumVersion')) { $params.MinimumVersion = $MinimumVersion }
-if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
-
-if ($PrereleaseFlag -eq '1' -and $saveCmd.Parameters.ContainsKey('AllowPrerelease')) { $params.AllowPrerelease = $true }
-if ($AcceptLicenseFlag -eq '1' -and $saveCmd.Parameters.ContainsKey('AcceptLicense')) { $params.AcceptLicense = $true }
-
-if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
-  $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
-  $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
-}
-
-try {
-  Save-Module @params | Out-Null
-
-  $moduleRoot = Join-Path $Path $Name
-  $versionDirs = @()
-  try { $versionDirs = Get-ChildItem -Path $moduleRoot -Directory -ErrorAction SilentlyContinue } catch { $versionDirs = @() }
-
-  foreach ($d in @($versionDirs)) {
-    $n = Enc ([string]$Name)
-    $v = Enc ([string]$d.Name)
-    Write-Output ('PFPWSGET::SAVE::ITEM::' + $n + '::' + $v)
-  }
-
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  $b64 = Enc $msg
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
 
     private static string BuildEnsureRepositoryScript()
     {
-        return @"
-param(
-  [string]$Name,
-  [string]$SourceUri,
-  [string]$PublishUri,
-  [string]$TrustedFlag
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-try {
-  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
-} catch {
-  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 3
+        return EmbeddedScripts.Load("Scripts/PowerShellGet/Ensure-Repository.ps1");
 }
-
-$existing = $null
-try { $existing = Get-PSRepository -Name $Name -ErrorAction SilentlyContinue } catch { $existing = $null }
-
-$policy = if ($TrustedFlag -eq '1') { 'Trusted' } else { 'Untrusted' }
-
-try {
-  $created = $false
-
-  if ($Name -eq 'PSGallery') {
-    # PSGallery has pre-defined locations; Register-PSRepository requires -Default and Set-PSRepository does not allow PublishLocation.
-    if (-not $existing) {
-      $created = $true
-      Register-PSRepository -Default -ErrorAction Stop | Out-Null
-    }
-    Set-PSRepository -Name 'PSGallery' -InstallationPolicy $policy -ErrorAction Stop | Out-Null
-  } else {
-    if ($existing) {
-      Set-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
-    } else {
-      $created = $true
-      Register-PSRepository -Name $Name -SourceLocation $SourceUri -PublishLocation $PublishUri -InstallationPolicy $policy -ErrorAction Stop | Out-Null
-    }
-  }
-  Write-Output ('PFPWSGET::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
 
     private static string BuildUnregisterRepositoryScript()
     {
-        return @"
-param(
-  [string]$Name
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-try {
-  Import-Module PowerShellGet -ErrorAction Stop | Out-Null
-} catch {
-  $msg = 'PowerShellGet not available: ' + $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 3
+        return EmbeddedScripts.Load("Scripts/PowerShellGet/Unregister-Repository.ps1");
+}
 }
 
-try {
-  Unregister-PSRepository -Name $Name -ErrorAction Stop | Out-Null
-  Write-Output 'PFPWSGET::REPO::UNREGISTER::OK'
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(($msg)))
-  Write-Output ('PFPWSGET::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
-}

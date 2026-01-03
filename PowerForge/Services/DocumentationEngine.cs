@@ -97,7 +97,7 @@ public sealed class DocumentationEngine
                 enabled: false,
                 tool: DocumentationTool.PowerForge,
                 docsPath: ResolvePath(stagingPath, documentation.Path),
-                readmePath: ResolvePath(stagingPath, documentation.PathReadme),
+                readmePath: ResolvePath(stagingPath, documentation.PathReadme, optional: true),
                 succeeded: true,
                 exitCode: 0,
                 markdownFiles: 0,
@@ -106,7 +106,7 @@ public sealed class DocumentationEngine
         }
 
         var docsPath = ResolvePath(stagingPath, documentation.Path);
-        var readmePath = ResolvePath(stagingPath, documentation.PathReadme);
+        var readmePath = ResolvePath(stagingPath, documentation.PathReadme, optional: true);
         var startClean = buildDocumentation.StartClean;
 
         void SafeStart(ModulePipelineStep? step)
@@ -298,10 +298,10 @@ public sealed class DocumentationEngine
         }
     }
 
-    private static string ResolvePath(string baseDir, string path)
+    private static string ResolvePath(string baseDir, string path, bool optional = false)
     {
         var p = (path ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(p)) return Path.GetFullPath(baseDir);     
+        if (string.IsNullOrWhiteSpace(p)) return optional ? string.Empty : Path.GetFullPath(baseDir);
         if (Path.IsPathRooted(p)) return Path.GetFullPath(p);
         return Path.GetFullPath(Path.Combine(baseDir, p));
     }

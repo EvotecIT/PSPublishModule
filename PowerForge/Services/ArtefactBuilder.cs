@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PowerForge;
@@ -110,14 +112,16 @@ public sealed class ArtefactBuilder
         if (cfg.RequiredModules.Enabled == true)
         {
             var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
-            foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))    
+            var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
+            foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
             {
                 var depEntry = SaveRequiredModuleToFolder(
                     rm,
                     requiredRoot,
                     cfg.RequiredModules.Repository,
                     cfg.RequiredModules.Credential,
-                    tool);
+                    tool,
+                    source);
                 modules.Add(depEntry);
             }
         }
@@ -170,14 +174,16 @@ public sealed class ArtefactBuilder
             if (cfg.RequiredModules.Enabled == true)
             {
                 var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
-                foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))    
+                var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
+                foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
                 {
                     var depEntry = SaveRequiredModuleToFolder(
                         rm,
                         tempRoot,
                         cfg.RequiredModules.Repository,
                         cfg.RequiredModules.Credential,
-                        tool);
+                        tool,
+                        source);
                     modules.Add(depEntry);
                 }
             }
@@ -207,7 +213,8 @@ public sealed class ArtefactBuilder
         string destinationRoot,
         string? repository,
         RepositoryCredential? credential,
-        ModuleSaveTool tool)
+        ModuleSaveTool tool,
+        RequiredModulesSource source)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
         if (string.IsNullOrWhiteSpace(requiredModule.ModuleName))
@@ -218,15 +225,47 @@ public sealed class ArtefactBuilder
         var name = requiredModule.ModuleName.Trim();
         var minimumVersionArgument = NormalizeVersionArgument(requiredModule.ModuleVersion);
         var requiredVersionArgument = NormalizeVersionArgument(requiredModule.RequiredVersion);
+        var maximumVersionArgument = NormalizeVersionArgument(requiredModule.MaximumVersion);
         var versionArgument = requiredVersionArgument ?? minimumVersionArgument;
 
         Directory.CreateDirectory(destinationRoot);
+
+        var runner = new PowerShellRunner();
+        if (source != RequiredModulesSource.Download)
+        {
+            try
+            {
+                var installed = TryGetInstalledModule(
+                    runner,
+                    name,
+                    requiredVersionArgument,
+                    minimumVersionArgument,
+                    maximumVersionArgument);
+                if (installed is not null)
+                {
+                    var dest = Path.Combine(destinationRoot, name);
+                    CopyDirectory(installed.ModuleBasePath, dest);
+                    return new ArtefactModuleEntry(name, isMainModule: false, version: installed.Version, path: dest);
+                }
+
+                if (source == RequiredModulesSource.Installed)
+                {
+                    var reqText = requiredVersionArgument ?? minimumVersionArgument ?? string.Empty;
+                    var versionText = string.IsNullOrWhiteSpace(reqText) ? string.Empty : $" (requested: {reqText})";
+                    throw new InvalidOperationException($"Required module '{name}' was not found locally{versionText}. Install it (Install-Module {name}) or set RequiredModules.Source to 'Auto'/'Download'.");
+                }
+            }
+            catch (Exception ex) when (source == RequiredModulesSource.Auto)
+            {
+                _logger.Warn($"Failed to resolve required module '{name}' from local module paths; attempting download. {ex.Message}");
+            }
+        }
+
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "saved", $"{name}_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
 
         try
         {
-            var runner = new PowerShellRunner();
             IReadOnlyList<PSResourceInfo> saved;
 
             var effectiveTool = tool;
@@ -345,6 +384,111 @@ public sealed class ArtefactBuilder
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
         }
     }
+
+    private sealed class InstalledModule
+    {
+        public string ModuleBasePath { get; }
+        public string? Version { get; }
+
+        public InstalledModule(string moduleBasePath, string? version)
+        {
+            ModuleBasePath = moduleBasePath;
+            Version = version;
+        }
+    }
+
+    private InstalledModule? TryGetInstalledModule(
+        IPowerShellRunner runner,
+        string moduleName,
+        string? requiredVersion,
+        string? minimumVersion,
+        string? maximumVersion)
+    {
+        if (runner is null) throw new ArgumentNullException(nameof(runner));
+        if (string.IsNullOrWhiteSpace(moduleName)) return null;
+
+        var script = BuildFindInstalledModuleScript();
+        var args = new List<string>(4)
+        {
+            moduleName.Trim(),
+            requiredVersion ?? string.Empty,
+            minimumVersion ?? string.Empty,
+            maximumVersion ?? string.Empty
+        };
+
+        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(2));
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractModuleLocatorError(result.StdOut) ?? result.StdErr;
+            throw new InvalidOperationException($"Get-Module -ListAvailable failed (exit {result.ExitCode}). {msg}".Trim());
+        }
+
+        foreach (var line in SplitLines(result.StdOut))
+        {
+            if (!line.StartsWith("PFMODLOC::FOUND::", StringComparison.Ordinal)) continue;
+            var parts = line.Split(new[] { "::" }, StringSplitOptions.None);
+            if (parts.Length < 4) continue;
+
+            var version = Decode(parts[2]);
+            var path = Decode(parts[3]);
+            if (string.IsNullOrWhiteSpace(path)) continue;
+
+            var full = Path.GetFullPath(path.Trim());
+            if (!Directory.Exists(full)) continue;
+
+            var verText = string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+            return new InstalledModule(full, verText);
+        }
+
+        return null;
+    }
+
+    private static PowerShellRunResult RunScript(
+        IPowerShellRunner runner,
+        string scriptText,
+        IReadOnlyList<string> args,
+        TimeSpan timeout)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulelocator");
+        Directory.CreateDirectory(tempDir);
+        var scriptPath = Path.Combine(tempDir, $"modulelocator_{Guid.NewGuid():N}.ps1");
+        File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        try
+        {
+            return runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); } catch { /* ignore */ }
+        }
+    }
+
+    private static IEnumerable<string> SplitLines(string? text)
+        => (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+    private static string Decode(string? b64)
+    {
+        if (string.IsNullOrWhiteSpace(b64)) return string.Empty;
+        try { return Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
+        catch { return string.Empty; }
+    }
+
+    private static string? TryExtractModuleLocatorError(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFMODLOC::ERROR::", StringComparison.Ordinal)) continue;
+            var b64 = line.Substring("PFMODLOC::ERROR::".Length);
+            var msg = Decode(b64);
+            return string.IsNullOrWhiteSpace(msg) ? null : msg;
+        }
+        return null;
+    }
+
+    private static string BuildFindInstalledModuleScript()
+    {
+        return EmbeddedScripts.Load("Scripts/ModuleLocator/Find-InstalledModule.ps1");
+}
 
     private static bool IsSecretStoreLockedMessage(string message)
         => !string.IsNullOrWhiteSpace(message) &&
@@ -863,3 +1007,4 @@ public sealed class ArtefactBuilder
             ? path
             : path + Path.DirectorySeparatorChar;
 }
+

@@ -332,90 +332,13 @@ public sealed class ModuleDependencyInstaller
 
     private static string BuildGetInstalledVersionsScript()
     {
-        return @"
-param(
-  [string]$NamesB64
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-function DecodeLines([string]$b64) {
-  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
-  $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
-  return $text -split ""`n"" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Get-InstalledVersions.ps1");
 }
-
-function Enc([string]$s) {
-  return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$s))
-}
-
-try {
-  $names = DecodeLines $NamesB64
-  foreach ($n in $names) {
-    $mods = Get-Module -ListAvailable -Name $n -ErrorAction SilentlyContinue
-    $ver = ''
-    if ($mods) {
-      $latest = ($mods | Sort-Object Version -Descending | Select-Object -First 1)
-      if ($latest -and $latest.Version) { $ver = [string]$latest.Version }
-    }
-    Write-Output ('PFMOD::ITEM::' + (Enc $n) + '::' + (Enc $ver))
-  }
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
-  Write-Output ('PFMOD::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
 
     private static string BuildInstallModuleScript()
     {
-        return @"
-param(
-  [string]$Name,
-  [string]$RequiredVersion,
-  [string]$MinimumVersion,
-  [string]$Repository,
-  [string]$CredentialUser,
-  [string]$CredentialSecret
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-function Enc([string]$s) {
-  return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$s))
+        return EmbeddedScripts.Load("Scripts/ModuleDependencyInstaller/Install-Module.ps1");
 }
-
-try {
-  $params = @{
-    Name = $Name
-    Force = $true
-    ErrorAction = 'Stop'
-    SkipPublisherCheck = $true
-    Scope = 'CurrentUser'
-    AcceptLicense = $true
-  }
-  if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }
-  if (-not [string]::IsNullOrWhiteSpace($RequiredVersion)) { $params.RequiredVersion = $RequiredVersion }
-  elseif (-not [string]::IsNullOrWhiteSpace($MinimumVersion)) { $params.MinimumVersion = $MinimumVersion }
-  if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNullOrWhiteSpace($CredentialSecret)) {
-    $sec = ConvertTo-SecureString -String $CredentialSecret -AsPlainText -Force
-    $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
-  }
-
-  Install-Module @params | Out-Null
-  Write-Output 'PFMOD::INSTALL::OK'
-  exit 0
-} catch {
-  $msg = $_.Exception.Message
-  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$msg))
-  Write-Output ('PFMOD::ERROR::' + $b64)
-  exit 1
-}
-";
-    }
 
     private readonly struct Decision
     {
@@ -453,3 +376,4 @@ try {
         }
     }
 }
+
