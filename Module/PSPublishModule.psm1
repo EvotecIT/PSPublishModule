@@ -43,13 +43,24 @@ $FoundErrors = @(
             $tfms = if ($PSEdition -eq 'Core') {
                 if ($dotnetMajor -ge 10) { @('net10.0', 'net8.0') } else { @('net8.0') }
             } else { @('net472') }
+
             $devBinary = $null
+            $devConfig = $env:PSPUBLISHMODULE_DEV_CONFIGURATION
+            $devConfig = if ([string]::IsNullOrWhiteSpace($devConfig)) { $null } else { $devConfig.Trim() }
+            $cfgs = if ($devConfig -and $devConfig -in @('Debug', 'Release')) { @($devConfig) } else { @('Debug', 'Release') }
+
+            $candidates = @()
             foreach ($tfm in $tfms) {
-                foreach ($cfg in @('Release', 'Debug')) {
+                foreach ($cfg in $cfgs) {
                     $candidate = [IO.Path]::Combine($repoRoot, 'PSPublishModule', 'bin', $cfg, $tfm, 'PSPublishModule.dll')
-                    if (Test-Path -LiteralPath $candidate) { $devBinary = $candidate; break }
+                    if (Test-Path -LiteralPath $candidate) { $candidates += $candidate }
                 }
-                if ($devBinary) { break }
+            }
+
+            if ($candidates.Count -gt 0) {
+                $devBinary = $candidates |
+                    Sort-Object { (Get-Item -LiteralPath $_).LastWriteTimeUtc } -Descending |
+                    Select-Object -First 1
             }
 
             if ($devBinary) {
@@ -66,6 +77,22 @@ $FoundErrors = @(
         try {
             $loaded = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'PSPublishModule' } | Select-Object -First 1
             if ($loaded -and $loaded.Location -and (Test-Path -LiteralPath $loaded.Location)) {
+                # When a newer build exists, we can't hot-reload it in-process; guide the user to restart the session.
+                try {
+                    if ($devBinary -and (Test-Path -LiteralPath $devBinary)) {
+                        $loadedPath = (Resolve-Path -LiteralPath $loaded.Location).Path
+                        $devPath = (Resolve-Path -LiteralPath $devBinary).Path
+                        if (-not [string]::Equals($loadedPath, $devPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                            $loadedTime = (Get-Item -LiteralPath $loadedPath).LastWriteTimeUtc
+                            $devTime = (Get-Item -LiteralPath $devPath).LastWriteTimeUtc
+                            if ($devTime -gt $loadedTime) {
+                                Write-Warning "PSPublishModule is already loaded from '$loadedPath'. A newer build exists at '$devPath'. Start a new PowerShell session to use the newer build."
+                            }
+                        }
+                    }
+                } catch {
+                    # ignore
+                }
                 $BinaryModule = $loaded.Location
             }
         } catch {
