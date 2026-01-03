@@ -4,11 +4,26 @@
 
 [CmdletBinding()] param(
     [switch] $JsonOnly,
-    [string] $JsonPath = (Join-Path $PSScriptRoot '..\..\powerforge.json')
+    [string] $JsonPath = (Join-Path $PSScriptRoot '..\..\powerforge.json'),
+    [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
+    [switch] $NoDotnetBuild
 )
 
 if (-not $JsonOnly) {
     Remove-Item -Path (Join-Path $PSScriptRoot '..\Lib') -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+if (-not $JsonOnly -and -not $NoDotnetBuild) {
+    $csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
+    if (Test-Path -LiteralPath $csproj) {
+        Write-Host "ℹ️ Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+        $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $buildOutput | Out-Host
+            Write-Host "❌ dotnet build failed (exit $LASTEXITCODE). Stopping." -ForegroundColor Red
+            return
+        }
+    }
 }
 
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
