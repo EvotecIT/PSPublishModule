@@ -78,6 +78,12 @@ public sealed class ArtefactRequiredModulesConfiguration
     public string? ModulesPath { get; set; }
 
     /// <summary>
+    /// Tool used when downloading required modules (Save-PSResource/Save-Module).
+    /// When empty, PowerForge chooses the best available tool at runtime (prefer PSResourceGet, fall back to PowerShellGet).
+    /// </summary>
+    public ModuleSaveTool? Tool { get; set; }
+
+    /// <summary>
     /// Repository name used when downloading required modules (Save-PSResource / Save-Module).
     /// When empty, the default PSResourceGet behavior is used (PowerForge defaults to PSGallery).
     /// </summary>

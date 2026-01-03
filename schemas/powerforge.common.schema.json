@@ -20,6 +20,10 @@
       "type": "string",
       "enum": ["Auto", "PSResourceGet", "PowerShellGet"]
     },
+    "ModuleSaveTool": {
+      "type": "string",
+      "enum": ["Auto", "PSResourceGet", "PowerShellGet"]
+    },
     "RepositoryApiVersion": {
       "type": "string",
       "enum": ["Auto", "V2", "V3"]
@@ -54,4 +58,3 @@
     }
   }
 }
-

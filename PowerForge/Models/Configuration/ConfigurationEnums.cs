@@ -27,6 +27,21 @@ public enum PublishTool
 }
 
 /// <summary>
+/// Tool/provider used when downloading PowerShell modules (Save-PSResource/Save-Module).
+/// </summary>
+public enum ModuleSaveTool
+{
+    /// <summary>
+    /// Choose the best available tool at runtime (prefer PSResourceGet, fall back to PowerShellGet).
+    /// </summary>
+    Auto,
+    /// <summary>Use Microsoft.PowerShell.PSResourceGet (Save-PSResource).</summary>
+    PSResourceGet,
+    /// <summary>Use PowerShellGet (Save-Module).</summary>
+    PowerShellGet
+}
+
+/// <summary>
 /// API version for NuGet-compatible repository endpoints (v2/v3).
 /// </summary>
 public enum RepositoryApiVersion

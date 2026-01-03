@@ -60,10 +60,9 @@ internal static class SpectrePipelineConsoleUi
             .Start(ctx =>
             {
                 var tasksByKey = new Dictionary<string, ProgressTask>(StringComparer.OrdinalIgnoreCase);
-                var labelsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 var total = Math.Max(1, steps.Length);
-                var digits = Math.Max(2, total.ToString().Length);
+                var digits = Math.Max(2, total.ToString().Length);        
 
                 for (int i = 0; i < steps.Length; i++)
                 {
@@ -74,11 +73,10 @@ internal static class SpectrePipelineConsoleUi
                     var task = ctx.AddTask(label, maxValue: 1, autoStart: false);
 
                     tasksByKey[step.Key] = task;
-                    labelsByKey[step.Key] = label;
                     iconLookup[task] = GetStepIcon(step);
                 }
 
-                var reporter = new SpectrePipelineProgressReporter(tasksByKey, labelsByKey, startLookup, doneLookup);
+                var reporter = new SpectrePipelineProgressReporter(tasksByKey, iconLookup, startLookup, doneLookup);
 
                 try
                 {
@@ -87,7 +85,7 @@ internal static class SpectrePipelineConsoleUi
                 catch (Exception ex)
                 {
                     failure = ex;
-                    AbortRemainingTasks(tasksByKey, labelsByKey, startLookup, doneLookup, ex);
+                    AbortRemainingTasks(tasksByKey, iconLookup, startLookup, doneLookup);
                 }
             });
 
@@ -348,36 +346,41 @@ internal static class SpectrePipelineConsoleUi
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
+            .AddColumn(new TableColumn("i").NoWrap().Width(3))
             .AddColumn(new TableColumn("k").NoWrap())
             .AddColumn(new TableColumn("v"));
 
+        void AddInfoRow(string icon, string label, string valueMarkup)
+            => info.AddRow($"[grey]{icon}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
+
         var cfgText = string.IsNullOrWhiteSpace(configLabel) ? "(dsl)" : configLabel;
-        info.AddRow($"[grey]{(unicode ? "⚙️" : "CFG")}[/] [grey]Config[/]", Esc(cfgText));
-        info.AddRow($"[grey]{(unicode ? "📁" : "DIR")}[/] [grey]Project[/]", Esc(plan.ProjectRoot));
+        AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
+        AddInfoRow(unicode ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
-        info.AddRow($"[grey]{(unicode ? "🧪" : "TMP")}[/] [grey]Staging[/]", Esc(stagingText));
+        AddInfoRow(unicode ? "🧪" : "TMP", "Staging", Esc(stagingText));
 
         var frameworks = plan.BuildSpec.Frameworks is { Length: > 0 }
             ? string.Join(", ", plan.BuildSpec.Frameworks)
             : "(auto)";
-        info.AddRow($"[grey]{(unicode ? "🧩" : "TFM")}[/] [grey]Frameworks[/]", Esc(frameworks));
+        AddInfoRow(unicode ? "🧩" : "TFM", "Frameworks", Esc(frameworks));
 
         var docsEnabled = plan.DocumentationBuild?.Enable == true;
-        info.AddRow($"[grey]{(unicode ? "📚" : "DOC")}[/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+        AddInfoRow(unicode ? "📚" : "DOC", "Docs", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
 
         var validations = new List<string>();
         if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
         if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
-        info.AddRow(
-            $"[grey]{(unicode ? "🔎" : "VAL")}[/] [grey]Validation[/]",
+        AddInfoRow(
+            unicode ? "🔎" : "VAL",
+            "Validation",
             validations.Count == 0 ? "[grey]Disabled[/]" : Esc(string.Join(", ", validations)));
 
-        info.AddRow($"[grey]{(unicode ? "📦" : "PKG")}[/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
-        info.AddRow($"[grey]{(unicode ? "🚀" : "PUB")}[/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
-        info.AddRow($"[grey]{(unicode ? "📥" : "INS")}[/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
+        AddInfoRow(unicode ? "📦" : "PKG", "Artefacts", Esc((plan.Artefacts?.Length ?? 0).ToString()));
+        AddInfoRow(unicode ? "🚀" : "PUB", "Publishes", Esc((plan.Publishes?.Length ?? 0).ToString()));
+        AddInfoRow(unicode ? "📥" : "INS", "Install", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
-        info.AddRow($"[grey]{(unicode ? "🧭" : "STP")}[/] [grey]Steps[/]", Esc(steps.Length.ToString()));
+        AddInfoRow(unicode ? "🧭" : "STP", "Steps", Esc(steps.Length.ToString()));
         AnsiConsole.Write(info);
 
         AnsiConsole.WriteLine();
@@ -482,20 +485,22 @@ internal static class SpectrePipelineConsoleUi
     private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporter
     {
         private readonly IReadOnlyDictionary<string, ProgressTask> _tasks;
-        private readonly IReadOnlyDictionary<string, string> _labels;
+        private readonly ConcurrentDictionary<ProgressTask, string> _icons;
         private readonly ConcurrentDictionary<ProgressTask, DateTimeOffset> _startLookup;
         private readonly ConcurrentDictionary<ProgressTask, TimeSpan> _doneLookup;
+        private readonly bool _unicode;
 
         public SpectrePipelineProgressReporter(
             IReadOnlyDictionary<string, ProgressTask> tasks,
-            IReadOnlyDictionary<string, string> labels,
+            ConcurrentDictionary<ProgressTask, string> icons,
             ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
-            ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)
+            ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)      
         {
             _tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
-            _labels = labels ?? throw new ArgumentNullException(nameof(labels));
+            _icons = icons ?? throw new ArgumentNullException(nameof(icons));
             _startLookup = startLookup ?? throw new ArgumentNullException(nameof(startLookup));
             _doneLookup = doneLookup ?? throw new ArgumentNullException(nameof(doneLookup));
+            _unicode = AnsiConsole.Profile.Capabilities.Unicode;
         }
 
         public void StepStarting(ModulePipelineStep step)
@@ -511,66 +516,47 @@ internal static class SpectrePipelineConsoleUi
         public void StepCompleted(ModulePipelineStep step)
         {
             if (step is null) return;
-            if (!_tasks.TryGetValue(step.Key, out var task)) return;
+            if (!_tasks.TryGetValue(step.Key, out var task)) return;      
 
             task.IsIndeterminate = false;
             task.Value = task.MaxValue;
             task.StopTask();
+            _icons[task] = StatusIcon(StepUiStatus.Completed, _unicode);
 
             if (_startLookup.TryGetValue(task, out var start))
                 _doneLookup[task] = DateTimeOffset.Now - start;
         }
 
-        public void StepFailed(ModulePipelineStep step, Exception error)
+        public void StepFailed(ModulePipelineStep step, Exception error)  
         {
             if (step is null) return;
-            if (!_tasks.TryGetValue(step.Key, out var task)) return;
+            if (!_tasks.TryGetValue(step.Key, out var task)) return;      
 
             task.IsIndeterminate = false;
             task.Value = task.MaxValue;
-
-            if (_labels.TryGetValue(step.Key, out var label))
-            {
-                // Keep it plain (no markup) to avoid rendering issues in live regions.
-                var safeLabel = label.TrimEnd();
-                var msg = NormalizeErrorMessage(error);
-                task.Description = string.IsNullOrWhiteSpace(msg)
-                    ? $"{safeLabel} FAILED"
-                    : $"{safeLabel} FAILED: {msg}";
-            }
+            _icons[task] = StatusIcon(StepUiStatus.Failed, _unicode);
 
             task.StopTask();
 
             if (_startLookup.TryGetValue(task, out var start))
                 _doneLookup[task] = DateTimeOffset.Now - start;
-        }
-
-        private static string NormalizeErrorMessage(Exception error)
-        {
-            if (error is null) return string.Empty;
-            var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
-            msg = msg.Replace("\r\n", " ").Replace("\n", " ").Trim();
-            if (msg.Length <= 140) return msg;
-            return msg.Substring(0, 139) + "…";
         }
     }
 
     private static void AbortRemainingTasks(
         IReadOnlyDictionary<string, ProgressTask> tasksByKey,
-        IReadOnlyDictionary<string, string> labelsByKey,
-        ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
-        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup,
-        Exception error)
+        ConcurrentDictionary<ProgressTask, string> iconLookup,
+        ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,   
+        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)
     {
         if (tasksByKey is null) return;
-        if (labelsByKey is null) return;
+        if (iconLookup is null) return;
         if (startLookup is null) return;
         if (doneLookup is null) return;
 
-        var msg = NormalizeFailureMessage(error);
-
         // Stop any running step and mark the rest as skipped. This ensures the interactive UI closes cleanly
         // and does not leave indeterminate spinners running when an exception escapes the pipeline runner.
+        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         foreach (var entry in tasksByKey)
         {
             var key = entry.Key;
@@ -578,27 +564,41 @@ internal static class SpectrePipelineConsoleUi
 
             if (task is null) continue;
 
-            var label = labelsByKey.TryGetValue(key, out var l) ? l.TrimEnd() : (task.Description ?? string.Empty).TrimEnd();
-
             if (startLookup.ContainsKey(task))
             {
                 if (!doneLookup.ContainsKey(task))
                 {
                     task.IsIndeterminate = false;
                     task.Value = task.MaxValue;
-                    task.Description = string.IsNullOrWhiteSpace(msg) ? $"{label} FAILED" : $"{label} FAILED: {msg}";
-                    try { task.StopTask(); } catch { /* best effort */ }
+                    iconLookup[task] = StatusIcon(StepUiStatus.Failed, unicode);
+                    try { task.StopTask(); } catch { /* best effort */ }  
 
-                    if (startLookup.TryGetValue(task, out var start))
-                        doneLookup[task] = DateTimeOffset.Now - start;
+                    if (startLookup.TryGetValue(task, out var start))     
+                        doneLookup[task] = DateTimeOffset.Now - start;    
                 }
 
                 continue;
             }
 
-            task.Description = $"{label} SKIPPED";
+            iconLookup[task] = StatusIcon(StepUiStatus.Skipped, unicode);
         }
     }
+
+    private enum StepUiStatus
+    {
+        Completed,
+        Failed,
+        Skipped
+    }
+
+    private static string StatusIcon(StepUiStatus status, bool unicode)
+        => status switch
+        {
+            StepUiStatus.Completed => unicode ? "[green]✅[/]" : "[green]OK[/]",
+            StepUiStatus.Failed => unicode ? "[red]❌[/]" : "[red]X[/]",
+            StepUiStatus.Skipped => unicode ? "[grey]⏭[/]" : "[grey]SK[/]",
+            _ => unicode ? "[grey]•[/]" : "[grey]?[/]"
+        };
 
     private static string NormalizeFailureMessage(Exception error, int maxLength = 140)
     {

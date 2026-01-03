@@ -4712,6 +4712,18 @@ the artefact so the output can be used in offline environments.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredModulesTool</maml:name>
+          <maml:description>
+            <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleSaveTool</command:parameterValue>
+          <dev:type>
+            <maml:name>ModuleSaveTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="FileName">
           <maml:name>ScriptName</maml:name>
           <maml:description>
@@ -4987,6 +4999,18 @@ the artefact so the output can be used in offline environments.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredModulesTool</maml:name>
+        <maml:description>
+          <maml:para>Tool used when downloading required modules (Save-PSResource / Save-Module).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleSaveTool</command:parameterValue>
+        <dev:type>
+          <maml:name>ModuleSaveTool</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

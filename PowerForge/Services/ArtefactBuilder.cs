@@ -109,13 +109,15 @@ public sealed class ArtefactBuilder
 
         if (cfg.RequiredModules.Enabled == true)
         {
-            foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
+            var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
+            foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))    
             {
                 var depEntry = SaveRequiredModuleToFolder(
                     rm,
                     requiredRoot,
                     cfg.RequiredModules.Repository,
-                    cfg.RequiredModules.Credential);
+                    cfg.RequiredModules.Credential,
+                    tool);
                 modules.Add(depEntry);
             }
         }
@@ -167,13 +169,15 @@ public sealed class ArtefactBuilder
 
             if (cfg.RequiredModules.Enabled == true)
             {
-                foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))
+                var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
+                foreach (var rm in (requiredModules ?? Array.Empty<ManifestEditor.RequiredModule>()).Where(m => !string.IsNullOrWhiteSpace(m.ModuleName)))    
                 {
                     var depEntry = SaveRequiredModuleToFolder(
                         rm,
                         tempRoot,
                         cfg.RequiredModules.Repository,
-                        cfg.RequiredModules.Credential);
+                        cfg.RequiredModules.Credential,
+                        tool);
                     modules.Add(depEntry);
                 }
             }
@@ -202,7 +206,8 @@ public sealed class ArtefactBuilder
         ManifestEditor.RequiredModule requiredModule,
         string destinationRoot,
         string? repository,
-        RepositoryCredential? credential)
+        RepositoryCredential? credential,
+        ModuleSaveTool tool)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
         if (string.IsNullOrWhiteSpace(requiredModule.ModuleName))
@@ -224,20 +229,23 @@ public sealed class ArtefactBuilder
             var runner = new PowerShellRunner();
             IReadOnlyList<PSResourceInfo> saved;
 
-            var psg = new PowerShellGetClient(runner, _logger);
-            var psgOpts = new PowerShellGetSaveOptions(
-                name: name,
-                destinationPath: tempRoot,
-                minimumVersion: minimumVersionArgument,
-                requiredVersion: requiredVersionArgument,
-                repository: repository,
-                prerelease: false,
-                acceptLicense: true,
-                credential: credential);
-            TryEnsurePowerShellGetDefaultRepository(psg, repository);
+            var effectiveTool = tool;
+            if (effectiveTool == ModuleSaveTool.Auto && _skipPsResourceGetSave)
+                effectiveTool = ModuleSaveTool.PowerShellGet;
 
-            if (_skipPsResourceGetSave)
+            if (effectiveTool == ModuleSaveTool.PowerShellGet)
             {
+                var psg = new PowerShellGetClient(runner, _logger);
+                var psgOpts = new PowerShellGetSaveOptions(
+                    name: name,
+                    destinationPath: tempRoot,
+                    minimumVersion: minimumVersionArgument,
+                    requiredVersion: requiredVersionArgument,
+                    repository: repository,
+                    prerelease: false,
+                    acceptLicense: true,
+                    credential: credential);
+                TryEnsurePowerShellGetDefaultRepository(psg, repository);
                 saved = SaveRequiredModuleWithPowerShellGet(psg, psgOpts, name);
             }
             else
@@ -261,31 +269,52 @@ public sealed class ArtefactBuilder
                 }
                 catch (Exception ex)
                 {
+                    if (tool == ModuleSaveTool.PSResourceGet)
+                    {
+                        var raw = ex.GetBaseException().Message ?? ex.Message ?? string.Empty;
+                        var reason = SimplifyPsResourceGetFailureMessage(raw);
+                        var msg = string.IsNullOrWhiteSpace(reason)
+                            ? $"Save-PSResource failed while downloading required module '{name}'."
+                            : $"Save-PSResource failed while downloading required module '{name}'. {reason}";
+                        throw new InvalidOperationException(msg, ex);
+                    }
+
                     _skipPsResourceGetSave = true;
 
-                    var raw = ex.Message ?? string.Empty;
-                    var reason = SimplifyPsResourceGetFailureMessage(raw);
+                    var rawAuto = ex.Message ?? string.Empty;
+                    var reasonAuto = SimplifyPsResourceGetFailureMessage(rawAuto);
 
                     if (ex is PowerShellToolNotAvailableException)
                     {
                         _logger.Warn("PSResourceGet is not available; using Save-Module for required modules.");
                     }
-                    else if (IsSecretStoreLockedMessage(raw))
+                    else if (IsSecretStoreLockedMessage(rawAuto))
                     {
                         _logger.Warn("PSResourceGet cannot access SecretStore (locked); using Save-Module for required modules.");
                     }
-                    else if (!string.IsNullOrWhiteSpace(reason))
+                    else if (!string.IsNullOrWhiteSpace(reasonAuto))
                     {
-                        _logger.Warn($"Save-PSResource failed; using Save-Module for required modules. {reason}");
+                        _logger.Warn($"Save-PSResource failed; using Save-Module for required modules. {reasonAuto}");
                     }
                     else
                     {
                         _logger.Warn("Save-PSResource failed; using Save-Module for required modules.");
                     }
 
-                    if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(raw))
-                        _logger.Verbose(raw.Trim());
+                    if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(rawAuto))
+                        _logger.Verbose(rawAuto.Trim());
 
+                    var psg = new PowerShellGetClient(runner, _logger);
+                    var psgOpts = new PowerShellGetSaveOptions(
+                        name: name,
+                        destinationPath: tempRoot,
+                        minimumVersion: minimumVersionArgument,
+                        requiredVersion: requiredVersionArgument,
+                        repository: repository,
+                        prerelease: false,
+                        acceptLicense: true,
+                        credential: credential);
+                    TryEnsurePowerShellGetDefaultRepository(psg, repository);
                     saved = SaveRequiredModuleWithPowerShellGet(psg, psgOpts, name);
                 }
             }

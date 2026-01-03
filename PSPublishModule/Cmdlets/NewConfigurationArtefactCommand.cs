@@ -77,6 +77,10 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     [Parameter]
     public string? RequiredModulesRepository { get; set; }
 
+    /// <summary>Tool used when downloading required modules (Save-PSResource / Save-Module).</summary>
+    [Parameter]
+    public ModuleSaveTool RequiredModulesTool { get; set; }
+
     /// <summary>Repository credential username (basic auth) used when downloading required modules.</summary>
     [Parameter]
     public string? RequiredModulesCredentialUserName { get; set; }
@@ -157,10 +161,13 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
             artefact.Configuration.RequiredModules.Path = NormalizePath(RequiredModulesPath);
 
         if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesRepository)) &&
-            !string.IsNullOrWhiteSpace(RequiredModulesRepository))
+            !string.IsNullOrWhiteSpace(RequiredModulesRepository))        
         {
             artefact.Configuration.RequiredModules.Repository = RequiredModulesRepository!.Trim();
         }
+
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesTool)))
+            artefact.Configuration.RequiredModules.Tool = RequiredModulesTool;
 
         var requiredModulesSecret = string.Empty;
         if (MyInvocation.BoundParameters.ContainsKey(nameof(RequiredModulesCredentialSecretFilePath)) &&

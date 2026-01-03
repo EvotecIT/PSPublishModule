@@ -507,6 +507,7 @@
         "Enabled": { "type": ["boolean", "null"] },
         "Path": { "type": ["string", "null"] },
         "ModulesPath": { "type": ["string", "null"] },
+        "Tool": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ModuleSaveTool" }, { "type": "null" }] },
         "Repository": { "type": ["string", "null"] },
         "Credential": { "anyOf": [{ "$ref": "#/$defs/RepositoryCredential" }, { "type": "null" }] }
       }

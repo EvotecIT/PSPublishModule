@@ -25,7 +25,7 @@ internal sealed class SpectreConsoleLogger : ILogger
 
         var (icon, color) = level switch
         {
-            LogLevel.Info => (unicode ? "ℹ️" : "i", "deepskyblue1"),
+            LogLevel.Info => (unicode ? "ℹ️" : "i", "deepskyblue1"),      
             LogLevel.Success => (unicode ? "✅" : "+", "green"),
             LogLevel.Warning => (unicode ? "⚠️" : "!", "yellow"),
             LogLevel.Error => (unicode ? "❌" : "x", "red"),
@@ -33,7 +33,15 @@ internal sealed class SpectreConsoleLogger : ILogger
             _ => (unicode ? "•" : "?", "grey")
         };
 
-        AnsiConsole.MarkupLine($"[{color}]{icon}[/] {safe}");
+        // Render with a fixed-width icon column so emoji/codepage glyphs don't shift the message text.
+        var table = new Table()
+            .Border(TableBorder.None)
+            .HideHeaders()
+            .AddColumn(new TableColumn("i").NoWrap().Width(2))
+            .AddColumn(new TableColumn("m"));
+
+        table.AddRow($"[{color}]{icon}[/]", safe);
+        AnsiConsole.Write(table);
     }
 
     private enum LogLevel
@@ -45,4 +53,3 @@ internal sealed class SpectreConsoleLogger : ILogger
         Verbose
     }
 }
-

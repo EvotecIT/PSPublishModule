@@ -11,7 +11,7 @@ Tells the module to create an artefact of a specified type.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -342,6 +342,21 @@ Repository name used when downloading required modules (Save-PSResource / Save-M
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredModulesTool
+Tool used when downloading required modules (Save-PSResource / Save-Module).
+
+```yaml
+Type: ModuleSaveTool
 Parameter Sets: __AllParameterSets
 Aliases: None
 
