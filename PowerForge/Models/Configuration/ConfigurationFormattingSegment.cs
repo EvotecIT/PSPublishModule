@@ -37,6 +37,9 @@ public sealed class FormattingTargetOptions
     /// <summary>Style configuration.</summary>
     public FormattingStyleOptions? Style { get; set; }
 
+    /// <summary>Formatting options for PS1 code.</summary>
+    public FormatCodeOptions? FormatCodePS1 { get; set; }
+
     /// <summary>Formatting options for PSM1 code.</summary>
     public FormatCodeOptions? FormatCodePSM1 { get; set; }
 

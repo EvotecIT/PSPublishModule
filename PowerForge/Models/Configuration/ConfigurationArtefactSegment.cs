@@ -84,6 +84,12 @@ public sealed class ArtefactRequiredModulesConfiguration
     public ModuleSaveTool? Tool { get; set; }
 
     /// <summary>
+    /// Source used to resolve required modules (local copy vs download).
+    /// When empty, PowerForge uses locally available modules only.
+    /// </summary>
+    public RequiredModulesSource? Source { get; set; }
+
+    /// <summary>
     /// Repository name used when downloading required modules (Save-PSResource / Save-Module).
     /// When empty, the default PSResourceGet behavior is used (PowerForge defaults to PSGallery).
     /// </summary>

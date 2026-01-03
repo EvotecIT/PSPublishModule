@@ -42,6 +42,25 @@ public enum ModuleSaveTool
 }
 
 /// <summary>
+/// Source used when resolving required modules for artefacts (local copy vs download).
+/// </summary>
+public enum RequiredModulesSource
+{
+    /// <summary>
+    /// Prefer locally available modules (Get-Module -ListAvailable) and download only when missing.
+    /// </summary>
+    Auto,
+    /// <summary>
+    /// Only copy locally available modules (do not download).
+    /// </summary>
+    Installed,
+    /// <summary>
+    /// Always download required modules (ignore locally available copies).
+    /// </summary>
+    Download
+}
+
+/// <summary>
 /// API version for NuGet-compatible repository endpoints (v2/v3).
 /// </summary>
 public enum RepositoryApiVersion
