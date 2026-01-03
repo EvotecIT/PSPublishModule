@@ -11,15 +11,15 @@ Tells the module to create an artefact of a specified type.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
 Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and
 Unpacked (folder) for inspection or offline installation.
 
-When -AddRequiredModules is enabled, required modules are downloaded (via Save-PSResource/Save-Module) and copied into
-the artefact so the output can be used in offline environments.
+When -AddRequiredModules is enabled, required modules are copied from locally available modules (Get-Module -ListAvailable) and,
+when configured, downloaded (via Save-PSResource/Save-Module) before being copied into the artefact.
 
 Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.
 
@@ -342,6 +342,21 @@ Repository name used when downloading required modules (Save-PSResource / Save-M
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -RequiredModulesSource
+Source used when resolving required modules (Auto / Installed / Download). When omitted, PowerForge defaults to Installed (no download).
+
+```yaml
+Type: RequiredModulesSource
 Parameter Sets: __AllParameterSets
 Aliases: None
 

@@ -67,7 +67,7 @@ Accept wildcard characters: True
 ```
 
 ### -ApplyTo
-Targets to apply formatting to (OnMergePSM1, OnMergePSD1, DefaultPSM1, DefaultPSD1).
+Targets to apply formatting to (OnMergePSM1, OnMergePSD1, DefaultPS1, DefaultPSM1, DefaultPSD1).
 
 ```yaml
 Type: String[]
