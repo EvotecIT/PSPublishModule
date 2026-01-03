@@ -439,6 +439,7 @@
       "additionalProperties": false,
       "properties": {
         "Style": { "anyOf": [{ "$ref": "#/$defs/FormattingStyleOptions" }, { "type": "null" }] },
+        "FormatCodePS1": { "anyOf": [{ "$ref": "#/$defs/FormatCodeOptions" }, { "type": "null" }] },
         "FormatCodePSM1": { "anyOf": [{ "$ref": "#/$defs/FormatCodeOptions" }, { "type": "null" }] },
         "FormatCodePSD1": { "anyOf": [{ "$ref": "#/$defs/FormatCodeOptions" }, { "type": "null" }] }
       }
@@ -508,6 +509,7 @@
         "Path": { "type": ["string", "null"] },
         "ModulesPath": { "type": ["string", "null"] },
         "Tool": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ModuleSaveTool" }, { "type": "null" }] },
+        "Source": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/RequiredModulesSource" }, { "type": "null" }] },
         "Repository": { "type": ["string", "null"] },
         "Credential": { "anyOf": [{ "$ref": "#/$defs/RepositoryCredential" }, { "type": "null" }] }
       }

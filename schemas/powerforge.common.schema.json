@@ -24,6 +24,10 @@
       "type": "string",
       "enum": ["Auto", "PSResourceGet", "PowerShellGet"]
     },
+    "RequiredModulesSource": {
+      "type": "string",
+      "enum": ["Auto", "Installed", "Download"]
+    },
     "RepositoryApiVersion": {
       "type": "string",
       "enum": ["Auto", "V2", "V3"]
