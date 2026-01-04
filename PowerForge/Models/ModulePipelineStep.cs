@@ -11,6 +11,8 @@ public enum ModulePipelineStepKind
     Documentation = 1,
     /// <summary>Format PowerShell sources.</summary>
     Formatting = 7,
+    /// <summary>Sign module output (Authenticode).</summary>
+    Signing = 8,
     /// <summary>Run validation checks (compatibility, consistency).</summary>
     Validation = 6,
     /// <summary>Create an artefact output (packed/unpacked).</summary>
@@ -103,7 +105,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 3) Formatting (after build/docs, before validation/packaging).
+        // 3) Formatting (after build/docs, before validation/packaging). 
         if (plan.Formatting is not null)
         {
             steps.Add(new ModulePipelineStep(
@@ -120,7 +122,16 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 4) Validation checks (after build/docs/formatting, before packaging/publish/install).
+        // 4) Signing (after build/docs/formatting, before validation/packaging/publish/install).
+        if (plan.SignModule)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Signing,
+                key: "sign",
+                title: "Sign module"));
+        }
+
+        // 5) Validation checks (after build/docs/formatting/signing, before packaging/publish/install).
         if (plan.FileConsistencySettings?.Enable == true)
         {
             steps.Add(new ModulePipelineStep(
@@ -145,7 +156,7 @@ public sealed class ModulePipelineStep
                 title: "Check PowerShell compatibility"));
         }
 
-        // 5) Artefacts
+        // 6) Artefacts
         if (plan.Artefacts is { Length: > 0 })
         {
             for (int i = 0; i < plan.Artefacts.Length; i++)
@@ -166,7 +177,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 6) Publishes
+        // 7) Publishes
         if (plan.Publishes is { Length: > 0 })
         {
             for (int i = 0; i < plan.Publishes.Length; i++)
@@ -191,7 +202,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 7) Install
+        // 8) Install
         if (plan.InstallEnabled)
         {
             steps.Add(new ModulePipelineStep(
@@ -200,7 +211,7 @@ public sealed class ModulePipelineStep
                 title: $"Install ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})"));
         }
 
-        // 8) Cleanup staging
+        // 9) Cleanup staging
         if (plan.DeleteGeneratedStagingAfterRun)
         {
             steps.Add(new ModulePipelineStep(

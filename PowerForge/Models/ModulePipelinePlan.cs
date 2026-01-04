@@ -86,6 +86,16 @@ public sealed class ModulePipelinePlan
     public ConfigurationFormattingSegment? Formatting { get; }
 
     /// <summary>
+    /// When true, code-signing is requested for the built module output (legacy: BuildModule.SignMerged).
+    /// </summary>
+    public bool SignModule { get; }
+
+    /// <summary>
+    /// Optional signing options (certificate selection and include/exclude patterns).
+    /// </summary>
+    public SigningOptionsConfiguration? Signing { get; }
+
+    /// <summary>
     /// Publish configuration segments enabled for this pipeline run.
     /// </summary>
     public ConfigurationPublishSegment[] Publishes { get; }
@@ -145,6 +155,8 @@ public sealed class ModulePipelinePlan
         CompatibilitySettings? compatibilitySettings,
         FileConsistencySettings? fileConsistencySettings,
         ConfigurationFormattingSegment? formatting,
+        bool signModule,
+        SigningOptionsConfiguration? signing,
         ConfigurationPublishSegment[] publishes,
         ConfigurationArtefactSegment[] artefacts,
         bool installEnabled,
@@ -170,7 +182,9 @@ public sealed class ModulePipelinePlan
         CompatibilitySettings = compatibilitySettings;
         FileConsistencySettings = fileConsistencySettings;
         Formatting = formatting;
-        Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();    
+        SignModule = signModule;
+        Signing = signing;
+        Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();
         Artefacts = artefacts;
         InstallEnabled = installEnabled;
         InstallStrategy = installStrategy;

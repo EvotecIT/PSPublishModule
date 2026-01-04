@@ -44,6 +44,12 @@ public sealed class SigningOptionsConfiguration
     /// <summary>Additional path substrings to exclude from signing.</summary>
     public string[]? ExcludePaths { get; set; }
 
+    /// <summary>
+    /// When true, re-sign files even if they already have a signature (overwrites existing signatures).
+    /// Default behavior signs only files that are <c>NotSigned</c>.
+    /// </summary>
+    public bool? OverwriteSigned { get; set; }
+
     /// <summary>Thumbprint of a code-signing certificate from the local cert store.</summary>
     public string? CertificateThumbprint { get; set; }
 

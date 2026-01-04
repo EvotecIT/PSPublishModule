@@ -90,6 +90,8 @@ public sealed class ModulePipelineRunner
         bool localVersioning = false;
         InstallationStrategy? installStrategyFromSegments = null;
         int? keepVersionsFromSegments = null;
+        bool signModule = false;
+        SigningOptionsConfiguration? signing = null;
 
         string? dotnetConfigFromSegments = null;
         string[]? dotnetFrameworksFromSegments = null;
@@ -139,6 +141,7 @@ public sealed class ModulePipelineRunner
                     if (b.LocalVersion.HasValue) localVersioning = b.LocalVersion.Value;
                     if (b.VersionedInstallStrategy.HasValue) installStrategyFromSegments = b.VersionedInstallStrategy.Value;
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
+                    if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
                     if (!string.IsNullOrWhiteSpace(b.ResolveBinaryConflicts?.ProjectName))
                         resolveBinaryConflictsProjectName = b.ResolveBinaryConflicts!.ProjectName;
                     break;
@@ -193,6 +196,8 @@ public sealed class ModulePipelineRunner
                     var opts = optionsSegment.Options ?? new ConfigurationOptions();
                     if (opts.Delivery is not null && opts.Delivery.Enable)
                         delivery = opts.Delivery;
+                    if (opts.Signing is not null)
+                        signing = opts.Signing;
                     break;
                 }
                 case ConfigurationInformationSegment info:
@@ -363,6 +368,8 @@ public sealed class ModulePipelineRunner
             compatibilitySettings: compatibilitySettings,
             fileConsistencySettings: fileConsistencySettings,
             formatting: formatting,
+            signModule: signModule,
+            signing: signing,
             publishes: enabledPublishes,
             artefacts: enabledArtefacts,
             installEnabled: installEnabled,
@@ -411,7 +418,8 @@ public sealed class ModulePipelineRunner
         var docsMamlStep = steps.FirstOrDefault(s => string.Equals(s.Key, "docs:maml", StringComparison.OrdinalIgnoreCase));
         var formatStagingStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:staging", StringComparison.OrdinalIgnoreCase));
         var formatProjectStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:project", StringComparison.OrdinalIgnoreCase));
-        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));
+        var signStep = steps.FirstOrDefault(s => string.Equals(s.Key, "sign", StringComparison.OrdinalIgnoreCase));
+        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));        
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
@@ -615,10 +623,28 @@ public sealed class ModulePipelineRunner
                 }
             }
 
+            if (plan.SignModule)
+            {
+                SafeStart(signStep);
+                try
+                {
+                    SignBuiltModuleOutput(
+                        moduleName: plan.ModuleName,
+                        rootPath: buildResult.StagingPath,
+                        signing: plan.Signing);
+                    SafeDone(signStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(signStep, ex);
+                    throw;
+                }
+            }
+
         ProjectConsistencyReport? fileConsistencyReport = null;
         CheckStatus? fileConsistencyStatus = null;
-        ProjectConversionResult? fileConsistencyEncodingFix = null;       
-        ProjectConversionResult? fileConsistencyLineEndingFix = null;     
+        ProjectConversionResult? fileConsistencyEncodingFix = null;
+        ProjectConversionResult? fileConsistencyLineEndingFix = null;
         ProjectConsistencyReport? projectFileConsistencyReport = null;
         CheckStatus? projectFileConsistencyStatus = null;
         ProjectConversionResult? projectFileConsistencyEncodingFix = null;
@@ -1513,6 +1539,106 @@ exit 0
             return false;
         }
     }
+
+    private void SignBuiltModuleOutput(string moduleName, string rootPath, SigningOptionsConfiguration? signing)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+            throw new ArgumentException("Root path is required.", nameof(rootPath));
+
+        if (signing is null)
+        {
+            throw new InvalidOperationException(
+                "Signing is enabled but no signing options were provided. " +
+                "Configure a certificate (CertificateThumbprint / CertificatePFXPath / CertificatePFXBase64) or disable signing.");
+        }
+
+        var include = BuildSigningIncludePatterns(signing);
+        var exclude = BuildSigningExcludeSubstrings(signing);
+
+        var args = new List<string>(8)
+        {
+            rootPath,
+            EncodeLines(include),
+            EncodeLines(exclude),
+            signing.CertificateThumbprint ?? string.Empty,
+            signing.CertificatePFXPath ?? string.Empty,
+            signing.CertificatePFXBase64 ?? string.Empty,
+            signing.CertificatePFXPassword ?? string.Empty,
+            signing.OverwriteSigned == true ? "1" : "0"
+        };
+
+        var runner = new PowerShellRunner();
+        var script = BuildSignModuleScript();
+        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(10));
+        if (result.ExitCode != 0)
+        {
+            var msg = TryExtractSigningError(result.StdOut) ?? result.StdErr;
+            var full = $"Signing failed (exit {result.ExitCode}). {msg}".Trim();
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            throw new InvalidOperationException(full);
+        }
+
+        var signedCount = ParseSignedCount(result.StdOut);
+        if (signedCount > 0)
+            _logger.Success($"Signed {signedCount} file(s) for '{moduleName}'.");
+        else
+            _logger.Info($"No files required signing for '{moduleName}'.");
+    }
+
+    private static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)
+    {
+        if (signing.Include is { Length: > 0 })
+            return signing.Include.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray();
+
+        var include = new List<string> { "*.ps1", "*.psm1", "*.psd1" };
+        if (signing.IncludeBinaries == true) include.AddRange(new[] { "*.dll", "*.cat" });
+        if (signing.IncludeExe == true) include.Add("*.exe");
+        return include.ToArray();
+    }
+
+    private static string[] BuildSigningExcludeSubstrings(SigningOptionsConfiguration signing)
+    {
+        var list = new List<string>();
+
+        // Legacy behavior: Internals are excluded unless explicitly included.
+        if (signing.IncludeInternals != true)
+            list.Add("Internals");
+
+        // Safety: never sign third-party downloaded dependencies by default.
+        list.Add("Modules");
+
+        if (signing.ExcludePaths is { Length: > 0 })
+            list.AddRange(signing.ExcludePaths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()));
+
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static int ParseSignedCount(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFSIGN::COUNT::", StringComparison.Ordinal)) continue;
+            var val = line.Substring("PFSIGN::COUNT::".Length);
+            if (int.TryParse(val, out var n)) return n;
+        }
+        return 0;
+    }
+
+    private static string? TryExtractSigningError(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFSIGN::ERROR::", StringComparison.Ordinal)) continue;
+            var b64 = line.Substring("PFSIGN::ERROR::".Length);
+            var decoded = Decode(b64);
+            return string.IsNullOrWhiteSpace(decoded) ? null : decoded;
+        }
+        return null;
+    }
+
+    private static string BuildSignModuleScript()
+        => EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
 
     private static FormatOptions BuildFormatOptions(FormatCodeOptions formatCode)
         => new()
