@@ -40,7 +40,7 @@ if ($JsonOnly) {
 Build-Module @buildParams -Settings {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '2.0.X'
+        ModuleVersion          = '3.0.X'
         #PreReleaseTag          = 'Preview5'
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
