@@ -582,7 +582,7 @@ public sealed class ModulePipelineRunner
 
             if (plan.Formatting is not null)
             {
-                var formattingPipeline = new FormattingPipeline(_logger);
+                var formattingPipeline = new FormattingPipeline(_logger);       
 
                 SafeStart(formatStagingStep);
                 try
@@ -594,6 +594,11 @@ public sealed class ModulePipelineRunner
                         includeMergeFormatting: true,
                         formatting: plan.Formatting,
                         pipeline: formattingPipeline);
+
+                    var stagingFmt = FormattingSummary.FromResults(formattingStagingResults);
+                    if (stagingFmt.Status == CheckStatus.Fail)
+                        throw new InvalidOperationException(
+                            $"Formatting failed for staging (errors {stagingFmt.Errors}/{stagingFmt.Total}).");
                     SafeDone(formatStagingStep);
                 }
                 catch (Exception ex)
@@ -608,13 +613,18 @@ public sealed class ModulePipelineRunner
                     try
                     {
                         var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
-                        formattingProjectResults = FormatPowerShellTree(
+                        formattingProjectResults = FormatPowerShellTree(        
                             rootPath: plan.ProjectRoot,
                             moduleName: plan.ModuleName,
                             manifestPath: projectManifest,
                             includeMergeFormatting: false,
                             formatting: plan.Formatting,
                             pipeline: formattingPipeline);
+
+                        var projectFmt = FormattingSummary.FromResults(formattingProjectResults);
+                        if (projectFmt.Status == CheckStatus.Fail)
+                            throw new InvalidOperationException(
+                                $"Formatting failed for project root (errors {projectFmt.Errors}/{projectFmt.Total}).");
                         SafeDone(formatProjectStep);
                     }
                     catch (Exception ex)
@@ -1609,13 +1619,14 @@ exit 0
         return summary;
     }
 
-    private static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)
+    internal static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)
     {
         if (signing.Include is { Length: > 0 })
             return signing.Include.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray();
 
         var include = new List<string> { "*.ps1", "*.psm1", "*.psd1" };
-        if (signing.IncludeBinaries == true) include.AddRange(new[] { "*.dll", "*.cat" });
+        // New default: include binaries unless explicitly disabled.
+        if (signing.IncludeBinaries != false) include.AddRange(new[] { "*.dll", "*.cat" });
         if (signing.IncludeExe == true) include.Add("*.exe");
         return include.ToArray();
     }

@@ -66,7 +66,8 @@ try {
   $overwrite = -not [string]::IsNullOrWhiteSpace($OverwriteSigned) -and $OverwriteSigned -eq '1'
 
   if (-not $include -or $include.Count -eq 0) {
-    $include = @('*.ps1','*.psm1','*.psd1')
+    # Keep defaults aligned with the C# pipeline (PowerForge.Services.ModulePipelineRunner).
+    $include = @('*.ps1','*.psm1','*.psd1','*.dll','*.cat')
   }
 
   # Resolve certificate

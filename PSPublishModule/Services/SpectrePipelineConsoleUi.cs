@@ -205,27 +205,37 @@ internal static class SpectrePipelineConsoleUi
 
         if (res.Plan.Formatting is not null)
         {
-            static string FormatCount(int changed, int total, string label)
+            static CheckStatus Worst(CheckStatus a, CheckStatus b)
+                => (a == CheckStatus.Fail || b == CheckStatus.Fail) ? CheckStatus.Fail
+                    : (a == CheckStatus.Warning || b == CheckStatus.Warning) ? CheckStatus.Warning
+                    : CheckStatus.Pass;
+
+            static string FormatPart(string label, FormattingSummary s)
             {
-                var c = changed > 0 ? $"[green]{changed}[/]" : "[grey]0[/]";
-                return $"{label} {c}[grey]/{total}[/]";
+                var c = s.Changed > 0 ? $"[green]{s.Changed}[/]" : "[grey]0[/]";
+                var baseText = $"{label} {c}[grey]/{s.Total}[/]";
+
+                var extras = new List<string>(2);
+                if (s.Skipped > 0) extras.Add($"skipped [yellow]{s.Skipped}[/]");
+                if (s.Errors > 0) extras.Add($"errors [red]{s.Errors}[/]");
+                if (extras.Count > 0) baseText += $" [grey]({string.Join(", ", extras)})[/]";
+                return baseText;
             }
 
-            var parts = new List<string>(2);
-            {
-                var total = res.FormattingStagingResults.Length;
-                var changed = res.FormattingStagingResults.Count(r => r.Changed);
-                parts.Add(FormatCount(changed, total, "staging"));
-            }
+            var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
+            var status = staging.Status;
+            var parts = new List<string>(2) { FormatPart("staging", staging) };
 
             if (res.Plan.Formatting.Options.UpdateProjectRoot)
             {
-                var total = res.FormattingProjectResults.Length;
-                var changed = res.FormattingProjectResults.Count(r => r.Changed);
-                parts.Add(FormatCount(changed, total, "project"));
+                var project = FormattingSummary.FromResults(res.FormattingProjectResults);
+                status = Worst(status, project.Status);
+                parts.Add(FormatPart("project", project));
             }
 
-            table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", string.Join(", ", parts));
+            table.AddRow(
+                $"{(unicode ? "🎨" : "*")} Formatting",
+                $"{StatusMarkup(status)} [grey]{string.Join(", ", parts)}[/]");
         }
         else
         {

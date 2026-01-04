@@ -43,10 +43,25 @@ public sealed class FormattingPipeline
         foreach (var f in list)
         {
             var n = _norm.NormalizeFile(f, opts);
-            bool changed = (pre.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase))?.Changed ?? false)
-                           || (pssa.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase))?.Changed ?? false)
-                           || n.Changed;
-            var msg = $"pre={(changed ? '1' : '0')}; pssa={(pssa.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase))?.Changed ?? false ? '1' : '0')}; norm={(n.Changed ? '1' : '0')}";
+            var preResult = pre.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase));
+            var pssaResult = pssa.FirstOrDefault(x => string.Equals(x.Path, f, StringComparison.OrdinalIgnoreCase));
+
+            bool preChanged = preResult?.Changed ?? false;
+            bool pssaChanged = pssaResult?.Changed ?? false;
+            bool changed = preChanged || pssaChanged || n.Changed;
+
+            var details = $"pre={(preChanged ? '1' : '0')}; pssa={(pssaChanged ? '1' : '0')}; norm={(n.Changed ? '1' : '0')}";
+
+            var preMsg = preResult?.Message ?? string.Empty;
+            var pssaMsg = pssaResult?.Message ?? string.Empty;
+
+            string? statusMsg = null;
+            if (FormattingSummary.IsErrorMessage(preMsg)) statusMsg = preMsg;
+            else if (FormattingSummary.IsErrorMessage(pssaMsg)) statusMsg = pssaMsg;
+            else if (FormattingSummary.IsSkippedMessage(preMsg)) statusMsg = preMsg;
+            else if (FormattingSummary.IsSkippedMessage(pssaMsg)) statusMsg = pssaMsg;
+
+            var msg = string.IsNullOrWhiteSpace(statusMsg) ? details : $"{statusMsg}; {details}";
             results.Add(new FormatterResult(f, changed, msg));
         }
         return results;

@@ -42,7 +42,10 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>When signing is enabled, also sign scripts that reside under the Internals folder.</summary>
     [Parameter] public SwitchParameter SignIncludeInternals { get; set; }
 
-    /// <summary>When signing is enabled, include binary files (e.g., .dll, .cat) in signing.</summary>
+    /// <summary>
+    /// When signing is enabled, binaries are signed by default (e.g., .dll, .cat).
+    /// Use <c>-SignIncludeBinaries:$false</c> to opt out.
+    /// </summary>
     [Parameter] public SwitchParameter SignIncludeBinaries { get; set; }
 
     /// <summary>When signing is enabled, include .exe files in signing.</summary>
