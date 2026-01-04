@@ -222,7 +222,7 @@ public sealed class ModulePipelineRunner
                 }
                 case ConfigurationFormattingSegment formattingSegment:
                 {
-                    formatting = formattingSegment;
+                    formatting = MergeFormattingSegments(formatting, formattingSegment);
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -392,6 +392,8 @@ public sealed class ModulePipelineRunner
 
         var reporter = progress ?? NullModulePipelineProgressReporter.Instance;
         var steps = ModulePipelineStep.Create(plan);
+        var reporterV2 = reporter as IModulePipelineProgressReporterV2;
+        var startedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var artefactSteps = steps
             .Where(s => s.ArtefactSegment is not null)
@@ -418,6 +420,7 @@ public sealed class ModulePipelineRunner
         void SafeStart(ModulePipelineStep? step)
         {
             if (step is null) return;
+            if (!string.IsNullOrWhiteSpace(step.Key)) startedKeys.Add(step.Key);
             try { reporter.StepStarting(step); } catch { /* best effort */ }
         }
 
@@ -435,6 +438,7 @@ public sealed class ModulePipelineRunner
 
         var pipeline = new ModuleBuildPipeline(_logger);
         string? stagingPathForCleanup = plan.BuildSpec.StagingPath;
+        Exception? pipelineFailure = null;
 
         try
         {
@@ -862,9 +866,9 @@ public sealed class ModulePipelineRunner
         }
 
         ModuleInstallerResult? installResult = null;
-        if (plan.InstallEnabled)
-        {
-            SafeStart(installStep);
+            if (plan.InstallEnabled)
+            {
+                SafeStart(installStep);
             string? installPackagePath = null;
             try
             {
@@ -920,6 +924,11 @@ public sealed class ModulePipelineRunner
                 projectFileConsistencyEncodingFix,
                 projectFileConsistencyLineEndingFix);
         }
+        catch (Exception ex)
+        {
+            pipelineFailure = ex;
+            throw;
+        }
         finally
         {
             if (plan.DeleteGeneratedStagingAfterRun)
@@ -928,6 +937,17 @@ public sealed class ModulePipelineRunner
                 try { DeleteDirectoryWithRetries(stagingPathForCleanup); }
                 catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
                 SafeDone(cleanupStep);
+            }
+
+            if (pipelineFailure is not null && reporterV2 is not null)
+            {
+                foreach (var step in steps)
+                {
+                    if (step is null) continue;
+                    if (string.IsNullOrWhiteSpace(step.Key)) continue;
+                    if (startedKeys.Contains(step.Key)) continue;
+                    try { reporterV2.StepSkipped(step); } catch { /* best effort */ }
+                }
             }
         }
     }
@@ -1060,6 +1080,39 @@ public sealed class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(p)) return optional ? string.Empty : Path.GetFullPath(baseDir);
         if (Path.IsPathRooted(p)) return Path.GetFullPath(p);
         return Path.GetFullPath(Path.Combine(baseDir, p));
+    }
+
+    private static ConfigurationFormattingSegment? MergeFormattingSegments(
+        ConfigurationFormattingSegment? existing,
+        ConfigurationFormattingSegment incoming)
+    {
+        if (incoming is null) return existing;
+        if (existing is null) return incoming;
+
+        existing.Options ??= new FormattingOptions();
+        incoming.Options ??= new FormattingOptions();
+
+        existing.Options.UpdateProjectRoot |= incoming.Options.UpdateProjectRoot;
+
+        MergeTarget(existing.Options.Standard, incoming.Options.Standard);
+        MergeTarget(existing.Options.Merge, incoming.Options.Merge);
+
+        return existing;
+
+        static void MergeTarget(FormattingTargetOptions dst, FormattingTargetOptions src)
+        {
+            if (src is null) return;
+
+            if (src.FormatCodePS1 is not null) dst.FormatCodePS1 = src.FormatCodePS1;
+            if (src.FormatCodePSM1 is not null) dst.FormatCodePSM1 = src.FormatCodePSM1;
+            if (src.FormatCodePSD1 is not null) dst.FormatCodePSD1 = src.FormatCodePSD1;
+
+            if (src.Style?.PSD1 is not null)
+            {
+                dst.Style ??= new FormattingStyleOptions();
+                dst.Style.PSD1 = src.Style.PSD1;
+            }
+        }
     }
 
     private static void DirectoryCopy(string sourceDir, string destDir)
@@ -1420,7 +1473,8 @@ exit 0
 
         var results = new List<FormatterResult>(all.Length + 4);
 
-        var standardPs1 = cfg.Standard.FormatCodePS1 ?? cfg.Standard.FormatCodePSM1;
+        // Legacy PSPublishModule defaults did not format standalone PS1 files unless explicitly configured.
+        var standardPs1 = cfg.Standard.FormatCodePS1;
         if (standardPs1?.Enabled == true && ps1Files.Length > 0)
             results.AddRange(pipeline.Run(ps1Files, BuildFormatOptions(standardPs1)));
 

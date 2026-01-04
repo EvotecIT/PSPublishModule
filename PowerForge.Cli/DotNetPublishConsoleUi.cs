@@ -109,15 +109,19 @@ internal static class DotNetPublishConsoleUi
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
+            .AddColumn(new TableColumn("i").NoWrap().Width(3))
             .AddColumn(new TableColumn("k").NoWrap())
             .AddColumn(new TableColumn("v"));
 
+        void AddInfoRow(string icon, string label, string valueMarkup)
+            => info.AddRow($"[grey]{icon}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
+
         var cfgText = string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath;
-        info.AddRow($"[grey]{(unicode ? "⚙️" : "CFG")}[/] [grey]Config[/]", Esc(cfgText));
-        info.AddRow($"[grey]{(unicode ? "📁" : "DIR")}[/] [grey]Project[/]", Esc(plan.ProjectRoot));
+        AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
+        AddInfoRow(unicode ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
         if (!string.IsNullOrWhiteSpace(plan.SolutionPath))
-            info.AddRow($"[grey]{(unicode ? "🧩" : "SLN")}[/] [grey]Solution[/]", Esc(plan.SolutionPath));
-        info.AddRow($"[grey]{(unicode ? "⚙️" : "CFG")}[/] [grey]Configuration[/]", Esc(plan.Configuration));
+            AddInfoRow(unicode ? "🧩" : "SLN", "Solution", Esc(plan.SolutionPath));
+        AddInfoRow(unicode ? "⚙️" : "CFG", "Configuration", Esc(plan.Configuration));
 
         var runtimes = plan.Targets
             .SelectMany(t => t.Publish.Runtimes ?? Array.Empty<string>())
@@ -126,9 +130,9 @@ internal static class DotNetPublishConsoleUi
             .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        info.AddRow($"[grey]{(unicode ? "🎯" : "TGT")}[/] [grey]Targets[/]", plan.Targets.Length.ToString());
-        info.AddRow($"[grey]{(unicode ? "🖥️" : "RID")}[/] [grey]Runtimes[/]", runtimes.Length == 0 ? "(none)" : string.Join(", ", runtimes));
-        info.AddRow($"[grey]{(unicode ? "🧾" : "STP")}[/] [grey]Steps[/]", (plan.Steps?.Length ?? 0).ToString());
+        AddInfoRow(unicode ? "🎯" : "TGT", "Targets", plan.Targets.Length.ToString());
+        AddInfoRow(unicode ? "🖥️" : "RID", "Runtimes", runtimes.Length == 0 ? "(none)" : string.Join(", ", runtimes));
+        AddInfoRow(unicode ? "🧾" : "STP", "Steps", (plan.Steps?.Length ?? 0).ToString());
 
         AnsiConsole.Write(info);
         AnsiConsole.WriteLine();

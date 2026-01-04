@@ -33,7 +33,15 @@ public sealed class SpectreConsoleLogger : ILogger
             _ => (unicode ? "•" : "?", "grey")
         };
 
-        AnsiConsole.MarkupLine($"[{color}]{icon}[/] {safe}");
+        // Render with a fixed-width icon column so emoji/codepage glyphs don't shift the message text.
+        var table = new Table()
+            .Border(TableBorder.None)
+            .HideHeaders()
+            .AddColumn(new TableColumn("i").NoWrap().Width(2))
+            .AddColumn(new TableColumn("m"));
+
+        table.AddRow($"[{color}]{icon}[/]", safe);
+        AnsiConsole.Write(table);
     }
 
     private enum LogLevel

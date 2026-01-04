@@ -84,7 +84,12 @@ internal static class PipelineConsoleUi
                     iconLookup[task] = GetStepIcon(step);
                 }
 
-                var reporter = new SpectrePipelineProgressReporter(tasksByKey, labelsByKey, startLookup, doneLookup);
+                var reporter = new SpectrePipelineProgressReporter(
+                    tasksByKey,
+                    labelsByKey,
+                    iconLookup,
+                    startLookup,
+                    doneLookup);
                 result = runner.Run(spec, plan, reporter);
             });
 
@@ -149,36 +154,41 @@ internal static class PipelineConsoleUi
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
+            .AddColumn(new TableColumn("i").NoWrap().Width(3))
             .AddColumn(new TableColumn("k").NoWrap())
             .AddColumn(new TableColumn("v"));
 
+        void AddInfoRow(string icon, string label, string valueMarkup)
+            => info.AddRow($"[grey]{icon}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
+
         var cfgText = string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath;
-        info.AddRow($"[grey]{(unicode ? "⚙️" : "CFG")}[/] [grey]Config[/]", Esc(cfgText));
-        info.AddRow($"[grey]{(unicode ? "📁" : "DIR")}[/] [grey]Project[/]", Esc(plan.ProjectRoot));
+        AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
+        AddInfoRow(unicode ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
-        info.AddRow($"[grey]{(unicode ? "🧪" : "TMP")}[/] [grey]Staging[/]", Esc(stagingText));
+        AddInfoRow(unicode ? "🧪" : "TMP", "Staging", Esc(stagingText));
 
         var frameworks = plan.BuildSpec.Frameworks is { Length: > 0 }
             ? string.Join(", ", plan.BuildSpec.Frameworks)
             : "(auto)";
-        info.AddRow($"[grey]{(unicode ? "🧩" : "TFM")}[/] [grey]Frameworks[/]", Esc(frameworks));
+        AddInfoRow(unicode ? "🧩" : "TFM", "Frameworks", Esc(frameworks));
 
         var docsEnabled = plan.DocumentationBuild?.Enable == true;
-        info.AddRow($"[grey]{(unicode ? "📚" : "DOC")}[/] [grey]Docs[/]", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+        AddInfoRow(unicode ? "📚" : "DOC", "Docs", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
 
         var validations = new List<string>();
         if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
         if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
-        info.AddRow(
-            $"[grey]{(unicode ? "🔎" : "VAL")}[/] [grey]Validation[/]",
+        AddInfoRow(
+            unicode ? "🔎" : "VAL",
+            "Validation",
             validations.Count == 0 ? "[grey]Disabled[/]" : Esc(string.Join(", ", validations)));
 
-        info.AddRow($"[grey]{(unicode ? "📦" : "PKG")}[/] [grey]Artefacts[/]", Esc((plan.Artefacts?.Length ?? 0).ToString()));
-        info.AddRow($"[grey]{(unicode ? "🚀" : "PUB")}[/] [grey]Publishes[/]", Esc((plan.Publishes?.Length ?? 0).ToString()));
-        info.AddRow($"[grey]{(unicode ? "📥" : "INS")}[/] [grey]Install[/]", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
+        AddInfoRow(unicode ? "📦" : "PKG", "Artefacts", Esc((plan.Artefacts?.Length ?? 0).ToString()));
+        AddInfoRow(unicode ? "🚀" : "PUB", "Publishes", Esc((plan.Publishes?.Length ?? 0).ToString()));
+        AddInfoRow(unicode ? "📥" : "INS", "Install", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
-        info.AddRow($"[grey]{(unicode ? "🧭" : "STP")}[/] [grey]Steps[/]", Esc(steps.Length.ToString()));
+        AddInfoRow(unicode ? "🧭" : "STP", "Steps", Esc(steps.Length.ToString()));
         AnsiConsole.Write(info);
 
         AnsiConsole.WriteLine();
@@ -287,23 +297,28 @@ internal static class PipelineConsoleUi
         return interactive ? ConsoleView.Standard : ConsoleView.Ansi;
     }
 
-    private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporter
+    private sealed class SpectrePipelineProgressReporter : IModulePipelineProgressReporterV2
     {
         private readonly IReadOnlyDictionary<string, ProgressTask> _tasks;
         private readonly IReadOnlyDictionary<string, string> _labels;
         private readonly ConcurrentDictionary<ProgressTask, DateTimeOffset> _startLookup;
         private readonly ConcurrentDictionary<ProgressTask, TimeSpan> _doneLookup;
+        private readonly ConcurrentDictionary<ProgressTask, string> _iconLookup;
+        private readonly bool _unicode;
 
         public SpectrePipelineProgressReporter(
             IReadOnlyDictionary<string, ProgressTask> tasks,
             IReadOnlyDictionary<string, string> labels,
+            ConcurrentDictionary<ProgressTask, string> iconLookup,
             ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
             ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)
         {
             _tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
             _labels = labels ?? throw new ArgumentNullException(nameof(labels));
+            _iconLookup = iconLookup ?? throw new ArgumentNullException(nameof(iconLookup));
             _startLookup = startLookup ?? throw new ArgumentNullException(nameof(startLookup));
             _doneLookup = doneLookup ?? throw new ArgumentNullException(nameof(doneLookup));
+            _unicode = AnsiConsole.Profile.Capabilities.Unicode;
         }
 
         public void StepStarting(ModulePipelineStep step)
@@ -324,6 +339,7 @@ internal static class PipelineConsoleUi
             task.IsIndeterminate = false;
             task.Value = task.MaxValue;
             task.StopTask();
+            _iconLookup[task] = StatusIcon(StepUiStatus.Completed, _unicode);
 
             if (_startLookup.TryGetValue(task, out var start))
                 _doneLookup[task] = DateTimeOffset.Now - start;
@@ -336,15 +352,13 @@ internal static class PipelineConsoleUi
 
             task.IsIndeterminate = false;
             task.Value = task.MaxValue;
+            _iconLookup[task] = StatusIcon(StepUiStatus.Failed, _unicode);
 
             if (_labels.TryGetValue(step.Key, out var label))
             {
                 // Keep it plain (no markup) to avoid rendering issues in live regions.
                 var safeLabel = label.TrimEnd();
-                var msg = NormalizeErrorMessage(error);
-                task.Description = string.IsNullOrWhiteSpace(msg)
-                    ? $"{safeLabel} FAILED"
-                    : $"{safeLabel} FAILED: {msg}";
+                task.Description = $"{safeLabel} FAILED";
             }
 
             task.StopTask();
@@ -353,14 +367,42 @@ internal static class PipelineConsoleUi
                 _doneLookup[task] = DateTimeOffset.Now - start;
         }
 
-        private static string NormalizeErrorMessage(Exception error)
+        public void StepSkipped(ModulePipelineStep step)
         {
-            if (error is null) return string.Empty;
-            var msg = error.GetBaseException().Message ?? error.Message ?? string.Empty;
-            msg = msg.Replace("\r\n", " ").Replace("\n", " ").Trim();
-            if (msg.Length <= 140) return msg;
-            return msg.Substring(0, 139) + "…";
+            if (step is null) return;
+            if (!_tasks.TryGetValue(step.Key, out var task)) return;
+
+            task.IsIndeterminate = false;
+            try { task.StartTask(); } catch { /* best effort */ }
+            task.Value = task.MaxValue;
+            _iconLookup[task] = StatusIcon(StepUiStatus.Skipped, _unicode);
+
+            if (_labels.TryGetValue(step.Key, out var label))
+            {
+                var safeLabel = label.TrimEnd();
+                task.Description = $"{safeLabel} SKIPPED";
+            }
+
+            task.StopTask();
         }
+    }
+
+    private enum StepUiStatus
+    {
+        Completed,
+        Failed,
+        Skipped
+    }
+
+    private static string StatusIcon(StepUiStatus status, bool unicode)
+    {
+        return status switch
+        {
+            StepUiStatus.Completed => unicode ? "[green]✅[/]" : "[green]OK[/]",
+            StepUiStatus.Failed => unicode ? "[red]❌[/]" : "[red]X[/]",
+            StepUiStatus.Skipped => unicode ? "[grey]⏭️[/]" : "[grey]SK[/]",
+            _ => unicode ? "[grey]•[/]" : "[grey].[/]"
+        };
     }
 
     private sealed class StepIconColumn : ProgressColumn

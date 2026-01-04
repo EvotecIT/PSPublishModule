@@ -17,3 +17,11 @@ public interface IModulePipelineProgressReporter
     void StepFailed(ModulePipelineStep step, Exception error);
 }
 
+/// <summary>
+/// Optional extension for hosts that want to render skipped steps (e.g., when the pipeline aborts early).
+/// </summary>
+public interface IModulePipelineProgressReporterV2 : IModulePipelineProgressReporter
+{
+    /// <summary>Called when a step is skipped (not executed).</summary>
+    void StepSkipped(ModulePipelineStep step);
+}
