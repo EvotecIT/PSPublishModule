@@ -94,6 +94,7 @@ internal static class DotNetPublishConsoleUi
     private static void WriteHeader(DotNetPublishPlan plan, string? configPath)
     {
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+        static string Icon(string? s) => Esc(NormalizeIcon(s));
 
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var titleTarget = !string.IsNullOrWhiteSpace(plan.SolutionPath)
@@ -106,15 +107,16 @@ internal static class DotNetPublishConsoleUi
 
         AnsiConsole.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
+        var iconColWidth = unicode ? 2 : 3;
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
-            .AddColumn(new TableColumn("i").NoWrap().Width(3))
-            .AddColumn(new TableColumn("k").NoWrap())
-            .AddColumn(new TableColumn("v"));
+            .AddColumn(BuildHeaderIconColumn(iconColWidth))
+            .AddColumn(BuildHeaderKeyColumn())
+            .AddColumn(BuildHeaderValueColumn());
 
         void AddInfoRow(string icon, string label, string valueMarkup)
-            => info.AddRow($"[grey]{icon}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
+            => info.AddRow($"[grey]{Icon(icon)}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
 
         var cfgText = string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath;
         AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
@@ -136,6 +138,34 @@ internal static class DotNetPublishConsoleUi
 
         AnsiConsole.Write(info);
         AnsiConsole.WriteLine();
+    }
+
+    private static string NormalizeIcon(string? icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon)) return string.Empty;
+        return icon!.Replace("\uFE0F", string.Empty).Replace("\uFE0E", string.Empty);
+    }
+
+    private static TableColumn BuildHeaderIconColumn(int width)
+    {
+        var col = new TableColumn("i").NoWrap().Width(width);
+        // Table uses per-column padding; remove left padding so the header aligns with progress output.
+        col.Padding = new Padding(0, 0, 1, 0);
+        return col;
+    }
+
+    private static TableColumn BuildHeaderKeyColumn()
+    {
+        var col = new TableColumn("k").NoWrap();
+        col.Padding = new Padding(0, 0, 1, 0);
+        return col;
+    }
+
+    private static TableColumn BuildHeaderValueColumn()
+    {
+        var col = new TableColumn("v");
+        col.Padding = new Padding(0, 0, 0, 0);
+        return col;
     }
 
     private static void WriteSummary(DotNetPublishPlan plan, DotNetPublishResult result)
