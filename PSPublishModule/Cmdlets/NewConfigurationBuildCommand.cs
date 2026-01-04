@@ -54,6 +54,9 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Additional path substrings to exclude from signing.</summary>
     [Parameter] public string[]? SignExcludePaths { get; set; }
 
+    /// <summary>When signing is enabled, overwrite existing signatures (re-sign files).</summary>
+    [Parameter] public SwitchParameter SignOverwriteSigned { get; set; }
+
     /// <summary>Keep classes in a separate dot-sourced file instead of merging into the main PSM1.</summary>
     [Parameter] public SwitchParameter DotSourceClasses { get; set; }
 
@@ -225,6 +228,7 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
         if (bound.ContainsKey(nameof(SignIncludeExe))) { EnsureSigning(); signing!.IncludeExe = SignIncludeExe.IsPresent; }
         if (bound.ContainsKey(nameof(SignCustomInclude))) { EnsureSigning(); signing!.Include = SignCustomInclude; }
         if (bound.ContainsKey(nameof(SignExcludePaths))) { EnsureSigning(); signing!.ExcludePaths = SignExcludePaths; }
+        if (bound.ContainsKey(nameof(SignOverwriteSigned))) { EnsureSigning(); signing!.OverwriteSigned = SignOverwriteSigned.IsPresent; }
 
         // Certificate selection (single branch)
         if (bound.ContainsKey(nameof(CertificateThumbprint)))

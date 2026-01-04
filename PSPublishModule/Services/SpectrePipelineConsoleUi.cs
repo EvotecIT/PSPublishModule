@@ -335,6 +335,7 @@ internal static class SpectrePipelineConsoleUi
     private static void WriteHeader(ModulePipelinePlan plan, string? configLabel, ModulePipelineStep[] steps)
     {
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+        static string Icon(string? s) => Esc(NormalizeIcon(s));
 
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
 
@@ -343,15 +344,16 @@ internal static class SpectrePipelineConsoleUi
             : $"PowerForge • {plan.ModuleName} {plan.ResolvedVersion}";
         AnsiConsole.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
+        var iconColWidth = unicode ? 2 : 3;
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
-            .AddColumn(new TableColumn("i").NoWrap().Width(3))
-            .AddColumn(new TableColumn("k").NoWrap())
-            .AddColumn(new TableColumn("v"));
+            .AddColumn(BuildHeaderIconColumn(iconColWidth))
+            .AddColumn(BuildHeaderKeyColumn())
+            .AddColumn(BuildHeaderValueColumn());
 
         void AddInfoRow(string icon, string label, string valueMarkup)
-            => info.AddRow($"[grey]{icon}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
+            => info.AddRow($"[grey]{Icon(icon)}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
 
         var cfgText = string.IsNullOrWhiteSpace(configLabel) ? "(dsl)" : configLabel;
         AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
@@ -386,6 +388,35 @@ internal static class SpectrePipelineConsoleUi
         AnsiConsole.WriteLine();
     }
 
+    private static string NormalizeIcon(string? icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon)) return string.Empty;
+        // Strip variation selectors so terminal glyph width matches Spectre's measurement more consistently.
+        return icon!.Replace("\uFE0F", string.Empty).Replace("\uFE0E", string.Empty);
+    }
+
+    private static TableColumn BuildHeaderIconColumn(int width)
+    {
+        var col = new TableColumn("i").NoWrap().Width(width);
+        // Table uses per-column padding; remove left padding so the header aligns with progress output.
+        col.Padding = new Padding(0, 0, 1, 0);
+        return col;
+    }
+
+    private static TableColumn BuildHeaderKeyColumn()
+    {
+        var col = new TableColumn("k").NoWrap();
+        col.Padding = new Padding(0, 0, 1, 0);
+        return col;
+    }
+
+    private static TableColumn BuildHeaderValueColumn()
+    {
+        var col = new TableColumn("v");
+        col.Padding = new Padding(0, 0, 0, 0);
+        return col;
+    }
+
     private static string GetStepIcon(ModulePipelineStep step)
     {
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
@@ -394,6 +425,7 @@ internal static class SpectrePipelineConsoleUi
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
             ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
             ModulePipelineStepKind.Formatting => unicode ? "[mediumpurple3]🎨[/]" : "[mediumpurple3]FM[/]",
+            ModulePipelineStepKind.Signing => unicode ? "[gold3]🔏[/]" : "[gold3]SG[/]",
             ModulePipelineStepKind.Validation => unicode ? "[lightskyblue1]🔎[/]" : "[lightskyblue1]VA[/]",
             ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
             ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
