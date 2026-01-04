@@ -8,6 +8,7 @@ namespace PowerForge;
 public sealed class ModuleInstaller
 {
     private readonly ILogger _logger;
+    private static readonly char[] PathSeparators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
 
     /// <summary>
     /// Creates a new installer.
@@ -28,6 +29,13 @@ public sealed class ModuleInstaller
         if (string.IsNullOrWhiteSpace(moduleVersion))
             throw new ArgumentException("Module version is required", nameof(moduleVersion));
 
+        stagingPath = Path.GetFullPath(stagingPath.Trim().Trim('"'));
+        moduleName = moduleName.Trim();
+        moduleVersion = moduleVersion.Trim();
+
+        ValidatePathSegment(moduleName, nameof(moduleName));
+        ValidatePathSegment(moduleVersion, nameof(moduleVersion));
+
         options ??= new ModuleInstallerOptions();
         var roots = options.DestinationRoots.Count > 0 ? options.DestinationRoots : GetDefaultModuleRoots();
         var installed = new List<string>();
@@ -41,10 +49,11 @@ public sealed class ModuleInstaller
         {
             try
             {
-                var moduleRoot = Path.Combine(root, moduleName);
+                var rootFull = Path.GetFullPath(root.Trim().Trim('"'));
+                var moduleRoot = EnsureChildPath(rootFull, moduleName);
                 Directory.CreateDirectory(moduleRoot);
-                var finalPath = Path.Combine(moduleRoot, resolvedVersion);
-                var tempPath = Path.Combine(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
+                var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
+                var tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
 
                 // Prefer temp under moduleRoot for fast rename; fall back to OS temp on access issues
                 try
@@ -72,7 +81,8 @@ public sealed class ModuleInstaller
                         // Compute next revision
                         _logger.Warn($"Target exists, computing next revision for {finalPath}");
                         resolvedVersion = ResolveVersion(new[] { root }, moduleName, moduleVersion, InstallationStrategy.AutoRevision);
-                        finalPath = Path.Combine(moduleRoot, resolvedVersion);  
+                        ValidatePathSegment(resolvedVersion, nameof(moduleVersion));
+                        finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
                     }
                     else
                     {
@@ -309,5 +319,33 @@ public sealed class ModuleInstaller
         var arr = new int[4];
         for (int i = 0; i < Math.Min(parts.Length, 4); i++) int.TryParse(parts[i], out arr[i]);
         return new Version(arr[0], arr[1], arr[2], arr[3]);
+    }
+
+    private static void ValidatePathSegment(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("Value is required.", name);
+
+        var v = value.Trim().Trim('"');
+        if (v == "." || v == "..")
+            throw new ArgumentException("Value cannot be '.' or '..'.", name);
+
+        if (v.IndexOfAny(PathSeparators) >= 0)
+            throw new ArgumentException("Value cannot contain path separators.", name);
+
+        if (v.Contains(':'))
+            throw new ArgumentException("Value cannot contain drive specifiers.", name);
+    }
+
+    private static string EnsureChildPath(string root, string child)
+    {
+        var rootFull = Path.GetFullPath(root);
+        var rootPrefix = rootFull.TrimEnd(PathSeparators) + Path.DirectorySeparatorChar;
+
+        var combined = Path.GetFullPath(Path.Combine(rootFull, child));
+        if (!combined.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Resolved path '{combined}' escapes root '{rootFull}'.");
+
+        return combined;
     }
 }

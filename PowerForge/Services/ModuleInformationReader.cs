@@ -32,7 +32,9 @@ public sealed class ModuleInformationReader
             throw new InvalidOperationException($"More than one PSD1 file detected in '{root}': {foundFiles}");
         }
 
-        var manifestPath = manifests[0];
+        var manifestPath = manifests.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(manifestPath))
+            throw new InvalidOperationException($"Unable to determine PSD1 file for '{root}'.");
         var moduleName = Path.GetFileNameWithoutExtension(manifestPath) ?? string.Empty;
 
         string? moduleVersion = null;
@@ -102,4 +104,3 @@ public sealed class ModuleInformationReader
         }
     }
 }
-

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.Serialization;
@@ -16,6 +17,7 @@ namespace PowerForge;
 public sealed class GitHubReleasePublisher
 {
     private readonly ILogger _logger;
+    private static readonly HttpClient SharedClient = CreateSharedClient();
 
     /// <summary>
     /// Creates a new publisher using the provided logger.
@@ -74,8 +76,6 @@ public sealed class GitHubReleasePublisher
         bool isDraft,
         bool isPreRelease)
     {
-        using var client = CreateHttpClient(token);
-
         var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases");
 
         var normalizedCommitish = string.IsNullOrWhiteSpace(commitish) ? null : commitish!.Trim();
@@ -97,8 +97,9 @@ public sealed class GitHubReleasePublisher
         {
             Content = new StringContent(json, Encoding.UTF8, "application/vnd.github+json")
         };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+        var response = SharedClient.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
         var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
@@ -114,8 +115,6 @@ public sealed class GitHubReleasePublisher
 
     private void UploadAssets(string uploadUrl, string[] assets, string token)
     {
-        using var client = CreateHttpClient(token);
-
         foreach (var assetPath in assets)
         {
             var fileName = Path.GetFileName(assetPath) ?? assetPath;
@@ -128,22 +127,41 @@ public sealed class GitHubReleasePublisher
             content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
             using var req = new HttpRequestMessage(HttpMethod.Post, target) { Content = content };
-            var resp = client.SendAsync(req).ConfigureAwait(false).GetAwaiter().GetResult();
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            var resp = SharedClient.SendAsync(req).ConfigureAwait(false).GetAwaiter().GetResult();
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode)
                 throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
         }
     }
 
-    private static HttpClient CreateHttpClient(string token)
+    private static HttpClient CreateSharedClient()
     {
-        var client = new HttpClient();
+        HttpMessageHandler handler;
+#if NETFRAMEWORK
+        handler = new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+        };
+#else
+        handler = new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            MaxConnectionsPerServer = 16
+        };
+#endif
+
+        var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = TimeSpan.FromMinutes(10)
+        };
         client.DefaultRequestHeaders.UserAgent.Clear();
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("PowerForge", "1.0"));
         client.DefaultRequestHeaders.Accept.Clear();
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }
 
