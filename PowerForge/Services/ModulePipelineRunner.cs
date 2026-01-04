@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -577,6 +578,7 @@ public sealed class ModulePipelineRunner
 
             FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
             FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
+            ModuleSigningResult? signingResult = null;
 
             if (plan.Formatting is not null)
             {
@@ -628,7 +630,7 @@ public sealed class ModulePipelineRunner
                 SafeStart(signStep);
                 try
                 {
-                    SignBuiltModuleOutput(
+                    signingResult = SignBuiltModuleOutput(
                         moduleName: plan.ModuleName,
                         rootPath: buildResult.StagingPath,
                         signing: plan.Signing);
@@ -948,7 +950,8 @@ public sealed class ModulePipelineRunner
                 projectFileConsistencyReport,
                 projectFileConsistencyStatus,
                 projectFileConsistencyEncodingFix,
-                projectFileConsistencyLineEndingFix);
+                projectFileConsistencyLineEndingFix,
+                signingResult);
         }
         catch (Exception ex)
         {
@@ -1540,7 +1543,7 @@ exit 0
         }
     }
 
-    private void SignBuiltModuleOutput(string moduleName, string rootPath, SigningOptionsConfiguration? signing)
+    private ModuleSigningResult SignBuiltModuleOutput(string moduleName, string rootPath, SigningOptionsConfiguration? signing)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
@@ -1570,20 +1573,40 @@ exit 0
         var runner = new PowerShellRunner();
         var script = BuildSignModuleScript();
         var result = RunScript(runner, script, args, TimeSpan.FromMinutes(10));
-        if (result.ExitCode != 0)
+
+        var summary = TryExtractSigningSummary(result.StdOut);
+        if (result.ExitCode != 0 || (summary?.Failed ?? 0) > 0)
         {
             var msg = TryExtractSigningError(result.StdOut) ?? result.StdErr;
-            var full = $"Signing failed (exit {result.ExitCode}). {msg}".Trim();
+            var extra = summary is null ? string.Empty : $" {FormatSigningSummary(summary)}";
+            var full = $"Signing failed (exit {result.ExitCode}). {msg}{extra}".Trim();
+
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
             if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
-            throw new InvalidOperationException(full);
+
+            throw new ModuleSigningException(full, summary);
         }
 
-        var signedCount = ParseSignedCount(result.StdOut);
-        if (signedCount > 0)
-            _logger.Success($"Signed {signedCount} file(s) for '{moduleName}'.");
+        summary ??= new ModuleSigningResult
+        {
+            Attempted = ParseSignedCount(result.StdOut),
+            SignedNew = ParseSignedCount(result.StdOut)
+        };
+
+        if (summary.SignedTotal > 0)
+        {
+            _logger.Success(
+                $"Signed {summary.SignedNew} new file(s), re-signed {summary.Resigned} file(s) for '{moduleName}'. " +
+                $"(Already signed: {summary.AlreadySignedOther} third-party, {summary.AlreadySignedByThisCert} by this cert)");
+        }
         else
-            _logger.Info($"No files required signing for '{moduleName}'.");
+        {
+            _logger.Info(
+                $"No files required signing for '{moduleName}'. " +
+                $"(Already signed: {summary.AlreadySignedOther} third-party, {summary.AlreadySignedByThisCert} by this cert)");
+        }
+
+        return summary;
     }
 
     private static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)
@@ -1636,6 +1659,32 @@ exit 0
         }
         return null;
     }
+
+    private static ModuleSigningResult? TryExtractSigningSummary(string stdout)
+    {
+        foreach (var line in SplitLines(stdout))
+        {
+            if (!line.StartsWith("PFSIGN::SUMMARY::", StringComparison.Ordinal)) continue;
+            var b64 = line.Substring("PFSIGN::SUMMARY::".Length);
+            var decoded = Decode(b64);
+            if (string.IsNullOrWhiteSpace(decoded)) return null;
+
+            try
+            {
+                return JsonSerializer.Deserialize<ModuleSigningResult>(decoded,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static string FormatSigningSummary(ModuleSigningResult s)
+        => $"matched {s.TotalAfterExclude}, signed {s.SignedNew} new, re-signed {s.Resigned}, " +
+           $"already signed {s.AlreadySignedOther} third-party/{s.AlreadySignedByThisCert} by this cert, failed {s.Failed}.";
 
     private static string BuildSignModuleScript()
         => EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");

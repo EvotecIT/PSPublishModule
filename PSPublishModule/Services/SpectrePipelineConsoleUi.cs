@@ -117,6 +117,8 @@ internal static class SpectrePipelineConsoleUi
                 CheckStatus.Warning => "[yellow]Warning[/]",
                 _ => "[red]Fail[/]"
             };
+
+        static string SigningStatusMarkup(bool ok) => ok ? "[green]Pass[/]" : "[red]Fail[/]";
         static int CountIssues(ProjectConsistencyReport report, FileConsistencySettings? settings)
         {
             if (report is null) return 0;
@@ -230,6 +232,34 @@ internal static class SpectrePipelineConsoleUi
             table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", "[grey]Disabled[/]");
         }
 
+        if (res.Plan.SignModule)
+        {
+            if (res.SigningResult is null)
+            {
+                table.AddRow($"{(unicode ? "🔏" : "*")} Signing", "[yellow]Enabled[/]");
+            }
+            else
+            {
+                var s = res.SigningResult;
+                var bits = new List<string>(6)
+                {
+                    $"signed [green]{s.SignedTotal}[/]",
+                    $"new [green]{s.SignedNew}[/]",
+                    $"re-signed [green]{s.Resigned}[/]",
+                    $"already [grey]{s.AlreadySignedOther}[/] 3p",
+                    $"already [grey]{s.AlreadySignedByThisCert}[/] ours"
+                };
+
+                if (s.Failed > 0) bits.Add($"failed [red]{s.Failed}[/]");
+
+                table.AddRow($"{(unicode ? "🔏" : "*")} Signing", $"{SigningStatusMarkup(s.Success)} [grey]{string.Join(", ", bits)}[/]");
+            }
+        }
+        else
+        {
+            table.AddRow($"{(unicode ? "🔏" : "*")} Signing", "[grey]Disabled[/]");
+        }
+
         if (res.ArtefactResults is { Length: > 0 })
             table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
         else
@@ -286,6 +316,14 @@ internal static class SpectrePipelineConsoleUi
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
         table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(stagingText));
+
+        if (error is ModuleSigningException signingEx && signingEx.Result is not null)
+        {
+            var s = signingEx.Result;
+            table.AddRow(
+                $"{(unicode ? "🔏" : "*")} Signing",
+                $"[red]Fail[/] [grey]signed {s.SignedTotal}, already {s.AlreadySignedOther} 3p/{s.AlreadySignedByThisCert} ours, failed {s.Failed}[/]");
+        }
 
         var message = NormalizeFailureMessage(error, maxLength: 220);
         if (!string.IsNullOrWhiteSpace(message))

@@ -86,6 +86,11 @@ public sealed class ModulePipelineResult
     public ModulePublishResult[] PublishResults { get; }
 
     /// <summary>
+    /// Signing result when signing was enabled; otherwise null.
+    /// </summary>
+    public ModuleSigningResult? SigningResult { get; }
+
+    /// <summary>
     /// Artefact results produced during the run.
     /// </summary>
     public ArtefactBuildResult[] ArtefactResults { get; }
@@ -107,10 +112,11 @@ public sealed class ModulePipelineResult
         ArtefactBuildResult[] artefactResults,
         FormatterResult[]? formattingStagingResults = null,
         FormatterResult[]? formattingProjectResults = null,
-        ProjectConsistencyReport? projectRootFileConsistencyReport = null,
+        ProjectConsistencyReport? projectRootFileConsistencyReport = null,      
         CheckStatus? projectRootFileConsistencyStatus = null,
-        ProjectConversionResult? projectRootFileConsistencyEncodingFix = null,
-        ProjectConversionResult? projectRootFileConsistencyLineEndingFix = null)
+        ProjectConversionResult? projectRootFileConsistencyEncodingFix = null,  
+        ProjectConversionResult? projectRootFileConsistencyLineEndingFix = null,
+        ModuleSigningResult? signingResult = null)
     {
         Plan = plan;
         BuildResult = buildResult;
@@ -127,7 +133,8 @@ public sealed class ModulePipelineResult
         CompatibilityReport = compatibilityReport;
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
-        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();
+        PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  
         ArtefactResults = artefactResults ?? Array.Empty<ArtefactBuildResult>();
+        SigningResult = signingResult;
     }
 }

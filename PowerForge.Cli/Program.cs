@@ -1638,6 +1638,23 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         else
             logger.Info("Compatibility: disabled");
 
+        if (res.Plan.SignModule)
+        {
+            if (res.SigningResult is null)
+            {
+                logger.Info("Signing: enabled");
+            }
+            else
+            {
+                var s = res.SigningResult;
+                logger.Info($"Signing: {(s.Success ? "Pass" : "Fail")} (signed {s.SignedTotal} [new {s.SignedNew}, re {s.Resigned}], already {s.AlreadySignedOther} 3p/{s.AlreadySignedByThisCert} ours, failed {s.Failed})");
+            }
+        }
+        else
+        {
+            logger.Info("Signing: disabled");
+        }
+
         if (res.ArtefactResults is { Length: > 0 })
         {
             logger.Info($"Artefacts: {res.ArtefactResults.Length}");
@@ -1662,6 +1679,8 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
             CheckStatus.Warning => "[yellow]Warning[/]",
             _ => "[red]Fail[/]"
         };
+
+    static string SigningStatusMarkup(bool ok) => ok ? "[green]Pass[/]" : "[red]Fail[/]";
 
     var unicode = AnsiConsole.Profile.Capabilities.Unicode;
     var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
@@ -1701,6 +1720,25 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
     else
     {
         table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+    }
+
+    if (res.Plan.SignModule)
+    {
+        if (res.SigningResult is null)
+        {
+            table.AddRow($"{(unicode ? "🔏" : "*")} Signing", "[yellow]Enabled[/]");
+        }
+        else
+        {
+            var s = res.SigningResult;
+            var value =
+                $"{SigningStatusMarkup(s.Success)} [grey]signed [green]{s.SignedTotal}[/] (new [green]{s.SignedNew}[/], re [green]{s.Resigned}[/]), already [grey]{s.AlreadySignedOther}[/] 3p/[grey]{s.AlreadySignedByThisCert}[/] ours, failed [red]{s.Failed}[/][/]";
+            table.AddRow($"{(unicode ? "🔏" : "*")} Signing", value);
+        }
+    }
+    else
+    {
+        table.AddRow($"{(unicode ? "🔏" : "*")} Signing", "[grey]Disabled[/]");
     }
 
     if (res.ArtefactResults is { Length: > 0 })

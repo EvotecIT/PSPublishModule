@@ -5,7 +5,10 @@ param(
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
     [switch] $NoBuild,
-    [switch] $Json
+    [switch] $Json,
+    [switch] $NoSign,
+    [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
+    [switch] $SignIncludeBinaries
 )
 
 $repoRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..', '..')))).Path
@@ -38,14 +41,40 @@ $cliDir = Join-Path -Path $repoRoot -ChildPath ("PowerForge.Cli\\bin\\{0}\\{1}" 
 $cliExe = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.exe'
 $cliDll = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.dll'
 
-$cmd = @('pipeline', '--project-root', $repoRoot)
-if ($Json) { $cmd += @('--output', 'json') }
+$configPath = $null
+try {
+    $pipelineConfig = Join-Path -Path $repoRoot -ChildPath 'powerforge.json'
+    if (-not $NoSign -and $Env:COMPUTERNAME -eq 'EVOMONSTER' -and (Test-Path -LiteralPath $pipelineConfig)) {
+        $spec = Get-Content -LiteralPath $pipelineConfig -Raw | ConvertFrom-Json -Depth 50
+        if (-not $spec.Segments) { $spec | Add-Member -MemberType NoteProperty -Name Segments -Value @() }
 
-if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {
-    & $cliExe @cmd
+        $signing = [ordered]@{ CertificateThumbprint = $CertificateThumbprint }
+        if ($SignIncludeBinaries.IsPresent) { $signing.IncludeBinaries = $true }
+
+        $spec.Segments += @(
+            [ordered]@{ Type = 'Build'; BuildModule = [ordered]@{ SignMerged = $true } },
+            [ordered]@{ Type = 'Options'; Options = [ordered]@{ Signing = $signing } }
+        )
+
+        # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
+        $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
+        $spec | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $configPath -Encoding UTF8
+    }
+
+    $cmd = @('pipeline', '--project-root', $repoRoot)
+    if ($configPath) { $cmd += @('--config', $configPath) }
+    if ($Json) { $cmd += @('--output', 'json') }
+
+    if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {
+        & $cliExe @cmd
+        exit $LASTEXITCODE
+    }
+
+    if (-not (Test-Path -LiteralPath $cliDll)) { throw "CLI build output not found: $cliDll" }
+    dotnet $cliDll @cmd
     exit $LASTEXITCODE
+} finally {
+    if ($configPath -and (Test-Path -LiteralPath $configPath)) {
+        try { Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue } catch { }
+    }
 }
-
-if (-not (Test-Path -LiteralPath $cliDll)) { throw "CLI build output not found: $cliDll" }
-dotnet $cliDll @cmd
-exit $LASTEXITCODE
