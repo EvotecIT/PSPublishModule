@@ -205,32 +205,15 @@ internal static class SpectrePipelineConsoleUi
 
         if (res.Plan.Formatting is not null)
         {
-            static CheckStatus Worst(CheckStatus a, CheckStatus b)
-                => (a == CheckStatus.Fail || b == CheckStatus.Fail) ? CheckStatus.Fail
-                    : (a == CheckStatus.Warning || b == CheckStatus.Warning) ? CheckStatus.Warning
-                    : CheckStatus.Pass;
-
-            static string FormatPart(string label, FormattingSummary s)
-            {
-                var c = s.Changed > 0 ? $"[green]{s.Changed}[/]" : "[grey]0[/]";
-                var baseText = $"{label} {c}[grey]/{s.Total}[/]";
-
-                var extras = new List<string>(2);
-                if (s.Skipped > 0) extras.Add($"skipped [yellow]{s.Skipped}[/]");
-                if (s.Errors > 0) extras.Add($"errors [red]{s.Errors}[/]");
-                if (extras.Count > 0) baseText += $" [grey]({string.Join(", ", extras)})[/]";
-                return baseText;
-            }
-
             var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
             var status = staging.Status;
-            var parts = new List<string>(2) { FormatPart("staging", staging) };
+            var parts = new List<string>(2) { FormattingSummary.FormatPartMarkup("staging", staging) };
 
             if (res.Plan.Formatting.Options.UpdateProjectRoot)
             {
                 var project = FormattingSummary.FromResults(res.FormattingProjectResults);
-                status = Worst(status, project.Status);
-                parts.Add(FormatPart("project", project));
+                status = FormattingSummary.Worst(status, project.Status);
+                parts.Add(FormattingSummary.FormatPartMarkup("project", project));
             }
 
             table.AddRow(
