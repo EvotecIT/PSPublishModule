@@ -107,11 +107,11 @@ New-PrepareModule -ModuleName "YourModule" -Path "C:\DirectoryWhereTheModuleWill
 
 Once run the script will precrate the module folder with nessecary fies
 
-![NewPrepareModule](https://raw.githubusercontent.com/EvotecIT/PSPublishModule/refs/heads/master/Assets/Images/NewPrepareModule.png)
+![NewPrepareModule](Assets/Images/NewPrepareModule.png)
 
 The structure of the module has all the basics that are required to start building the module. The module is ready to be built and published.
 
-![NewPrepareModuleStructure](https://raw.githubusercontent.com/EvotecIT/PSPublishModule/refs/heads/master/Assets/Images/NewPrepareModule1.png)
+![NewPrepareModuleStructure](Assets/Images/NewPrepareModule1.png)
 
 The configuration example below shows how PSPublishModule is built internally. It's a good starting point for building your own module.
 You can also look at the `Examples` and `Build` folders in this repository to see how it's used in real life.
