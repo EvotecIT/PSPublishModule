@@ -77,6 +77,7 @@ public sealed class ConfigurationSegmentJsonConverter : JsonConverter<IConfigura
         if (discriminator.Equals("PlaceHolderOption", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationPlaceHolderOptionSegment);
         if (discriminator.Equals("Compatibility", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationCompatibilitySegment);
         if (discriminator.Equals("FileConsistency", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationFileConsistencySegment);
+        if (discriminator.Equals("Validation", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationValidationSegment);
         if (discriminator.Equals("TestsAfterMerge", StringComparison.OrdinalIgnoreCase)) return typeof(ConfigurationTestSegment);
 
         // Dynamic discriminator types (maps to a single concrete segment type)
