@@ -103,7 +103,7 @@ public sealed class PssaFormatter : IFormatter
                 if (result.ExitCode != 0)
                     outputs.Add(new FormatterResult(p, false, $"Skipped: PSSA failed (exit {result.ExitCode})"));
                 else
-                    outputs.Add(new FormatterResult(p, false, "No result returned"));
+                    outputs.Add(new FormatterResult(p, false, "Error: PSSA returned no result"));
             }
         }
 

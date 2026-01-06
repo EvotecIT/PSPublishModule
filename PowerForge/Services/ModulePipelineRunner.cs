@@ -746,6 +746,7 @@ public sealed class ModulePipelineRunner
 
                 var finalReport = fileConsistencyReport ?? throw new InvalidOperationException("File consistency analysis produced no report.");
                 fileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
+                LogFileConsistencyIssues(finalReport, s, "staging", fileConsistencyStatus ?? CheckStatus.Warning);
                 if (s.FailOnInconsistency && fileConsistencyStatus == CheckStatus.Fail)
                     throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
@@ -823,6 +824,7 @@ public sealed class ModulePipelineRunner
 
                     var finalReport = projectFileConsistencyReport ?? throw new InvalidOperationException("Project-root file consistency analysis produced no report.");
                     projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
+                    LogFileConsistencyIssues(finalReport, s, "project", projectFileConsistencyStatus ?? CheckStatus.Warning);
                     if (s.FailOnInconsistency && projectFileConsistencyStatus == CheckStatus.Fail)
                         throw new InvalidOperationException($"File consistency (project) check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
@@ -1618,6 +1620,67 @@ exit 0
             Message = message ?? string.Empty;
             IsError = isError;
         }
+    }
+
+    private void LogFileConsistencyIssues(
+        ProjectConsistencyReport report,
+        FileConsistencySettings settings,
+        string label,
+        CheckStatus status)
+    {
+        if (report is null) return;
+        var problematic = report.ProblematicFiles ?? Array.Empty<ProjectConsistencyFileDetail>();
+        if (problematic.Length == 0) return;
+
+        var log = status == CheckStatus.Fail ? (Action<string>)_logger.Error : _logger.Warn;
+        log($"File consistency issues for {label}: {problematic.Length} file(s).");
+
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+            log($"File consistency report ({label}): {report.ExportPath}");
+
+        const int maxItems = 20;
+        var shown = 0;
+        foreach (var item in problematic)
+        {
+            var reasons = BuildFileConsistencyReasons(item, settings);
+            if (reasons.Count == 0) continue;
+            log($"{item.RelativePath} - {string.Join(", ", reasons)}");
+            if (++shown >= maxItems) break;
+        }
+
+        if (problematic.Length > maxItems)
+            _logger.Warn($"File consistency issues: {problematic.Length - maxItems} more not shown.");
+    }
+
+    private static List<string> BuildFileConsistencyReasons(
+        ProjectConsistencyFileDetail file,
+        FileConsistencySettings settings)
+    {
+        var reasons = new List<string>(4);
+
+        if (file.NeedsEncodingConversion)
+        {
+            var current = file.CurrentEncoding?.ToString() ?? "Unknown";
+            reasons.Add($"encoding {current} (expected {file.RecommendedEncoding})");
+        }
+
+        if (file.NeedsLineEndingConversion)
+        {
+            var current = file.CurrentLineEnding.ToString();
+            reasons.Add($"line endings {current} (expected {file.RecommendedLineEnding})");
+        }
+
+        if (settings.CheckMixedLineEndings && file.HasMixedLineEndings)
+            reasons.Add("mixed line endings");
+
+        if (settings.CheckMissingFinalNewline && file.MissingFinalNewline)
+            reasons.Add("missing final newline");
+
+        var error = file.Error;
+        if (!string.IsNullOrWhiteSpace(error))
+            reasons.Add($"error: {error!.Trim()}");
+
+        return reasons;
     }
 
     private static FormatterResult[] FormatPowerShellTree(
