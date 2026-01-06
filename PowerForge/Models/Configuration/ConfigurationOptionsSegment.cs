@@ -32,7 +32,10 @@ public sealed class SigningOptionsConfiguration
     /// <summary>When true, include Internals folder scripts in signing.</summary>
     public bool? IncludeInternals { get; set; }
 
-    /// <summary>When true, include binary files in signing.</summary>
+    /// <summary>
+    /// When false, exclude binary files from signing.
+    /// Default behavior includes <c>*.dll</c> and <c>*.cat</c>.
+    /// </summary>
     public bool? IncludeBinaries { get; set; }
 
     /// <summary>When true, include .exe files in signing.</summary>

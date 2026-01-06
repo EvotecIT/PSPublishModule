@@ -1638,6 +1638,26 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         else
             logger.Info("Compatibility: disabled");
 
+        if (res.Plan.Formatting is not null)
+        {
+            var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
+            var status = staging.Status;
+            var parts = new List<string>(2) { FormattingSummary.FormatPartPlain("staging", staging) };
+
+            if (res.Plan.Formatting.Options.UpdateProjectRoot)
+            {
+                var project = FormattingSummary.FromResults(res.FormattingProjectResults);
+                status = FormattingSummary.Worst(status, project.Status);
+                parts.Add(FormattingSummary.FormatPartPlain("project", project));
+            }
+
+            logger.Info($"Formatting: {status} ({string.Join(", ", parts)})");
+        }
+        else
+        {
+            logger.Info("Formatting: disabled");
+        }
+
         if (res.Plan.SignModule)
         {
             if (res.SigningResult is null)
@@ -1720,6 +1740,28 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
     else
     {
         table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+    }
+
+    if (res.Plan.Formatting is not null)
+    {
+        var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
+        var status = staging.Status;
+        var parts = new List<string>(2) { FormattingSummary.FormatPartMarkup("staging", staging) };
+
+        if (res.Plan.Formatting.Options.UpdateProjectRoot)
+        {
+            var project = FormattingSummary.FromResults(res.FormattingProjectResults);
+            status = FormattingSummary.Worst(status, project.Status);
+            parts.Add(FormattingSummary.FormatPartMarkup("project", project));
+        }
+
+        table.AddRow(
+            $"{(unicode ? "🎨" : "*")} Formatting",
+            $"{StatusMarkup(status)} [grey]{string.Join(", ", parts)}[/]");
+    }
+    else
+    {
+        table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", "[grey]Disabled[/]");
     }
 
     if (res.Plan.SignModule)

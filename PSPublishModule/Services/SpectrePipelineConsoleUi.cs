@@ -205,27 +205,20 @@ internal static class SpectrePipelineConsoleUi
 
         if (res.Plan.Formatting is not null)
         {
-            static string FormatCount(int changed, int total, string label)
-            {
-                var c = changed > 0 ? $"[green]{changed}[/]" : "[grey]0[/]";
-                return $"{label} {c}[grey]/{total}[/]";
-            }
-
-            var parts = new List<string>(2);
-            {
-                var total = res.FormattingStagingResults.Length;
-                var changed = res.FormattingStagingResults.Count(r => r.Changed);
-                parts.Add(FormatCount(changed, total, "staging"));
-            }
+            var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
+            var status = staging.Status;
+            var parts = new List<string>(2) { FormattingSummary.FormatPartMarkup("staging", staging) };
 
             if (res.Plan.Formatting.Options.UpdateProjectRoot)
             {
-                var total = res.FormattingProjectResults.Length;
-                var changed = res.FormattingProjectResults.Count(r => r.Changed);
-                parts.Add(FormatCount(changed, total, "project"));
+                var project = FormattingSummary.FromResults(res.FormattingProjectResults);
+                status = FormattingSummary.Worst(status, project.Status);
+                parts.Add(FormattingSummary.FormatPartMarkup("project", project));
             }
 
-            table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", string.Join(", ", parts));
+            table.AddRow(
+                $"{(unicode ? "🎨" : "*")} Formatting",
+                $"{StatusMarkup(status)} [grey]{string.Join(", ", parts)}[/]");
         }
         else
         {
