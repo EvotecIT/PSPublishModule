@@ -108,6 +108,7 @@ public sealed class ModulePipelineRunner
         BuildDocumentationConfiguration? documentationBuild = null;
         CompatibilitySettings? compatibilitySettings = null;
         FileConsistencySettings? fileConsistencySettings = null;
+        ModuleValidationSettings? validationSettings = null;
         ConfigurationFormattingSegment? formatting = null;
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
@@ -229,6 +230,11 @@ public sealed class ModulePipelineRunner
                 case ConfigurationFormattingSegment formattingSegment:
                 {
                     formatting = MergeFormattingSegments(formatting, formattingSegment);
+                    break;
+                }
+                case ConfigurationValidationSegment validationSegment:
+                {
+                    validationSettings = validationSegment.Settings;
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -368,6 +374,7 @@ public sealed class ModulePipelineRunner
             documentationBuild: documentationBuild,
             compatibilitySettings: compatibilitySettings,
             fileConsistencySettings: fileConsistencySettings,
+            validationSettings: validationSettings,
             formatting: formatting,
             signModule: signModule,
             signing: signing,
@@ -420,9 +427,10 @@ public sealed class ModulePipelineRunner
         var formatStagingStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:staging", StringComparison.OrdinalIgnoreCase));
         var formatProjectStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:project", StringComparison.OrdinalIgnoreCase));
         var signStep = steps.FirstOrDefault(s => string.Equals(s.Key, "sign", StringComparison.OrdinalIgnoreCase));
-        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));        
+        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
+        var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -579,6 +587,7 @@ public sealed class ModulePipelineRunner
             FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
             FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
             ModuleSigningResult? signingResult = null;
+            ModuleValidationReport? validationReport = null;
 
             if (plan.Formatting is not null)
             {
@@ -853,6 +862,34 @@ public sealed class ModulePipelineRunner
             }
         }
 
+        if (plan.ValidationSettings?.Enable == true)
+        {
+            SafeStart(moduleValidationStep);
+            try
+            {
+                var validator = new ModuleValidationService(_logger);
+                validationReport = validator.Run(new ModuleValidationSpec
+                {
+                    ProjectRoot = plan.ProjectRoot,
+                    StagingPath = buildResult.StagingPath,
+                    ModuleName = plan.ModuleName,
+                    ManifestPath = buildResult.ManifestPath,
+                    BuildSpec = plan.BuildSpec,
+                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings()
+                });
+
+                if (validationReport.Status == CheckStatus.Fail)
+                    throw new InvalidOperationException($"Module validation failed ({validationReport.Summary}).");
+
+                SafeDone(moduleValidationStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(moduleValidationStep, ex);
+                throw;
+            }
+        }
+
         var artefactResults = new List<ArtefactBuildResult>();
         if (plan.Artefacts is { Length: > 0 })
         {
@@ -953,6 +990,7 @@ public sealed class ModulePipelineRunner
                 fileConsistencyEncodingFix,
                 fileConsistencyLineEndingFix,
                 compatibilityReport,
+                validationReport,
                 publishResults.ToArray(),
                 artefactResults.ToArray(),
                 formattingStagingResults,
