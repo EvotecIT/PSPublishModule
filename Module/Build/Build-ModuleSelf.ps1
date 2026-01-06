@@ -1,5 +1,5 @@
 # Self-build script for PSPublishModule.
-# Builds PowerForge.Cli and runs `powerforge pipeline` using repo config discovery (`powerforge.json`).
+# Builds PowerForge.Cli and runs `powerforge pipeline` using the same configuration as Build-Module.ps1.
 [CmdletBinding()]
 param(
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
@@ -42,10 +42,18 @@ $cliExe = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.exe'
 $cliDll = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.dll'
 
 $configPath = $null
+$buildScript = Join-Path -Path $repoRoot -ChildPath 'Module\Build\Build-Module.ps1'
+if (-not (Test-Path -LiteralPath $buildScript)) { throw "Build-Module.ps1 not found: $buildScript" }
 try {
-    $pipelineConfig = Join-Path -Path $repoRoot -ChildPath 'powerforge.json'
-    if (-not $NoSign -and $Env:COMPUTERNAME -eq 'EVOMONSTER' -and (Test-Path -LiteralPath $pipelineConfig)) {
-        $spec = Get-Content -LiteralPath $pipelineConfig -Raw | ConvertFrom-Json -Depth 50
+    # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
+    $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
+    & $buildScript -JsonOnly -JsonPath $configPath -Configuration $Configuration -NoDotnetBuild
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        throw "Build configuration was not generated: $configPath"
+    }
+
+    if (-not $NoSign -and $Env:COMPUTERNAME -eq 'EVOMONSTER') {
+        $spec = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -Depth 50
         if (-not $spec.Segments) { $spec | Add-Member -MemberType NoteProperty -Name Segments -Value @() }
 
         $signing = [ordered]@{ CertificateThumbprint = $CertificateThumbprint }
@@ -56,13 +64,11 @@ try {
             [ordered]@{ Type = 'Options'; Options = [ordered]@{ Signing = $signing } }
         )
 
-        # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
-        $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
         $spec | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $configPath -Encoding UTF8
     }
 
     $cmd = @('pipeline', '--project-root', $repoRoot)
-    if ($configPath) { $cmd += @('--config', $configPath) }
+    $cmd += @('--config', $configPath)
     if ($Json) { $cmd += @('--output', 'json') }
 
     if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {
