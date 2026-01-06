@@ -181,6 +181,7 @@ internal static class PipelineConsoleUi
         var validations = new List<string>();
         if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
         if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
+        if (plan.ValidationSettings?.Enable == true) validations.Add("Module validation");
         AddInfoRow(
             unicode ? "🔎" : "VAL",
             "Validation",

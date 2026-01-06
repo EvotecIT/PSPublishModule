@@ -1638,6 +1638,11 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         else
             logger.Info("Compatibility: disabled");
 
+        if (res.ValidationReport is not null)
+            logger.Info($"Module validation: {res.ValidationReport.Status} ({res.ValidationReport.Summary})");
+        else
+            logger.Info("Module validation: disabled");
+
         if (res.Plan.Formatting is not null)
         {
             var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
@@ -1742,6 +1747,17 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
     }
 
+    if (res.ValidationReport is not null)
+    {
+        table.AddRow(
+            $"{(unicode ? "🔎" : "*")} Module validation",
+            $"{StatusMarkup(res.ValidationReport.Status)} [grey]{Esc(res.ValidationReport.Summary)}[/]");
+    }
+    else
+    {
+        table.AddRow($"{(unicode ? "🔎" : "*")} Module validation", "[grey]Disabled[/]");
+    }
+
     if (res.Plan.Formatting is not null)
     {
         var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
@@ -1794,6 +1810,27 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         table.AddRow($"{(unicode ? "📥" : "*")} Install", "[grey]Disabled[/]");
 
     AnsiConsole.Write(table);
+
+    if (res.ValidationReport is not null && res.ValidationReport.Checks.Length > 0)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Validation details[/]").LeftJustified());
+
+        var details = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Check").NoWrap())
+            .AddColumn(new TableColumn("Result"));
+
+        foreach (var check in res.ValidationReport.Checks)
+        {
+            if (check is null) continue;
+            details.AddRow(
+                Esc(check.Name),
+                $"{StatusMarkup(check.Status)} [grey]{Esc(check.Summary)}[/]");
+        }
+
+        AnsiConsole.Write(details);
+    }
 
     if (res.ArtefactResults is { Length: > 0 })
     {
