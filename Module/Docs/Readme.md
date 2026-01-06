@@ -82,10 +82,7 @@ Reserved placeholder for future execution-time configuration.
 Creates configuration for file consistency checking (encoding and line endings) during module build.
 
 ### [New-ConfigurationFormat](New-ConfigurationFormat.md)
-Builds formatting options for code and manifest generation during the build.    
-
-### [New-ConfigurationValidation](New-ConfigurationValidation.md)
-Configures module validation checks (structure, docs, tests, binaries, csproj).
+Builds formatting options for code and manifest generation during the build.
 
 ### [New-ConfigurationImportModule](New-ConfigurationImportModule.md)
 Creates a configuration for importing PowerShell modules.
@@ -110,6 +107,9 @@ Provides a way to configure publishing to PowerShell Gallery or GitHub.
 
 ### [New-ConfigurationTest](New-ConfigurationTest.md)
 Configures running Pester tests as part of the build.
+
+### [New-ConfigurationValidation](New-ConfigurationValidation.md)
+Creates configuration for module validation checks during build.
 
 ### [Publish-GitHubReleaseAsset](Publish-GitHubReleaseAsset.md)
 Publishes a release asset to GitHub (creates a release and uploads a zip).
