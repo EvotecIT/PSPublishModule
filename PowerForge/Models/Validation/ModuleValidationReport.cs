@@ -23,6 +23,8 @@ public sealed class ModuleValidationReport
     /// <summary>Short summary text.</summary>
     public string Summary { get; }
 
+    /// <summary>Creates a report from the provided check results.</summary>
+    /// <param name="checks">Check results to include in the report.</param>
     public ModuleValidationReport(ModuleValidationCheckResult[] checks)
     {
         Checks = checks ?? System.Array.Empty<ModuleValidationCheckResult>();
@@ -74,6 +76,12 @@ public sealed class ModuleValidationCheckResult
     /// <summary>Issues found by the check.</summary>
     public string[] Issues { get; }
 
+    /// <summary>Creates a single validation check result.</summary>
+    /// <param name="name">Check name.</param>
+    /// <param name="severity">Configured severity.</param>
+    /// <param name="status">Computed status.</param>
+    /// <param name="summary">Short summary.</param>
+    /// <param name="issues">Issues discovered by the check.</param>
     public ModuleValidationCheckResult(
         string name,
         ValidationSeverity severity,

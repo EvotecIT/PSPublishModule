@@ -18,12 +18,18 @@ public sealed class ModuleValidationService
     private readonly ILogger _logger;
     private readonly IPowerShellRunner _runner;
 
+    /// <summary>Creates a module validation service.</summary>
+    /// <param name="logger">Logger for status output.</param>
+    /// <param name="runner">Optional PowerShell runner override.</param>
     public ModuleValidationService(ILogger logger, IPowerShellRunner? runner = null)
     {
         _logger = logger ?? new NullLogger();
         _runner = runner ?? new PowerShellRunner();
     }
 
+    /// <summary>Runs configured validation checks for the module.</summary>
+    /// <param name="spec">Module validation inputs and settings.</param>
+    /// <returns>Validation report with per-check results.</returns>
     public ModuleValidationReport Run(ModuleValidationSpec spec)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
@@ -676,11 +682,15 @@ public sealed class ModuleValidationService
         if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, key, out var values) && values is { Length: > 0 })
             return (values, false);
 
-        if (ManifestEditor.TryGetTopLevelString(manifestPath, key, out var raw) && !string.IsNullOrWhiteSpace(raw))
+        if (ManifestEditor.TryGetTopLevelString(manifestPath, key, out var raw))
         {
-            if (raw.Trim().Equals("*", StringComparison.OrdinalIgnoreCase))
-                return (Array.Empty<string>(), true);
-            return (new[] { raw.Trim() }, false);
+            var trimmed = raw?.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                if (string.Equals(trimmed, "*", StringComparison.OrdinalIgnoreCase))
+                    return (Array.Empty<string>(), true);
+                return (new[] { trimmed! }, false);
+            }
         }
 
         return (null, false);
@@ -711,7 +721,7 @@ public sealed class ModuleValidationService
 
     private static IEnumerable<string> EnumerateFiles(string root, string pattern, string[]? excludeDirectories)
     {
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return Array.Empty<string>();
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) yield break;
         var exclude = excludeDirectories ?? Array.Empty<string>();
 
         foreach (var file in Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories))
