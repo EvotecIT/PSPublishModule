@@ -82,7 +82,10 @@ Reserved placeholder for future execution-time configuration.
 Creates configuration for file consistency checking (encoding and line endings) during module build.
 
 ### [New-ConfigurationFormat](New-ConfigurationFormat.md)
-Builds formatting options for code and manifest generation during the build.
+Builds formatting options for code and manifest generation during the build.    
+
+### [New-ConfigurationValidation](New-ConfigurationValidation.md)
+Configures module validation checks (structure, docs, tests, binaries, csproj).
 
 ### [New-ConfigurationImportModule](New-ConfigurationImportModule.md)
 Creates a configuration for importing PowerShell modules.
