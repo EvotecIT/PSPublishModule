@@ -203,6 +203,17 @@ internal static class SpectrePipelineConsoleUi
             table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
         }
 
+        if (res.ValidationReport is not null)
+        {
+            table.AddRow(
+                $"{(unicode ? "🔎" : "*")} Module validation",
+                $"{StatusMarkup(res.ValidationReport.Status)} [grey]{Esc(res.ValidationReport.Summary)}[/]");
+        }
+        else
+        {
+            table.AddRow($"{(unicode ? "🔎" : "*")} Module validation", "[grey]Disabled[/]");
+        }
+
         if (res.Plan.Formatting is not null)
         {
             var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
@@ -264,6 +275,27 @@ internal static class SpectrePipelineConsoleUi
             table.AddRow($"{(unicode ? "📥" : "*")} Install", "[grey]Disabled[/]");
 
         AnsiConsole.Write(table);
+
+        if (res.ValidationReport is not null && res.ValidationReport.Checks.Length > 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.Write(new Rule("[grey]Validation details[/]").LeftJustified());
+
+            var details = new Table()
+                .Border(border)
+                .AddColumn(new TableColumn("Check").NoWrap())
+                .AddColumn(new TableColumn("Result"));
+
+            foreach (var check in res.ValidationReport.Checks)
+            {
+                if (check is null) continue;
+                details.AddRow(
+                    Esc(check.Name),
+                    $"{StatusMarkup(check.Status)} [grey]{Esc(check.Summary)}[/]");
+            }
+
+            AnsiConsole.Write(details);
+        }
 
         if (res.ArtefactResults is { Length: > 0 })
         {
@@ -404,6 +436,7 @@ internal static class SpectrePipelineConsoleUi
         var validations = new List<string>();
         if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
         if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
+        if (plan.ValidationSettings?.Enable == true) validations.Add("Module validation");
         AddInfoRow(
             unicode ? "🔎" : "VAL",
             "Validation",
