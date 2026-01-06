@@ -598,7 +598,7 @@ public sealed class ModulePipelineRunner
                     var stagingFmt = FormattingSummary.FromResults(formattingStagingResults);
                     if (stagingFmt.Status == CheckStatus.Fail)
                         throw new InvalidOperationException(
-                            $"Formatting failed for staging (errors {stagingFmt.Errors}/{stagingFmt.Total}).");
+                            $"Formatting failed for staging root (errors {stagingFmt.Errors}/{stagingFmt.Total}).");
                     SafeDone(formatStagingStep);
                 }
                 catch (Exception ex)

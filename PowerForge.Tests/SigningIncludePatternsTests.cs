@@ -25,7 +25,27 @@ public sealed class SigningIncludePatternsTests
     }
 
     [Fact]
-    public void BuildSigningIncludePatterns_RespectsExplicitBinaryOptOut()
+    public void BuildSigningIncludePatterns_ExplicitlyIncludesBinaries()
+    {
+        var signing = new SigningOptionsConfiguration
+        {
+            Include = null,
+            IncludeBinaries = true,
+            IncludeExe = null
+        };
+
+        var patterns = ModulePipelineRunner.BuildSigningIncludePatterns(signing);
+
+        Assert.Contains("*.ps1", patterns);
+        Assert.Contains("*.psm1", patterns);
+        Assert.Contains("*.psd1", patterns);
+        Assert.Contains("*.dll", patterns);
+        Assert.Contains("*.cat", patterns);
+        Assert.DoesNotContain("*.exe", patterns);
+    }
+
+    [Fact]
+    public void BuildSigningIncludePatterns_RespectsExplicitBinaryOptOut()      
     {
         var signing = new SigningOptionsConfiguration
         {
@@ -57,4 +77,3 @@ public sealed class SigningIncludePatternsTests
         Assert.Equal(new[] { "*.ps1", "*.dll" }, patterns);
     }
 }
-
