@@ -59,6 +59,10 @@
     "TestExecutionWhen": {
       "type": "string",
       "enum": ["AfterMerge"]
+    },
+    "ValidationSeverity": {
+      "type": "string",
+      "enum": ["Off", "Warning", "Error"]
     }
   }
 }
