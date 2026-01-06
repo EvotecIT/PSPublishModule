@@ -13,7 +13,7 @@ public enum ModulePipelineStepKind
     Formatting = 7,
     /// <summary>Sign module output (Authenticode).</summary>
     Signing = 8,
-    /// <summary>Run validation checks (compatibility, consistency).</summary>
+    /// <summary>Run validation checks (compatibility, consistency, module validation).</summary>
     Validation = 6,
     /// <summary>Create an artefact output (packed/unpacked).</summary>
     Artefact = 2,
@@ -154,6 +154,14 @@ public sealed class ModulePipelineStep
                 kind: ModulePipelineStepKind.Validation,
                 key: "validate:compatibility",
                 title: "Check PowerShell compatibility"));
+        }
+
+        if (plan.ValidationSettings?.Enable == true)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Validation,
+                key: "validate:module",
+                title: "Validate module"));
         }
 
         // 6) Artefacts

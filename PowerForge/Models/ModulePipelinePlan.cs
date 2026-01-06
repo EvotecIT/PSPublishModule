@@ -81,6 +81,11 @@ public sealed class ModulePipelinePlan
     public FileConsistencySettings? FileConsistencySettings { get; }
 
     /// <summary>
+    /// Optional module validation settings.
+    /// </summary>
+    public ModuleValidationSettings? ValidationSettings { get; }
+
+    /// <summary>
     /// Optional formatting configuration.
     /// </summary>
     public ConfigurationFormattingSegment? Formatting { get; }
@@ -154,6 +159,7 @@ public sealed class ModulePipelinePlan
         BuildDocumentationConfiguration? documentationBuild,
         CompatibilitySettings? compatibilitySettings,
         FileConsistencySettings? fileConsistencySettings,
+        ModuleValidationSettings? validationSettings,
         ConfigurationFormattingSegment? formatting,
         bool signModule,
         SigningOptionsConfiguration? signing,
@@ -181,6 +187,7 @@ public sealed class ModulePipelinePlan
         DocumentationBuild = documentationBuild;
         CompatibilitySettings = compatibilitySettings;
         FileConsistencySettings = fileConsistencySettings;
+        ValidationSettings = validationSettings;
         Formatting = formatting;
         SignModule = signModule;
         Signing = signing;
