@@ -36,11 +36,20 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
     /// <summary>Fail the build if consistency issues are found.</summary>
     [Parameter] public SwitchParameter FailOnInconsistency { get; set; }
 
+    /// <summary>Severity for consistency issues (overrides FailOnInconsistency when specified).</summary>
+    [Parameter] public ValidationSeverity? Severity { get; set; }
+
     /// <summary>Required file encoding.</summary>
     [Parameter] public PowerForge.FileConsistencyEncoding RequiredEncoding { get; set; } = PowerForge.FileConsistencyEncoding.UTF8BOM;
 
     /// <summary>Required line ending style.</summary>
     [Parameter] public PowerForge.FileConsistencyLineEnding RequiredLineEnding { get; set; } = PowerForge.FileConsistencyLineEnding.CRLF;
+
+    /// <summary>Project kind used to derive default include patterns.</summary>
+    [Parameter] public ProjectKind? ProjectKind { get; set; }
+
+    /// <summary>Custom include patterns (override default project kind patterns).</summary>
+    [Parameter] public string[]? IncludePatterns { get; set; }
 
     /// <summary>Scope for file consistency checks (staging/project).</summary>
     [Parameter] public PowerForge.FileConsistencyScope Scope { get; set; } = PowerForge.FileConsistencyScope.StagingOnly;
@@ -57,8 +66,14 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
     /// <summary>Directory names to exclude from consistency analysis.</summary>
     [Parameter] public string[] ExcludeDirectories { get; set; } = new[] { "Artefacts", "Ignore", ".git", ".vs", "bin", "obj" };
 
+    /// <summary>File patterns to exclude from consistency analysis.</summary>
+    [Parameter] public string[]? ExcludeFiles { get; set; }
+
     /// <summary>Per-path encoding overrides (patterns mapped to encodings).</summary>
     [Parameter] public Hashtable? EncodingOverrides { get; set; }
+
+    /// <summary>Per-path line ending overrides (patterns mapped to line endings).</summary>
+    [Parameter] public Hashtable? LineEndingOverrides { get; set; }
 
     /// <summary>Export detailed consistency report to the artifacts directory.</summary>
     [Parameter] public SwitchParameter ExportReport { get; set; }
@@ -81,6 +96,10 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
         FileConsistencyScope? scope = null;
         if (MyInvocation.BoundParameters.ContainsKey(nameof(Scope)))
             scope = Scope;
+
+        ProjectKind? projectKind = null;
+        if (MyInvocation.BoundParameters.ContainsKey(nameof(ProjectKind)))
+            projectKind = ProjectKind;
 
         Dictionary<string, FileConsistencyEncoding>? overrides = null;
         if (EncodingOverrides is { Count: > 0 })
@@ -111,18 +130,52 @@ public sealed class NewConfigurationFileConsistencyCommand : PSCmdlet
             overrides = resolved;
         }
 
+        Dictionary<string, FileConsistencyLineEnding>? lineEndingOverrides = null;
+        if (LineEndingOverrides is { Count: > 0 })
+        {
+            var resolved = new Dictionary<string, FileConsistencyLineEnding>(StringComparer.OrdinalIgnoreCase);
+            foreach (DictionaryEntry entry in LineEndingOverrides)
+            {
+                var trimmedKey = entry.Key?.ToString()?.Trim();
+                if (string.IsNullOrWhiteSpace(trimmedKey)) continue;
+                var key = trimmedKey!;
+
+                if (entry.Value is FileConsistencyLineEnding ending)
+                {
+                    resolved[key] = ending;
+                    continue;
+                }
+
+                if (entry.Value is string text &&
+                    Enum.TryParse<FileConsistencyLineEnding>(text.Trim(), ignoreCase: true, out var parsed))
+                {
+                    resolved[key] = parsed;
+                    continue;
+                }
+
+                throw new PSArgumentException(
+                    $"LineEndingOverrides value for '{key}' must be a FileConsistencyLineEnding or string.");
+            }
+            lineEndingOverrides = resolved;
+        }
+
         var settings = new FileConsistencySettings
         {
             Enable = Enable.IsPresent,
             FailOnInconsistency = FailOnInconsistency.IsPresent,
+            Severity = Severity,
             RequiredEncoding = RequiredEncoding,
             RequiredLineEnding = RequiredLineEnding,
+            ProjectKind = projectKind,
+            IncludePatterns = IncludePatterns,
             Scope = scope,
             AutoFix = AutoFix.IsPresent,
             CreateBackups = CreateBackups.IsPresent,
             MaxInconsistencyPercentage = MaxInconsistencyPercentage,
             ExcludeDirectories = ExcludeDirectories ?? Array.Empty<string>(),
+            ExcludeFiles = ExcludeFiles ?? Array.Empty<string>(),
             EncodingOverrides = overrides,
+            LineEndingOverrides = lineEndingOverrides,
             UpdateProjectRoot = UpdateProjectRoot.IsPresent,
             ExportReport = ExportReport.IsPresent,
             ReportFileName = ReportFileName,

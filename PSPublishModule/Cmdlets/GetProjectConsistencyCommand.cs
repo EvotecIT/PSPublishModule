@@ -16,7 +16,7 @@ namespace PSPublishModule;
 /// It is intended to be run before bulk conversions (encoding/line endings) and before packaging a module for release.
 /// </para>
 /// <para>
-/// For fixing issues after analysis, use <c>Convert-ProjectEncoding</c> and <c>Convert-ProjectLineEnding</c>.
+/// For fixing issues during builds, use <c>New-ConfigurationFileConsistency</c> with <c>-AutoFix</c> enabled.
 /// </para>
 /// </remarks>
 /// <example>
@@ -106,7 +106,9 @@ public sealed class GetProjectConsistencyCommand : PSCmdlet
             recommendedEncoding: RecommendedEncoding,
             recommendedLineEnding: RecommendedLineEnding,
             includeDetails: ShowDetails.IsPresent,
-            exportPath: ExportPath);
+            exportPath: ExportPath,
+            encodingOverrides: null,
+            lineEndingOverrides: null);
 
         if (report.Summary.TotalFiles == 0)
         {
