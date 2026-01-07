@@ -117,6 +117,8 @@ public sealed class EncodingConversionOptions
     public TextEncodingKind SourceEncoding { get; }
     /// <summary>Explicit target encoding; when null, defaults are chosen based on file type.</summary>
     public TextEncodingKind? TargetEncoding { get; }
+    /// <summary>Optional per-file target encoding resolver.</summary>
+    public Func<string, TextEncodingKind?>? TargetEncodingResolver { get; set; }
     /// <summary>Whether to create backups prior to conversion.</summary>
     public bool CreateBackups { get; }
     /// <summary>Root folder for mirrored backups; when null, .bak is used next to files.</summary>
