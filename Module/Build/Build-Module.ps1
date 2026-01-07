@@ -6,7 +6,15 @@
     [switch] $JsonOnly,
     [string] $JsonPath = (Join-Path $PSScriptRoot '..\..\powerforge.json'),
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
-    [switch] $NoDotnetBuild
+    [switch] $NoDotnetBuild,
+    [string] $ModuleVersion = '3.0.X',
+    [string] $PreReleaseTag,
+    [switch] $SignModule,
+    [switch] $NoSign,
+    [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED99E7703',
+    [switch] $SignIncludeBinaries,
+    [switch] $SignIncludeInternals,
+    [switch] $SignIncludeExe
 )
 
 if (-not $JsonOnly) {
@@ -40,8 +48,7 @@ if ($JsonOnly) {
 Build-Module @buildParams -Settings {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '3.0.X'
-        #PreReleaseTag          = 'Preview5'
+        ModuleVersion          = $ModuleVersion
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -53,6 +60,9 @@ Build-Module @buildParams -Settings {
         IconUri                = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
         ProjectUri             = 'https://github.com/EvotecIT/PSPublishModule'
         DotNetFrameworkVersion = '4.5.2'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PreReleaseTag)) {
+        $Manifest.PreReleaseTag = $PreReleaseTag
     }
     New-ConfigurationManifest @Manifest
 
@@ -168,12 +178,13 @@ Build-Module @buildParams -Settings {
 
     New-ConfigurationImportModule -ImportSelf
 
+    $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMONSTER' }
     $newConfigurationBuildSplat = @{
         Enable                            = $true
-        SignModule                        = if ($Env:COMPUTERNAME -eq 'EVOMONSTER') { $true } else { $false }
+        SignModule                        = $signEnabled
         # DeleteTargetModuleBeforeBuild     = $true
         MergeModuleOnBuild                = $true
-        CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
+        CertificateThumbprint             = $CertificateThumbprint
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
         DoNotAttemptToFixRelativePaths    = $false
@@ -191,13 +202,20 @@ Build-Module @buildParams -Settings {
         DotSourceLibraries                = $true
         DotSourceClasses                  = $true
 
-        # This has to be disabled as it will not have DLLs required to do this
-        NETBinaryModuleCmdletScanDisabled = $true
-
-        VersionedInstallStrategy          = 'AutoRevision'   # or 'Exact'
+        VersionedInstallStrategy          = 'AutoRevision'   # or 'Exact'       
         VersionedInstallKeep              = 3                # how many versions to retain
         KillLockersBeforeInstall          = $true
         KillLockersForce                  = $true
+    }
+
+    if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) {
+        $newConfigurationBuildSplat.SignIncludeBinaries = $SignIncludeBinaries.IsPresent
+    }
+    if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) {
+        $newConfigurationBuildSplat.SignIncludeInternals = $SignIncludeInternals.IsPresent
+    }
+    if ($PSBoundParameters.ContainsKey('SignIncludeExe')) {
+        $newConfigurationBuildSplat.SignIncludeExe = $SignIncludeExe.IsPresent
     }
 
     New-ConfigurationBuild @newConfigurationBuildSplat
