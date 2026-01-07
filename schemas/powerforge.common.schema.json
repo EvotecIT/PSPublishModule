@@ -48,6 +48,10 @@
       "type": "string",
       "enum": ["CRLF", "LF"]
     },
+    "FileConsistencyScope": {
+      "type": "string",
+      "enum": ["StagingOnly", "ProjectOnly", "StagingAndProject"]
+    },
     "DeliveryBundleDestination": {
       "type": "string",
       "enum": ["Internals", "Root", "Both", "None"]

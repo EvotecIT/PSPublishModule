@@ -192,6 +192,7 @@
       "properties": {
         "ModuleName": { "type": "string" },
         "ModuleVersion": { "type": ["string", "null"] },
+        "MinimumVersion": { "type": ["string", "null"] },
         "RequiredVersion": { "type": ["string", "null"] },
         "Guid": { "type": ["string", "null"] }
       }
@@ -479,10 +480,15 @@
         "FailOnInconsistency": { "type": "boolean" },
         "RequiredEncoding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" },
         "RequiredLineEnding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyLineEnding" },
+        "Scope": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyScope" }, { "type": "null" }] },
         "AutoFix": { "type": "boolean" },
         "CreateBackups": { "type": "boolean" },
         "MaxInconsistencyPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
         "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "EncodingOverrides": {
+          "type": ["object", "null"],
+          "additionalProperties": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" }
+        },
         "UpdateProjectRoot": { "type": "boolean" },
         "ExportReport": { "type": "boolean" },
         "ReportFileName": { "type": "string" },
