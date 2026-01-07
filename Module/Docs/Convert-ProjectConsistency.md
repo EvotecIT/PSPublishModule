@@ -4,73 +4,54 @@ Module Name: PSPublishModule
 online version: https://github.com/EvotecIT/PSPublishModule
 schema: 2.0.0
 ---
-# New-ConfigurationFileConsistency
+# Convert-ProjectConsistency
 ## SYNOPSIS
-Creates configuration for file consistency checking (encoding and line endings) during module build.
+Converts a project to a consistent encoding/line ending policy and reports the results.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationFileConsistency [-Enable] [-FailOnInconsistency] [-Severity <ValidationSeverity>] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-ProjectKind <ProjectKind>] [-IncludePatterns <string[]>] [-Scope <FileConsistencyScope>] [-AutoFix] [-CreateBackups] [-MaxInconsistencyPercentage <int>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-EncodingOverrides <hashtable>] [-LineEndingOverrides <hashtable>] [-ExportReport] [-ReportFileName <string>] [-CheckMixedLineEndings] [-CheckMissingFinalNewline] [-UpdateProjectRoot] [<CommonParameters>]
+Convert-ProjectConsistency -Path <string> [-ProjectType <string>] [-CustomExtensions <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-SourceEncoding <TextEncodingKind>] [-FixEncoding] [-FixLineEndings] [-EncodingOverrides <IDictionary>] [-LineEndingOverrides <IDictionary>] [-CreateBackups] [-BackupDirectory <string>] [-Force] [-NoRollbackOnMismatch] [-OnlyMixedLineEndings] [-EnsureFinalNewline] [-OnlyMissingFinalNewline] [-ShowDetails] [-ExportPath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules
-and (optionally) auto-fix issues during a build.
+Convert-ProjectConsistency applies a consistency policy across a project tree by normalizing
+encoding and/or line endings to the specified targets. It reports a post-conversion summary
+and optionally exports a detailed CSV report for auditing.
+
+For build-time enforcement, use New-ConfigurationFileConsistency with -AutoFix so the pipeline
+applies the same rules automatically.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-PS>New-ConfigurationFileConsistency -Enable -FailOnInconsistency -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -AutoFix -CreateBackups -ExportReport
+PS>Convert-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell -CreateBackups
 ```
 
-Enforces consistency and exports a CSV report; backups are created before fixes are applied.
+Ensures PowerShell-friendly encoding (UTF-8 BOM) and CRLF line endings, creating backups before changes.
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject
+PS>Convert-ProjectConsistency -Path 'C:\MyProject' -FixLineEndings -RequiredLineEnding LF -ExcludeDirectories 'Build','Docs'
 ```
 
-Runs validation on staging and project root, exports a report, and does not apply automatic fixes.
+Normalizes line endings to LF only, skipping non-source folders.
+
+### EXAMPLE 3
+```powershell
+PS>Convert-ProjectConsistency -Path 'C:\MyProject' -FixEncoding -RequiredEncoding UTF8BOM -EncodingOverrides @{ '*.xml' = 'UTF8' } -ExportPath 'C:\Reports\consistency.csv'
+```
+
+Uses UTF-8 BOM by default but keeps XML files UTF-8 without BOM, and writes a report to disk.
 
 ## PARAMETERS
 
-### -AutoFix
-Automatically fix encoding and line ending issues during build.
+### -BackupDirectory
+Backup root folder (mirrors the project structure).
 
 ```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -CheckMissingFinalNewline
-Check for files missing final newlines.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -CheckMixedLineEndings
-Check for files with mixed line endings.
-
-```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -82,7 +63,7 @@ Accept wildcard characters: True
 ```
 
 ### -CreateBackups
-Create backup files before applying automatic fixes.
+Create backup files before modifying content.
 
 ```yaml
 Type: SwitchParameter
@@ -96,11 +77,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Enable
-Enable file consistency checking during build.
+### -CustomExtensions
+Custom file extensions to include when ProjectType is Custom (e.g., *.ps1, *.cs).
 
 ```yaml
-Type: SwitchParameter
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -112,10 +93,10 @@ Accept wildcard characters: True
 ```
 
 ### -EncodingOverrides
-Per-path encoding overrides (patterns mapped to encodings).
+Per-path encoding overrides (hashtable of pattern => encoding).
 
 ```yaml
-Type: Hashtable
+Type: IDictionary
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -126,11 +107,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ExcludeFiles
-File patterns to exclude from consistency analysis.
+### -EnsureFinalNewline
+Ensure a final newline exists after line ending conversion.
 
 ```yaml
-Type: String[]
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -142,7 +123,7 @@ Accept wildcard characters: True
 ```
 
 ### -ExcludeDirectories
-Directory names to exclude from consistency analysis.
+Directory names to exclude from conversion (e.g., .git, bin, obj).
 
 ```yaml
 Type: String[]
@@ -156,11 +137,71 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -IncludePatterns
-Custom include patterns (override default project kind patterns).
+### -ExcludeFiles
+File patterns to exclude from conversion.
 
 ```yaml
 Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExportPath
+Export the detailed report to a CSV file at the specified path.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FixEncoding
+Convert encoding inconsistencies.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -FixLineEndings
+Convert line ending inconsistencies.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Force
+Force conversion even when the file already matches the target.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -172,10 +213,10 @@ Accept wildcard characters: True
 ```
 
 ### -LineEndingOverrides
-Per-path line ending overrides (patterns mapped to line endings).
+Per-path line ending overrides (hashtable of pattern => line ending).
 
 ```yaml
-Type: Hashtable
+Type: IDictionary
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -186,23 +227,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ProjectKind
-Project kind used to derive default include patterns.
-
-```yaml
-Type: ProjectKind
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ExportReport
-Export detailed consistency report to the artifacts directory.
+### -NoRollbackOnMismatch
+Do not rollback from backup if verification mismatch occurs during encoding conversion.
 
 ```yaml
 Type: SwitchParameter
@@ -216,8 +242,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -FailOnInconsistency
-Fail the build if consistency issues are found.
+### -OnlyMissingFinalNewline
+Only fix files missing the final newline.
 
 ```yaml
 Type: SwitchParameter
@@ -231,11 +257,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Severity
-Severity for consistency issues (overrides FailOnInconsistency when specified).
+### -OnlyMixedLineEndings
+Only convert files that have mixed line endings.
 
 ```yaml
-Type: ValidationSeverity
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -246,23 +272,23 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -MaxInconsistencyPercentage
-Maximum percentage of files that can have consistency issues. Default is 5.
+### -Path
+Path to the project directory to convert.
 
 ```yaml
-Type: Int32
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 
-Required: False
+Required: True
 Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ReportFileName
-Custom filename for the consistency report.
+### -ProjectType
+Type of project to analyze. Determines which file extensions are included.
 
 ```yaml
 Type: String
@@ -277,7 +303,7 @@ Accept wildcard characters: True
 ```
 
 ### -RequiredEncoding
-Required file encoding.
+Target encoding to enforce when fixing encoding consistency.
 
 ```yaml
 Type: FileConsistencyEncoding
@@ -286,13 +312,13 @@ Aliases: None
 
 Required: False
 Position: named
-Default value: None
+Default value: UTF8BOM
 Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
 ### -RequiredLineEnding
-Required line ending style.
+Target line ending style to enforce when fixing line endings.
 
 ```yaml
 Type: FileConsistencyLineEnding
@@ -301,28 +327,13 @@ Aliases: None
 
 Required: False
 Position: named
-Default value: None
+Default value: CRLF
 Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Scope
-Scope for file consistency checks (staging/project).
-
-```yaml
-Type: FileConsistencyScope
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -UpdateProjectRoot
-Legacy switch. When set, applies encoding/line-ending consistency fixes to the project root as well as staging output.
+### -ShowDetails
+Include detailed file-by-file analysis in the output.
 
 ```yaml
 Type: SwitchParameter
@@ -336,18 +347,21 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
+### -SourceEncoding
+Source encoding filter. When Any, any non-target encoding may be converted.
 
-## INPUTS
+```yaml
+Type: TextEncodingKind
+Parameter Sets: __AllParameterSets
+Aliases: None
 
-- `None`
+Required: False
+Position: named
+Default value: Any
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
-## OUTPUTS
-
-- `System.Object`
+## NOTES
 
 ## RELATED LINKS
-
-- None
-

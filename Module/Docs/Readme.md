@@ -10,16 +10,11 @@ Locale: en-US
 Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
 
 ## PSPublishModule Cmdlets
-### [Convert-ProjectEncoding](Convert-ProjectEncoding.md)
-Converts file encodings across a project. Thin wrapper over PowerForge.EncodingConverter.
-Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibility.
-
-### [Convert-ProjectLineEnding](Convert-ProjectLineEnding.md)
-Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.
-Thin wrapper over PowerForge.LineEndingConverter.
-
 ### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
-Exports a code-signing certificate to DER format for NuGet.org registration.
+Exports a code-signing certificate to DER format for NuGet.org registration.    
+
+### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
+Converts a project to a consistent encoding/line ending policy and reports the results.
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.
@@ -38,12 +33,6 @@ Analyzes PowerShell files and folders to determine compatibility with Windows Po
 
 ### [Get-ProjectConsistency](Get-ProjectConsistency.md)
 Provides comprehensive analysis of encoding and line ending consistency across a project.
-
-### [Get-ProjectEncoding](Get-ProjectEncoding.md)
-Analyzes encoding consistency across all files in a project directory.
-
-### [Get-ProjectLineEnding](Get-ProjectLineEnding.md)
-Analyzes line ending consistency across all files in a project directory.
 
 ### [Get-ProjectVersion](Get-ProjectVersion.md)
 Retrieves project version information from .csproj, .psd1, and build scripts.

@@ -2,937 +2,6 @@
 <helpItems schema="maml" xmlns="http://msh">
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
-      <command:name>Convert-ProjectEncoding</command:name>
-      <command:verb>Convert</command:verb>
-      <command:noun>ProjectEncoding</command:noun>
-      <maml:description>
-        <maml:para>Converts file encodings across a project. Thin wrapper over PowerForge.EncodingConverter.&#xD;
-Defaults to UTF-8 with BOM for PowerShell file types to ensure PS 5.1 compatibility.</maml:para>
-      </maml:description>
-    </command:details>
-    <maml:description>
-      <maml:para>Use this cmdlet to standardize file encodings across a repository before packaging or publishing a module.&#xD;
-It supports -WhatIf/-Confirm and optional backups via -CreateBackups.</maml:para>
-      <maml:para>For PowerShell projects targeting Windows PowerShell 5.1, UTF-8 with BOM is commonly recommended to avoid&#xD;
-encoding-related parsing issues. For cross-platform projects that do not need PS 5.1, UTF-8 (no BOM) may be preferred.</maml:para>
-      <maml:para>For audit-only reporting, use Get-ProjectEncoding. For combined encoding + line-ending checks, use Get-ProjectConsistency.</maml:para>
-    </maml:description>
-    <command:syntax>
-      <command:syntaxItem>
-        <maml:name>Convert-ProjectEncoding</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>BackupDirectory</maml:name>
-          <maml:description>
-            <maml:para>Root folder for mirrored backups; when null, .bak is used next to files.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CreateBackups</maml:name>
-          <maml:description>
-            <maml:para>Create backups prior to conversion.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExcludeDirectories</maml:name>
-          <maml:description>
-            <maml:para>Directory names to exclude from traversal.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Force</maml:name>
-          <maml:description>
-            <maml:para>Force conversion even if detection does not match SourceEncoding.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NoRollbackOnMismatch</maml:name>
-          <maml:description>
-            <maml:para>Do not rollback from backup if verification mismatch occurs.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>PassThru</maml:name>
-          <maml:description>
-            <maml:para>Emit per-file results instead of a summary.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Path</maml:name>
-          <maml:description>
-            <maml:para>Path to the project directory to process.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ProjectType</maml:name>
-          <maml:description>
-            <maml:para>Project type used to derive default include patterns.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
-          <dev:type>
-            <maml:name>ProjectKind</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>SourceEncoding</maml:name>
-          <maml:description>
-            <maml:para>Expected source encoding; when Any, any non-target encoding may be converted.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
-          <dev:type>
-            <maml:name>TextEncodingKind</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>TargetEncoding</maml:name>
-          <maml:description>
-            <maml:para>Explicit target encoding; when null, defaults are chosen based on file type.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-          <dev:type>
-            <maml:name>Nullable`1</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem>
-        <maml:name>Convert-ProjectEncoding</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>BackupDirectory</maml:name>
-          <maml:description>
-            <maml:para>Root folder for mirrored backups; when null, .bak is used next to files.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CreateBackups</maml:name>
-          <maml:description>
-            <maml:para>Create backups prior to conversion.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CustomExtensions</maml:name>
-          <maml:description>
-            <maml:para>Custom extension patterns (e.g., *.ps1,*.psm1) when overriding defaults.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExcludeDirectories</maml:name>
-          <maml:description>
-            <maml:para>Directory names to exclude from traversal.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Force</maml:name>
-          <maml:description>
-            <maml:para>Force conversion even if detection does not match SourceEncoding.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>NoRollbackOnMismatch</maml:name>
-          <maml:description>
-            <maml:para>Do not rollback from backup if verification mismatch occurs.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>PassThru</maml:name>
-          <maml:description>
-            <maml:para>Emit per-file results instead of a summary.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Path</maml:name>
-          <maml:description>
-            <maml:para>Path to the project directory to process.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>SourceEncoding</maml:name>
-          <maml:description>
-            <maml:para>Expected source encoding; when Any, any non-target encoding may be converted.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
-          <dev:type>
-            <maml:name>TextEncodingKind</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>TargetEncoding</maml:name>
-          <maml:description>
-            <maml:para>Explicit target encoding; when null, defaults are chosen based on file type.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-          <dev:type>
-            <maml:name>Nullable`1</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-    </command:syntax>
-    <command:parameters>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>BackupDirectory</maml:name>
-        <maml:description>
-          <maml:para>Root folder for mirrored backups; when null, .bak is used next to files.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CreateBackups</maml:name>
-        <maml:description>
-          <maml:para>Create backups prior to conversion.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="true" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CustomExtensions</maml:name>
-        <maml:description>
-          <maml:para>Custom extension patterns (e.g., *.ps1,*.psm1) when overriding defaults.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ExcludeDirectories</maml:name>
-        <maml:description>
-          <maml:para>Directory names to exclude from traversal.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Force</maml:name>
-        <maml:description>
-          <maml:para>Force conversion even if detection does not match SourceEncoding.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>NoRollbackOnMismatch</maml:name>
-        <maml:description>
-          <maml:para>Do not rollback from backup if verification mismatch occurs.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>PassThru</maml:name>
-        <maml:description>
-          <maml:para>Emit per-file results instead of a summary.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Path</maml:name>
-        <maml:description>
-          <maml:para>Path to the project directory to process.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ProjectType</maml:name>
-        <maml:description>
-          <maml:para>Project type used to derive default include patterns.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
-        <dev:type>
-          <maml:name>ProjectKind</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>SourceEncoding</maml:name>
-        <maml:description>
-          <maml:para>Expected source encoding; when Any, any non-target encoding may be converted.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
-        <dev:type>
-          <maml:name>TextEncodingKind</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>TargetEncoding</maml:name>
-        <maml:description>
-          <maml:para>Explicit target encoding; when null, defaults are chosen based on file type.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">Nullable`1</command:parameterValue>
-        <dev:type>
-          <maml:name>Nullable`1</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-    </command:parameters>
-    <command:inputTypes>
-      <command:inputType>
-        <dev:type>
-          <maml:name>None</maml:name>
-        </dev:type>
-      </command:inputType>
-    </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
-    <maml:alertSet>
-      <maml:alert>
-        <maml:para></maml:para>
-      </maml:alert>
-    </maml:alertSet>
-    <command:examples>
-      <command:example>
-        <maml:title>Preview conversion for a PowerShell project</maml:title>
-        <dev:code>PS&gt;Convert-ProjectEncoding -Path C:\MyProject -ProjectType PowerShell -WhatIf</dev:code>
-        <dev:remarks>
-          <maml:para>Shows what would be converted. PowerShell files default to UTF-8 with BOM.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Convert ASCII files to UTF-8 with BOM and create backups</maml:title>
-        <dev:code>PS&gt;Convert-ProjectEncoding -Path C:\Repo -ProjectType Mixed -SourceEncoding ASCII -TargetEncoding UTF8BOM -CreateBackups -BackupDirectory C:\Backups\Repo</dev:code>
-        <dev:remarks>
-          <maml:para>Only files detected as ASCII are converted; backups are mirrored under C:\Backups\Repo.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Use custom patterns and return per-file results</maml:title>
-        <dev:code>PS&gt;Convert-ProjectEncoding -Path . -CustomExtensions *.ps1,*.psm1 -TargetEncoding UTF8BOM -PassThru</dev:code>
-        <dev:remarks>
-          <maml:para>Processes only PowerShell scripts using custom patterns and outputs a detailed result object.</maml:para>
-        </dev:remarks>
-      </command:example>
-    </command:examples>
-    <command:relatedLinks />
-  </command:command>
-  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-    <command:details>
-      <command:name>Convert-ProjectLineEnding</command:name>
-      <command:verb>Convert</command:verb>
-      <command:noun>ProjectLineEnding</command:noun>
-      <maml:description>
-        <maml:para>Converts line endings across a project (CRLF/LF), with options for mixed-only fixes and final newline enforcement.&#xD;
-Thin wrapper over PowerForge.LineEndingConverter.</maml:para>
-      </maml:description>
-    </command:details>
-    <maml:description>
-      <maml:para>Use -WhatIf to preview changes without modifying files. When conversion is performed, PowerForge preserves file encoding where possible&#xD;
-and prefers UTF-8 BOM for PowerShell files to maintain Windows PowerShell 5.1 compatibility.</maml:para>
-    </maml:description>
-    <command:syntax>
-      <command:syntaxItem>
-        <maml:name>Convert-ProjectLineEnding</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>BackupDirectory</maml:name>
-          <maml:description>
-            <maml:para>Root folder for mirrored backups; when null, .bak is used next to files.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CreateBackups</maml:name>
-          <maml:description>
-            <maml:para>Create backups prior to conversion.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>EnsureFinalNewline</maml:name>
-          <maml:description>
-            <maml:para>Ensure a final newline exists at the end of file.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExcludeDirectories</maml:name>
-          <maml:description>
-            <maml:para>Directory names to exclude from traversal.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Force</maml:name>
-          <maml:description>
-            <maml:para>Force conversion even if file appears to already match the target style.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>OnlyMissingNewline</maml:name>
-          <maml:description>
-            <maml:para>Only modify files that are missing the final newline.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>OnlyMixed</maml:name>
-          <maml:description>
-            <maml:para>Convert only files that contain mixed line endings.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>PassThru</maml:name>
-          <maml:description>
-            <maml:para>Emit per-file results instead of a summary.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Path</maml:name>
-          <maml:description>
-            <maml:para>Path to the project directory to process.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ProjectType</maml:name>
-          <maml:description>
-            <maml:para>Project type used to derive default include patterns.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
-          <dev:type>
-            <maml:name>ProjectKind</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>TargetLineEnding</maml:name>
-          <maml:description>
-            <maml:para>Target line ending style to enforce.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">LineEnding</command:parameterValue>
-          <dev:type>
-            <maml:name>LineEnding</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-      <command:syntaxItem>
-        <maml:name>Convert-ProjectLineEnding</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>BackupDirectory</maml:name>
-          <maml:description>
-            <maml:para>Root folder for mirrored backups; when null, .bak is used next to files.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CreateBackups</maml:name>
-          <maml:description>
-            <maml:para>Create backups prior to conversion.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CustomExtensions</maml:name>
-          <maml:description>
-            <maml:para>Custom extension patterns (e.g., *.ps1,*.psm1) when overriding defaults.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>EnsureFinalNewline</maml:name>
-          <maml:description>
-            <maml:para>Ensure a final newline exists at the end of file.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExcludeDirectories</maml:name>
-          <maml:description>
-            <maml:para>Directory names to exclude from traversal.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Force</maml:name>
-          <maml:description>
-            <maml:para>Force conversion even if file appears to already match the target style.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>OnlyMissingNewline</maml:name>
-          <maml:description>
-            <maml:para>Only modify files that are missing the final newline.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>OnlyMixed</maml:name>
-          <maml:description>
-            <maml:para>Convert only files that contain mixed line endings.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>PassThru</maml:name>
-          <maml:description>
-            <maml:para>Emit per-file results instead of a summary.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Path</maml:name>
-          <maml:description>
-            <maml:para>Path to the project directory to process.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ProjectType</maml:name>
-          <maml:description>
-            <maml:para>Project type used to derive default include patterns.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
-          <dev:type>
-            <maml:name>ProjectKind</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>TargetLineEnding</maml:name>
-          <maml:description>
-            <maml:para>Target line ending style to enforce.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">LineEnding</command:parameterValue>
-          <dev:type>
-            <maml:name>LineEnding</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-    </command:syntax>
-    <command:parameters>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>BackupDirectory</maml:name>
-        <maml:description>
-          <maml:para>Root folder for mirrored backups; when null, .bak is used next to files.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CreateBackups</maml:name>
-        <maml:description>
-          <maml:para>Create backups prior to conversion.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CustomExtensions</maml:name>
-        <maml:description>
-          <maml:para>Custom extension patterns (e.g., *.ps1,*.psm1) when overriding defaults.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>EnsureFinalNewline</maml:name>
-        <maml:description>
-          <maml:para>Ensure a final newline exists at the end of file.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ExcludeDirectories</maml:name>
-        <maml:description>
-          <maml:para>Directory names to exclude from traversal.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Force</maml:name>
-        <maml:description>
-          <maml:para>Force conversion even if file appears to already match the target style.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>OnlyMissingNewline</maml:name>
-        <maml:description>
-          <maml:para>Only modify files that are missing the final newline.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>OnlyMixed</maml:name>
-        <maml:description>
-          <maml:para>Convert only files that contain mixed line endings.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>PassThru</maml:name>
-        <maml:description>
-          <maml:para>Emit per-file results instead of a summary.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Path</maml:name>
-        <maml:description>
-          <maml:para>Path to the project directory to process.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ProjectType</maml:name>
-        <maml:description>
-          <maml:para>Project type used to derive default include patterns.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
-        <dev:type>
-          <maml:name>ProjectKind</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>TargetLineEnding</maml:name>
-        <maml:description>
-          <maml:para>Target line ending style to enforce.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">LineEnding</command:parameterValue>
-        <dev:type>
-          <maml:name>LineEnding</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-    </command:parameters>
-    <command:inputTypes>
-      <command:inputType>
-        <dev:type>
-          <maml:name>None</maml:name>
-        </dev:type>
-      </command:inputType>
-    </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
-    <maml:alertSet>
-      <maml:alert>
-        <maml:para></maml:para>
-      </maml:alert>
-    </maml:alertSet>
-    <command:examples>
-      <command:example>
-        <maml:title>Preview CRLF normalization for PowerShell files</maml:title>
-        <dev:code>PS&gt;Convert-ProjectLineEnding -Path C:\Repo -ProjectType PowerShell -TargetLineEnding CRLF -WhatIf</dev:code>
-        <dev:remarks>
-          <maml:para>Shows which files would be normalized to Windows-style line endings.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Fix only mixed line endings</maml:title>
-        <dev:code>PS&gt;Convert-ProjectLineEnding -Path . -ProjectType Mixed -TargetLineEnding LF -OnlyMixed -CreateBackups -BackupDirectory C:\Backups\Repo</dev:code>
-        <dev:remarks>
-          <maml:para>Converts only files that contain both CRLF and LF, backing up originals first.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Ensure final newline only</maml:title>
-        <dev:code>PS&gt;Convert-ProjectLineEnding -Path . -ProjectType All -TargetLineEnding CRLF -OnlyMissingNewline -EnsureFinalNewline</dev:code>
-        <dev:remarks>
-          <maml:para>Appends a final CRLF to files missing it without changing other files.</maml:para>
-        </dev:remarks>
-      </command:example>
-    </command:examples>
-    <command:relatedLinks />
-  </command:command>
-  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-    <command:details>
       <command:name>Export-CertificateForNuGet</command:name>
       <command:verb>Export</command:verb>
       <command:noun>CertificateForNuGet</command:noun>
@@ -941,7 +10,7 @@ and prefers UTF-8 BOM for PowerShell files to maintain Windows PowerShell 5.1 co
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>NuGet.org requires uploading the public certificate (.cer) used for package signing.&#xD;
+      <maml:para>NuGet.org requires uploading the public certificate (.cer) used for package signing.
 This cmdlet exports the selected certificate from the local certificate store.</maml:para>
     </maml:description>
     <command:syntax>
@@ -1090,7 +159,8 @@ This cmdlet exports the selected certificate from the local certificate store.</
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -1121,7 +191,7 @@ This cmdlet exports the selected certificate from the local certificate store.</
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet parses PowerShell code and returns a list of referenced commands that look like missing local helpers.&#xD;
+      <maml:para>This cmdlet parses PowerShell code and returns a list of referenced commands that look like missing local helpers.
 It is useful when building “portable” scripts/modules where you want to detect (and optionally inline) helper functions.</maml:para>
       <maml:para>When -ApprovedModules is specified, helper definitions are only accepted from those modules.</maml:para>
     </maml:description>
@@ -1379,7 +449,8 @@ It is useful when building “portable” scripts/modules where you want to dete
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -1410,8 +481,8 @@ It is useful when building “portable” scripts/modules where you want to dete
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This is a lightweight helper used by build/publish commands.&#xD;
-It finds the module manifest (*.psd1) under -Path and returns a structured object&#xD;
+      <maml:para>This is a lightweight helper used by build/publish commands.
+It finds the module manifest (*.psd1) under -Path and returns a structured object
 containing common fields such as module name, version, required modules, and the manifest path.</maml:para>
       <maml:para>Use it in build scripts to avoid re-implementing manifest discovery logic.</maml:para>
     </maml:description>
@@ -1462,7 +533,8 @@ containing common fields such as module name, version, required modules, and the
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -1494,7 +566,7 @@ containing common fields such as module name, version, required modules, and the
     </command:details>
     <maml:description>
       <maml:para>This cmdlet is designed to make CI output and local troubleshooting easier by summarizing failures from:</maml:para>
-      <maml:para>Use -OutputFormat to control whether the cmdlet writes a concise host summary, detailed messages,&#xD;
+      <maml:para>Use -OutputFormat to control whether the cmdlet writes a concise host summary, detailed messages,
 or emits JSON to the pipeline.</maml:para>
     </maml:description>
     <command:syntax>
@@ -1614,7 +686,7 @@ or emits JSON to the pipeline.</maml:para>
         <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
           <maml:name>TestResults</maml:name>
           <maml:description>
-            <maml:para>Pester test results object from Invoke-Pester, a T:PowerForge.ModuleTestSuiteResult from Invoke-ModuleTestSuite,&#xD;
+            <maml:para>Pester test results object from Invoke-Pester, a T:PowerForge.ModuleTestSuiteResult from Invoke-ModuleTestSuite,
 or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">Object</command:parameterValue>
@@ -1690,7 +762,7 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="True (ByValue)" position="named" aliases="None">
         <maml:name>TestResults</maml:name>
         <maml:description>
-          <maml:para>Pester test results object from Invoke-Pester, a T:PowerForge.ModuleTestSuiteResult from Invoke-ModuleTestSuite,&#xD;
+          <maml:para>Pester test results object from Invoke-Pester, a T:PowerForge.ModuleTestSuiteResult from Invoke-ModuleTestSuite,
 or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">Object</command:parameterValue>
@@ -1717,7 +789,8 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -1755,10 +828,10 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This is typically used by module build tooling to determine which cmdlets and aliases should be exported&#xD;
+      <maml:para>This is typically used by module build tooling to determine which cmdlets and aliases should be exported
 for binary modules (compiled cmdlets).</maml:para>
-      <maml:para>Under the hood it uses System.Reflection.MetadataLoadContext to inspect the assembly in isolation.&#xD;
-Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),&#xD;
+      <maml:para>Under the hood it uses System.Reflection.MetadataLoadContext to inspect the assembly in isolation.
+Make sure all dependencies of the target assembly are available next to it (or otherwise resolvable),
 especially when running under Windows PowerShell 5.1.</maml:para>
     </maml:description>
     <command:syntax>
@@ -1808,7 +881,8 @@ especially when running under Windows PowerShell 5.1.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -1839,9 +913,9 @@ especially when running under Windows PowerShell 5.1.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Scans PowerShell files to detect patterns and constructs that can cause cross-version issues&#xD;
+      <maml:para>Scans PowerShell files to detect patterns and constructs that can cause cross-version issues
 (Windows PowerShell 5.1 vs PowerShell 7+), and outputs a compatibility report.</maml:para>
-      <maml:para>Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks&#xD;
+      <maml:para>Use this as part of CI to keep modules compatible across editions, and pair it with encoding/line-ending checks
 when supporting Windows PowerShell 5.1.</maml:para>
     </maml:description>
     <command:syntax>
@@ -2011,7 +1085,8 @@ when supporting Windows PowerShell 5.1.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -2039,7 +1114,575 @@ when supporting Windows PowerShell 5.1.</maml:para>
     </command:examples>
     <command:relatedLinks />
   </command:command>
-  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Convert-ProjectConsistency</command:name>
+      <command:verb>Convert</command:verb>
+      <command:noun>ProjectConsistency</command:noun>
+      <maml:description>
+        <maml:para>Converts a project to a consistent encoding/line ending policy and reports the results.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>This cmdlet applies a consistency policy (encoding and/or line endings) across a project tree and reports the post-conversion state.</maml:para>
+      <maml:para>For build-time enforcement, use New-ConfigurationFileConsistency with -AutoFix enabled.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Convert-ProjectConsistency</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CustomExtensions</maml:name>
+          <maml:description>
+            <maml:para>Custom file extensions to include when ProjectType is Custom (e.g., *.ps1, *.cs).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExcludeDirectories</maml:name>
+          <maml:description>
+            <maml:para>Directory names to exclude from conversion (e.g., .git, bin, obj).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExcludeFiles</maml:name>
+          <maml:description>
+            <maml:para>File patterns to exclude from conversion.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExportPath</maml:name>
+          <maml:description>
+            <maml:para>Export the detailed report to a CSV file at the specified path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Path to the project directory to convert.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectType</maml:name>
+          <maml:description>
+            <maml:para>Type of project to analyze. Determines which file extensions are included.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredEncoding</maml:name>
+          <maml:description>
+            <maml:para>Target encoding to enforce when fixing encoding consistency.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">FileConsistencyEncoding</command:parameterValue>
+          <dev:type>
+            <maml:name>FileConsistencyEncoding</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>UTF8BOM</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RequiredLineEnding</maml:name>
+          <maml:description>
+            <maml:para>Target line ending style to enforce when fixing line endings.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">FileConsistencyLineEnding</command:parameterValue>
+          <dev:type>
+            <maml:name>FileConsistencyLineEnding</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>CRLF</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SourceEncoding</maml:name>
+          <maml:description>
+            <maml:para>Source encoding filter. When Any, any non-target encoding may be converted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
+          <dev:type>
+            <maml:name>TextEncodingKind</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>Any</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FixEncoding</maml:name>
+          <maml:description>
+            <maml:para>Convert encoding inconsistencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>FixLineEndings</maml:name>
+          <maml:description>
+            <maml:para>Convert line ending inconsistencies.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EncodingOverrides</maml:name>
+          <maml:description>
+            <maml:para>Per-path encoding overrides (hashtable of pattern => encoding).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">IDictionary</command:parameterValue>
+          <dev:type>
+            <maml:name>IDictionary</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>LineEndingOverrides</maml:name>
+          <maml:description>
+            <maml:para>Per-path line ending overrides (hashtable of pattern => line ending).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">IDictionary</command:parameterValue>
+          <dev:type>
+            <maml:name>IDictionary</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CreateBackups</maml:name>
+          <maml:description>
+            <maml:para>Create backup files before modifying content.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>BackupDirectory</maml:name>
+          <maml:description>
+            <maml:para>Backup root folder (mirrors the project structure).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Force conversion even when the file already matches the target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoRollbackOnMismatch</maml:name>
+          <maml:description>
+            <maml:para>Do not rollback from backup if verification mismatch occurs during encoding conversion.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OnlyMixedLineEndings</maml:name>
+          <maml:description>
+            <maml:para>Only convert files that have mixed line endings.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EnsureFinalNewline</maml:name>
+          <maml:description>
+            <maml:para>Ensure a final newline exists after line ending conversion.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OnlyMissingFinalNewline</maml:name>
+          <maml:description>
+            <maml:para>Only fix files missing the final newline.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ShowDetails</maml:name>
+          <maml:description>
+            <maml:para>Include detailed file-by-file analysis in the output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CustomExtensions</maml:name>
+        <maml:description>
+          <maml:para>Custom file extensions to include when ProjectType is Custom (e.g., *.ps1, *.cs).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExcludeDirectories</maml:name>
+        <maml:description>
+          <maml:para>Directory names to exclude from conversion (e.g., .git, bin, obj).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExcludeFiles</maml:name>
+        <maml:description>
+          <maml:para>File patterns to exclude from conversion.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExportPath</maml:name>
+        <maml:description>
+          <maml:para>Export the detailed report to a CSV file at the specified path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Path to the project directory to convert.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectType</maml:name>
+        <maml:description>
+          <maml:para>Type of project to analyze. Determines which file extensions are included.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredEncoding</maml:name>
+        <maml:description>
+          <maml:para>Target encoding to enforce when fixing encoding consistency.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">FileConsistencyEncoding</command:parameterValue>
+        <dev:type>
+          <maml:name>FileConsistencyEncoding</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>UTF8BOM</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RequiredLineEnding</maml:name>
+        <maml:description>
+          <maml:para>Target line ending style to enforce when fixing line endings.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">FileConsistencyLineEnding</command:parameterValue>
+        <dev:type>
+          <maml:name>FileConsistencyLineEnding</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>CRLF</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SourceEncoding</maml:name>
+        <maml:description>
+          <maml:para>Source encoding filter. When Any, any non-target encoding may be converted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">TextEncodingKind</command:parameterValue>
+        <dev:type>
+          <maml:name>TextEncodingKind</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>Any</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FixEncoding</maml:name>
+        <maml:description>
+          <maml:para>Convert encoding inconsistencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>FixLineEndings</maml:name>
+        <maml:description>
+          <maml:para>Convert line ending inconsistencies.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EncodingOverrides</maml:name>
+        <maml:description>
+          <maml:para>Per-path encoding overrides (hashtable of pattern => encoding).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">IDictionary</command:parameterValue>
+        <dev:type>
+          <maml:name>IDictionary</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>LineEndingOverrides</maml:name>
+        <maml:description>
+          <maml:para>Per-path line ending overrides (hashtable of pattern => line ending).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">IDictionary</command:parameterValue>
+        <dev:type>
+          <maml:name>IDictionary</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CreateBackups</maml:name>
+        <maml:description>
+          <maml:para>Create backup files before modifying content.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>BackupDirectory</maml:name>
+        <maml:description>
+          <maml:para>Backup root folder (mirrors the project structure).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Force conversion even when the file already matches the target.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NoRollbackOnMismatch</maml:name>
+        <maml:description>
+          <maml:para>Do not rollback from backup if verification mismatch occurs during encoding conversion.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OnlyMixedLineEndings</maml:name>
+        <maml:description>
+          <maml:para>Only convert files that have mixed line endings.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EnsureFinalNewline</maml:name>
+        <maml:description>
+          <maml:para>Ensure a final newline exists after line ending conversion.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OnlyMissingFinalNewline</maml:name>
+        <maml:description>
+          <maml:para>Only fix files missing the final newline.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ShowDetails</maml:name>
+        <maml:description>
+          <maml:para>Include detailed file-by-file analysis in the output.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>System.Object</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>
+        </maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Convert a PowerShell project to UTF-8 BOM + CRLF</maml:title>
+        <dev:code>PS&gt;Convert-ProjectConsistency -Path 'C:\MyProject' -ProjectType PowerShell -CreateBackups</dev:code>
+        <dev:remarks>
+          <maml:para>Ensures PowerShell-friendly encoding and line endings, creating backups before changes.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Convert line endings only for a cross-platform repo</maml:title>
+        <dev:code>PS&gt;Convert-ProjectConsistency -Path 'C:\MyProject' -FixLineEndings -RequiredLineEnding LF -ExcludeDirectories 'Build','Docs'</dev:code>
+        <dev:remarks>
+          <maml:para>Normalizes line endings to LF and skips non-source folders.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Convert encoding only with per-extension overrides</maml:title>
+        <dev:code>PS&gt;Convert-ProjectConsistency -Path 'C:\MyProject' -FixEncoding -RequiredEncoding UTF8BOM -EncodingOverrides @{ '*.xml' = 'UTF8' } -ExportPath 'C:\Reports\consistency.csv'</dev:code>
+        <dev:remarks>
+          <maml:para>Uses UTF-8 BOM by default but keeps XML files UTF-8 without BOM, and writes a report.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command><command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
       <command:name>Get-ProjectConsistency</command:name>
       <command:verb>Get</command:verb>
@@ -2049,9 +1692,9 @@ when supporting Windows PowerShell 5.1.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.&#xD;
+      <maml:para>This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.
 It is intended to be run before bulk conversions (encoding/line endings) and before packaging a module for release.</maml:para>
-      <maml:para>For fixing issues after analysis, use Convert-ProjectEncoding and Convert-ProjectLineEnding.</maml:para>
+      <maml:para>For fixing issues during builds, use New-ConfigurationFileConsistency with -AutoFix enabled.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2268,7 +1911,8 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -2298,518 +1942,6 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
-      <command:name>Get-ProjectEncoding</command:name>
-      <command:verb>Get</command:verb>
-      <command:noun>ProjectEncoding</command:noun>
-      <maml:description>
-        <maml:para>Analyzes encoding consistency across all files in a project directory.</maml:para>
-      </maml:description>
-    </command:details>
-    <maml:description>
-      <maml:para>This cmdlet is read-only: it does not modify files. Use it to audit a repository before converting encodings.</maml:para>
-      <maml:para>To standardize file encodings after analysis, use Convert-ProjectEncoding.</maml:para>
-    </maml:description>
-    <command:syntax>
-      <command:syntaxItem>
-        <maml:name>Get-ProjectEncoding</maml:name>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CustomExtensions</maml:name>
-          <maml:description>
-            <maml:para>Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExcludeDirectories</maml:name>
-          <maml:description>
-            <maml:para>Directory names to exclude from analysis (e.g., .git, bin, obj).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExportPath</maml:name>
-          <maml:description>
-            <maml:para>Export the detailed report to a CSV file at the specified path.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>GroupByEncoding</maml:name>
-          <maml:description>
-            <maml:para>Group results by encoding type.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Path</maml:name>
-          <maml:description>
-            <maml:para>Path to the project directory to analyze.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ProjectType</maml:name>
-          <maml:description>
-            <maml:para>Type of project to analyze. Determines which file extensions are included.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ShowFiles</maml:name>
-          <maml:description>
-            <maml:para>Include individual file details in the report.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-    </command:syntax>
-    <command:parameters>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CustomExtensions</maml:name>
-        <maml:description>
-          <maml:para>Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs).</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ExcludeDirectories</maml:name>
-        <maml:description>
-          <maml:para>Directory names to exclude from analysis (e.g., .git, bin, obj).</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ExportPath</maml:name>
-        <maml:description>
-          <maml:para>Export the detailed report to a CSV file at the specified path.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>GroupByEncoding</maml:name>
-        <maml:description>
-          <maml:para>Group results by encoding type.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Path</maml:name>
-        <maml:description>
-          <maml:para>Path to the project directory to analyze.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ProjectType</maml:name>
-        <maml:description>
-          <maml:para>Type of project to analyze. Determines which file extensions are included.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ShowFiles</maml:name>
-        <maml:description>
-          <maml:para>Include individual file details in the report.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-    </command:parameters>
-    <command:inputTypes>
-      <command:inputType>
-        <dev:type>
-          <maml:name>None</maml:name>
-        </dev:type>
-      </command:inputType>
-    </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
-    <maml:alertSet>
-      <maml:alert>
-        <maml:para></maml:para>
-      </maml:alert>
-    </maml:alertSet>
-    <command:examples>
-      <command:example>
-        <maml:title>Analyze a PowerShell project</maml:title>
-        <dev:code>PS&gt;Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
-        <dev:remarks>
-          <maml:para>Returns a summary of the encodings used in PowerShell-related files.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Show per-file details grouped by encoding</maml:title>
-        <dev:code>PS&gt;Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType Mixed -GroupByEncoding -ShowFiles</dev:code>
-        <dev:remarks>
-          <maml:para>Useful when you need to identify which files are outliers (e.g. ASCII vs UTF-8 BOM).</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Export a detailed report to CSV</maml:title>
-        <dev:code>PS&gt;Get-ProjectEncoding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\encoding-report.csv'</dev:code>
-        <dev:remarks>
-          <maml:para>Creates a CSV report that can be shared or used in CI artifacts.</maml:para>
-        </dev:remarks>
-      </command:example>
-    </command:examples>
-    <command:relatedLinks />
-  </command:command>
-  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-    <command:details>
-      <command:name>Get-ProjectLineEnding</command:name>
-      <command:verb>Get</command:verb>
-      <command:noun>ProjectLineEnding</command:noun>
-      <maml:description>
-        <maml:para>Analyzes line ending consistency across all files in a project directory.</maml:para>
-      </maml:description>
-    </command:details>
-    <maml:description>
-      <maml:para>This cmdlet is read-only: it reports CRLF/LF usage and can optionally detect mixed line endings.</maml:para>
-      <maml:para>To normalize line endings after analysis, use Convert-ProjectLineEnding.</maml:para>
-    </maml:description>
-    <command:syntax>
-      <command:syntaxItem>
-        <maml:name>Get-ProjectLineEnding</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CheckMixed</maml:name>
-          <maml:description>
-            <maml:para>Additionally check for files with mixed line endings.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>CustomExtensions</maml:name>
-          <maml:description>
-            <maml:para>Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExcludeDirectories</maml:name>
-          <maml:description>
-            <maml:para>Directory names to exclude from analysis (e.g., .git, bin, obj).</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-          <dev:type>
-            <maml:name>String[]</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ExportPath</maml:name>
-          <maml:description>
-            <maml:para>Export the detailed report to a CSV file at the specified path.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>GroupByLineEnding</maml:name>
-          <maml:description>
-            <maml:para>Group results by line ending type.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Internal</maml:name>
-          <maml:description>
-            <maml:para>Internal mode: avoid host output; use verbose messages instead.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>Path</maml:name>
-          <maml:description>
-            <maml:para>Path to the project directory to analyze.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ProjectType</maml:name>
-          <maml:description>
-            <maml:para>Type of project to analyze. Determines which file extensions are included.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-          <maml:name>ShowFiles</maml:name>
-          <maml:description>
-            <maml:para>Include individual file details in the report.</maml:para>
-          </maml:description>
-          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-          <dev:type>
-            <maml:name>SwitchParameter</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
-      </command:syntaxItem>
-    </command:syntax>
-    <command:parameters>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CheckMixed</maml:name>
-        <maml:description>
-          <maml:para>Additionally check for files with mixed line endings.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>CustomExtensions</maml:name>
-        <maml:description>
-          <maml:para>Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs).</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ExcludeDirectories</maml:name>
-        <maml:description>
-          <maml:para>Directory names to exclude from analysis (e.g., .git, bin, obj).</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
-        <dev:type>
-          <maml:name>String[]</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ExportPath</maml:name>
-        <maml:description>
-          <maml:para>Export the detailed report to a CSV file at the specified path.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>GroupByLineEnding</maml:name>
-        <maml:description>
-          <maml:para>Group results by line ending type.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Internal</maml:name>
-        <maml:description>
-          <maml:para>Internal mode: avoid host output; use verbose messages instead.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>Path</maml:name>
-        <maml:description>
-          <maml:para>Path to the project directory to analyze.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ProjectType</maml:name>
-        <maml:description>
-          <maml:para>Type of project to analyze. Determines which file extensions are included.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
-        <maml:name>ShowFiles</maml:name>
-        <maml:description>
-          <maml:para>Include individual file details in the report.</maml:para>
-        </maml:description>
-        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
-        <dev:type>
-          <maml:name>SwitchParameter</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
-    </command:parameters>
-    <command:inputTypes>
-      <command:inputType>
-        <dev:type>
-          <maml:name>None</maml:name>
-        </dev:type>
-      </command:inputType>
-    </command:inputTypes>
-    <command:returnValues>
-      <command:returnValue>
-        <dev:type>
-          <maml:name>System.Object</maml:name>
-        </dev:type>
-      </command:returnValue>
-    </command:returnValues>
-    <maml:alertSet>
-      <maml:alert>
-        <maml:para></maml:para>
-      </maml:alert>
-    </maml:alertSet>
-    <command:examples>
-      <command:example>
-        <maml:title>Analyze a PowerShell project</maml:title>
-        <dev:code>PS&gt;Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType PowerShell</dev:code>
-        <dev:remarks>
-          <maml:para>Returns a summary of line endings used across PowerShell-related files.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Detect mixed line endings and show per-file details</maml:title>
-        <dev:code>PS&gt;Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType Mixed -CheckMixed -ShowFiles</dev:code>
-        <dev:remarks>
-          <maml:para>Use this before enforcing a repository-wide LF/CRLF policy.</maml:para>
-        </dev:remarks>
-      </command:example>
-      <command:example>
-        <maml:title>Export a detailed report to CSV</maml:title>
-        <dev:code>PS&gt;Get-ProjectLineEnding -Path 'C:\MyProject' -ProjectType All -ExportPath 'C:\Reports\lineending-report.csv'</dev:code>
-        <dev:remarks>
-          <maml:para>Creates a CSV report that can be shared or used in CI artifacts.</maml:para>
-        </dev:remarks>
-      </command:example>
-    </command:examples>
-    <command:relatedLinks />
-  </command:command>
-  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-    <command:details>
       <command:name>Get-ProjectVersion</command:name>
       <command:verb>Get</command:verb>
       <command:noun>ProjectVersion</command:noun>
@@ -2818,8 +1950,8 @@ It is intended to be run before bulk conversions (encoding/line endings) and bef
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Scans the specified path for:&#xD;
-*.csproj files*.psd1 filesPowerShell build scripts (*.ps1) that contain Invoke-ModuleBuild&#xD;
+      <maml:para>Scans the specified path for:
+*.csproj files*.psd1 filesPowerShell build scripts (*.ps1) that contain Invoke-ModuleBuild
 and returns one record per discovered version entry.</maml:para>
       <maml:para>This is useful for multi-project repositories where you want to quickly verify version alignment across projects/modules.</maml:para>
     </maml:description>
@@ -2918,7 +2050,8 @@ and returns one record per discovered version entry.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -2949,8 +2082,8 @@ and returns one record per discovered version entry.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>The cmdlet discovers the .csproj file (when a directory is provided), reads VersionPrefix from the&#xD;
-project, then runs dotnet build and dotnet pack in Release (by default). It produces a ZIP snapshot of&#xD;
+      <maml:para>The cmdlet discovers the .csproj file (when a directory is provided), reads VersionPrefix from the
+project, then runs dotnet build and dotnet pack in Release (by default). It produces a ZIP snapshot of
 the release output and returns a typed result object for each input project path.</maml:para>
       <maml:para>Use -WhatIf to preview the planned outputs without running build/pack/sign operations.</maml:para>
     </maml:description>
@@ -3097,7 +2230,8 @@ the release output and returns a typed result object for each input project path
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -3105,28 +2239,32 @@ the release output and returns a typed result object for each input project path
         <maml:title>Build and pack a project (and its dependency projects)</maml:title>
         <dev:code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -PackDependencies</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Build and sign a project (certificate thumbprint)</maml:title>
         <dev:code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary\MyLibrary.csproj' -CertificateThumbprint '0123456789ABCDEF' -LocalStore CurrentUser</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Preview the release build plan (no build)</maml:title>
         <dev:code>Invoke-DotNetReleaseBuild -ProjectPath '.\MyLibrary' -PackDependencies -WhatIf</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Build multiple projects in one invocation</maml:title>
         <dev:code>Invoke-DotNetReleaseBuild -ProjectPath '.\ProjectA\ProjectA.csproj', '.\ProjectB\ProjectB.csproj' -PackDependencies</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -3142,12 +2280,12 @@ the release output and returns a typed result object for each input project path
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This is the primary entry point for building a PowerShell module using PSPublishModule.&#xD;
-Configuration is provided via a DSL using New-Configuration* cmdlets (typically inside the -Settings&#xD;
+      <maml:para>This is the primary entry point for building a PowerShell module using PSPublishModule.
+Configuration is provided via a DSL using New-Configuration* cmdlets (typically inside the -Settings
 scriptblock) and then executed by the PowerForge pipeline runner.</maml:para>
-      <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build&#xD;
+      <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build
 steps, use -JsonOnly with -JsonPath.</maml:para>
-      <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.&#xD;
+      <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).</maml:para>
     </maml:description>
     <command:syntax>
@@ -3348,7 +2486,7 @@ Redirect output or use -Verbose to force plain, line-by-line output (useful for 
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
-            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
+            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -3361,7 +2499,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonPath</maml:name>
           <maml:description>
-            <maml:para>Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).&#xD;
+            <maml:para>Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).
 Defaults to powerforge.json in the project root.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -3557,7 +2695,7 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
           <maml:description>
-            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
+            <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -3570,7 +2708,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonPath</maml:name>
           <maml:description>
-            <maml:para>Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).&#xD;
+            <maml:para>Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).
 Defaults to powerforge.json in the project root.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -3802,7 +2940,7 @@ Defaults to powerforge.json in the project root.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>JsonOnly</maml:name>
         <maml:description>
-          <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.&#xD;
+          <maml:para>Generates a PowerForge pipeline JSON file and exits without running the build pipeline.
 Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -3815,7 +2953,7 @@ Intended for migrating legacy DSL scripts to powerforge CLI configuration.</maml
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>JsonPath</maml:name>
         <maml:description>
-          <maml:para>Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).&#xD;
+          <maml:para>Output path for the generated pipeline JSON file (used with P:PSPublishModule.InvokeModuleBuildCommand.JsonOnly).
 Defaults to powerforge.json in the project root.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
@@ -3974,7 +3112,8 @@ Defaults to powerforge.json in the project root.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -3984,14 +3123,16 @@ Defaults to powerforge.json in the project root.</maml:para>
 New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md'
 }</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Generate a PowerForge JSON pipeline without running the build</maml:title>
         <dev:code>Invoke-ModuleBuild -ModuleName 'MyModule' -Path 'C:\Git\MyModule' -JsonOnly -JsonPath 'C:\Git\MyModule\powerforge.json'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
@@ -4001,7 +3142,8 @@ New-ConfigurationFileConsistency -Enable -FailOnInconsistency -AutoFix -CreateBa
 New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompatibility -ExportReport
 }</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
@@ -4010,7 +3152,8 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
 -CsprojPath 'C:\Git\MyModule\src\MyModule\MyModule.csproj' -DotNetFramework net8.0 -DotNetConfiguration Release `
 -Settings { New-ConfigurationBuild -Enable -MergeModuleOnBuild }</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -4026,7 +3169,7 @@ New-ConfigurationCompatibility -Enable -RequireCrossCompatibility -FailOnIncompa
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both&#xD;
+      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both
 local development and CI pipelines.</maml:para>
       <maml:para>For post-processing failures (e.g. emitting JSON summaries), combine it with Get-ModuleTestFailures.</maml:para>
     </maml:description>
@@ -4413,7 +3556,8 @@ local development and CI pipelines.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -4451,9 +3595,9 @@ local development and CI pipelines.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and&#xD;
+      <maml:para>Artefacts are created after the module is built into staging. Use Packed (ZIP) for distribution and
 Unpacked (folder) for inspection or offline installation.</maml:para>
-      <maml:para>When -AddRequiredModules is enabled, required modules are downloaded (via Save-PSResource/Save-Module) and copied into&#xD;
+      <maml:para>When -AddRequiredModules is enabled, required modules are downloaded (via Save-PSResource/Save-Module) and copied into
 the artefact so the output can be used in offline environments.</maml:para>
       <maml:para>Use -ID to link an artefact to a publish step (New-ConfigurationPublish) and publish only a specific artefact.</maml:para>
     </maml:description>
@@ -5056,7 +4200,8 @@ the artefact so the output can be used in offline environments.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -5064,14 +4209,16 @@ the artefact so the output can be used in offline environments.</maml:para>
         <maml:title>Create a packed ZIP artefact</maml:title>
         <dev:code>New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Create an unpacked artefact including required modules</maml:title>
         <dev:code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -5087,7 +4234,7 @@ the artefact so the output can be used in offline environments.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+      <maml:para>This cmdlet emits build configuration that is consumed by Invoke-ModuleBuild / Build-Module.
 It controls how the module is merged, signed, versioned, installed, and how optional .NET publishing is performed.</maml:para>
     </maml:description>
     <command:syntax>
@@ -6193,7 +5340,8 @@ It controls how the module is merged, signed, versioned, installed, and how opti
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -6201,14 +5349,16 @@ It controls how the module is merged, signed, versioned, installed, and how opti
         <maml:title>Enable build and module merge, and keep a few installed versions</maml:title>
         <dev:code>New-ConfigurationBuild -Enable -MergeModuleOnBuild -LocalVersioning -VersionedInstallStrategy AutoRevision -VersionedInstallKeep 3</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Enable signing and terminate locking processes before install</maml:title>
         <dev:code>New-ConfigurationBuild -Enable -SignModule -CertificateThumbprint '0123456789ABCDEF' -KillLockersBeforeInstall -KillLockersForce</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -6224,7 +5374,7 @@ It controls how the module is merged, signed, versioned, installed, and how opti
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Used by the build pipeline to declare which commands should be imported from an external module at build time.&#xD;
+      <maml:para>Used by the build pipeline to declare which commands should be imported from an external module at build time.
 This helps make build scripts deterministic and explicit about their dependencies.</maml:para>
     </maml:description>
     <command:syntax>
@@ -6298,7 +5448,8 @@ This helps make build scripts deterministic and explicit about their dependencie
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -6329,7 +5480,7 @@ This helps make build scripts deterministic and explicit about their dependencie
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Adds a compatibility validation step to the build pipeline. This can be used to enforce that the module source is compatible&#xD;
+      <maml:para>Adds a compatibility validation step to the build pipeline. This can be used to enforce that the module source is compatible
 with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
     </maml:description>
     <command:syntax>
@@ -6379,6 +5530,18 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Severity</maml:name>
+          <maml:description>
+            <maml:para>Severity for compatibility issues (overrides FailOnIncompatibility when specified).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+          <dev:type>
+            <maml:name>ValidationSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -6495,6 +5658,18 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Severity</maml:name>
+        <maml:description>
+          <maml:para>Severity for compatibility issues (overrides FailOnIncompatibility when specified).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+        <dev:type>
+          <maml:name>ValidationSeverity</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>MinimumCompatibilityPercentage</maml:name>
         <maml:description>
           <maml:para>Minimum percentage of files that must be cross-compatible. Default is 95.</maml:para>
@@ -6571,7 +5746,8 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -6586,7 +5762,8 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
         <maml:title>Require PowerShell 7 compatibility only</maml:title>
         <dev:code>PS&gt;New-ConfigurationCompatibility -Enable -RequirePS7Compatibility -FailOnIncompatibility -ExportReport</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -6602,7 +5779,7 @@ with Windows PowerShell 5.1 and/or PowerShell 7+.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally&#xD;
+      <maml:para>Delivery configuration is used to bundle “internals” (docs, examples, tools, configuration files) into a module and optionally
 generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleName&gt;) that can copy these files to a target folder.</maml:para>
       <maml:para>This is intended for “script packages” where the module contains additional artifacts that should be deployed alongside it.</maml:para>
     </maml:description>
@@ -7109,7 +6286,8 @@ generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleN
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -7140,10 +6318,10 @@ generate public helper commands (Install-&lt;ModuleName&gt; / Update-&lt;ModuleN
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.&#xD;
-It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\&lt;ModuleName&gt;-help.xml),&#xD;
+      <maml:para>This cmdlet emits documentation configuration segments that are consumed by Invoke-ModuleBuild / Build-Module.
+It controls markdown generation (in -Path), optional external help generation (MAML, e.g. en-US\&lt;ModuleName&gt;-help.xml),
 and whether generated documentation should be synced back to the project root.</maml:para>
-      <maml:para>About topics are supported via about_*.help.txt / about_*.txt files present in the module source. When enabled,&#xD;
+      <maml:para>About topics are supported via about_*.help.txt / about_*.txt files present in the module source. When enabled,
 these are converted into markdown pages under Docs\About.</maml:para>
     </maml:description>
     <command:syntax>
@@ -7260,7 +6438,7 @@ these are converted into markdown pages under Docs\About.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SyncExternalHelpToProjectRoot</maml:name>
           <maml:description>
-            <maml:para>When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced&#xD;
+            <maml:para>When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced
 back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -7285,7 +6463,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateWhenNew</maml:name>
           <maml:description>
-            <maml:para>When enabled, generated documentation is also synced back to the project folder&#xD;
+            <maml:para>When enabled, generated documentation is also synced back to the project folder
 (not only to the staging build output).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -7409,7 +6587,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SyncExternalHelpToProjectRoot</maml:name>
         <maml:description>
-          <maml:para>When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced&#xD;
+          <maml:para>When enabled and P:PSPublishModule.NewConfigurationDocumentationCommand.UpdateWhenNew is set, the generated external help file is also synced
 back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -7434,7 +6612,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>UpdateWhenNew</maml:name>
         <maml:description>
-          <maml:para>When enabled, generated documentation is also synced back to the project folder&#xD;
+          <maml:para>When enabled, generated documentation is also synced back to the project folder
 (not only to the staging build output).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -7461,7 +6639,8 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -7469,14 +6648,16 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
         <maml:title>Generate markdown docs and external help, and sync back to project root</maml:title>
         <dev:code>New-ConfigurationDocumentation -Enable -UpdateWhenNew -StartClean -Path 'Docs' -PathReadme 'Docs\Readme.md' -SyncExternalHelpToProjectRoot</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Generate docs but skip about topics conversion and fallback examples</maml:title>
         <dev:code>New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -SkipAboutTopics -SkipFallbackExamples</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -7492,7 +6673,7 @@ back to the project root (e.g. en-US\&lt;ModuleName&gt;-help.xml).</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet currently exists only for backward compatibility with older build scripts.&#xD;
+      <maml:para>This cmdlet currently exists only for backward compatibility with older build scripts.
 It emits no configuration segment and has no effect.</maml:para>
     </maml:description>
     <command:syntax>
@@ -7517,7 +6698,8 @@ It emits no configuration segment and has no effect.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -7541,7 +6723,7 @@ It emits no configuration segment and has no effect.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules&#xD;
+      <maml:para>Adds a file-consistency validation step to the pipeline. This can enforce required encoding/line-ending rules
 and (optionally) auto-fix issues during a build.</maml:para>
     </maml:description>
     <command:syntax>
@@ -7619,6 +6801,66 @@ and (optionally) auto-fix issues during a build.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExcludeFiles</maml:name>
+          <maml:description>
+            <maml:para>File patterns to exclude from consistency analysis.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProjectKind</maml:name>
+          <maml:description>
+            <maml:para>Project kind used to derive default include patterns.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
+          <dev:type>
+            <maml:name>ProjectKind</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludePatterns</maml:name>
+          <maml:description>
+            <maml:para>Custom include patterns (override default project kind patterns).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>EncodingOverrides</maml:name>
+          <maml:description>
+            <maml:para>Per-path encoding overrides (patterns mapped to encodings).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>LineEndingOverrides</maml:name>
+          <maml:description>
+            <maml:para>Per-path line ending overrides (patterns mapped to line endings).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>ExportReport</maml:name>
           <maml:description>
@@ -7639,6 +6881,18 @@ and (optionally) auto-fix issues during a build.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Severity</maml:name>
+          <maml:description>
+            <maml:para>Severity for consistency issues (overrides FailOnInconsistency when specified).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+          <dev:type>
+            <maml:name>ValidationSeverity</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -7778,6 +7032,66 @@ and (optionally) auto-fix issues during a build.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExcludeFiles</maml:name>
+        <maml:description>
+          <maml:para>File patterns to exclude from consistency analysis.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProjectKind</maml:name>
+        <maml:description>
+          <maml:para>Project kind used to derive default include patterns.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ProjectKind</command:parameterValue>
+        <dev:type>
+          <maml:name>ProjectKind</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>IncludePatterns</maml:name>
+        <maml:description>
+          <maml:para>Custom include patterns (override default project kind patterns).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>EncodingOverrides</maml:name>
+        <maml:description>
+          <maml:para>Per-path encoding overrides (patterns mapped to encodings).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>LineEndingOverrides</maml:name>
+        <maml:description>
+          <maml:para>Per-path line ending overrides (patterns mapped to line endings).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>ExportReport</maml:name>
         <maml:description>
@@ -7798,6 +7112,18 @@ and (optionally) auto-fix issues during a build.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Severity</maml:name>
+        <maml:description>
+          <maml:para>Severity for consistency issues (overrides FailOnInconsistency when specified).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ValidationSeverity</command:parameterValue>
+        <dev:type>
+          <maml:name>ValidationSeverity</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -7879,7 +7205,8 @@ and (optionally) auto-fix issues during a build.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -7910,7 +7237,7 @@ and (optionally) auto-fix issues during a build.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Produces a formatting configuration segment used by the build pipeline to normalize generated output&#xD;
+      <maml:para>Produces a formatting configuration segment used by the build pipeline to normalize generated output
 (merged PSM1/PSD1) and optionally apply formatting back to the project root.</maml:para>
     </maml:description>
     <command:syntax>
@@ -8704,7 +8031,8 @@ and (optionally) auto-fix issues during a build.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -8735,7 +8063,7 @@ and (optionally) auto-fix issues during a build.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).&#xD;
+      <maml:para>Controls which modules are imported during a pipeline run (the module under build itself and/or its RequiredModules).
 This is primarily used by test and documentation steps that execute PowerShell code.</maml:para>
     </maml:description>
     <command:syntax>
@@ -8809,7 +8137,8 @@ This is primarily used by test and documentation steps that execute PowerShell c
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -8824,7 +8153,8 @@ This is primarily used by test and documentation steps that execute PowerShell c
         <maml:title>Import only the module under build</maml:title>
         <dev:code>PS&gt;New-ConfigurationImportModule -ImportSelf</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -9129,7 +8459,8 @@ This is primarily used by test and documentation steps that execute PowerShell c
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -9160,7 +8491,7 @@ This is primarily used by test and documentation steps that execute PowerShell c
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits a manifest configuration segment that is later applied to the module .psd1 during a build.&#xD;
+      <maml:para>Emits a manifest configuration segment that is later applied to the module .psd1 during a build.
 Use this to define identity and metadata (version, GUID, author, tags, links) in a build script / JSON pipeline.</maml:para>
     </maml:description>
     <command:syntax>
@@ -9642,7 +8973,8 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -9673,7 +9005,7 @@ Use this to define identity and metadata (version, GUID, author, tags, links) in
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)&#xD;
+      <maml:para>Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)
 install/package dependencies during a build.</maml:para>
     </maml:description>
     <command:syntax>
@@ -9843,7 +9175,8 @@ install/package dependencies during a build.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -9881,7 +9214,7 @@ install/package dependencies during a build.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Useful for optional dependencies where you want builds to succeed even if a tool module is not available&#xD;
+      <maml:para>Useful for optional dependencies where you want builds to succeed even if a tool module is not available
 (e.g. optional analyzers, formatters, helpers).</maml:para>
     </maml:description>
     <command:syntax>
@@ -9979,7 +9312,8 @@ install/package dependencies during a build.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -9994,7 +9328,8 @@ install/package dependencies during a build.</maml:para>
         <maml:title>Ignore specific functions for cross-platform builds</maml:title>
         <dev:code>PS&gt;New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security' -IgnoreFunctionName 'Get-AuthenticodeSignature','Set-AuthenticodeSignature' -Force</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -10010,7 +9345,7 @@ install/package dependencies during a build.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)&#xD;
+      <maml:para>Placeholders are applied during merge/packaging so you can inject build-time values (versions, build IDs, timestamps)
 without hardcoding them into source files.</maml:para>
     </maml:description>
     <command:syntax>
@@ -10111,7 +9446,8 @@ without hardcoding them into source files.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -10142,9 +9478,9 @@ without hardcoding them into source files.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.&#xD;
+      <maml:para>This cmdlet emits publish configuration consumed by Invoke-ModuleBuild / Build-Module.
 Use -Type to choose a destination. For repository publishing, -Tool selects the provider (PowerShellGet/PSResourceGet/Auto).</maml:para>
-      <maml:para>For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.&#xD;
+      <maml:para>For private repositories (for example Azure DevOps Artifacts / private NuGet v3 feeds), provide repository URIs and (optionally) credentials.
 To avoid secrets in source control, pass API keys/tokens via -FilePath or environment-specific tooling.</maml:para>
     </maml:description>
     <command:syntax>
@@ -10977,7 +10313,8 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -10985,14 +10322,16 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
         <maml:title>Publish to PowerShell Gallery (API key from file)</maml:title>
         <dev:code>New-ConfigurationPublish -Type PowerShellGallery -FilePath "$env:USERPROFILE\.secrets\psgallery.key" -Enabled</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>Publish to GitHub Releases (token from file)</maml:title>
         <dev:code>New-ConfigurationPublish -Type GitHub -FilePath "$env:USERPROFILE\.secrets\github.token" -UserName 'EvotecIT' -RepositoryName 'MyModule' -Enabled</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>
+          </maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -11008,7 +10347,7 @@ To avoid secrets in source control, pass API keys/tokens via -FilePath or enviro
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Emits a test configuration segment that instructs the pipeline to run Pester tests after the module is merged/built.&#xD;
+      <maml:para>Emits a test configuration segment that instructs the pipeline to run Pester tests after the module is merged/built.
 Use this when you want builds to fail fast on test failures.</maml:para>
     </maml:description>
     <command:syntax>
@@ -11106,7 +10445,8 @@ Use this when you want builds to fail fast on test failures.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -11137,7 +10477,7 @@ Use this when you want builds to fail fast on test failures.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Reads project metadata from *.csproj, resolves the release version (unless overridden),&#xD;
+      <maml:para>Reads project metadata from *.csproj, resolves the release version (unless overridden),
 creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
       <maml:para>For private repositories, use a token with the minimal required scope and prefer providing it via an environment variable.</maml:para>
     </maml:description>
@@ -11452,7 +10792,8 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -11516,7 +10857,7 @@ creates a GitHub release, and uploads the specified ZIP asset.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>SkipDuplicate</maml:name>
           <maml:description>
-            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.&#xD;
+            <maml:para>When set, passes --skip-duplicate to dotnet nuget push.
 This makes repeated publishing runs idempotent when the package already exists.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -11568,7 +10909,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>SkipDuplicate</maml:name>
         <maml:description>
-          <maml:para>When set, passes --skip-duplicate to dotnet nuget push.&#xD;
+          <maml:para>When set, passes --skip-duplicate to dotnet nuget push.
 This makes repeated publishing runs idempotent when the package already exists.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
@@ -11607,7 +10948,8 @@ This makes repeated publishing runs idempotent when the package already exists.<
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -11638,7 +10980,7 @@ This makes repeated publishing runs idempotent when the package already exists.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.&#xD;
+      <maml:para>Signs PowerShell scripts/manifests (and optionally binaries) using Authenticode.
 When running in CI, prefer using a certificate from the Windows certificate store and referencing it by thumbprint.</maml:para>
     </maml:description>
     <command:syntax>
@@ -11955,7 +11297,8 @@ When running in CI, prefer using a certificate from the Windows certificate stor
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -11986,7 +11329,7 @@ When running in CI, prefer using a certificate from the Windows certificate stor
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.&#xD;
+      <maml:para>Uses the PowerShell parser (AST) to remove comments safely rather than relying on fragile regex-only approaches.
 Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
     </maml:description>
     <command:syntax>
@@ -12279,7 +11622,8 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -12310,7 +11654,7 @@ Useful as a preprocessing step when producing merged/packed scripts.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)&#xD;
+      <maml:para>Designed for build/CI cleanup scenarios where removing generated artifacts (bin/obj, packed outputs, temporary files)
 should be predictable and safe. Supports -WhatIf, retries and optional backups.</maml:para>
     </maml:description>
     <command:syntax>
@@ -12819,7 +12163,8 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -12850,7 +12195,7 @@ should be predictable and safe. Supports -WhatIf, retries and optional backups.<
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by&#xD;
+      <maml:para>This cmdlet uses the GitHub REST API to create a release and upload assets. It is a lower-level building block used by
 higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used directly in CI pipelines.</maml:para>
       <maml:para>Provide the token via an environment variable to avoid leaking secrets into logs or history.</maml:para>
     </maml:description>
@@ -13141,7 +12486,8 @@ higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used d
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -13172,7 +12518,7 @@ higher-level helpers (such as Publish-GitHubReleaseAsset) and can also be used d
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Updates version numbers in:&#xD;
+      <maml:para>Updates version numbers in:
 C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scripts that reference Invoke-ModuleBuild</maml:para>
       <maml:para>Use -VersionType to increment one component, or -NewVersion to set an explicit version.</maml:para>
     </maml:description>
@@ -13343,7 +12689,8 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -13375,7 +12722,7 @@ C# projects (*.csproj)PowerShell module manifests (*.psd1)PowerShell build scrip
     </command:details>
     <maml:description>
       <maml:para>This cmdlet supports two common workflows:</maml:para>
-      <maml:para>When -ExpectedVersion contains an X placeholder (e.g. 1.2.X),&#xD;
+      <maml:para>When -ExpectedVersion contains an X placeholder (e.g. 1.2.X),
 the cmdlet resolves the next patch version. When an exact version is provided, it is returned as-is.</maml:para>
     </maml:description>
     <command:syntax>
@@ -13491,14 +12838,15 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:returnValues>
       <command:returnValue>
         <dev:type>
-          <maml:name>System.String&#xD;
+          <maml:name>System.String
 PowerForge.ModuleVersionStepResult</maml:name>
         </dev:type>
       </command:returnValue>
     </command:returnValues>
     <maml:alertSet>
       <maml:alert>
-        <maml:para></maml:para>
+        <maml:para>
+        </maml:para>
       </maml:alert>
     </maml:alertSet>
     <command:examples>
@@ -13527,3 +12875,11 @@ PowerForge.ModuleVersionStepResult</maml:name>
     <command:relatedLinks />
   </command:command>
 </helpItems>
+
+
+
+
+
+
+
+

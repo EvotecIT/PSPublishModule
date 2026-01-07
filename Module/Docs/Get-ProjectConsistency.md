@@ -18,7 +18,7 @@ Get-ProjectConsistency -Path <string> [-ProjectType <string>] [-CustomExtensions
 This cmdlet combines encoding and line-ending analysis to provide a single “consistency” view of your repository.
 It is intended to be run before bulk conversions (encoding/line endings) and before packaging a module for release.
 
-For fixing issues after analysis, use Convert-ProjectEncoding and Convert-ProjectLineEnding.
+For fixing issues during builds, use New-ConfigurationFileConsistency with -AutoFix enabled so the pipeline applies the same rules automatically.
 
 ## EXAMPLES
 
