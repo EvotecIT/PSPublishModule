@@ -74,6 +74,11 @@ public sealed class FileConsistencySettings
     /// <summary>Required line ending style.</summary>
     public FileConsistencyLineEnding RequiredLineEnding { get; set; } = FileConsistencyLineEnding.CRLF;
 
+    /// <summary>
+    /// Optional scope for consistency checks (staging/project). When null, <see cref="UpdateProjectRoot"/> is used for backward compatibility.
+    /// </summary>
+    public FileConsistencyScope? Scope { get; set; }
+
     /// <summary>Automatically fix encoding and line ending issues during build.</summary>
     public bool AutoFix { get; set; }
 
@@ -85,6 +90,11 @@ public sealed class FileConsistencySettings
 
     /// <summary>Directory names to exclude from consistency analysis.</summary>
     public string[] ExcludeDirectories { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Per-path encoding overrides. Keys are file patterns (e.g., "*.xml", "Docs/*.md", ".ps1") and values are encodings.
+    /// </summary>
+    public Dictionary<string, FileConsistencyEncoding>? EncodingOverrides { get; set; }
 
     /// <summary>
     /// When true, applies consistency checks (and optional AutoFix) to the project root as well as staging output.
@@ -102,4 +112,10 @@ public sealed class FileConsistencySettings
 
     /// <summary>Check for files missing final newlines.</summary>
     public bool CheckMissingFinalNewline { get; set; }
+
+    /// <summary>
+    /// Resolves the effective scope for file consistency checks.
+    /// </summary>
+    public FileConsistencyScope ResolveScope()
+        => Scope ?? (UpdateProjectRoot ? FileConsistencyScope.StagingAndProject : FileConsistencyScope.StagingOnly);
 }

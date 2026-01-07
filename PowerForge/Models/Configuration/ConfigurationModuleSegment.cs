@@ -27,8 +27,13 @@ public sealed class ModuleDependencyConfiguration
     /// <summary>Dependency module name.</summary>
     public string ModuleName { get; set; } = string.Empty;
 
-    /// <summary>Minimum module version (legacy key: ModuleVersion). Use <see cref="RequiredVersion"/> for exact matches.</summary>
+    /// <summary>
+    /// Minimum module version (legacy key: ModuleVersion). Use <see cref="RequiredVersion"/> for exact matches.
+    /// </summary>
     public string? ModuleVersion { get; set; }
+
+    /// <summary>Minimum module version (preferred). Use <see cref="RequiredVersion"/> for exact matches.</summary>
+    public string? MinimumVersion { get; set; }
 
     /// <summary>Exact required version.</summary>
     public string? RequiredVersion { get; set; }

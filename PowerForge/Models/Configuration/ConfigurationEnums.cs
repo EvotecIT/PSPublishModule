@@ -119,6 +119,19 @@ public enum FileConsistencyLineEnding
 }
 
 /// <summary>
+/// Scope for file consistency checks (staging/project).
+/// </summary>
+public enum FileConsistencyScope
+{
+    /// <summary>Check staging output only.</summary>
+    StagingOnly,
+    /// <summary>Check project root only.</summary>
+    ProjectOnly,
+    /// <summary>Check both staging output and project root.</summary>
+    StagingAndProject
+}
+
+/// <summary>
 /// Destination locations for delivery bundle items (README/CHANGELOG/LICENSE).
 /// </summary>
 public enum DeliveryBundleDestination
