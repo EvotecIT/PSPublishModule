@@ -28,12 +28,14 @@ public sealed class LineEndingConverter
 
         if (options.CreateBackups && !string.IsNullOrWhiteSpace(options.BackupDirectory)) Directory.CreateDirectory(options.BackupDirectory!);
 
-        string targetNewLine = options.Target == LineEnding.CRLF ? "\r\n" : "\n";
-
         foreach (var file in files)
         {
             try
             {
+                var overrideTarget = options.TargetResolver?.Invoke(file);
+                var targetForFile = overrideTarget ?? options.Target;
+                string targetNewLine = targetForFile == LineEnding.CRLF ? "\r\n" : "\n";
+
                 var readEnc = DetectEncodingForRead(file);
                 var text = File.ReadAllText(file, readEnc);
 
@@ -49,11 +51,11 @@ public sealed class LineEndingConverter
                 {
                     // If already consistent with target and final newline condition satisfied, skip
                     var targetNowKind = hasCrlf ? LineEnding.CRLF : LineEnding.LF;
-                    if (targetNowKind == options.Target && (!options.EnsureFinalNewline || !missingFinal))
+                    if (targetNowKind == targetForFile && (!options.EnsureFinalNewline || !missingFinal))
                     { skipped++; results.Add(new FileConversion(file, readEnc.WebName, readEnc.WebName, "Skipped", null, null)); continue; }
                 }
 
-                string normalized = NormalizeEndings(text, targetNewLine);
+                string normalized = NormalizeEndings(text, targetNewLine);      
                 if (options.EnsureFinalNewline && !normalized.EndsWith(targetNewLine))
                     normalized += targetNewLine;
 

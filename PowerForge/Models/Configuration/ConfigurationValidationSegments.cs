@@ -20,7 +20,10 @@ public sealed class CompatibilitySettings
     /// <summary>Enable PowerShell compatibility checking during build.</summary>
     public bool Enable { get; set; }
 
-    /// <summary>Fail the build if compatibility issues are found.</summary>
+    /// <summary>Severity for compatibility issues (null uses legacy FailOnIncompatibility).</summary>
+    public ValidationSeverity? Severity { get; set; }
+
+    /// <summary>Fail the build if compatibility issues are found.</summary>    
     public bool FailOnIncompatibility { get; set; }
 
     /// <summary>Require PowerShell 5.1 compatibility.</summary>
@@ -62,10 +65,13 @@ public sealed class ConfigurationFileConsistencySegment : IConfigurationSegment
 /// </summary>
 public sealed class FileConsistencySettings
 {
-    /// <summary>Enable file consistency checking during build.</summary>
+    /// <summary>Enable file consistency checking during build.</summary>       
     public bool Enable { get; set; }
 
-    /// <summary>Fail the build if consistency issues are found.</summary>
+    /// <summary>Severity for consistency issues (null uses legacy FailOnInconsistency).</summary>
+    public ValidationSeverity? Severity { get; set; }
+
+    /// <summary>Fail the build if consistency issues are found.</summary>      
     public bool FailOnInconsistency { get; set; }
 
     /// <summary>Required file encoding.</summary>
@@ -73,6 +79,12 @@ public sealed class FileConsistencySettings
 
     /// <summary>Required line ending style.</summary>
     public FileConsistencyLineEnding RequiredLineEnding { get; set; } = FileConsistencyLineEnding.CRLF;
+
+    /// <summary>Project kind used to derive default include patterns.</summary>
+    public ProjectKind? ProjectKind { get; set; }
+
+    /// <summary>Custom include patterns (e.g., "*.ps1", "Docs/*.md") that override defaults.</summary>
+    public string[]? IncludePatterns { get; set; }
 
     /// <summary>
     /// Optional scope for consistency checks (staging/project). When null, <see cref="UpdateProjectRoot"/> is used for backward compatibility.
@@ -91,10 +103,18 @@ public sealed class FileConsistencySettings
     /// <summary>Directory names to exclude from consistency analysis.</summary>
     public string[] ExcludeDirectories { get; set; } = Array.Empty<string>();
 
+    /// <summary>File patterns to exclude from consistency analysis.</summary>
+    public string[] ExcludeFiles { get; set; } = Array.Empty<string>();
+
     /// <summary>
     /// Per-path encoding overrides. Keys are file patterns (e.g., "*.xml", "Docs/*.md", ".ps1") and values are encodings.
     /// </summary>
     public Dictionary<string, FileConsistencyEncoding>? EncodingOverrides { get; set; }
+
+    /// <summary>
+    /// Per-path line ending overrides. Keys are file patterns (e.g., "*.xml", "Docs/*.md", ".ps1") and values are line endings.
+    /// </summary>
+    public Dictionary<string, FileConsistencyLineEnding>? LineEndingOverrides { get; set; }
 
     /// <summary>
     /// When true, applies consistency checks (and optional AutoFix) to the project root as well as staging output.

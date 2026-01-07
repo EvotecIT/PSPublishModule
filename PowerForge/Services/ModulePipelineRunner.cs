@@ -98,6 +98,7 @@ public sealed class ModulePipelineRunner
         bool signModule = false;
         bool mergeModule = false;
         bool mergeMissing = false;
+        bool mergeMissingSet = false;
         SigningOptionsConfiguration? signing = null;
 
         string? dotnetConfigFromSegments = null;
@@ -155,7 +156,11 @@ public sealed class ModulePipelineRunner
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
                     if (b.Merge.HasValue) mergeModule = b.Merge.Value;
-                    if (b.MergeMissing.HasValue) mergeMissing = b.MergeMissing.Value;
+                    if (b.MergeMissing.HasValue)
+                    {
+                        mergeMissing = b.MergeMissing.Value;
+                        mergeMissingSet = true;
+                    }
                     if (!string.IsNullOrWhiteSpace(b.ResolveBinaryConflicts?.ProjectName))
                         resolveBinaryConflictsProjectName = b.ResolveBinaryConflicts!.ProjectName;
                     break;
@@ -388,6 +393,13 @@ public sealed class ModulePipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        if (!mergeMissingSet && !mergeMissing && approved.Length > 0)
+        {
+            mergeMissing = true;
+            var context = mergeModule ? "and MergeModule is enabled" : "for approved-module inlining";
+            _logger.Info($"MergeMissing not explicitly set; enabling because approved modules are configured {context}.");
+        }
+
         if (mergeMissing && approved.Length > 0)
         {
             requiredModules = FilterRequiredModules(requiredModules, approved);
@@ -597,6 +609,8 @@ public sealed class ModulePipelineRunner
                     }
                 }
 
+                TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
+
                 SafeDone(manifestStep);
             }
             catch (Exception ex)
@@ -753,6 +767,8 @@ public sealed class ModulePipelineRunner
             var runStaging = scope != FileConsistencyScope.ProjectOnly;
             var runProject = scope != FileConsistencyScope.StagingOnly;
 
+            var fileConsistencySeverity = ResolveFileConsistencySeverity(s);
+
             if (runStaging)
             {
                 SafeStart(fileConsistencyStep);
@@ -761,14 +777,21 @@ public sealed class ModulePipelineRunner
                     var excludeDirs = MergeExcludeDirectories(
                         s.ExcludeDirectories,
                         new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+                    var excludeFiles = s.ExcludeFiles ?? Array.Empty<string>();
+                    var kind = s.ProjectKind ?? ProjectKind.Mixed;
+                    var includePatterns = s.IncludePatterns is { Length: > 0 }
+                        ? s.IncludePatterns.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray()
+                        : null;
 
                     var enumeration = new ProjectEnumeration(
                         rootPath: buildResult.StagingPath,
-                        kind: ProjectKind.Mixed,
-                        customExtensions: null,
-                        excludeDirectories: excludeDirs);
+                        kind: kind,
+                        customExtensions: includePatterns,
+                        excludeDirectories: excludeDirs,
+                        excludeFiles: excludeFiles);
 
                     var encodingOverrides = s.EncodingOverrides;
+                    var lineEndingOverrides = s.LineEndingOverrides;
                     var recommendedEncoding = s.RequiredEncoding.ToTextEncodingKind();
                     var exportPath = s.ExportReport
                         ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "FileConsistencyReport.csv")
@@ -777,12 +800,13 @@ public sealed class ModulePipelineRunner
                     var analyzer = new ProjectConsistencyAnalyzer(_logger);
                     fileConsistencyReport = analyzer.Analyze(
                         enumeration: enumeration,
-                        projectType: "Mixed",
+                        projectType: kind.ToString(),
                         recommendedEncoding: recommendedEncoding,
                         recommendedLineEnding: s.RequiredLineEnding,
                         includeDetails: false,
                         exportPath: exportPath,
-                        encodingOverrides: encodingOverrides);
+                        encodingOverrides: encodingOverrides,
+                        lineEndingOverrides: lineEndingOverrides);
 
                     if (s.AutoFix)
                     {
@@ -808,8 +832,8 @@ public sealed class ModulePipelineRunner
                         fileConsistencyEncodingFix = enc.Convert(encOptions);
 
                         var le = new LineEndingConverter();
-                        var target = s.RequiredLineEnding == FileConsistencyLineEnding.CRLF ? LineEnding.CRLF : LineEnding.LF;
-                        fileConsistencyLineEndingFix = le.Convert(new LineEndingConversionOptions(
+                        var target = s.RequiredLineEnding.ToLineEnding();
+                        var lineEndingOptions = new LineEndingConversionOptions(
                             enumeration: enumeration,
                             target: target,
                             createBackups: s.CreateBackups,
@@ -818,22 +842,34 @@ public sealed class ModulePipelineRunner
                             onlyMixed: false,
                             ensureFinalNewline: s.CheckMissingFinalNewline,
                             onlyMissingNewline: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
+                        if (lineEndingOverrides is { Count: > 0 })
+                        {
+                            lineEndingOptions.TargetResolver = path =>
+                            {
+                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
+                                var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
+                                return overrideLineEnding?.ToLineEnding();
+                            };
+                        }
+                        fileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
 
                         fileConsistencyReport = analyzer.Analyze(
                             enumeration: enumeration,
-                            projectType: "Mixed",
+                            projectType: kind.ToString(),
                             recommendedEncoding: recommendedEncoding,
                             recommendedLineEnding: s.RequiredLineEnding,
                             includeDetails: false,
                             exportPath: exportPath,
-                            encodingOverrides: encodingOverrides);
+                            encodingOverrides: encodingOverrides,
+                            lineEndingOverrides: lineEndingOverrides);
                     }
 
                     var finalReport = fileConsistencyReport ?? throw new InvalidOperationException("File consistency analysis produced no report.");
-                    fileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
-                    LogFileConsistencyIssues(finalReport, s, "staging", fileConsistencyStatus ?? CheckStatus.Warning);
-                    if (s.FailOnInconsistency && fileConsistencyStatus == CheckStatus.Fail)
+                    fileConsistencyStatus = EvaluateFileConsistency(finalReport, s, fileConsistencySeverity);
+                    if (fileConsistencySeverity != ValidationSeverity.Off)
+                        LogFileConsistencyIssues(finalReport, s, "staging", fileConsistencyStatus ?? CheckStatus.Warning);
+                    if (fileConsistencySeverity == ValidationSeverity.Error && fileConsistencyStatus == CheckStatus.Fail)
                         throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
                     SafeDone(fileConsistencyStep);
@@ -853,14 +889,21 @@ public sealed class ModulePipelineRunner
                     var excludeDirs = MergeExcludeDirectories(
                         s.ExcludeDirectories,
                         new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+                    var excludeFiles = s.ExcludeFiles ?? Array.Empty<string>();
+                    var kind = s.ProjectKind ?? ProjectKind.Mixed;
+                    var includePatterns = s.IncludePatterns is { Length: > 0 }
+                        ? s.IncludePatterns.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray()
+                        : null;
 
                     var enumeration = new ProjectEnumeration(
                         rootPath: plan.ProjectRoot,
-                        kind: ProjectKind.Mixed,
-                        customExtensions: null,
-                        excludeDirectories: excludeDirs);
+                        kind: kind,
+                        customExtensions: includePatterns,
+                        excludeDirectories: excludeDirs,
+                        excludeFiles: excludeFiles);
 
                     var encodingOverrides = s.EncodingOverrides;
+                    var lineEndingOverrides = s.LineEndingOverrides;
                     var recommendedEncoding = s.RequiredEncoding.ToTextEncodingKind();
                     var exportPath = s.ExportReport
                         ? BuildArtefactsReportPath(plan.ProjectRoot, AddFileNameSuffix(s.ReportFileName, "Project"), fallbackFileName: "FileConsistencyReport.Project.csv")
@@ -869,12 +912,13 @@ public sealed class ModulePipelineRunner
                     var analyzer = new ProjectConsistencyAnalyzer(_logger);
                     projectFileConsistencyReport = analyzer.Analyze(
                         enumeration: enumeration,
-                        projectType: "Mixed",
+                        projectType: kind.ToString(),
                         recommendedEncoding: recommendedEncoding,
                         recommendedLineEnding: s.RequiredLineEnding,
                         includeDetails: false,
                         exportPath: exportPath,
-                        encodingOverrides: encodingOverrides);
+                        encodingOverrides: encodingOverrides,
+                        lineEndingOverrides: lineEndingOverrides);
 
                     if (s.AutoFix)
                     {
@@ -900,8 +944,8 @@ public sealed class ModulePipelineRunner
                         projectFileConsistencyEncodingFix = enc.Convert(encOptions);
 
                         var le = new LineEndingConverter();
-                        var target = s.RequiredLineEnding == FileConsistencyLineEnding.CRLF ? LineEnding.CRLF : LineEnding.LF;
-                        projectFileConsistencyLineEndingFix = le.Convert(new LineEndingConversionOptions(
+                        var target = s.RequiredLineEnding.ToLineEnding();
+                        var lineEndingOptions = new LineEndingConversionOptions(
                             enumeration: enumeration,
                             target: target,
                             createBackups: s.CreateBackups,
@@ -910,22 +954,34 @@ public sealed class ModulePipelineRunner
                             onlyMixed: false,
                             ensureFinalNewline: s.CheckMissingFinalNewline,
                             onlyMissingNewline: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
+                        if (lineEndingOverrides is { Count: > 0 })
+                        {
+                            lineEndingOptions.TargetResolver = path =>
+                            {
+                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
+                                var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
+                                return overrideLineEnding?.ToLineEnding();
+                            };
+                        }
+                        projectFileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
 
                         projectFileConsistencyReport = analyzer.Analyze(
                             enumeration: enumeration,
-                            projectType: "Mixed",
+                            projectType: kind.ToString(),
                             recommendedEncoding: recommendedEncoding,
                             recommendedLineEnding: s.RequiredLineEnding,
                             includeDetails: false,
                             exportPath: exportPath,
-                            encodingOverrides: encodingOverrides);
+                            encodingOverrides: encodingOverrides,
+                            lineEndingOverrides: lineEndingOverrides);
                     }
 
                     var finalReport = projectFileConsistencyReport ?? throw new InvalidOperationException("Project-root file consistency analysis produced no report.");
-                    projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
-                    LogFileConsistencyIssues(finalReport, s, "project", projectFileConsistencyStatus ?? CheckStatus.Warning);
-                    if (s.FailOnInconsistency && projectFileConsistencyStatus == CheckStatus.Fail)
+                    projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s, fileConsistencySeverity);
+                    if (fileConsistencySeverity != ValidationSeverity.Off)
+                        LogFileConsistencyIssues(finalReport, s, "project", projectFileConsistencyStatus ?? CheckStatus.Warning);
+                    if (fileConsistencySeverity == ValidationSeverity.Error && projectFileConsistencyStatus == CheckStatus.Fail)
                         throw new InvalidOperationException($"File consistency (project) check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
                     SafeDone(projectFileConsistencyStep);
@@ -944,6 +1000,7 @@ public sealed class ModulePipelineRunner
             try
             {
                 var s = plan.CompatibilitySettings;
+                var compatibilitySeverity = ResolveCompatibilitySeverity(s);
                 var excludeDirs = MergeExcludeDirectories(
                     s.ExcludeDirectories,
                     new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
@@ -955,10 +1012,10 @@ public sealed class ModulePipelineRunner
                 var analyzer = new PowerShellCompatibilityAnalyzer(_logger);
                 var specCompat = new PowerShellCompatibilitySpec(buildResult.StagingPath, recurse: true, excludeDirectories: excludeDirs);
                 var raw = analyzer.Analyze(specCompat, progress: null, exportPath: exportPath);
-                var adjusted = ApplyCompatibilitySettings(raw, s);
+                var adjusted = ApplyCompatibilitySettings(raw, s, compatibilitySeverity);
                 compatibilityReport = adjusted;
 
-                if (s.FailOnIncompatibility && adjusted.Summary.Status == CheckStatus.Fail)
+                if (compatibilitySeverity == ValidationSeverity.Error && adjusted.Summary.Status == CheckStatus.Fail)
                     throw new InvalidOperationException($"PowerShell compatibility check failed. {adjusted.Summary.Message}");
 
                 SafeDone(compatibilityStep);
@@ -1743,6 +1800,19 @@ exit 0
         if (!string.IsNullOrWhiteSpace(report.ExportPath))
             log($"File consistency report ({label}): {report.ExportPath}");
 
+        var summary = report.Summary;
+        var parts = new List<string>();
+        if (summary.FilesNeedingEncodingConversion > 0)
+            parts.Add($"encoding {summary.FilesNeedingEncodingConversion}");
+        if (summary.FilesNeedingLineEndingConversion > 0)
+            parts.Add($"line endings {summary.FilesNeedingLineEndingConversion}");
+        if (settings.CheckMixedLineEndings && summary.FilesWithMixedLineEndings > 0)
+            parts.Add($"mixed {summary.FilesWithMixedLineEndings}");
+        if (settings.CheckMissingFinalNewline && summary.FilesMissingFinalNewline > 0)
+            parts.Add($"missing newline {summary.FilesMissingFinalNewline}");
+        if (parts.Count > 0)
+            log($"File consistency summary ({label}): {string.Join(", ", parts)} (total {summary.TotalFiles}).");
+
         const int maxItems = 20;
         var shown = 0;
         foreach (var item in problematic)
@@ -1966,6 +2036,34 @@ exit 0
 
         header.Append(body.ToString().TrimEnd());
         return header.ToString();
+    }
+
+    private void TryRegenerateBootstrapperFromManifest(ModuleBuildResult buildResult, string moduleName, IReadOnlyList<string>? exportAssemblies)
+    {
+        try
+        {
+            var exports = ReadExportsFromManifest(buildResult.ManifestPath);
+            ModuleBootstrapperGenerator.Generate(buildResult.StagingPath, moduleName, exports, exportAssemblies);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to regenerate module bootstrapper exports for '{moduleName}'. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+        }
+    }
+
+    private static ExportSet ReadExportsFromManifest(string psd1Path)
+        => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
+            ReadStringOrArray(psd1Path, "CmdletsToExport"),
+            ReadStringOrArray(psd1Path, "AliasesToExport"));
+
+    private static string[] ReadStringOrArray(string psd1Path, string key)
+    {
+        if (ManifestEditor.TryGetTopLevelStringArray(psd1Path, key, out var values) && values is not null)
+            return values;
+        if (ManifestEditor.TryGetTopLevelString(psd1Path, key, out var value) && !string.IsNullOrWhiteSpace(value))
+            return new[] { value! };
+        return Array.Empty<string>();
     }
 
     private static string PrependFunctions(string[] functions, string content)
@@ -2615,7 +2713,24 @@ $req | ForEach-Object { $_.Name }
             Utf8Bom = true
         };
 
-    private static CheckStatus EvaluateFileConsistency(ProjectConsistencyReport report, FileConsistencySettings settings)
+    private static ValidationSeverity ResolveFileConsistencySeverity(FileConsistencySettings settings)
+    {
+        if (settings is null) return ValidationSeverity.Warning;
+        if (settings.Severity.HasValue) return settings.Severity.Value;
+        return settings.FailOnInconsistency ? ValidationSeverity.Error : ValidationSeverity.Warning;
+    }
+
+    private static ValidationSeverity ResolveCompatibilitySeverity(CompatibilitySettings settings)
+    {
+        if (settings is null) return ValidationSeverity.Warning;
+        if (settings.Severity.HasValue) return settings.Severity.Value;
+        return settings.FailOnIncompatibility ? ValidationSeverity.Error : ValidationSeverity.Warning;
+    }
+
+    private static CheckStatus EvaluateFileConsistency(
+        ProjectConsistencyReport report,
+        FileConsistencySettings settings,
+        ValidationSeverity severity)
     {
         var total = report.Summary.TotalFiles;
         if (total <= 0) return CheckStatus.Pass;
@@ -2626,7 +2741,12 @@ $req | ForEach-Object { $_.Name }
 
         var max = Clamp(settings.MaxInconsistencyPercentage, 0, 100);
         var percent = (filesWithIssues / (double)total) * 100.0;
-        return percent <= max ? CheckStatus.Warning : CheckStatus.Fail;
+        var status = percent <= max ? CheckStatus.Warning : CheckStatus.Fail;
+
+        if (severity == ValidationSeverity.Off) return CheckStatus.Pass;
+        if (severity == ValidationSeverity.Warning && status == CheckStatus.Fail)
+            return CheckStatus.Warning;
+        return status;
     }
 
     private static string BuildFileConsistencyMessage(ProjectConsistencyReport report, FileConsistencySettings settings)
@@ -2664,7 +2784,10 @@ $req | ForEach-Object { $_.Name }
         return filesWithIssues;
     }
 
-    private static PowerShellCompatibilityReport ApplyCompatibilitySettings(PowerShellCompatibilityReport report, CompatibilitySettings settings)
+    private static PowerShellCompatibilityReport ApplyCompatibilitySettings(
+        PowerShellCompatibilityReport report,
+        CompatibilitySettings settings,
+        ValidationSeverity severity)
     {
         if (report is null) throw new ArgumentNullException(nameof(report));
         if (settings is null) return report;
@@ -2694,6 +2817,15 @@ $req | ForEach-Object { $_.Name }
         var status = failures.Count > 0
             ? CheckStatus.Fail
             : s.FilesWithIssues > 0 ? CheckStatus.Warning : CheckStatus.Pass;
+
+        if (severity == ValidationSeverity.Off)
+        {
+            status = CheckStatus.Pass;
+        }
+        else if (severity == ValidationSeverity.Warning && status == CheckStatus.Fail)
+        {
+            status = CheckStatus.Warning;
+        }
 
         var message = status switch
         {

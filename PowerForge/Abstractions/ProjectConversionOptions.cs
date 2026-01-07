@@ -47,8 +47,10 @@ public sealed class ProjectEnumeration
     public ProjectKind Kind { get; }
     /// <summary>Optional custom patterns (e.g., *.ps1,*.psm1) when overriding kind.</summary>
     public IReadOnlyList<string>? CustomExtensions { get; }
-    /// <summary>Directory names to exclude (exact name match).</summary>
+    /// <summary>Directory names to exclude (exact name match).</summary>       
     public IReadOnlyList<string> ExcludeDirectories { get; }
+    /// <summary>File patterns to exclude (wildcards allowed, matched against relative path or file name).</summary>
+    public IReadOnlyList<string> ExcludeFiles { get; }
 
     /// <summary>
     /// Creates project enumeration options.
@@ -57,12 +59,19 @@ public sealed class ProjectEnumeration
     /// <param name="kind">Project kind to derive default patterns from.</param>
     /// <param name="customExtensions">Optional custom patterns overriding defaults.</param>
     /// <param name="excludeDirectories">Directory names to skip during traversal.</param>
-    public ProjectEnumeration(string rootPath, ProjectKind kind, IEnumerable<string>? customExtensions, IEnumerable<string>? excludeDirectories)
+    /// <param name="excludeFiles">File patterns to skip during traversal.</param>
+    public ProjectEnumeration(
+        string rootPath,
+        ProjectKind kind,
+        IEnumerable<string>? customExtensions,
+        IEnumerable<string>? excludeDirectories,
+        IEnumerable<string>? excludeFiles = null)
     {
-        RootPath = System.IO.Path.GetFullPath(rootPath.Trim().Trim('"'));
+        RootPath = System.IO.Path.GetFullPath(rootPath.Trim().Trim('"'));       
         Kind = kind;
         CustomExtensions = customExtensions?.ToArray();
         ExcludeDirectories = (excludeDirectories ?? new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode" }).ToArray();
+        ExcludeFiles = (excludeFiles ?? System.Array.Empty<string>()).ToArray();
     }
 }
 
@@ -157,6 +166,8 @@ public sealed class LineEndingConversionOptions
     public bool OnlyMissingNewline { get; }
     /// <summary>Prefer UTF-8 BOM when writing PowerShell files.</summary>
     public bool PreferUtf8BomForPowerShell { get; }
+    /// <summary>Optional per-file target line ending resolver.</summary>
+    public Func<string, LineEnding?>? TargetResolver { get; set; }
     /// <summary>
     /// Creates line ending conversion options.
     /// </summary>

@@ -8,6 +8,20 @@ namespace PowerForge;
 public static class FileConsistencyOverrideResolver
 {
     /// <summary>
+    /// Determines whether a pattern matches the provided relative path.
+    /// </summary>
+    public static bool Matches(string pattern, string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        if (string.IsNullOrWhiteSpace(relativePath)) return false;
+
+        var normalizedPath = NormalizePath(relativePath);
+        var fileName = Path.GetFileName(relativePath);
+        var extension = Path.GetExtension(relativePath);
+        return IsMatch(pattern.Trim(), normalizedPath, fileName, extension);
+    }
+
+    /// <summary>
     /// Resolves an encoding override for a relative path using the provided pattern map.
     /// </summary>
     public static FileConsistencyEncoding? ResolveEncodingOverride(
@@ -43,15 +57,62 @@ public static class FileConsistencyOverrideResolver
     }
 
     /// <summary>
+    /// Resolves a line ending override for a relative path using the provided pattern map.
+    /// </summary>
+    public static FileConsistencyLineEnding? ResolveLineEndingOverride(
+        string relativePath,
+        IReadOnlyDictionary<string, FileConsistencyLineEnding>? overrides)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath)) return null;
+        if (overrides is null || overrides.Count == 0) return null;
+
+        var normalizedPath = NormalizePath(relativePath);
+        var fileName = Path.GetFileName(relativePath);
+        var extension = Path.GetExtension(relativePath);
+
+        FileConsistencyLineEnding? best = null;
+        var bestScore = int.MinValue;
+
+        foreach (var entry in overrides)
+        {
+            var pattern = entry.Key;
+            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            var trimmed = pattern.Trim();
+            if (!IsMatch(trimmed, normalizedPath, fileName, extension)) continue;
+
+            var score = ScorePattern(trimmed);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = entry.Value;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
     /// Resolves the expected encoding for a relative path, falling back to <paramref name="defaultEncoding"/>.
     /// </summary>
     public static TextEncodingKind ResolveExpectedEncoding(
         string relativePath,
         TextEncodingKind defaultEncoding,
-        IReadOnlyDictionary<string, FileConsistencyEncoding>? overrides)
+        IReadOnlyDictionary<string, FileConsistencyEncoding>? overrides)        
     {
         var match = ResolveEncodingOverride(relativePath, overrides);
         return match.HasValue ? match.Value.ToTextEncodingKind() : defaultEncoding;
+    }
+
+    /// <summary>
+    /// Resolves the expected line ending for a relative path, falling back to <paramref name="defaultLineEnding"/>.
+    /// </summary>
+    public static FileConsistencyLineEnding ResolveExpectedLineEnding(
+        string relativePath,
+        FileConsistencyLineEnding defaultLineEnding,
+        IReadOnlyDictionary<string, FileConsistencyLineEnding>? overrides)
+    {
+        var match = ResolveLineEndingOverride(relativePath, overrides);
+        return match ?? defaultLineEnding;
     }
 
     private static bool IsMatch(string pattern, string normalizedPath, string fileName, string extension)
