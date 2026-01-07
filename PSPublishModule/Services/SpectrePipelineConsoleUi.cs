@@ -161,34 +161,50 @@ internal static class SpectrePipelineConsoleUi
         table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
         table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
 
-        if (res.FileConsistencyReport is not null)
+        var fileConsistencySettings = res.Plan.FileConsistencySettings;
+        if (fileConsistencySettings?.Enable == true)
         {
-            var status = res.FileConsistencyStatus ?? CheckStatus.Warning;
-            var total = res.FileConsistencyReport.Summary.TotalFiles;
-            var issues = CountIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings);
-            var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
-            table.AddRow(
-                $"{(unicode ? "🔎" : "*")} File consistency",
-                $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+            var scope = fileConsistencySettings.ResolveScope();
+
+            if (scope != FileConsistencyScope.ProjectOnly)
+            {
+                if (res.FileConsistencyReport is not null)
+                {
+                    var status = res.FileConsistencyStatus ?? CheckStatus.Warning;
+                    var total = res.FileConsistencyReport.Summary.TotalFiles;
+                    var issues = CountIssues(res.FileConsistencyReport, fileConsistencySettings);
+                    var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+                    table.AddRow(
+                        $"{(unicode ? "🔎" : "*")} File consistency",
+                        $"{StatusMarkup(status)} [grey]{issues}/{total} with issues ({compliance:0.0}% compliant)[/]");
+                }
+                else
+                {
+                    table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
+                }
+            }
+
+            if (scope != FileConsistencyScope.StagingOnly)
+            {
+                if (res.ProjectRootFileConsistencyReport is not null)
+                {
+                    var status = res.ProjectRootFileConsistencyStatus ?? CheckStatus.Warning;
+                    var total = res.ProjectRootFileConsistencyReport.Summary.TotalFiles;
+                    var issues = CountIssues(res.ProjectRootFileConsistencyReport, fileConsistencySettings);
+                    var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+                    table.AddRow(
+                        $"{(unicode ? "🔎" : "*")} File consistency (project)",
+                        $"{StatusMarkup(status)} [grey]{issues}/{total} with issues ({compliance:0.0}% compliant)[/]");
+                }
+                else
+                {
+                    table.AddRow($"{(unicode ? "🔎" : "*")} File consistency (project)", "[grey]Disabled[/]");
+                }
+            }
         }
         else
         {
             table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
-        }
-
-        if (res.ProjectRootFileConsistencyReport is not null)
-        {
-            var status = res.ProjectRootFileConsistencyStatus ?? CheckStatus.Warning;
-            var total = res.ProjectRootFileConsistencyReport.Summary.TotalFiles;
-            var issues = CountIssues(res.ProjectRootFileConsistencyReport, res.Plan.FileConsistencySettings);
-            var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
-            table.AddRow(
-                $"{(unicode ? "🔎" : "*")} File consistency (project)",
-                $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
-        }
-        else if (res.Plan.FileConsistencySettings?.Enable == true && res.Plan.FileConsistencySettings.UpdateProjectRoot)
-        {
-            table.AddRow($"{(unicode ? "🔎" : "*")} File consistency (project)", "[grey]Disabled[/]");
         }
 
         if (res.CompatibilityReport is not null)
@@ -297,6 +313,12 @@ internal static class SpectrePipelineConsoleUi
             AnsiConsole.Write(details);
         }
 
+        if (res.FileConsistencyReport is not null)
+            WriteFileConsistencyIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings, "staging", border);
+
+        if (res.ProjectRootFileConsistencyReport is not null)
+            WriteFileConsistencyIssues(res.ProjectRootFileConsistencyReport, res.Plan.FileConsistencySettings, "project", border);
+
         if (res.ArtefactResults is { Length: > 0 })
         {
             var artefacts = new Table()
@@ -317,6 +339,78 @@ internal static class SpectrePipelineConsoleUi
             foreach (var path in res.InstallResult.InstalledPaths)
                 AnsiConsole.MarkupLine($"  [grey]{(unicode ? "→" : "->")}[/] {Esc(path)}");
         }
+    }
+
+    private static void WriteFileConsistencyIssues(
+        ProjectConsistencyReport report,
+        FileConsistencySettings? settings,
+        string label,
+        TableBorder border)
+    {
+        if (report is null) return;
+
+        var issues = report.ProblematicFiles ?? Array.Empty<ProjectConsistencyFileDetail>();
+        if (issues.Length == 0) return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule($"[grey]File consistency issues ({Esc(label)})[/]").LeftJustified());
+
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+            AnsiConsole.MarkupLine($"[grey]Report:[/] {Esc(report.ExportPath)}");
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Path"))
+            .AddColumn(new TableColumn("Issues"));
+
+        const int maxItems = 20;
+        var shown = 0;
+        foreach (var item in issues)
+        {
+            var reasons = BuildFileConsistencyReasons(item, settings);
+            if (reasons.Count == 0) continue;
+
+            table.AddRow(Esc(item.RelativePath), Esc(string.Join(", ", reasons)));
+            if (++shown >= maxItems) break;
+        }
+
+        AnsiConsole.Write(table);
+
+        if (issues.Length > maxItems)
+            AnsiConsole.MarkupLine($"[grey]... {issues.Length - maxItems} more not shown.[/]");
+    }
+
+    private static List<string> BuildFileConsistencyReasons(
+        ProjectConsistencyFileDetail file,
+        FileConsistencySettings? settings)
+    {
+        var reasons = new List<string>(4);
+
+        if (file.NeedsEncodingConversion)
+        {
+            var current = file.CurrentEncoding?.ToString() ?? "Unknown";
+            reasons.Add($"encoding {current} (expected {file.RecommendedEncoding})");
+        }
+
+        if (file.NeedsLineEndingConversion)
+        {
+            var current = file.CurrentLineEnding.ToString();
+            reasons.Add($"line endings {current} (expected {file.RecommendedLineEnding})");
+        }
+
+        if (settings?.CheckMixedLineEndings == true && file.HasMixedLineEndings)
+            reasons.Add("mixed line endings");
+
+        if (settings?.CheckMissingFinalNewline == true && file.MissingFinalNewline)
+            reasons.Add("missing final newline");
+
+        var error = file.Error;
+        if (!string.IsNullOrWhiteSpace(error))
+            reasons.Add($"error: {error!.Trim()}");
+
+        return reasons;
     }
 
     public static void WriteFailureSummary(ModulePipelinePlan plan, Exception error)
