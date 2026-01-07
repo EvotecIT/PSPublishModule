@@ -9730,7 +9730,19 @@ install/package dependencies during a build.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>Version</maml:name>
           <maml:description>
-            <maml:para>Minimum version of the dependency module (or 'Latest').</maml:para>
+            <maml:para>Minimum version of the dependency module (legacy alias; use MinimumVersion).</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinimumVersion</maml:name>
+          <maml:description>
+            <maml:para>Minimum version of the dependency module (preferred).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -9793,7 +9805,19 @@ install/package dependencies during a build.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
         <maml:name>Version</maml:name>
         <maml:description>
-          <maml:para>Minimum version of the dependency module (or 'Latest').</maml:para>
+          <maml:para>Minimum version of the dependency module (legacy alias; use MinimumVersion).</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinimumVersion</maml:name>
+        <maml:description>
+          <maml:para>Minimum version of the dependency module (preferred).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>

@@ -11,7 +11,7 @@ Creates configuration for file consistency checking (encoding and line endings) 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationFileConsistency [-Enable] [-FailOnInconsistency] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-AutoFix] [-CreateBackups] [-MaxInconsistencyPercentage <int>] [-ExcludeDirectories <string[]>] [-ExportReport] [-ReportFileName <string>] [-CheckMixedLineEndings] [-CheckMissingFinalNewline] [-UpdateProjectRoot] [<CommonParameters>]
+New-ConfigurationFileConsistency [-Enable] [-FailOnInconsistency] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-Scope <FileConsistencyScope>] [-AutoFix] [-CreateBackups] [-MaxInconsistencyPercentage <int>] [-ExcludeDirectories <string[]>] [-EncodingOverrides <hashtable>] [-ExportReport] [-ReportFileName <string>] [-CheckMixedLineEndings] [-CheckMissingFinalNewline] [-UpdateProjectRoot] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -29,7 +29,7 @@ Enforces consistency and exports a CSV report; backups are created before fixes 
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -UpdateProjectRoot
+PS>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject
 ```
 
 Runs validation on staging and project root, exports a report, and does not apply automatic fixes.
@@ -101,6 +101,21 @@ Enable file consistency checking during build.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -EncodingOverrides
+Per-path encoding overrides (patterns mapped to encodings).
+
+```yaml
+Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -216,8 +231,23 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Scope
+Scope for file consistency checks (staging/project).
+
+```yaml
+Type: FileConsistencyScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -UpdateProjectRoot
-When set, applies encoding/line-ending consistency fixes to the project root as well as staging output.
+Legacy switch. When set, applies encoding/line-ending consistency fixes to the project root as well as staging output.
 
 ```yaml
 Type: SwitchParameter

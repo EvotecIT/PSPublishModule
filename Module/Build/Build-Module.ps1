@@ -129,6 +129,43 @@ Build-Module @buildParams -Settings {
     # configuration for documentation, at the same time it enables documentation processing
     New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
+    # quality checks (non-blocking by default; add -FailOn* switches to hard-fail)
+    $newConfigurationValidationSplat = @{
+        Enable                               = $true
+        StructureSeverity                    = 'Warning'
+        DocumentationSeverity                = 'Warning'
+        EnableScriptAnalyzer                 = $true
+        ScriptAnalyzerSeverity               = 'Warning'
+        FileIntegritySeverity                = 'Warning'
+        FileIntegrityCheckTrailingWhitespace = $true
+        FileIntegrityCheckSyntax             = $true
+    }
+
+    New-ConfigurationValidation @newConfigurationValidationSplat
+
+    $newConfigurationFileConsistencySplat = @{
+        Enable                   = $true
+        RequiredEncoding         = 'UTF8BOM'
+        RequiredLineEnding       = 'CRLF'
+        ExcludeDirectories       = 'Build', 'Docs', 'Documentation', 'Examples', 'Tests'
+        ExportReport             = $true
+        CheckMixedLineEndings    = $true
+        CheckMissingFinalNewline = $true
+        Scope                    = 'StagingAndProject'
+        EncodingOverrides        = @{ '*.xml' = 'UTF8' }
+    }
+
+    New-ConfigurationFileConsistency @newConfigurationFileConsistencySplat
+
+    $newConfigurationCompatibilitySplat = @{
+        Enable                         = $true
+        RequireCrossCompatibility      = $true
+        MinimumCompatibilityPercentage = 95
+        ExportReport                   = $true
+    }
+
+    New-ConfigurationCompatibility @newConfigurationCompatibilitySplat
+
     New-ConfigurationImportModule -ImportSelf
 
     $newConfigurationBuildSplat = @{
