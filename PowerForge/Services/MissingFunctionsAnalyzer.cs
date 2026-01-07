@@ -236,6 +236,8 @@ public sealed class MissingFunctionsAnalyzer
             name = name.Trim();
             if (name.Length == 0)
                 continue;
+            if (name.StartsWith("$", StringComparison.Ordinal))
+                continue;
             if (reserved.Contains(name) || redirection.Contains(name))
                 continue;
 
@@ -321,9 +323,16 @@ public sealed class MissingFunctionsAnalyzer
         }
     }
 
+    private static PowerShell CreatePowerShell()
+    {
+        if (Runspace.DefaultRunspace is null)
+            return PowerShell.Create();
+        return PowerShell.Create(RunspaceMode.CurrentRunspace);
+    }
+
     private static CommandInfo? GetCommandFromCurrentSession(string name)
     {
-        using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
+        using var ps = CreatePowerShell();
         ps.AddCommand("Get-Command")
             .AddParameter("Name", name)
             .AddParameter("CommandType", CommandTypes.All)
@@ -339,7 +348,7 @@ public sealed class MissingFunctionsAnalyzer
 
     private static CommandInfo? GetCommandFromModuleScope(string moduleName, string commandName)
     {
-        using var ps = PowerShell.Create(RunspaceMode.CurrentRunspace);
+        using var ps = CreatePowerShell();
         var script = @"
 param($moduleName, $commandName)
 $m = Import-Module -Name $moduleName -PassThru -ErrorAction Stop -Verbose:$false

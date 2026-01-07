@@ -231,6 +231,7 @@ public static class LegacySegmentAdapter
                 {
                     ModuleName = name!.Trim(),
                     ModuleVersion = GetString(d, "ModuleVersion"),
+                    MinimumVersion = GetString(d, "MinimumVersion"),
                     RequiredVersion = GetString(d, "RequiredVersion"),
                     Guid = GetString(d, "Guid")
                 }

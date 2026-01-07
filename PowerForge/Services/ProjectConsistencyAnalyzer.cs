@@ -28,6 +28,26 @@ public sealed class ProjectConsistencyAnalyzer
         FileConsistencyLineEnding? recommendedLineEnding,
         bool includeDetails,
         string? exportPath)
+        => Analyze(
+            enumeration: enumeration,
+            projectType: projectType,
+            recommendedEncoding: recommendedEncoding,
+            recommendedLineEnding: recommendedLineEnding,
+            includeDetails: includeDetails,
+            exportPath: exportPath,
+            encodingOverrides: null);
+
+    /// <summary>
+    /// Analyzes the project for encoding and line ending consistency with optional per-path encoding overrides.
+    /// </summary>
+    public ProjectConsistencyReport Analyze(
+        ProjectEnumeration enumeration,
+        string projectType,
+        TextEncodingKind? recommendedEncoding,
+        FileConsistencyLineEnding? recommendedLineEnding,
+        bool includeDetails,
+        string? exportPath,
+        IReadOnlyDictionary<string, FileConsistencyEncoding>? encodingOverrides)
     {
         var files = ProjectFileEnumerator.Enumerate(enumeration)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -138,7 +158,8 @@ public sealed class ProjectConsistencyAnalyzer
             if (!perExtLe.ContainsKey(currentLineEnding)) perExtLe[currentLineEnding] = 0;
             perExtLe[currentLineEnding]++;
 
-            bool needsEncodingConversion = currentEncoding.HasValue && currentEncoding.Value != resolvedEncoding;
+            var expectedEncoding = FileConsistencyOverrideResolver.ResolveExpectedEncoding(rel, resolvedEncoding, encodingOverrides);
+            bool needsEncodingConversion = currentEncoding.HasValue && currentEncoding.Value != expectedEncoding;
             bool needsLineEndingConversion = currentLineEnding switch
             {
                 DetectedLineEndingKind.None => false,
@@ -160,7 +181,7 @@ public sealed class ProjectConsistencyAnalyzer
                 currentEncoding: currentEncoding,
                 currentLineEnding: currentLineEnding,
                 hasFinalNewline: hasFinalNewline,
-                recommendedEncoding: resolvedEncoding,
+                recommendedEncoding: expectedEncoding,
                 recommendedLineEnding: resolvedLineEnding,
                 needsEncodingConversion: needsEncodingConversion,
                 needsLineEndingConversion: needsLineEndingConversion,

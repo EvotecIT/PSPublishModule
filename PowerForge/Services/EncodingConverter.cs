@@ -112,6 +112,13 @@ public sealed class EncodingConverter
 
     private static Encoding GetTarget(string file, EncodingConversionOptions options)
     {
+        if (options.TargetEncodingResolver is not null)
+        {
+            var resolved = options.TargetEncodingResolver(file);
+            if (resolved.HasValue)
+                return GetEncodingByKind(resolved.Value);
+        }
+
         if (options.TargetEncoding.HasValue)
             return GetEncodingByKind(options.TargetEncoding.Value);
 

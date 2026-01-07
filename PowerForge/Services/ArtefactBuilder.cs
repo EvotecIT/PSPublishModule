@@ -151,7 +151,7 @@ public sealed class ArtefactBuilder
     {
         Directory.CreateDirectory(outputRoot);
         if (cfg.DoNotClear != true)
-            ClearDirectoryContentsSafe(outputRoot);
+            ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" });
 
         var include = ResolvePackagingInformation(information);
 
@@ -953,7 +953,7 @@ public sealed class ArtefactBuilder
         Directory.CreateDirectory(full);
     }
 
-    private static void ClearDirectoryContentsSafe(string path)
+    private static void ClearDirectoryContentsSafe(string path, IEnumerable<string>? excludePatterns = null)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("Path is required.", nameof(path));
@@ -965,10 +965,19 @@ public sealed class ArtefactBuilder
 
         if (!Directory.Exists(full)) return;
 
+        var excludes = (excludePatterns ?? Array.Empty<string>())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim())
+            .ToArray();
+
         foreach (var entry in Directory.EnumerateFileSystemEntries(full))
         {
             try
             {
+                var name = Path.GetFileName(entry);
+                if (!string.IsNullOrWhiteSpace(name) && WildcardAnyMatch(name, excludes))
+                    continue;
+
                 if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
                 else File.Delete(entry);
             }
