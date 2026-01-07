@@ -91,6 +91,26 @@ public sealed class ModulePipelinePlan
     public ConfigurationFormattingSegment? Formatting { get; }
 
     /// <summary>
+    /// When true, module sources should be merged into a single PSM1 (legacy: BuildModule.Merge).
+    /// </summary>
+    public bool MergeModule { get; }
+
+    /// <summary>
+    /// When true, merge missing functions from approved modules into the PSM1 (legacy: BuildModule.MergeMissing).
+    /// </summary>
+    public bool MergeMissing { get; }
+
+    /// <summary>
+    /// Approved module names that can be used as function donors during merge.
+    /// </summary>
+    public string[] ApprovedModules { get; }
+
+    /// <summary>
+    /// Optional ModuleSkip configuration (ignored modules/functions when validating merge dependencies).
+    /// </summary>
+    public ModuleSkipConfiguration? ModuleSkip { get; }
+
+    /// <summary>
     /// When true, code-signing is requested for the built module output (legacy: BuildModule.SignMerged).
     /// </summary>
     public bool SignModule { get; }
@@ -161,6 +181,10 @@ public sealed class ModulePipelinePlan
         FileConsistencySettings? fileConsistencySettings,
         ModuleValidationSettings? validationSettings,
         ConfigurationFormattingSegment? formatting,
+        bool mergeModule,
+        bool mergeMissing,
+        string[] approvedModules,
+        ModuleSkipConfiguration? moduleSkip,
         bool signModule,
         SigningOptionsConfiguration? signing,
         ConfigurationPublishSegment[] publishes,
@@ -189,6 +213,10 @@ public sealed class ModulePipelinePlan
         FileConsistencySettings = fileConsistencySettings;
         ValidationSettings = validationSettings;
         Formatting = formatting;
+        MergeModule = mergeModule;
+        MergeMissing = mergeMissing;
+        ApprovedModules = approvedModules ?? Array.Empty<string>();
+        ModuleSkip = moduleSkip;
         SignModule = signModule;
         Signing = signing;
         Publishes = publishes ?? Array.Empty<ConfigurationPublishSegment>();

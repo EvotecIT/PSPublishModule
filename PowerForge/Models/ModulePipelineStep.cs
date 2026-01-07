@@ -134,12 +134,16 @@ public sealed class ModulePipelineStep
         // 5) Validation checks (after build/docs/formatting/signing, before packaging/publish/install).
         if (plan.FileConsistencySettings?.Enable == true)
         {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Validation,
-                key: "validate:fileconsistency",
-                title: "Check file consistency"));
+            var scope = plan.FileConsistencySettings.ResolveScope();
+            if (scope != FileConsistencyScope.ProjectOnly)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Validation,
+                    key: "validate:fileconsistency",
+                    title: "Check file consistency"));
+            }
 
-            if (plan.FileConsistencySettings.UpdateProjectRoot)
+            if (scope != FileConsistencyScope.StagingOnly)
             {
                 steps.Add(new ModulePipelineStep(
                     kind: ModulePipelineStepKind.Validation,
