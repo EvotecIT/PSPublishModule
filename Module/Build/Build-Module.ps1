@@ -11,7 +11,7 @@
     [string] $PreReleaseTag,
     [switch] $SignModule,
     [switch] $NoSign,
-    [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED99E7703',
+    [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
     [switch] $SignIncludeBinaries,
     [switch] $SignIncludeInternals,
     [switch] $SignIncludeExe

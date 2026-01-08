@@ -52,15 +52,20 @@ if (-not (Test-Path -LiteralPath $buildScript)) { throw "Build-Module.ps1 not fo
 try {
     # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
     $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
-    $buildArgs = @('-JsonOnly', '-JsonPath', $configPath, '-Configuration', $Configuration, '-NoDotnetBuild')
-    if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $buildArgs += @('-ModuleVersion', $ModuleVersion) }
-    if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $buildArgs += @('-PreReleaseTag', $PreReleaseTag) }
-    if ($PSBoundParameters.ContainsKey('NoSign')) { $buildArgs += "-NoSign:$($NoSign.IsPresent)" }
-    if ($PSBoundParameters.ContainsKey('SignModule')) { $buildArgs += "-SignModule:$($SignModule.IsPresent)" }
-    if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $buildArgs += @('-CertificateThumbprint', $CertificateThumbprint) }
-    if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $buildArgs += "-SignIncludeBinaries:$($SignIncludeBinaries.IsPresent)" }
-    if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $buildArgs += "-SignIncludeInternals:$($SignIncludeInternals.IsPresent)" }
-    if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $buildArgs += "-SignIncludeExe:$($SignIncludeExe.IsPresent)" }
+    $buildArgs = @{
+        JsonOnly       = $true
+        JsonPath       = $configPath
+        Configuration  = $Configuration
+        NoDotnetBuild  = $true
+    }
+    if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $buildArgs.ModuleVersion = $ModuleVersion }
+    if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $buildArgs.PreReleaseTag = $PreReleaseTag }
+    if ($PSBoundParameters.ContainsKey('NoSign')) { $buildArgs.NoSign = $NoSign.IsPresent }
+    if ($PSBoundParameters.ContainsKey('SignModule')) { $buildArgs.SignModule = $SignModule.IsPresent }
+    if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $buildArgs.CertificateThumbprint = $CertificateThumbprint }
+    if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $buildArgs.SignIncludeBinaries = $SignIncludeBinaries.IsPresent }
+    if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $buildArgs.SignIncludeInternals = $SignIncludeInternals.IsPresent }
+    if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $buildArgs.SignIncludeExe = $SignIncludeExe.IsPresent }
 
     & $buildScript @buildArgs
     if (-not (Test-Path -LiteralPath $configPath)) {
