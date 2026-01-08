@@ -2286,7 +2286,7 @@ scriptblock) and then executed by the PowerForge pipeline runner.</maml:para>
       <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build
 steps, use -JsonOnly with -JsonPath.</maml:para>
       <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
-Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).</maml:para>
+Redirect output or use -Verbose/-NoInteractive to force plain, line-by-line output (useful for CI logs).</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem>
@@ -2546,6 +2546,18 @@ Defaults to powerforge.json in the project root.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoInteractive</maml:name>
+          <maml:description>
+            <maml:para>Disables the interactive progress UI and emits plain log output.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
           <maml:name>LibrariesCore</maml:name>
           <maml:description>
             <maml:para>Alternate relative path for .NET Core-targeted libraries folder. Default: Lib/Core.</maml:para>
@@ -2722,6 +2734,18 @@ Defaults to powerforge.json in the project root.</maml:para>
           <maml:name>Legacy</maml:name>
           <maml:description>
             <maml:para>Compatibility switch. Historically forced the PowerShell-script build pipeline; the build now always runs through the C# PowerForge pipeline.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoInteractive</maml:name>
+          <maml:description>
+            <maml:para>Disables the interactive progress UI and emits plain log output.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -2991,6 +3015,18 @@ Defaults to powerforge.json in the project root.</maml:para>
         <maml:name>Legacy</maml:name>
         <maml:description>
           <maml:para>Compatibility switch. Historically forced the PowerShell-script build pipeline; the build now always runs through the C# PowerForge pipeline.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="true" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NoInteractive</maml:name>
+        <maml:description>
+          <maml:para>Disables the interactive progress UI and emits plain log output.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
