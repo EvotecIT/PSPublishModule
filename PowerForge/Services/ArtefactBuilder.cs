@@ -42,6 +42,7 @@ public sealed class ArtefactBuilder
     /// <param name="preRelease">Optional prerelease tag.</param>
     /// <param name="requiredModules">Required modules from configuration (used when AddRequiredModules is enabled).</param>
     /// <param name="information">Optional include/exclude configuration for packaging.</param>
+    /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
     public ArtefactBuildResult Build(
         ConfigurationArtefactSegment segment,
         string projectRoot,
@@ -50,7 +51,8 @@ public sealed class ArtefactBuilder
         string moduleVersion,
         string? preRelease,
         IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
-        InformationConfiguration? information = null)
+        InformationConfiguration? information = null,
+        bool includeScriptFolders = true)
     {
         if (segment is null) throw new ArgumentNullException(nameof(segment));
         if (string.IsNullOrWhiteSpace(projectRoot)) throw new ArgumentException("ProjectRoot is required.", nameof(projectRoot));
@@ -66,8 +68,8 @@ public sealed class ArtefactBuilder
 
         return segment.ArtefactType switch
         {
-            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information),
-            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information),
+            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, includeScriptFolders),
+            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, includeScriptFolders),
             _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported yet.")
         };
     }
@@ -75,9 +77,10 @@ public sealed class ArtefactBuilder
     internal static void CopyModulePackageForInstall(
         string stagingRoot,
         string destinationModuleRoot,
-        InformationConfiguration? information)
+        InformationConfiguration? information,
+        bool includeScriptFolders = true)
     {
-        var include = ResolvePackagingInformation(information);
+        var include = ResolvePackagingInformation(information, includeScriptFolders);
         CopyModulePackage(stagingRoot, destinationModuleRoot, include);
     }
 
@@ -90,13 +93,14 @@ public sealed class ArtefactBuilder
         string moduleVersion,
         string? preRelease,
         IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
-        InformationConfiguration? information)
+        InformationConfiguration? information,
+        bool includeScriptFolders)
     {
         if (cfg.DoNotClear != true)
             ClearDirectorySafe(outputRoot);
         Directory.CreateDirectory(outputRoot);
 
-        var include = ResolvePackagingInformation(information);
+        var include = ResolvePackagingInformation(information, includeScriptFolders);
 
         var requiredRoot = ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, projectRoot, moduleName, moduleVersion, preRelease);
         var modulesRoot = ResolveModulesRootForUnpacked(cfg, outputRoot, requiredRoot, projectRoot, moduleName, moduleVersion, preRelease);
@@ -147,13 +151,14 @@ public sealed class ArtefactBuilder
         string moduleVersion,
         string? preRelease,
         IReadOnlyList<ManifestEditor.RequiredModule> requiredModules,
-        InformationConfiguration? information)
+        InformationConfiguration? information,
+        bool includeScriptFolders)
     {
         Directory.CreateDirectory(outputRoot);
         if (cfg.DoNotClear != true)
             ClearDirectoryContentsSafe(outputRoot, excludePatterns: new[] { "*.zip" }, includeDirectories: false);
 
-        var include = ResolvePackagingInformation(information);
+        var include = ResolvePackagingInformation(information, includeScriptFolders);
 
         var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
         var zipPath = Path.Combine(outputRoot, artefactName);
@@ -657,12 +662,14 @@ public sealed class ArtefactBuilder
         public string[] IncludeAll { get; set; } = Array.Empty<string>();
     }
 
-    private static PackagingInformation ResolvePackagingInformation(InformationConfiguration? information)
+    private static PackagingInformation ResolvePackagingInformation(InformationConfiguration? information, bool includeScriptFolders = true)
     {
         var info = information ?? new InformationConfiguration();
 
         var includeRoot = (info.IncludeRoot is { Length: > 0 } ? info.IncludeRoot : DefaultIncludeRoot).ToArray();
-        var includePS1 = (info.IncludePS1 is { Length: > 0 } ? info.IncludePS1 : DefaultIncludePS1).ToArray();
+        var includePS1 = includeScriptFolders
+            ? (info.IncludePS1 is { Length: > 0 } ? info.IncludePS1 : DefaultIncludePS1).ToArray()
+            : Array.Empty<string>();
         var includeAll = (info.IncludeAll is { Length: > 0 } ? info.IncludeAll : DefaultIncludeAll).ToArray();
         var exclude = (info.ExcludeFromPackage is { Length: > 0 } ? info.ExcludeFromPackage : DefaultExcludeFromPackage).ToArray();
 
@@ -672,7 +679,7 @@ public sealed class ArtefactBuilder
             {
                 if (entry.Values is not { Length: > 0 }) continue;
                 if (entry.Key.Equals("IncludeRoot", StringComparison.OrdinalIgnoreCase)) includeRoot = entry.Values;
-                if (entry.Key.Equals("IncludePS1", StringComparison.OrdinalIgnoreCase)) includePS1 = entry.Values;
+                if (includeScriptFolders && entry.Key.Equals("IncludePS1", StringComparison.OrdinalIgnoreCase)) includePS1 = entry.Values;
                 if (entry.Key.Equals("IncludeAll", StringComparison.OrdinalIgnoreCase)) includeAll = entry.Values;
                 if (entry.Key.Equals("ExcludeFromPackage", StringComparison.OrdinalIgnoreCase)) exclude = entry.Values;
             }
@@ -682,6 +689,8 @@ public sealed class ArtefactBuilder
             => (values ?? Array.Empty<string>())
                 .Where(v => !string.IsNullOrWhiteSpace(v))
                 .Select(v => v.Trim())
+                .Select(v => v.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                .Where(v => !string.IsNullOrWhiteSpace(v))
                 .ToArray();
 
         return new PackagingInformation
@@ -746,7 +755,12 @@ public sealed class ArtefactBuilder
             var dir = Path.Combine(src, dirName);
             if (!Directory.Exists(dir)) continue;
 
-            CopyDirectoryFiltered(dir, Path.Combine(destinationModuleRoot, dirName), include.ExcludeFromPackage ?? Array.Empty<string>(), includeOnlyPs1: false);
+            CopyDirectoryFiltered(
+                dir,
+                Path.Combine(destinationModuleRoot, dirName),
+                include.ExcludeFromPackage ?? Array.Empty<string>(),
+                includeOnlyPs1: false,
+                excludeDirectories: false);
         }
 
         // 3) IncludePS1 directories
@@ -756,11 +770,21 @@ public sealed class ArtefactBuilder
             var dir = Path.Combine(src, dirName);
             if (!Directory.Exists(dir)) continue;
 
-            CopyDirectoryFiltered(dir, Path.Combine(destinationModuleRoot, dirName), include.ExcludeFromPackage ?? Array.Empty<string>(), includeOnlyPs1: true);
+            CopyDirectoryFiltered(
+                dir,
+                Path.Combine(destinationModuleRoot, dirName),
+                include.ExcludeFromPackage ?? Array.Empty<string>(),
+                includeOnlyPs1: true,
+                excludeDirectories: true);
         }
     }
 
-    private static void CopyDirectoryFiltered(string sourceDir, string destDir, string[] excludeNamePatterns, bool includeOnlyPs1)
+    private static void CopyDirectoryFiltered(
+        string sourceDir,
+        string destDir,
+        string[] excludeNamePatterns,
+        bool includeOnlyPs1,
+        bool excludeDirectories)
     {
         var sourceFull = Path.GetFullPath(sourceDir);
         Directory.CreateDirectory(destDir);
@@ -789,7 +813,7 @@ public sealed class ArtefactBuilder
             {
                 var name = Path.GetFileName(dir);
                 if (string.IsNullOrWhiteSpace(name)) continue;
-                if (WildcardAnyMatch(name, excludeNamePatterns)) continue;
+                if (excludeDirectories && WildcardAnyMatch(name, excludeNamePatterns)) continue;
                 stack.Push(dir);
             }
         }
