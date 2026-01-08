@@ -28,7 +28,7 @@ To generate a reusable powerforge.json configuration file (for the PowerForge CL
 steps, use -JsonOnly with -JsonPath.
 
 When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
-Redirect output or use -Verbose/-NoInteractive to force plain, line-by-line output (useful for CI logs).
+Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).
 
 ## EXAMPLES
 
@@ -393,21 +393,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -NoInteractive
-Disables the interactive progress UI and emits plain log output.
-
-```yaml
-Type: SwitchParameter
-Parameter Sets: Modern, Configuration
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -LibrariesCore
 Alternate relative path for .NET Core-targeted libraries folder. Default: Lib/Core.
 
@@ -462,6 +447,21 @@ Parameter Sets: Modern
 Aliases: ProjectName
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NoInteractive
+Disables the interactive progress UI and emits plain log output.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Modern, Configuration
+Aliases: None
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
