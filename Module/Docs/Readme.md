@@ -10,11 +10,11 @@ Locale: en-US
 Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
 
 ## PSPublishModule Cmdlets
-### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
-Exports a code-signing certificate to DER format for NuGet.org registration.    
-
 ### [Convert-ProjectConsistency](Convert-ProjectConsistency.md)
 Converts a project to a consistent encoding/line ending policy and reports the results.
+
+### [Export-CertificateForNuGet](Export-CertificateForNuGet.md)
+Exports a code-signing certificate to DER format for NuGet.org registration.
 
 ### [Get-MissingFunctions](Get-MissingFunctions.md)
 Analyzes a script or scriptblock and reports functions/commands it calls that are not present.

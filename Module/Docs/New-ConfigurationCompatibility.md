@@ -94,21 +94,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Severity
-Severity for compatibility issues (overrides FailOnIncompatibility when specified).
-
-```yaml
-Type: ValidationSeverity
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -MinimumCompatibilityPercentage
 Minimum percentage of files that must be cross-compatible. Default is 95.
 
@@ -174,6 +159,21 @@ Require PowerShell 7 compatibility.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Severity
+Severity for compatibility issues (overrides FailOnIncompatibility when specified).
+
+```yaml
+Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 

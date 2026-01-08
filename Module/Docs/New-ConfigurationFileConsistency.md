@@ -126,21 +126,6 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -ExcludeFiles
-File patterns to exclude from consistency analysis.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -ExcludeDirectories
 Directory names to exclude from consistency analysis.
 
@@ -156,41 +141,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -IncludePatterns
-Custom include patterns (override default project kind patterns).
+### -ExcludeFiles
+File patterns to exclude from consistency analysis.
 
 ```yaml
 Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -LineEndingOverrides
-Per-path line ending overrides (patterns mapped to line endings).
-
-```yaml
-Type: Hashtable
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ProjectKind
-Project kind used to derive default include patterns.
-
-```yaml
-Type: ProjectKind
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -231,11 +186,26 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Severity
-Severity for consistency issues (overrides FailOnInconsistency when specified).
+### -IncludePatterns
+Custom include patterns (override default project kind patterns).
 
 ```yaml
-Type: ValidationSeverity
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LineEndingOverrides
+Per-path line ending overrides (patterns mapped to line endings).
+
+```yaml
+Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -251,6 +221,21 @@ Maximum percentage of files that can have consistency issues. Default is 5.
 
 ```yaml
 Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectKind
+Project kind used to derive default include patterns.
+
+```yaml
+Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -311,6 +296,21 @@ Scope for file consistency checks (staging/project).
 
 ```yaml
 Type: FileConsistencyScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Severity
+Severity for consistency issues (overrides FailOnInconsistency when specified).
+
+```yaml
+Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 
