@@ -192,6 +192,7 @@
       "properties": {
         "ModuleName": { "type": "string" },
         "ModuleVersion": { "type": ["string", "null"] },
+        "MinimumVersion": { "type": ["string", "null"] },
         "RequiredVersion": { "type": ["string", "null"] },
         "Guid": { "type": ["string", "null"] }
       }
@@ -460,6 +461,7 @@
       "additionalProperties": false,
       "properties": {
         "Enable": { "type": "boolean" },
+        "Severity": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" }, { "type": "null" }] },
         "FailOnIncompatibility": { "type": "boolean" },
         "RequirePS51Compatibility": { "type": "boolean" },
         "RequirePS7Compatibility": { "type": "boolean" },
@@ -476,18 +478,136 @@
       "additionalProperties": false,
       "properties": {
         "Enable": { "type": "boolean" },
+        "Severity": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" }, { "type": "null" }] },
         "FailOnInconsistency": { "type": "boolean" },
         "RequiredEncoding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" },
         "RequiredLineEnding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyLineEnding" },
+        "ProjectKind": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ProjectKind" }, { "type": "null" }] },
+        "IncludePatterns": { "type": ["array", "null"], "items": { "type": "string" } },
+        "Scope": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyScope" }, { "type": "null" }] },
         "AutoFix": { "type": "boolean" },
         "CreateBackups": { "type": "boolean" },
         "MaxInconsistencyPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
         "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "ExcludeFiles": { "type": ["array", "null"], "items": { "type": "string" } },
+        "EncodingOverrides": {
+          "type": ["object", "null"],
+          "additionalProperties": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" }
+        },
+        "LineEndingOverrides": {
+          "type": ["object", "null"],
+          "additionalProperties": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyLineEnding" }
+        },
         "UpdateProjectRoot": { "type": "boolean" },
         "ExportReport": { "type": "boolean" },
         "ReportFileName": { "type": "string" },
         "CheckMixedLineEndings": { "type": "boolean" },
         "CheckMissingFinalNewline": { "type": "boolean" }
+      }
+    },
+
+    "ModuleStructureValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "PublicFunctionPaths": { "type": "array", "items": { "type": "string" } },
+        "InternalFunctionPaths": { "type": "array", "items": { "type": "string" } },
+        "ValidateManifestFiles": { "type": "boolean" },
+        "ValidateExports": { "type": "boolean" },
+        "ValidateInternalNotExported": { "type": "boolean" },
+        "AllowWildcardExports": { "type": "boolean" }
+      }
+    },
+
+    "DocumentationValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "MinSynopsisPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "MinDescriptionPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "MinExampleCountPerCommand": { "type": "integer", "minimum": 0 },
+        "ExcludeCommands": { "type": "array", "items": { "type": "string" } },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+
+    "ScriptAnalyzerValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "Enable": { "type": "boolean" },
+        "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "ExcludeRules": { "type": "array", "items": { "type": "string" } },
+        "SkipIfUnavailable": { "type": "boolean" },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+
+    "FileIntegrityValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "CheckTrailingWhitespace": { "type": "boolean" },
+        "CheckSyntax": { "type": "boolean" },
+        "BannedCommands": { "type": "array", "items": { "type": "string" } },
+        "AllowBannedCommandsIn": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "TestSuiteValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "Enable": { "type": "boolean" },
+        "TestPath": { "type": ["string", "null"] },
+        "AdditionalModules": { "type": "array", "items": { "type": "string" } },
+        "SkipModules": { "type": "array", "items": { "type": "string" } },
+        "SkipDependencies": { "type": "boolean" },
+        "SkipImport": { "type": "boolean" },
+        "Force": { "type": "boolean" },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+
+    "BinaryModuleValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "ValidateAssembliesExist": { "type": "boolean" },
+        "ValidateManifestExports": { "type": "boolean" },
+        "AllowWildcardExports": { "type": "boolean" }
+      }
+    },
+
+    "CsprojValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Severity": { "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" },
+        "RequireTargetFramework": { "type": "boolean" },
+        "RequireLibraryOutput": { "type": "boolean" }
+      }
+    },
+
+    "ModuleValidationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enable": { "type": "boolean" },
+        "Structure": { "$ref": "#/$defs/ModuleStructureValidationSettings" },
+        "Documentation": { "$ref": "#/$defs/DocumentationValidationSettings" },
+        "ScriptAnalyzer": { "$ref": "#/$defs/ScriptAnalyzerValidationSettings" },
+        "FileIntegrity": { "$ref": "#/$defs/FileIntegrityValidationSettings" },
+        "Tests": { "$ref": "#/$defs/TestSuiteValidationSettings" },
+        "Binary": { "$ref": "#/$defs/BinaryModuleValidationSettings" },
+        "Csproj": { "$ref": "#/$defs/CsprojValidationSettings" }
       }
     },
 
@@ -695,6 +815,16 @@
       "required": ["Type"]
     },
 
+    "ValidationSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Validation" },
+        "Settings": { "$ref": "#/$defs/ModuleValidationSettings" }
+      },
+      "required": ["Type"]
+    },
+
     "TestsAfterMergeSegment": {
       "type": "object",
       "additionalProperties": false,
@@ -754,6 +884,7 @@
         { "$ref": "#/$defs/PlaceHolderOptionSegment" },
         { "$ref": "#/$defs/CompatibilitySegment" },
         { "$ref": "#/$defs/FileConsistencySegment" },
+        { "$ref": "#/$defs/ValidationSegment" },
         { "$ref": "#/$defs/TestsAfterMergeSegment" },
         { "$ref": "#/$defs/PublishSegment" },
         { "$ref": "#/$defs/ArtefactSegment" },

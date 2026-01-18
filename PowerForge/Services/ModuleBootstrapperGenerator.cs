@@ -386,7 +386,6 @@ internal static class ModuleBootstrapperGenerator
             .ToArray();
 
         if (list.Length == 0) return "@()";
-        if (list.Length == 1 && list[0] == "*") return "'*'";
 
         var sb = new StringBuilder();
         sb.Append("@(");

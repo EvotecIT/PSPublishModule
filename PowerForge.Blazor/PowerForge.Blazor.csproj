@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Package metadata -->
+    <PackageId>PowerForge.Blazor</PackageId>
+    <Description>Blazor components for displaying API documentation. Supports C# XML docs, PowerShell help, and custom markdown pages. Part of the PowerForge ecosystem.</Description>
+    <Authors>Przemyslaw Klys</Authors>
+    <Company>Evotec Services sp. z o.o.</Company>
+    <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
+    <PackageTags>blazor;documentation;api-docs;xml-docs;powershell;help</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/EvotecIT/PSPublishModule</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- Build settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
+    <ProjectReference Include="..\..\OfficeIMO\OfficeIMO.Markdown\OfficeIMO.Markdown.csproj" />
+  </ItemGroup>
+
+</Project>

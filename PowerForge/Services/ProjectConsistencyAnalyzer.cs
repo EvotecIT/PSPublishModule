@@ -28,6 +28,28 @@ public sealed class ProjectConsistencyAnalyzer
         FileConsistencyLineEnding? recommendedLineEnding,
         bool includeDetails,
         string? exportPath)
+        => Analyze(
+            enumeration: enumeration,
+            projectType: projectType,
+            recommendedEncoding: recommendedEncoding,
+            recommendedLineEnding: recommendedLineEnding,
+            includeDetails: includeDetails,
+            exportPath: exportPath,
+            encodingOverrides: null,
+            lineEndingOverrides: null);
+
+    /// <summary>
+    /// Analyzes the project for encoding and line ending consistency with optional per-path encoding overrides.
+    /// </summary>
+    public ProjectConsistencyReport Analyze(
+        ProjectEnumeration enumeration,
+        string projectType,
+        TextEncodingKind? recommendedEncoding,
+        FileConsistencyLineEnding? recommendedLineEnding,
+        bool includeDetails,
+        string? exportPath,
+        IReadOnlyDictionary<string, FileConsistencyEncoding>? encodingOverrides,
+        IReadOnlyDictionary<string, FileConsistencyLineEnding>? lineEndingOverrides)
     {
         var files = ProjectFileEnumerator.Enumerate(enumeration)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -138,15 +160,17 @@ public sealed class ProjectConsistencyAnalyzer
             if (!perExtLe.ContainsKey(currentLineEnding)) perExtLe[currentLineEnding] = 0;
             perExtLe[currentLineEnding]++;
 
-            bool needsEncodingConversion = currentEncoding.HasValue && currentEncoding.Value != resolvedEncoding;
+            var expectedEncoding = FileConsistencyOverrideResolver.ResolveExpectedEncoding(rel, resolvedEncoding, encodingOverrides);
+            var expectedLineEnding = FileConsistencyOverrideResolver.ResolveExpectedLineEnding(rel, resolvedLineEnding, lineEndingOverrides);
+            bool needsEncodingConversion = currentEncoding.HasValue && currentEncoding.Value != expectedEncoding;
             bool needsLineEndingConversion = currentLineEnding switch
             {
                 DetectedLineEndingKind.None => false,
                 DetectedLineEndingKind.Error => false,
                 DetectedLineEndingKind.Mixed => true,
                 DetectedLineEndingKind.CR => true,
-                DetectedLineEndingKind.CRLF => resolvedLineEnding != FileConsistencyLineEnding.CRLF,
-                DetectedLineEndingKind.LF => resolvedLineEnding != FileConsistencyLineEnding.LF,
+                DetectedLineEndingKind.CRLF => expectedLineEnding != FileConsistencyLineEnding.CRLF,
+                DetectedLineEndingKind.LF => expectedLineEnding != FileConsistencyLineEnding.LF,
                 _ => true
             };
 
@@ -160,8 +184,8 @@ public sealed class ProjectConsistencyAnalyzer
                 currentEncoding: currentEncoding,
                 currentLineEnding: currentLineEnding,
                 hasFinalNewline: hasFinalNewline,
-                recommendedEncoding: resolvedEncoding,
-                recommendedLineEnding: resolvedLineEnding,
+                recommendedEncoding: expectedEncoding,
+                recommendedLineEnding: expectedLineEnding,
                 needsEncodingConversion: needsEncodingConversion,
                 needsLineEndingConversion: needsLineEndingConversion,
                 hasMixedLineEndings: hasMixedLineEndings,
@@ -379,7 +403,12 @@ public sealed class ProjectConsistencyAnalyzer
 
         var recommendations = status == CheckStatus.Pass
             ? Array.Empty<string>()
-            : new[] { "Fix files with mixed line endings", "Standardize line endings by file extension", "Use Convert-ProjectLineEnding to fix issues" };
+            : new[]
+            {
+                "Fix files with mixed line endings",
+                "Standardize line endings by file extension",
+                "Use New-ConfigurationFileConsistency -AutoFix during builds"
+            };
 
         var summary = new ProjectLineEndingSummary(
             status: status,

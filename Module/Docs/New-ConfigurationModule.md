@@ -11,7 +11,7 @@ Provides a way to configure required, external, or approved modules used in the 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationModule -Name <string[]> [-Type <ModuleDependencyKind>] [-Version <string>] [-RequiredVersion <string>] [-Guid <string>] [<CommonParameters>]
+New-ConfigurationModule -Name <string[]> [-Type <ModuleDependencyKind>] [-Version <string>] [-MinimumVersion <string>] [-RequiredVersion <string>] [-Guid <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -45,6 +45,21 @@ Uses RequiredVersion when an exact match is required.
 
 ### -Guid
 GUID of the dependency module (or 'Auto').
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -MinimumVersion
+Minimum version of the dependency module (preferred over -Version).
 
 ```yaml
 Type: String

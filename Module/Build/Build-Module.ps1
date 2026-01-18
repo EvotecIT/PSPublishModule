@@ -6,7 +6,15 @@
     [switch] $JsonOnly,
     [string] $JsonPath = (Join-Path $PSScriptRoot '..\..\powerforge.json'),
     [ValidateSet('Release', 'Debug')][string] $Configuration = 'Release',
-    [switch] $NoDotnetBuild
+    [switch] $NoDotnetBuild,
+    [string] $ModuleVersion = '3.0.X',
+    [string] $PreReleaseTag,
+    [switch] $SignModule,
+    [switch] $NoSign,
+    [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
+    [switch] $SignIncludeBinaries,
+    [switch] $SignIncludeInternals,
+    [switch] $SignIncludeExe
 )
 
 if (-not $JsonOnly) {
@@ -40,8 +48,7 @@ if ($JsonOnly) {
 Build-Module @buildParams -Settings {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
-        ModuleVersion          = '3.0.X'
-        #PreReleaseTag          = 'Preview5'
+        ModuleVersion          = $ModuleVersion
         CompatiblePSEditions   = @('Desktop', 'Core')
         GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
         Author                 = 'Przemyslaw Klys'
@@ -53,6 +60,9 @@ Build-Module @buildParams -Settings {
         IconUri                = 'https://evotec.xyz/wp-content/uploads/2019/02/PSPublishModule.png'
         ProjectUri             = 'https://github.com/EvotecIT/PSPublishModule'
         DotNetFrameworkVersion = '4.5.2'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($PreReleaseTag)) {
+        $Manifest.PreReleaseTag = $PreReleaseTag
     }
     New-ConfigurationManifest @Manifest
 
@@ -129,38 +139,83 @@ Build-Module @buildParams -Settings {
     # configuration for documentation, at the same time it enables documentation processing
     New-ConfigurationDocumentation -Enable:$true -StartClean -UpdateWhenNew -PathReadme 'Docs\Readme.md' -Path 'Docs'
 
+    # quality checks (non-blocking by default; add -FailOn* switches to hard-fail)
+    $newConfigurationValidationSplat = @{
+        Enable                               = $true
+        StructureSeverity                    = 'Warning'
+        DocumentationSeverity                = 'Warning'
+        EnableScriptAnalyzer                 = $true
+        ScriptAnalyzerSeverity               = 'Warning'
+        FileIntegritySeverity                = 'Warning'
+        FileIntegrityCheckTrailingWhitespace = $true
+        FileIntegrityCheckSyntax             = $true
+    }
+
+    New-ConfigurationValidation @newConfigurationValidationSplat
+
+    $newConfigurationFileConsistencySplat = @{
+        Enable                   = $true
+        RequiredEncoding         = 'UTF8BOM'
+        RequiredLineEnding       = 'CRLF'
+        ExcludeDirectories       = 'Build', 'Docs', 'Documentation', 'Examples', 'Tests'
+        ExportReport             = $true
+        CheckMixedLineEndings    = $true
+        CheckMissingFinalNewline = $true
+        Scope                    = 'StagingAndProject'
+        EncodingOverrides        = @{ '*.xml' = 'UTF8' }
+    }
+
+    New-ConfigurationFileConsistency @newConfigurationFileConsistencySplat
+
+    $newConfigurationCompatibilitySplat = @{
+        Enable                         = $true
+        RequireCrossCompatibility      = $true
+        MinimumCompatibilityPercentage = 95
+        ExportReport                   = $true
+    }
+
+    New-ConfigurationCompatibility @newConfigurationCompatibilitySplat
+
     New-ConfigurationImportModule -ImportSelf
 
+    $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMONSTER' }
     $newConfigurationBuildSplat = @{
-        Enable                            = $true
-        SignModule                        = if ($Env:COMPUTERNAME -eq 'EVOMONSTER') { $true } else { $false }
+        Enable                         = $true
+        SignModule                     = $signEnabled
         # DeleteTargetModuleBeforeBuild     = $true
-        MergeModuleOnBuild                = $true
-        CertificateThumbprint             = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703'
+        MergeModuleOnBuild             = $true
+        CertificateThumbprint          = $CertificateThumbprint
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
-        DoNotAttemptToFixRelativePaths    = $false
-        SkipBuiltinReplacements           = $true
+        DoNotAttemptToFixRelativePaths = $false
+        SkipBuiltinReplacements        = $true
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                    = "$PSScriptRoot\..\..\PSPublishModule"
-        ResolveBinaryConflicts            = $true
-        ResolveBinaryConflictsName        = 'PSPublishModule'
-        NETProjectName                    = 'PSPublishModule'
-        NETConfiguration                  = 'Release'
-        NETFramework                      = 'net8.0', 'net472'
-        NETHandleAssemblyWithSameName     = $true
+        NETProjectPath                 = "$PSScriptRoot\..\..\PSPublishModule"
+        ResolveBinaryConflicts         = $true
+        ResolveBinaryConflictsName     = 'PSPublishModule'
+        NETProjectName                 = 'PSPublishModule'
+        NETConfiguration               = 'Release'
+        NETFramework                   = 'net8.0', 'net472'
+        NETHandleAssemblyWithSameName  = $true
         #NETDocumentation                  = $true
-        DotSourceLibraries                = $true
-        DotSourceClasses                  = $true
+        DotSourceLibraries             = $true
+        DotSourceClasses               = $true
 
-        # This has to be disabled as it will not have DLLs required to do this
-        NETBinaryModuleCmdletScanDisabled = $true
+        VersionedInstallStrategy       = 'AutoRevision'   # or 'Exact'
+        VersionedInstallKeep           = 3                # how many versions to retain
+        KillLockersBeforeInstall       = $true
+        KillLockersForce               = $true
+    }
 
-        VersionedInstallStrategy          = 'AutoRevision'   # or 'Exact'
-        VersionedInstallKeep              = 3                # how many versions to retain
-        KillLockersBeforeInstall          = $true
-        KillLockersForce                  = $true
+    if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) {
+        $newConfigurationBuildSplat.SignIncludeBinaries = $SignIncludeBinaries.IsPresent
+    }
+    if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) {
+        $newConfigurationBuildSplat.SignIncludeInternals = $SignIncludeInternals.IsPresent
+    }
+    if ($PSBoundParameters.ContainsKey('SignIncludeExe')) {
+        $newConfigurationBuildSplat.SignIncludeExe = $SignIncludeExe.IsPresent
     }
 
     New-ConfigurationBuild @newConfigurationBuildSplat
@@ -177,6 +232,8 @@ Build-Module @buildParams -Settings {
 
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
+
+    New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
     # Disabled because PSPublishModule testing itself after build causes multiple module instances
     # which breaks InModuleScope tests. The module is tested separately via PSPublishModule.Tests.ps1
     #New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable

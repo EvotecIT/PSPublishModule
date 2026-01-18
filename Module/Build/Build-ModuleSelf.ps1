@@ -1,5 +1,5 @@
 # Self-build script for PSPublishModule.
-# Builds PowerForge.Cli and runs `powerforge pipeline` using repo config discovery (`powerforge.json`).
+# Builds PowerForge.Cli and runs `powerforge pipeline` using the same configuration as Build-Module.ps1.
 [CmdletBinding()]
 param(
     [ValidateSet('auto', 'net10.0', 'net8.0')][string] $Framework = 'auto',
@@ -7,8 +7,13 @@ param(
     [switch] $NoBuild,
     [switch] $Json,
     [switch] $NoSign,
+    [switch] $SignModule,
+    [string] $ModuleVersion,
+    [string] $PreReleaseTag,
     [string] $CertificateThumbprint = '483292C9E317AA13B07BB7A96AE9D1A5ED9E7703',
-    [switch] $SignIncludeBinaries
+    [switch] $SignIncludeBinaries,
+    [switch] $SignIncludeInternals,
+    [switch] $SignIncludeExe
 )
 
 $repoRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..', '..')))).Path
@@ -42,27 +47,33 @@ $cliExe = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.exe'
 $cliDll = Join-Path -Path $cliDir -ChildPath 'PowerForge.Cli.dll'
 
 $configPath = $null
+$buildScript = Join-Path -Path $repoRoot -ChildPath 'Module\Build\Build-Module.ps1'
+if (-not (Test-Path -LiteralPath $buildScript)) { throw "Build-Module.ps1 not found: $buildScript" }
 try {
-    $pipelineConfig = Join-Path -Path $repoRoot -ChildPath 'powerforge.json'
-    if (-not $NoSign -and $Env:COMPUTERNAME -eq 'EVOMONSTER' -and (Test-Path -LiteralPath $pipelineConfig)) {
-        $spec = Get-Content -LiteralPath $pipelineConfig -Raw | ConvertFrom-Json -Depth 50
-        if (-not $spec.Segments) { $spec | Add-Member -MemberType NoteProperty -Name Segments -Value @() }
+    # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
+    $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
+    $buildArgs = @{
+        JsonOnly       = $true
+        JsonPath       = $configPath
+        Configuration  = $Configuration
+        NoDotnetBuild  = $true
+    }
+    if ($PSBoundParameters.ContainsKey('ModuleVersion')) { $buildArgs.ModuleVersion = $ModuleVersion }
+    if ($PSBoundParameters.ContainsKey('PreReleaseTag')) { $buildArgs.PreReleaseTag = $PreReleaseTag }
+    if ($PSBoundParameters.ContainsKey('NoSign')) { $buildArgs.NoSign = $NoSign.IsPresent }
+    if ($PSBoundParameters.ContainsKey('SignModule')) { $buildArgs.SignModule = $SignModule.IsPresent }
+    if ($PSBoundParameters.ContainsKey('CertificateThumbprint')) { $buildArgs.CertificateThumbprint = $CertificateThumbprint }
+    if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) { $buildArgs.SignIncludeBinaries = $SignIncludeBinaries.IsPresent }
+    if ($PSBoundParameters.ContainsKey('SignIncludeInternals')) { $buildArgs.SignIncludeInternals = $SignIncludeInternals.IsPresent }
+    if ($PSBoundParameters.ContainsKey('SignIncludeExe')) { $buildArgs.SignIncludeExe = $SignIncludeExe.IsPresent }
 
-        $signing = [ordered]@{ CertificateThumbprint = $CertificateThumbprint }
-        if ($SignIncludeBinaries.IsPresent) { $signing.IncludeBinaries = $true }
-
-        $spec.Segments += @(
-            [ordered]@{ Type = 'Build'; BuildModule = [ordered]@{ SignMerged = $true } },
-            [ordered]@{ Type = 'Options'; Options = [ordered]@{ Signing = $signing } }
-        )
-
-        # Keep the generated config in the repo root so relative paths (e.g. "Module") resolve correctly.
-        $configPath = Join-Path -Path $repoRoot -ChildPath ("powerforge.pipeline.self.{0}.json" -f [Guid]::NewGuid().ToString('N'))
-        $spec | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $configPath -Encoding UTF8
+    & $buildScript @buildArgs
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        throw "Build configuration was not generated: $configPath"
     }
 
     $cmd = @('pipeline', '--project-root', $repoRoot)
-    if ($configPath) { $cmd += @('--config', $configPath) }
+    $cmd += @('--config', $configPath)
     if ($Json) { $cmd += @('--output', 'json') }
 
     if ([IO.Path]::DirectorySeparatorChar -eq '\' -and (Test-Path -LiteralPath $cliExe)) {

@@ -1618,25 +1618,169 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         return count;
     }
 
+    static List<string> BuildFileConsistencyReasons(ProjectConsistencyFileDetail file, FileConsistencySettings? settings)
+    {
+        var reasons = new List<string>(4);
+
+        if (file.NeedsEncodingConversion)
+        {
+            var current = file.CurrentEncoding?.ToString() ?? "Unknown";
+            reasons.Add($"encoding {current} (expected {file.RecommendedEncoding})");
+        }
+
+        if (file.NeedsLineEndingConversion)
+        {
+            var current = file.CurrentLineEnding.ToString();
+            reasons.Add($"line endings {current} (expected {file.RecommendedLineEnding})");
+        }
+
+        if (settings?.CheckMixedLineEndings == true && file.HasMixedLineEndings)
+            reasons.Add("mixed line endings");
+
+        if (settings?.CheckMissingFinalNewline == true && file.MissingFinalNewline)
+            reasons.Add("missing final newline");
+
+        var error = file.Error;
+        if (!string.IsNullOrWhiteSpace(error))
+            reasons.Add($"error: {error!.Trim()}");
+
+        return reasons;
+    }
+
+    static void WriteFileConsistencyIssuesPlain(
+        ProjectConsistencyReport report,
+        FileConsistencySettings? settings,
+        string label,
+        CheckStatus status,
+        ILogger logger)
+    {
+        if (report is null) return;
+        var issues = report.ProblematicFiles ?? Array.Empty<ProjectConsistencyFileDetail>();
+        if (issues.Length == 0) return;
+
+        var log = status == CheckStatus.Fail ? (Action<string>)logger.Error : logger.Warn;
+        log($"File consistency issues ({label}): {issues.Length} file(s).");
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+            log($"Report ({label}): {report.ExportPath}");
+
+        const int maxItems = 20;
+        var shown = 0;
+        foreach (var item in issues)
+        {
+            var reasons = BuildFileConsistencyReasons(item, settings);
+            if (reasons.Count == 0) continue;
+            log($"{item.RelativePath} - {string.Join(", ", reasons)}");
+            if (++shown >= maxItems) break;
+        }
+
+        if (issues.Length > maxItems)
+            logger.Warn($"File consistency issues: {issues.Length - maxItems} more not shown.");
+    }
+
+    static void WriteFileConsistencyIssuesSpectre(
+        ProjectConsistencyReport report,
+        FileConsistencySettings? settings,
+        string label,
+        TableBorder border)
+    {
+        if (report is null) return;
+        var issues = report.ProblematicFiles ?? Array.Empty<ProjectConsistencyFileDetail>();
+        if (issues.Length == 0) return;
+
+        static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule($"[grey]File consistency issues ({Esc(label)})[/]").LeftJustified());
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+            AnsiConsole.MarkupLine($"[grey]Report:[/] {Esc(report.ExportPath)}");
+
+        var table = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Path"))
+            .AddColumn(new TableColumn("Issues"));
+
+        const int maxItems = 20;
+        var shown = 0;
+        foreach (var item in issues)
+        {
+            var reasons = BuildFileConsistencyReasons(item, settings);
+            if (reasons.Count == 0) continue;
+            table.AddRow(Esc(item.RelativePath), Esc(string.Join(", ", reasons)));
+            if (++shown >= maxItems) break;
+        }
+
+        AnsiConsole.Write(table);
+
+        if (issues.Length > maxItems)
+            AnsiConsole.MarkupLine($"[grey]... {issues.Length - maxItems} more not shown.[/]");
+    }
+
     if (cli.NoColor)
     {
         logger.Success($"Pipeline built {res.Plan.ModuleName} {res.Plan.ResolvedVersion}");
         logger.Info($"Staging: {res.BuildResult.StagingPath}");
 
-        if (res.FileConsistencyReport is not null)
+        var fileConsistencyConfig = res.Plan.FileConsistencySettings;
+        if (fileConsistencyConfig?.Enable == true)
         {
-            var total = res.FileConsistencyReport.Summary.TotalFiles;
-            var issues = CountFileConsistencyIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings);
-            var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
-            logger.Info($"File consistency: {res.FileConsistencyStatus} ({compliance:0.0}% compliant)");
+            var scope = fileConsistencyConfig.ResolveScope();
+
+            if (scope != FileConsistencyScope.ProjectOnly)
+            {
+                if (res.FileConsistencyReport is not null)
+                {
+                    var total = res.FileConsistencyReport.Summary.TotalFiles;
+                    var issues = CountFileConsistencyIssues(res.FileConsistencyReport, fileConsistencyConfig);
+                    var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+                    logger.Info($"File consistency: {res.FileConsistencyStatus} ({compliance:0.0}% compliant)");
+                    WriteFileConsistencyIssuesPlain(
+                        res.FileConsistencyReport,
+                        fileConsistencyConfig,
+                        "staging",
+                        res.FileConsistencyStatus ?? CheckStatus.Warning,
+                        logger);
+                }
+                else
+                {
+                    logger.Info("File consistency: disabled");
+                }
+            }
+
+            if (scope != FileConsistencyScope.StagingOnly)
+            {
+                if (res.ProjectRootFileConsistencyReport is not null)
+                {
+                    var total = res.ProjectRootFileConsistencyReport.Summary.TotalFiles;
+                    var issues = CountFileConsistencyIssues(res.ProjectRootFileConsistencyReport, fileConsistencyConfig);
+                    var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+                    logger.Info($"File consistency (project): {res.ProjectRootFileConsistencyStatus} ({compliance:0.0}% compliant)");
+                    WriteFileConsistencyIssuesPlain(
+                        res.ProjectRootFileConsistencyReport,
+                        fileConsistencyConfig,
+                        "project",
+                        res.ProjectRootFileConsistencyStatus ?? CheckStatus.Warning,
+                        logger);
+                }
+                else
+                {
+                    logger.Info("File consistency (project): disabled");
+                }
+            }
         }
         else
+        {
             logger.Info("File consistency: disabled");
+        }
 
         if (res.CompatibilityReport is not null)
             logger.Info($"Compatibility: {res.CompatibilityReport.Summary.Status} ({res.CompatibilityReport.Summary.CrossCompatibilityPercentage:0.0}% cross-compatible)");
         else
             logger.Info("Compatibility: disabled");
+
+        if (res.ValidationReport is not null)
+            logger.Info($"Module validation: {res.ValidationReport.Status} ({res.ValidationReport.Summary})");
+        else
+            logger.Info("Module validation: disabled");
 
         if (res.Plan.Formatting is not null)
         {
@@ -1715,15 +1859,46 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
     table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
     table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
 
-    if (res.FileConsistencyReport is not null)
+    var fileConsistencySettings = res.Plan.FileConsistencySettings;
+    if (fileConsistencySettings?.Enable == true)
     {
-        var status = res.FileConsistencyStatus ?? CheckStatus.Warning;
-        var total = res.FileConsistencyReport.Summary.TotalFiles;
-        var issues = CountFileConsistencyIssues(res.FileConsistencyReport, res.Plan.FileConsistencySettings);
-        var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
-        table.AddRow(
-            $"{(unicode ? "🔎" : "*")} File consistency",
-            $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+        var scope = fileConsistencySettings.ResolveScope();
+
+        if (scope != FileConsistencyScope.ProjectOnly)
+        {
+            if (res.FileConsistencyReport is not null)
+            {
+                var status = res.FileConsistencyStatus ?? CheckStatus.Warning;
+                var total = res.FileConsistencyReport.Summary.TotalFiles;
+                var issues = CountFileConsistencyIssues(res.FileConsistencyReport, fileConsistencySettings);
+                var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+                table.AddRow(
+                    $"{(unicode ? "🔎" : "*")} File consistency",
+                    $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+            }
+            else
+            {
+                table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
+            }
+        }
+
+        if (scope != FileConsistencyScope.StagingOnly)
+        {
+            if (res.ProjectRootFileConsistencyReport is not null)
+            {
+                var status = res.ProjectRootFileConsistencyStatus ?? CheckStatus.Warning;
+                var total = res.ProjectRootFileConsistencyReport.Summary.TotalFiles;
+                var issues = CountFileConsistencyIssues(res.ProjectRootFileConsistencyReport, fileConsistencySettings);
+                var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
+                table.AddRow(
+                    $"{(unicode ? "🔎" : "*")} File consistency (project)",
+                    $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
+            }
+            else
+            {
+                table.AddRow($"{(unicode ? "🔎" : "*")} File consistency (project)", "[grey]Disabled[/]");
+            }
+        }
     }
     else
     {
@@ -1740,6 +1915,17 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
     else
     {
         table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+    }
+
+    if (res.ValidationReport is not null)
+    {
+        table.AddRow(
+            $"{(unicode ? "🔎" : "*")} Module validation",
+            $"{StatusMarkup(res.ValidationReport.Status)} [grey]{Esc(res.ValidationReport.Summary)}[/]");
+    }
+    else
+    {
+        table.AddRow($"{(unicode ? "🔎" : "*")} Module validation", "[grey]Disabled[/]");
     }
 
     if (res.Plan.Formatting is not null)
@@ -1794,6 +1980,33 @@ static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogg
         table.AddRow($"{(unicode ? "📥" : "*")} Install", "[grey]Disabled[/]");
 
     AnsiConsole.Write(table);
+
+    if (res.ValidationReport is not null && res.ValidationReport.Checks.Length > 0)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[grey]Validation details[/]").LeftJustified());
+
+        var details = new Table()
+            .Border(border)
+            .AddColumn(new TableColumn("Check").NoWrap())
+            .AddColumn(new TableColumn("Result"));
+
+        foreach (var check in res.ValidationReport.Checks)
+        {
+            if (check is null) continue;
+            details.AddRow(
+                Esc(check.Name),
+                $"{StatusMarkup(check.Status)} [grey]{Esc(check.Summary)}[/]");
+        }
+
+        AnsiConsole.Write(details);
+    }
+
+    if (res.FileConsistencyReport is not null)
+        WriteFileConsistencyIssuesSpectre(res.FileConsistencyReport, res.Plan.FileConsistencySettings, "staging", border);
+
+    if (res.ProjectRootFileConsistencyReport is not null)
+        WriteFileConsistencyIssuesSpectre(res.ProjectRootFileConsistencyReport, res.Plan.FileConsistencySettings, "project", border);
 
     if (res.ArtefactResults is { Length: > 0 })
     {

@@ -1,0 +1,206 @@
+@namespace PowerForge.Blazor
+
+<div class="api-type-viewer @CssClass">
+    @if (Type == null)
+    {
+        <div class="api-not-found">Type not found</div>
+    }
+    else
+    {
+        <header class="api-header">
+            <div class="api-type-badge @Type.Kind.ToString().ToLowerInvariant()">@Type.Kind</div>
+            <h1>@Type.Name</h1>
+            <code class="api-namespace">@Type.Namespace</code>
+        </header>
+
+        @if (!string.IsNullOrEmpty(Type.Summary))
+        {
+            <section class="api-summary">
+                <p>@((MarkupString)Type.Summary)</p>
+            </section>
+        }
+
+        @if (Type.TypeParameters.Count > 0)
+        {
+            <section class="api-type-params">
+                <h2>Type Parameters</h2>
+                <dl>
+                    @foreach (var tp in Type.TypeParameters)
+                    {
+                        <dt><code>@tp.Name</code></dt>
+                        <dd>@tp.Description</dd>
+                    }
+                </dl>
+            </section>
+        }
+
+        @if (!string.IsNullOrEmpty(Type.Remarks))
+        {
+            <section class="api-remarks">
+                <h2>Remarks</h2>
+                <div>@((MarkupString)Type.Remarks)</div>
+            </section>
+        }
+
+        @if (Type.Constructors.Count > 0)
+        {
+            <section class="api-constructors">
+                <h2>Constructors</h2>
+                @foreach (var ctor in Type.Constructors)
+                {
+                    <ApiMethodCard Method="@ctor" />
+                }
+            </section>
+        }
+
+        @if (Type.Properties.Count > 0)
+        {
+            <section class="api-properties">
+                <h2>Properties</h2>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var prop in Type.Properties.OrderBy(p => p.Name))
+                        {
+                            <tr>
+                                <td><code>@prop.Name</code></td>
+                                <td><code>@prop.Type</code></td>
+                                <td>@prop.Summary</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (Type.Methods.Count > 0)
+        {
+            <section class="api-methods">
+                <h2>Methods</h2>
+                @foreach (var method in Type.Methods.OrderBy(m => m.Name))
+                {
+                    <ApiMethodCard Method="@method" />
+                }
+            </section>
+        }
+
+        @if (Type.Fields.Count > 0)
+        {
+            <section class="api-fields">
+                <h2>Fields</h2>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var field in Type.Fields.OrderBy(f => f.Name))
+                        {
+                            <tr>
+                                <td><code>@field.Name</code></td>
+                                <td><code>@field.Type</code></td>
+                                <td>@field.Summary</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (Type.EnumValues.Count > 0)
+        {
+            <section class="api-enum-values">
+                <h2>Values</h2>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Value</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var val in Type.EnumValues)
+                        {
+                            <tr>
+                                <td><code>@val.Name</code></td>
+                                <td>@val.Value</td>
+                                <td>@val.Summary</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (Type.Events.Count > 0)
+        {
+            <section class="api-events">
+                <h2>Events</h2>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var evt in Type.Events.OrderBy(e => e.Name))
+                        {
+                            <tr>
+                                <td><code>@evt.Name</code></td>
+                                <td><code>@evt.Type</code></td>
+                                <td>@evt.Summary</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        @if (!string.IsNullOrEmpty(Type.Example))
+        {
+            <section class="api-example">
+                <h2>Example</h2>
+                <pre><code>@Type.Example</code></pre>
+            </section>
+        }
+
+        @if (Type.SeeAlso.Count > 0)
+        {
+            <section class="api-seealso">
+                <h2>See Also</h2>
+                <ul>
+                    @foreach (var see in Type.SeeAlso)
+                    {
+                        <li><code>@see</code></li>
+                    }
+                </ul>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The API type to display.
+    /// </summary>
+    [Parameter]
+    public ApiType? Type { get; set; }
+
+    /// <summary>
+    /// Additional CSS class.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+}

@@ -71,6 +71,11 @@ public sealed class ModulePipelineResult
     public PowerShellCompatibilityReport? CompatibilityReport { get; }
 
     /// <summary>
+    /// Module validation report when enabled; otherwise null.
+    /// </summary>
+    public ModuleValidationReport? ValidationReport { get; }
+
+    /// <summary>
     /// Formatting results for the staging output (empty when formatting was disabled).
     /// </summary>
     public FormatterResult[] FormattingStagingResults { get; }
@@ -108,6 +113,7 @@ public sealed class ModulePipelineResult
         ProjectConversionResult? fileConsistencyEncodingFix,
         ProjectConversionResult? fileConsistencyLineEndingFix,
         PowerShellCompatibilityReport? compatibilityReport,
+        ModuleValidationReport? validationReport,
         ModulePublishResult[] publishResults,
         ArtefactBuildResult[] artefactResults,
         FormatterResult[]? formattingStagingResults = null,
@@ -131,6 +137,7 @@ public sealed class ModulePipelineResult
         ProjectRootFileConsistencyEncodingFix = projectRootFileConsistencyEncodingFix;
         ProjectRootFileConsistencyLineEndingFix = projectRootFileConsistencyLineEndingFix;
         CompatibilityReport = compatibilityReport;
+        ValidationReport = validationReport;
         FormattingStagingResults = formattingStagingResults ?? Array.Empty<FormatterResult>();
         FormattingProjectResults = formattingProjectResults ?? Array.Empty<FormatterResult>();
         PublishResults = publishResults ?? Array.Empty<ModulePublishResult>();  

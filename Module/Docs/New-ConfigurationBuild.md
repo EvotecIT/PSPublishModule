@@ -588,7 +588,8 @@ Accept wildcard characters: True
 ```
 
 ### -SignIncludeBinaries
-When signing is enabled, include binary files (e.g., .dll, .cat) in signing.
+When signing is enabled, binaries are signed by default (e.g., .dll, .cat).
+Use -SignIncludeBinaries:$false to opt out.
 
 ```yaml
 Type: SwitchParameter

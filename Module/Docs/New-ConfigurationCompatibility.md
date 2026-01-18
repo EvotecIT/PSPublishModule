@@ -11,7 +11,7 @@ Creates configuration for PowerShell compatibility checking during module build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationCompatibility [-Enable] [-FailOnIncompatibility] [-RequirePS51Compatibility] [-RequirePS7Compatibility] [-RequireCrossCompatibility] [-MinimumCompatibilityPercentage <int>] [-ExcludeDirectories <string[]>] [-ExportReport] [-ReportFileName <string>] [<CommonParameters>]
+New-ConfigurationCompatibility [-Enable] [-FailOnIncompatibility] [-Severity <ValidationSeverity>] [-RequirePS51Compatibility] [-RequirePS7Compatibility] [-RequireCrossCompatibility] [-MinimumCompatibilityPercentage <int>] [-ExcludeDirectories <string[]>] [-ExportReport] [-ReportFileName <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -159,6 +159,21 @@ Require PowerShell 7 compatibility.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Severity
+Severity for compatibility issues (overrides FailOnIncompatibility when specified).
+
+```yaml
+Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 

@@ -33,6 +33,9 @@ public sealed class NewConfigurationCompatibilityCommand : PSCmdlet
     /// <summary>Fail the build if compatibility issues are found.</summary>
     [Parameter] public SwitchParameter FailOnIncompatibility { get; set; }
 
+    /// <summary>Severity for compatibility issues (overrides FailOnIncompatibility when specified).</summary>
+    [Parameter] public ValidationSeverity? Severity { get; set; }
+
     /// <summary>Require PowerShell 5.1 compatibility.</summary>
     [Parameter] public SwitchParameter RequirePS51Compatibility { get; set; }
 
@@ -61,6 +64,7 @@ public sealed class NewConfigurationCompatibilityCommand : PSCmdlet
         {
             Enable = Enable.IsPresent,
             FailOnIncompatibility = FailOnIncompatibility.IsPresent,
+            Severity = Severity,
             RequirePS51Compatibility = RequirePS51Compatibility.IsPresent,
             RequirePS7Compatibility = RequirePS7Compatibility.IsPresent,
             RequireCrossCompatibility = RequireCrossCompatibility.IsPresent,

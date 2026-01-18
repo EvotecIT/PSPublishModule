@@ -1,0 +1,59 @@
+@namespace PowerForge.Blazor
+
+<nav class="doc-nav-tree @CssClass">
+    @foreach (var source in NavigationSources)
+    {
+        <div class="nav-source">
+            @if (ShowSourceHeaders)
+            {
+                <h3 class="nav-source-title">@source.SourceId</h3>
+            }
+            <ul class="nav-items">
+                @foreach (var item in source.Items)
+                {
+                    <NavItemComponent Item="@item"
+                                     CurrentSlug="@CurrentSlug"
+                                     OnNavigate="@HandleNavigate"
+                                     Level="0" />
+                }
+            </ul>
+        </div>
+    }
+</nav>
+
+@code {
+    /// <summary>
+    /// Navigation sources to display.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<DocNavigation> NavigationSources { get; set; } = Array.Empty<DocNavigation>();
+
+    /// <summary>
+    /// Currently active page slug.
+    /// </summary>
+    [Parameter]
+    public string? CurrentSlug { get; set; }
+
+    /// <summary>
+    /// Whether to show source section headers. Defaults to true.
+    /// </summary>
+    [Parameter]
+    public bool ShowSourceHeaders { get; set; } = true;
+
+    /// <summary>
+    /// Callback when a navigation item is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnNavigate { get; set; }
+
+    /// <summary>
+    /// Additional CSS class.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    private async Task HandleNavigate(string slug)
+    {
+        await OnNavigate.InvokeAsync(slug);
+    }
+}

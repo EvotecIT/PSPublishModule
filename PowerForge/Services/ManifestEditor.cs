@@ -521,6 +521,10 @@ public static class ManifestEditor
     public static bool TrySetPsDataSubStringArray(string filePath, string parentKey, string key, string[] values)
         => TrySetPsDataSubValue(filePath, parentKey, key, "@(" + string.Join(", ", (values ?? Array.Empty<string>()).Select(EscapeAndQuote)) + ")");
 
+    /// <summary>Sets a PSData sub-hashtable boolean value (e.g., Delivery.Enable).</summary>
+    public static bool TrySetPsDataSubBool(string filePath, string parentKey, string key, bool value)
+        => TrySetPsDataSubValue(filePath, parentKey, key, value ? "$true" : "$false");
+
     private static bool TrySetPsDataValue(string filePath, string key, string valueExpression)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;

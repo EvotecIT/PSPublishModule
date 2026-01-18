@@ -1,0 +1,114 @@
+@namespace PowerForge.Blazor
+
+<div class="doc-viewer @CssClass">
+    @if (IsLoading)
+    {
+        <div class="doc-loading">
+            <div class="loading-spinner"></div>
+            <span>Loading documentation...</span>
+        </div>
+    }
+    else if (Page == null)
+    {
+        <div class="doc-not-found">
+            <h2>Page Not Found</h2>
+            <p>The requested documentation page could not be found.</p>
+        </div>
+    }
+    else
+    {
+        @if (ShowTitle)
+        {
+            <header class="doc-header">
+                <h1>@Page.Title</h1>
+                @if (!string.IsNullOrEmpty(Page.Description))
+                {
+                    <p class="doc-description">@Page.Description</p>
+                }
+                @if (Page.Tags.Count > 0)
+                {
+                    <div class="doc-tags">
+                        @foreach (var tag in Page.Tags)
+                        {
+                            <span class="doc-tag">@tag</span>
+                        }
+                    </div>
+                }
+            </header>
+        }
+
+        @if (ShowTableOfContents && Page.TableOfContents.Count > 1)
+        {
+            <nav class="doc-toc">
+                <h3>On this page</h3>
+                <ul>
+                    @foreach (var entry in Page.TableOfContents.Where(e => e.Level <= MaxTocLevel))
+                    {
+                        <li class="toc-level-@entry.Level">
+                            <a href="#@entry.Anchor">@entry.Text</a>
+                        </li>
+                    }
+                </ul>
+            </nav>
+        }
+
+        <article class="doc-content markdown-body">
+            @((MarkupString)(Page.RenderedHtml ?? Page.Content))
+        </article>
+
+        @if (ShowMetadata && Page.LastModified.HasValue)
+        {
+            <footer class="doc-footer">
+                <span class="doc-modified">Last updated: @Page.LastModified.Value.ToString("MMMM d, yyyy")</span>
+                @if (!string.IsNullOrEmpty(Page.SourcePath))
+                {
+                    <span class="doc-source">@Path.GetFileName(Page.SourcePath)</span>
+                }
+            </footer>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The documentation page to display.
+    /// </summary>
+    [Parameter]
+    public DocPage? Page { get; set; }
+
+    /// <summary>
+    /// Whether the content is currently loading.
+    /// </summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// Whether to show the page title. Defaults to true.
+    /// </summary>
+    [Parameter]
+    public bool ShowTitle { get; set; } = true;
+
+    /// <summary>
+    /// Whether to show the table of contents. Defaults to true.
+    /// </summary>
+    [Parameter]
+    public bool ShowTableOfContents { get; set; } = true;
+
+    /// <summary>
+    /// Maximum TOC heading level to show. Defaults to 3.
+    /// </summary>
+    [Parameter]
+    public int MaxTocLevel { get; set; } = 3;
+
+    /// <summary>
+    /// Whether to show metadata (last modified, source file). Defaults to true.
+    /// </summary>
+    [Parameter]
+    public bool ShowMetadata { get; set; } = true;
+
+    /// <summary>
+    /// Additional CSS class for the viewer container.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+}

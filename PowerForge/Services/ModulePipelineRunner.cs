@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using System.Text;
 using System.Text.Json;
 
@@ -41,13 +43,15 @@ public sealed class ModulePipelineRunner
     {
         public string ModuleName { get; }
         public string? ModuleVersion { get; }
+        public string? MinimumVersion { get; }
         public string? RequiredVersion { get; }
         public string? Guid { get; }
 
-        public RequiredModuleDraft(string moduleName, string? moduleVersion, string? requiredVersion, string? guid)
+        public RequiredModuleDraft(string moduleName, string? moduleVersion, string? minimumVersion, string? requiredVersion, string? guid)
         {
             ModuleName = moduleName;
             ModuleVersion = moduleVersion;
+            MinimumVersion = minimumVersion;
             RequiredVersion = requiredVersion;
             Guid = guid;
         }
@@ -92,6 +96,10 @@ public sealed class ModulePipelineRunner
         InstallationStrategy? installStrategyFromSegments = null;
         int? keepVersionsFromSegments = null;
         bool signModule = false;
+        bool mergeModule = false;
+        bool mergeModuleSet = false;
+        bool mergeMissing = false;
+        bool mergeMissingSet = false;
         SigningOptionsConfiguration? signing = null;
 
         string? dotnetConfigFromSegments = null;
@@ -108,9 +116,14 @@ public sealed class ModulePipelineRunner
         BuildDocumentationConfiguration? documentationBuild = null;
         CompatibilitySettings? compatibilitySettings = null;
         FileConsistencySettings? fileConsistencySettings = null;
+        ModuleValidationSettings? validationSettings = null;
         ConfigurationFormattingSegment? formatting = null;
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
+        var approvedModules = new List<string>();
+        var moduleSkipIgnoreModules = new List<string>();
+        var moduleSkipIgnoreFunctions = new List<string>();
+        bool moduleSkipForce = false;
 
         var requiredModulesDraft = new List<RequiredModuleDraft>();
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -143,6 +156,16 @@ public sealed class ModulePipelineRunner
                     if (b.VersionedInstallStrategy.HasValue) installStrategyFromSegments = b.VersionedInstallStrategy.Value;
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
+                    if (b.Merge.HasValue)
+                    {
+                        mergeModule = b.Merge.Value;
+                        mergeModuleSet = true;
+                    }
+                    if (b.MergeMissing.HasValue)
+                    {
+                        mergeMissing = b.MergeMissing.Value;
+                        mergeMissingSet = true;
+                    }
                     if (!string.IsNullOrWhiteSpace(b.ResolveBinaryConflicts?.ProjectName))
                         resolveBinaryConflictsProjectName = b.ResolveBinaryConflicts!.ProjectName;
                     break;
@@ -160,15 +183,23 @@ public sealed class ModulePipelineRunner
                 }
                 case ConfigurationModuleSegment moduleSeg:
                 {
+                    var md = moduleSeg.Configuration;
+                    if (string.IsNullOrWhiteSpace(md.ModuleName)) break;        
+                    var name = md.ModuleName.Trim();
+
+                    if (moduleSeg.Kind == ModuleDependencyKind.ApprovedModule)
+                    {
+                        approvedModules.Add(name);
+                        break;
+                    }
+
                     if (moduleSeg.Kind is not (ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule))
                         break;
 
-                    var md = moduleSeg.Configuration;
-                    if (string.IsNullOrWhiteSpace(md.ModuleName)) break;
-                    var name = md.ModuleName.Trim();
                     var draft = new RequiredModuleDraft(
                         moduleName: name,
                         moduleVersion: md.ModuleVersion,
+                        minimumVersion: md.MinimumVersion,
                         requiredVersion: md.RequiredVersion,
                         guid: md.Guid);
 
@@ -195,10 +226,20 @@ public sealed class ModulePipelineRunner
                 case ConfigurationOptionsSegment optionsSegment:
                 {
                     var opts = optionsSegment.Options ?? new ConfigurationOptions();
-                    if (opts.Delivery is not null && opts.Delivery.Enable)
+                    if (opts.Delivery is not null && opts.Delivery.Enable)      
                         delivery = opts.Delivery;
                     if (opts.Signing is not null)
                         signing = opts.Signing;
+                    break;
+                }
+                case ConfigurationModuleSkipSegment skipSeg:
+                {
+                    var cfg = skipSeg.Configuration ?? new ModuleSkipConfiguration();
+                    if (cfg.IgnoreModuleName is { Length: > 0 })
+                        moduleSkipIgnoreModules.AddRange(cfg.IgnoreModuleName);
+                    if (cfg.IgnoreFunctionName is { Length: > 0 })
+                        moduleSkipIgnoreFunctions.AddRange(cfg.IgnoreFunctionName);
+                    if (cfg.Force) moduleSkipForce = true;
                     break;
                 }
                 case ConfigurationInformationSegment info:
@@ -229,6 +270,11 @@ public sealed class ModulePipelineRunner
                 case ConfigurationFormattingSegment formattingSegment:
                 {
                     formatting = MergeFormattingSegments(formatting, formattingSegment);
+                    break;
+                }
+                case ConfigurationValidationSegment validationSegment:
+                {
+                    validationSettings = validationSegment.Settings;
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -345,6 +391,51 @@ public sealed class ModulePipelineRunner
 
         var requiredModules = ResolveRequiredModules(requiredModulesDraft);
         var requiredModulesForPackaging = ResolveRequiredModules(requiredModulesDraftForPackaging);
+
+        var approved = approvedModules
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Select(m => m.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (!mergeModuleSet)
+        {
+            mergeModule = true;
+            _logger.Info("MergeModule not explicitly set; enabling by default for legacy compatibility.");
+        }
+
+        if (!mergeMissingSet && !mergeMissing && approved.Length > 0)
+        {
+            mergeMissing = true;
+            var context = mergeModule ? "and MergeModule is enabled" : "for approved-module inlining";
+            _logger.Info($"MergeMissing not explicitly set; enabling because approved modules are configured {context}.");
+        }
+
+        if (mergeMissing && approved.Length > 0)
+        {
+            requiredModules = FilterRequiredModules(requiredModules, approved);
+            requiredModulesForPackaging = FilterRequiredModules(requiredModulesForPackaging, approved);
+        }
+
+        ModuleSkipConfiguration? moduleSkip = null;
+        if (moduleSkipForce || moduleSkipIgnoreModules.Count > 0 || moduleSkipIgnoreFunctions.Count > 0)
+        {
+            moduleSkip = new ModuleSkipConfiguration
+            {
+                Force = moduleSkipForce,
+                IgnoreModuleName = moduleSkipIgnoreModules
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                IgnoreFunctionName = moduleSkipIgnoreFunctions
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+            };
+        }
+
         var enabledArtefacts = artefacts
             .Where(a => a is not null && a.Configuration?.Enabled == true)      
             .ToArray();
@@ -368,7 +459,12 @@ public sealed class ModulePipelineRunner
             documentationBuild: documentationBuild,
             compatibilitySettings: compatibilitySettings,
             fileConsistencySettings: fileConsistencySettings,
+            validationSettings: validationSettings,
             formatting: formatting,
+            mergeModule: mergeModule,
+            mergeMissing: mergeMissing,
+            approvedModules: approved,
+            moduleSkip: moduleSkip,
             signModule: signModule,
             signing: signing,
             publishes: enabledPublishes,
@@ -420,9 +516,10 @@ public sealed class ModulePipelineRunner
         var formatStagingStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:staging", StringComparison.OrdinalIgnoreCase));
         var formatProjectStep = steps.FirstOrDefault(s => string.Equals(s.Key, "format:project", StringComparison.OrdinalIgnoreCase));
         var signStep = steps.FirstOrDefault(s => string.Equals(s.Key, "sign", StringComparison.OrdinalIgnoreCase));
-        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));        
+        var fileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency", StringComparison.OrdinalIgnoreCase));
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
+        var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -479,6 +576,8 @@ public sealed class ModulePipelineRunner
                 throw;
             }
 
+            var mergedScripts = ApplyMerge(plan, buildResult);
+
             SafeStart(manifestStep);
             try
             {
@@ -520,6 +619,9 @@ public sealed class ModulePipelineRunner
                         }
                     }
                 }
+
+                if (!mergedScripts)
+                    TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
                 SafeDone(manifestStep);
             }
@@ -579,6 +681,7 @@ public sealed class ModulePipelineRunner
             FormatterResult[] formattingStagingResults = Array.Empty<FormatterResult>();
             FormatterResult[] formattingProjectResults = Array.Empty<FormatterResult>();
             ModuleSigningResult? signingResult = null;
+            ModuleValidationReport? validationReport = null;
 
             if (plan.Formatting is not null)
             {
@@ -597,8 +700,11 @@ public sealed class ModulePipelineRunner
 
                     var stagingFmt = FormattingSummary.FromResults(formattingStagingResults);
                     if (stagingFmt.Status == CheckStatus.Fail)
+                    {
+                        LogFormattingIssues(buildResult.StagingPath, formattingStagingResults, "staging root");
                         throw new InvalidOperationException(
-                            $"Formatting failed for staging root (errors {stagingFmt.Errors}/{stagingFmt.Total}).");
+                            BuildFormattingFailureMessage("staging root", buildResult.StagingPath, stagingFmt, formattingStagingResults));
+                    }
                     SafeDone(formatStagingStep);
                 }
                 catch (Exception ex)
@@ -623,8 +729,11 @@ public sealed class ModulePipelineRunner
 
                         var projectFmt = FormattingSummary.FromResults(formattingProjectResults);
                         if (projectFmt.Status == CheckStatus.Fail)
+                        {
+                            LogFormattingIssues(plan.ProjectRoot, formattingProjectResults, "project root");
                             throw new InvalidOperationException(
-                                $"Formatting failed for project root (errors {projectFmt.Errors}/{projectFmt.Total}).");
+                                BuildFormattingFailureMessage("project root", plan.ProjectRoot, projectFmt, formattingProjectResults));
+                        }
                         SafeDone(formatProjectStep);
                     }
                     catch (Exception ex)
@@ -666,115 +775,55 @@ public sealed class ModulePipelineRunner
         if (plan.FileConsistencySettings?.Enable == true)
         {
             var s = plan.FileConsistencySettings;
+            var scope = s.ResolveScope();
+            var runStaging = scope != FileConsistencyScope.ProjectOnly;
+            var runProject = scope != FileConsistencyScope.StagingOnly;
 
-            SafeStart(fileConsistencyStep);
-            try
+            var fileConsistencySeverity = ResolveFileConsistencySeverity(s);
+
+            if (runStaging)
             {
-                var excludeDirs = MergeExcludeDirectories(
-                    s.ExcludeDirectories,
-                    new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
-
-                var enumeration = new ProjectEnumeration(
-                    rootPath: buildResult.StagingPath,
-                    kind: ProjectKind.Mixed,
-                    customExtensions: null,
-                    excludeDirectories: excludeDirs);
-
-                var recommendedEncoding = MapEncoding(s.RequiredEncoding);
-                var exportPath = s.ExportReport
-                    ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "FileConsistencyReport.csv")
-                    : null;
-
-                var analyzer = new ProjectConsistencyAnalyzer(_logger);
-                fileConsistencyReport = analyzer.Analyze(
-                    enumeration: enumeration,
-                    projectType: "Mixed",
-                    recommendedEncoding: recommendedEncoding,
-                    recommendedLineEnding: s.RequiredLineEnding,
-                    includeDetails: false,
-                    exportPath: exportPath);
-
-                if (s.AutoFix)
-                {
-                    var enc = new EncodingConverter();
-                    fileConsistencyEncodingFix = enc.Convert(new EncodingConversionOptions(
-                        enumeration: enumeration,
-                        sourceEncoding: TextEncodingKind.Any,
-                        targetEncoding: recommendedEncoding,
-                        createBackups: s.CreateBackups,
-                        backupDirectory: null,
-                        force: false,
-                        noRollbackOnMismatch: false,
-                        preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
-
-                    var le = new LineEndingConverter();
-                    var target = s.RequiredLineEnding == FileConsistencyLineEnding.CRLF ? LineEnding.CRLF : LineEnding.LF;
-                    fileConsistencyLineEndingFix = le.Convert(new LineEndingConversionOptions(
-                        enumeration: enumeration,
-                        target: target,
-                        createBackups: s.CreateBackups,
-                        backupDirectory: null,
-                        force: false,
-                        onlyMixed: false,
-                        ensureFinalNewline: s.CheckMissingFinalNewline,
-                        onlyMissingNewline: false,
-                        preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
-
-                    fileConsistencyReport = analyzer.Analyze(
-                        enumeration: enumeration,
-                        projectType: "Mixed",
-                        recommendedEncoding: recommendedEncoding,
-                        recommendedLineEnding: s.RequiredLineEnding,
-                        includeDetails: false,
-                        exportPath: exportPath);
-                }
-
-                var finalReport = fileConsistencyReport ?? throw new InvalidOperationException("File consistency analysis produced no report.");
-                fileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
-                if (s.FailOnInconsistency && fileConsistencyStatus == CheckStatus.Fail)
-                    throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
-
-                SafeDone(fileConsistencyStep);
-            }
-            catch (Exception ex)
-            {
-                SafeFail(fileConsistencyStep, ex);
-                throw;
-            }
-
-            if (s.UpdateProjectRoot)
-            {
-                SafeStart(projectFileConsistencyStep);
+                SafeStart(fileConsistencyStep);
                 try
                 {
                     var excludeDirs = MergeExcludeDirectories(
                         s.ExcludeDirectories,
                         new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+                    var excludeFiles = s.ExcludeFiles ?? Array.Empty<string>();
+                    var kind = s.ProjectKind ?? ProjectKind.Mixed;
+                    var includePatterns = s.IncludePatterns is { Length: > 0 }
+                        ? s.IncludePatterns.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray()
+                        : null;
 
                     var enumeration = new ProjectEnumeration(
-                        rootPath: plan.ProjectRoot,
-                        kind: ProjectKind.Mixed,
-                        customExtensions: null,
-                        excludeDirectories: excludeDirs);
+                        rootPath: buildResult.StagingPath,
+                        kind: kind,
+                        customExtensions: includePatterns,
+                        excludeDirectories: excludeDirs,
+                        excludeFiles: excludeFiles);
 
-                    var recommendedEncoding = MapEncoding(s.RequiredEncoding);
+                    var encodingOverrides = s.EncodingOverrides;
+                    var lineEndingOverrides = s.LineEndingOverrides;
+                    var recommendedEncoding = s.RequiredEncoding.ToTextEncodingKind();
                     var exportPath = s.ExportReport
-                        ? BuildArtefactsReportPath(plan.ProjectRoot, AddFileNameSuffix(s.ReportFileName, "Project"), fallbackFileName: "FileConsistencyReport.Project.csv")
+                        ? BuildArtefactsReportPath(plan.ProjectRoot, s.ReportFileName, fallbackFileName: "FileConsistencyReport.csv")
                         : null;
 
                     var analyzer = new ProjectConsistencyAnalyzer(_logger);
-                    projectFileConsistencyReport = analyzer.Analyze(
+                    fileConsistencyReport = analyzer.Analyze(
                         enumeration: enumeration,
-                        projectType: "Mixed",
+                        projectType: kind.ToString(),
                         recommendedEncoding: recommendedEncoding,
                         recommendedLineEnding: s.RequiredLineEnding,
                         includeDetails: false,
-                        exportPath: exportPath);
+                        exportPath: exportPath,
+                        encodingOverrides: encodingOverrides,
+                        lineEndingOverrides: lineEndingOverrides);
 
                     if (s.AutoFix)
                     {
                         var enc = new EncodingConverter();
-                        projectFileConsistencyEncodingFix = enc.Convert(new EncodingConversionOptions(
+                        var encOptions = new EncodingConversionOptions(
                             enumeration: enumeration,
                             sourceEncoding: TextEncodingKind.Any,
                             targetEncoding: recommendedEncoding,
@@ -782,11 +831,21 @@ public sealed class ModulePipelineRunner
                             backupDirectory: null,
                             force: false,
                             noRollbackOnMismatch: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
+                        if (encodingOverrides is { Count: > 0 })
+                        {
+                            encOptions.TargetEncodingResolver = path =>
+                            {
+                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
+                                var overrideEncoding = FileConsistencyOverrideResolver.ResolveEncodingOverride(rel, encodingOverrides);
+                                return overrideEncoding?.ToTextEncodingKind();
+                            };
+                        }
+                        fileConsistencyEncodingFix = enc.Convert(encOptions);
 
                         var le = new LineEndingConverter();
-                        var target = s.RequiredLineEnding == FileConsistencyLineEnding.CRLF ? LineEnding.CRLF : LineEnding.LF;
-                        projectFileConsistencyLineEndingFix = le.Convert(new LineEndingConversionOptions(
+                        var target = s.RequiredLineEnding.ToLineEnding();
+                        var lineEndingOptions = new LineEndingConversionOptions(
                             enumeration: enumeration,
                             target: target,
                             createBackups: s.CreateBackups,
@@ -795,20 +854,146 @@ public sealed class ModulePipelineRunner
                             onlyMixed: false,
                             ensureFinalNewline: s.CheckMissingFinalNewline,
                             onlyMissingNewline: false,
-                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM));
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
+                        if (lineEndingOverrides is { Count: > 0 })
+                        {
+                            lineEndingOptions.TargetResolver = path =>
+                            {
+                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
+                                var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
+                                return overrideLineEnding?.ToLineEnding();
+                            };
+                        }
+                        fileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
 
-                        projectFileConsistencyReport = analyzer.Analyze(
+                        fileConsistencyReport = analyzer.Analyze(
                             enumeration: enumeration,
-                            projectType: "Mixed",
+                            projectType: kind.ToString(),
                             recommendedEncoding: recommendedEncoding,
                             recommendedLineEnding: s.RequiredLineEnding,
                             includeDetails: false,
-                            exportPath: exportPath);
+                            exportPath: exportPath,
+                            encodingOverrides: encodingOverrides,
+                            lineEndingOverrides: lineEndingOverrides);
+                    }
+
+                    var finalReport = fileConsistencyReport ?? throw new InvalidOperationException("File consistency analysis produced no report.");
+                    fileConsistencyStatus = EvaluateFileConsistency(finalReport, s, fileConsistencySeverity);
+                    if (fileConsistencySeverity != ValidationSeverity.Off)
+                        LogFileConsistencyIssues(finalReport, s, "staging", fileConsistencyStatus ?? CheckStatus.Warning);
+                    if (fileConsistencySeverity == ValidationSeverity.Error && fileConsistencyStatus == CheckStatus.Fail)
+                        throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
+
+                    SafeDone(fileConsistencyStep);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(fileConsistencyStep, ex);
+                    throw;
+                }
+            }
+
+            if (runProject)
+            {
+                SafeStart(projectFileConsistencyStep);
+                try
+                {
+                    var excludeDirs = MergeExcludeDirectories(
+                        s.ExcludeDirectories,
+                        new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
+                    var excludeFiles = s.ExcludeFiles ?? Array.Empty<string>();
+                    var kind = s.ProjectKind ?? ProjectKind.Mixed;
+                    var includePatterns = s.IncludePatterns is { Length: > 0 }
+                        ? s.IncludePatterns.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p.Trim()).ToArray()
+                        : null;
+
+                    var enumeration = new ProjectEnumeration(
+                        rootPath: plan.ProjectRoot,
+                        kind: kind,
+                        customExtensions: includePatterns,
+                        excludeDirectories: excludeDirs,
+                        excludeFiles: excludeFiles);
+
+                    var encodingOverrides = s.EncodingOverrides;
+                    var lineEndingOverrides = s.LineEndingOverrides;
+                    var recommendedEncoding = s.RequiredEncoding.ToTextEncodingKind();
+                    var exportPath = s.ExportReport
+                        ? BuildArtefactsReportPath(plan.ProjectRoot, AddFileNameSuffix(s.ReportFileName, "Project"), fallbackFileName: "FileConsistencyReport.Project.csv")
+                        : null;
+
+                    var analyzer = new ProjectConsistencyAnalyzer(_logger);
+                    projectFileConsistencyReport = analyzer.Analyze(
+                        enumeration: enumeration,
+                        projectType: kind.ToString(),
+                        recommendedEncoding: recommendedEncoding,
+                        recommendedLineEnding: s.RequiredLineEnding,
+                        includeDetails: false,
+                        exportPath: exportPath,
+                        encodingOverrides: encodingOverrides,
+                        lineEndingOverrides: lineEndingOverrides);
+
+                    if (s.AutoFix)
+                    {
+                        var enc = new EncodingConverter();
+                        var encOptions = new EncodingConversionOptions(
+                            enumeration: enumeration,
+                            sourceEncoding: TextEncodingKind.Any,
+                            targetEncoding: recommendedEncoding,
+                            createBackups: s.CreateBackups,
+                            backupDirectory: null,
+                            force: false,
+                            noRollbackOnMismatch: false,
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
+                        if (encodingOverrides is { Count: > 0 })
+                        {
+                            encOptions.TargetEncodingResolver = path =>
+                            {
+                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
+                                var overrideEncoding = FileConsistencyOverrideResolver.ResolveEncodingOverride(rel, encodingOverrides);
+                                return overrideEncoding?.ToTextEncodingKind();
+                            };
+                        }
+                        projectFileConsistencyEncodingFix = enc.Convert(encOptions);
+
+                        var le = new LineEndingConverter();
+                        var target = s.RequiredLineEnding.ToLineEnding();
+                        var lineEndingOptions = new LineEndingConversionOptions(
+                            enumeration: enumeration,
+                            target: target,
+                            createBackups: s.CreateBackups,
+                            backupDirectory: null,
+                            force: false,
+                            onlyMixed: false,
+                            ensureFinalNewline: s.CheckMissingFinalNewline,
+                            onlyMissingNewline: false,
+                            preferUtf8BomForPowerShell: s.RequiredEncoding == FileConsistencyEncoding.UTF8BOM);
+                        if (lineEndingOverrides is { Count: > 0 })
+                        {
+                            lineEndingOptions.TargetResolver = path =>
+                            {
+                                var rel = ProjectTextInspection.ComputeRelativePath(enumeration.RootPath, path);
+                                var overrideLineEnding = FileConsistencyOverrideResolver.ResolveLineEndingOverride(rel, lineEndingOverrides);
+                                return overrideLineEnding?.ToLineEnding();
+                            };
+                        }
+                        projectFileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
+
+                        projectFileConsistencyReport = analyzer.Analyze(
+                            enumeration: enumeration,
+                            projectType: kind.ToString(),
+                            recommendedEncoding: recommendedEncoding,
+                            recommendedLineEnding: s.RequiredLineEnding,
+                            includeDetails: false,
+                            exportPath: exportPath,
+                            encodingOverrides: encodingOverrides,
+                            lineEndingOverrides: lineEndingOverrides);
                     }
 
                     var finalReport = projectFileConsistencyReport ?? throw new InvalidOperationException("Project-root file consistency analysis produced no report.");
-                    projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s);
-                    if (s.FailOnInconsistency && projectFileConsistencyStatus == CheckStatus.Fail)
+                    projectFileConsistencyStatus = EvaluateFileConsistency(finalReport, s, fileConsistencySeverity);
+                    if (fileConsistencySeverity != ValidationSeverity.Off)
+                        LogFileConsistencyIssues(finalReport, s, "project", projectFileConsistencyStatus ?? CheckStatus.Warning);
+                    if (fileConsistencySeverity == ValidationSeverity.Error && projectFileConsistencyStatus == CheckStatus.Fail)
                         throw new InvalidOperationException($"File consistency (project) check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
                     SafeDone(projectFileConsistencyStep);
@@ -827,6 +1012,7 @@ public sealed class ModulePipelineRunner
             try
             {
                 var s = plan.CompatibilitySettings;
+                var compatibilitySeverity = ResolveCompatibilitySeverity(s);
                 var excludeDirs = MergeExcludeDirectories(
                     s.ExcludeDirectories,
                     new[] { ".git", ".vs", "bin", "obj", "packages", "node_modules", ".vscode", "Artefacts", "Ignore", "Lib", "Modules" });
@@ -838,10 +1024,10 @@ public sealed class ModulePipelineRunner
                 var analyzer = new PowerShellCompatibilityAnalyzer(_logger);
                 var specCompat = new PowerShellCompatibilitySpec(buildResult.StagingPath, recurse: true, excludeDirectories: excludeDirs);
                 var raw = analyzer.Analyze(specCompat, progress: null, exportPath: exportPath);
-                var adjusted = ApplyCompatibilitySettings(raw, s);
+                var adjusted = ApplyCompatibilitySettings(raw, s, compatibilitySeverity);
                 compatibilityReport = adjusted;
 
-                if (s.FailOnIncompatibility && adjusted.Summary.Status == CheckStatus.Fail)
+                if (compatibilitySeverity == ValidationSeverity.Error && adjusted.Summary.Status == CheckStatus.Fail)
                     throw new InvalidOperationException($"PowerShell compatibility check failed. {adjusted.Summary.Message}");
 
                 SafeDone(compatibilityStep);
@@ -849,6 +1035,34 @@ public sealed class ModulePipelineRunner
             catch (Exception ex)
             {
                 SafeFail(compatibilityStep, ex);
+                throw;
+            }
+        }
+
+        if (plan.ValidationSettings?.Enable == true)
+        {
+            SafeStart(moduleValidationStep);
+            try
+            {
+                var validator = new ModuleValidationService(_logger);
+                validationReport = validator.Run(new ModuleValidationSpec
+                {
+                    ProjectRoot = plan.ProjectRoot,
+                    StagingPath = buildResult.StagingPath,
+                    ModuleName = plan.ModuleName,
+                    ManifestPath = buildResult.ManifestPath,
+                    BuildSpec = plan.BuildSpec,
+                    Settings = plan.ValidationSettings ?? new ModuleValidationSettings()
+                });
+
+                if (validationReport.Status == CheckStatus.Fail)
+                    throw new InvalidOperationException($"Module validation failed ({validationReport.Summary}).");
+
+                SafeDone(moduleValidationStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(moduleValidationStep, ex);
                 throw;
             }
         }
@@ -871,7 +1085,8 @@ public sealed class ModulePipelineRunner
                         moduleVersion: plan.ResolvedVersion,
                         preRelease: plan.PreRelease,
                         requiredModules: plan.RequiredModulesForPackaging,
-                        information: plan.Information));
+                        information: plan.Information,
+                        includeScriptFolders: !mergedScripts));
                     SafeDone(step);
                 }
                 catch (Exception ex)
@@ -914,7 +1129,11 @@ public sealed class ModulePipelineRunner
                 // This prevents shipping repo metadata (e.g., .github/.editorconfig/Sources) to end users.
                 installPackagePath = Path.Combine(Path.GetTempPath(), "PowerForge", "install", $"{plan.ModuleName}_{Guid.NewGuid():N}");
                 Directory.CreateDirectory(installPackagePath);
-                ArtefactBuilder.CopyModulePackageForInstall(buildResult.StagingPath, installPackagePath, plan.Information);
+                ArtefactBuilder.CopyModulePackageForInstall(
+                    buildResult.StagingPath,
+                    installPackagePath,
+                    plan.Information,
+                    includeScriptFolders: !mergedScripts);
 
                 var installSpec = new ModuleInstallSpec
                 {
@@ -953,6 +1172,7 @@ public sealed class ModulePipelineRunner
                 fileConsistencyEncodingFix,
                 fileConsistencyLineEndingFix,
                 compatibilityReport,
+                validationReport,
                 publishResults.ToArray(),
                 artefactResults.ToArray(),
                 formattingStagingResults,
@@ -1218,7 +1438,14 @@ public sealed class ModulePipelineRunner
             installed.TryGetValue(d.ModuleName, out var info);
 
             var required = ResolveAutoOrLatest(d.RequiredVersion, info.Version);
-            var moduleVersion = ResolveAutoOrLatest(d.ModuleVersion, info.Version);
+            var minimumSource = !string.IsNullOrWhiteSpace(d.MinimumVersion) ? d.MinimumVersion : d.ModuleVersion;
+            if (!string.IsNullOrWhiteSpace(d.MinimumVersion) &&
+                !string.IsNullOrWhiteSpace(d.ModuleVersion) &&
+                !string.Equals(d.MinimumVersion, d.ModuleVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Warn($"Module dependency '{d.ModuleName}' specifies both MinimumVersion and ModuleVersion; using MinimumVersion '{d.MinimumVersion}'.");
+            }
+            var moduleVersion = ResolveAutoOrLatest(minimumSource, info.Version);
             var guid = ResolveAutoGuid(d.Guid, info.Guid);
 
             // RequiredVersion is exact; do not also emit ModuleVersion when present.
@@ -1228,6 +1455,19 @@ public sealed class ModulePipelineRunner
         }
 
         return results.ToArray();
+    }
+
+    private static ManifestEditor.RequiredModule[] FilterRequiredModules(
+        ManifestEditor.RequiredModule[] modules,
+        IReadOnlyCollection<string> approvedModules)
+    {
+        if (modules is null || modules.Length == 0) return Array.Empty<ManifestEditor.RequiredModule>();
+        if (approvedModules is null || approvedModules.Count == 0) return modules;
+
+        var approved = new HashSet<string>(approvedModules, StringComparer.OrdinalIgnoreCase);
+        return modules
+            .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName) && !approved.Contains(m.ModuleName!))
+            .ToArray();
     }
 
     private static string? ResolveAutoOrLatest(string? value, string? installedVersion)
@@ -1418,21 +1658,6 @@ exit 0
         return roots.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    private static TextEncodingKind MapEncoding(FileConsistencyEncoding encoding)
-    {
-        return encoding switch
-        {
-            FileConsistencyEncoding.ASCII => TextEncodingKind.Ascii,
-            FileConsistencyEncoding.UTF8 => TextEncodingKind.UTF8,
-            FileConsistencyEncoding.UTF8BOM => TextEncodingKind.UTF8BOM,
-            FileConsistencyEncoding.Unicode => TextEncodingKind.Unicode,
-            FileConsistencyEncoding.BigEndianUnicode => TextEncodingKind.BigEndianUnicode,
-            FileConsistencyEncoding.UTF7 => TextEncodingKind.UTF7,
-            FileConsistencyEncoding.UTF32 => TextEncodingKind.UTF32,
-            _ => TextEncodingKind.UTF8BOM
-        };
-    }
-
     private static string BuildArtefactsReportPath(string projectRoot, string? reportFileName, string fallbackFileName)
     {
         var name = string.IsNullOrWhiteSpace(reportFileName) ? fallbackFileName : reportFileName!.Trim();
@@ -1466,6 +1691,861 @@ exit 0
         return set.ToArray();
     }
 
+    private void LogFormattingIssues(string rootPath, FormatterResult[] results, string label)
+    {
+        var issues = CollectFormattingIssues(rootPath, results);
+        if (issues.Length == 0) return;
+
+        var errorCount = 0;
+        var skippedCount = 0;
+        foreach (var i in issues)
+        {
+            if (i.IsError) errorCount++;
+            else skippedCount++;
+        }
+
+        _logger.Error($"Formatting issues for {label}: {errorCount} error(s), {skippedCount} skipped.");
+
+        const int maxItems = 20;
+        var shown = 0;
+        foreach (var issue in issues.Where(i => i.IsError).Concat(issues.Where(i => !i.IsError)))
+        {
+            if (shown++ >= maxItems) break;
+            var prefix = issue.IsError ? "ERROR" : "SKIP";
+            var line = $"{prefix}: {issue.Path} - {issue.Message}";
+            if (issue.IsError) _logger.Error(line);
+            else _logger.Warn(line);
+        }
+
+        if (issues.Length > maxItems)
+            _logger.Warn($"Formatting issues: {issues.Length - maxItems} more not shown.");
+    }
+
+    private static string BuildFormattingFailureMessage(
+        string label,
+        string rootPath,
+        FormattingSummary summary,
+        FormatterResult[] results)
+    {
+        var message = $"Formatting failed for {label} (errors {summary.Errors}/{summary.Total}).";
+        var issues = CollectFormattingIssues(rootPath, results, onlyErrors: true, maxItems: 3);
+        if (issues.Length == 0) return message;
+        var sample = string.Join(" | ", issues.Select(i => $"{i.Path}: {i.Message}"));
+        return $"{message} First error(s): {sample}";
+    }
+
+    private static FormattingIssue[] CollectFormattingIssues(
+        string rootPath,
+        FormatterResult[] results,
+        bool onlyErrors = false,
+        int maxItems = 0)
+    {
+        if (results is null || results.Length == 0) return Array.Empty<FormattingIssue>();
+
+        var list = new List<FormattingIssue>();
+        foreach (var r in results)
+        {
+            if (r is null) continue;
+            var msg = r.Message ?? string.Empty;
+            var isError = FormattingSummary.IsErrorMessage(msg);
+            var isSkipped = FormattingSummary.IsSkippedMessage(msg);
+            if (!isError && !isSkipped) continue;
+            if (onlyErrors && !isError) continue;
+
+            var rel = FormatFormattingPath(rootPath, r.Path);
+            var message = NormalizeFormattingMessage(msg);
+            list.Add(new FormattingIssue(rel, message, isError));
+        }
+
+        if (maxItems > 0 && list.Count > maxItems)
+            return list.Take(maxItems).ToArray();
+
+        return list.ToArray();
+    }
+
+    private static string NormalizeFormattingMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return "Unknown";
+        var idx = message.IndexOf(';');
+        if (idx < 0) return message.Trim();
+        var token = message.Substring(0, idx).Trim();
+        var details = message.Substring(idx + 1).Trim();
+        return string.IsNullOrWhiteSpace(details) ? token : $"{token} ({details})";
+    }
+
+    private static string FormatFormattingPath(string rootPath, string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return "<unknown>";
+        if (string.IsNullOrWhiteSpace(rootPath)) return fullPath;
+        try
+        {
+            return ProjectTextInspection.ComputeRelativePath(rootPath, fullPath);
+        }
+        catch
+        {
+            return fullPath;
+        }
+    }
+
+    private sealed class FormattingIssue
+    {
+        public string Path { get; }
+        public string Message { get; }
+        public bool IsError { get; }
+
+        public FormattingIssue(string path, string message, bool isError)
+        {
+            Path = path ?? string.Empty;
+            Message = message ?? string.Empty;
+            IsError = isError;
+        }
+    }
+
+    private void LogFileConsistencyIssues(
+        ProjectConsistencyReport report,
+        FileConsistencySettings settings,
+        string label,
+        CheckStatus status)
+    {
+        if (report is null) return;
+        var problematic = report.ProblematicFiles ?? Array.Empty<ProjectConsistencyFileDetail>();
+        if (problematic.Length == 0) return;
+
+        var log = status == CheckStatus.Fail ? (Action<string>)_logger.Error : _logger.Warn;
+        log($"File consistency issues for {label}: {problematic.Length} file(s).");
+
+        if (!string.IsNullOrWhiteSpace(report.ExportPath))
+            log($"File consistency report ({label}): {report.ExportPath}");
+
+        var summary = report.Summary;
+        var parts = new List<string>();
+        if (summary.FilesNeedingEncodingConversion > 0)
+            parts.Add($"encoding {summary.FilesNeedingEncodingConversion}");
+        if (summary.FilesNeedingLineEndingConversion > 0)
+            parts.Add($"line endings {summary.FilesNeedingLineEndingConversion}");
+        if (settings.CheckMixedLineEndings && summary.FilesWithMixedLineEndings > 0)
+            parts.Add($"mixed {summary.FilesWithMixedLineEndings}");
+        if (settings.CheckMissingFinalNewline && summary.FilesMissingFinalNewline > 0)
+            parts.Add($"missing newline {summary.FilesMissingFinalNewline}");
+        if (parts.Count > 0)
+            log($"File consistency summary ({label}): {string.Join(", ", parts)} (total {summary.TotalFiles}).");
+
+        const int maxItems = 20;
+        var shown = 0;
+        foreach (var item in problematic)
+        {
+            var reasons = BuildFileConsistencyReasons(item, settings);
+            if (reasons.Count == 0) continue;
+            log($"{item.RelativePath} - {string.Join(", ", reasons)}");
+            if (++shown >= maxItems) break;
+        }
+
+        if (problematic.Length > maxItems)
+            _logger.Warn($"File consistency issues: {problematic.Length - maxItems} more not shown.");
+    }
+
+    private static List<string> BuildFileConsistencyReasons(
+        ProjectConsistencyFileDetail file,
+        FileConsistencySettings settings)
+    {
+        var reasons = new List<string>(4);
+
+        if (file.NeedsEncodingConversion)
+        {
+            var current = file.CurrentEncoding?.ToString() ?? "Unknown";
+            reasons.Add($"encoding {current} (expected {file.RecommendedEncoding})");
+        }
+
+        if (file.NeedsLineEndingConversion)
+        {
+            var current = file.CurrentLineEnding.ToString();
+            reasons.Add($"line endings {current} (expected {file.RecommendedLineEnding})");
+        }
+
+        if (settings.CheckMixedLineEndings && file.HasMixedLineEndings)
+            reasons.Add("mixed line endings");
+
+        if (settings.CheckMissingFinalNewline && file.MissingFinalNewline)
+            reasons.Add("missing final newline");
+
+        var error = file.Error;
+        if (!string.IsNullOrWhiteSpace(error))
+            reasons.Add($"error: {error!.Trim()}");
+
+        return reasons;
+    }
+
+    private bool ApplyMerge(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        if (plan is null || buildResult is null) return false;
+        if (!plan.MergeModule && !plan.MergeMissing) return false;
+
+        var mergeInfo = BuildMergeSources(buildResult.StagingPath, plan.ModuleName, plan.Information, buildResult.Exports);
+        if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
+        {
+            _logger.Warn("Merge requested but no script sources or PSM1 file were found.");
+            return false;
+        }
+
+        string? analysisCode = mergeInfo.HasScripts ? mergeInfo.MergedScriptContent : null;
+        string? analysisPath = mergeInfo.HasScripts ? null : mergeInfo.Psm1Path;
+
+        MissingFunctionsReport? missingReport = null;
+        string[] dependentRequiredModules = Array.Empty<string>();
+        if (plan.MergeModule || plan.MergeMissing)
+        {
+            var requiredModules = GetRequiredModuleNames(plan);
+            var approvedModules = plan.ApprovedModules ?? Array.Empty<string>();
+            dependentRequiredModules = ResolveDependentRequiredModules(requiredModules, approvedModules);
+
+            missingReport = AnalyzeMissingFunctions(analysisPath, analysisCode, plan);
+            LogMergeSummary(plan, mergeInfo, missingReport, dependentRequiredModules);
+            if (missingReport is not null)
+                ValidateMissingFunctions(missingReport, plan, dependentRequiredModules);
+        }
+
+        var mergedModule = false;
+        if (plan.MergeModule)
+        {
+            if (mergeInfo.HasLib)
+            {
+                _logger.Warn("MergeModuleOnBuild requested but binary outputs were detected. Keeping bootstrapper PSM1.");
+            }
+            else if (!mergeInfo.HasScripts)
+            {
+                _logger.Warn("MergeModuleOnBuild requested but no script sources were found. Skipping merge.");
+            }
+            else
+            {
+                if (File.Exists(mergeInfo.Psm1Path))
+                {
+                    try
+                    {
+                        var existing = File.ReadAllText(mergeInfo.Psm1Path);    
+                        if (!string.IsNullOrWhiteSpace(existing) && !IsAutoGeneratedPsm1(existing))
+                            _logger.Warn("MergeModuleOnBuild will overwrite existing PSM1 content in staging.");
+                    }
+                    catch
+                    {
+                        // best effort only
+                    }
+                }
+
+                var merged = mergeInfo.MergedScriptContent;
+                if (plan.MergeMissing && missingReport?.Functions is { Length: > 0 })
+                    merged = PrependFunctions(missingReport.Functions, merged);
+
+                WriteMergedPsm1(mergeInfo.Psm1Path, merged);
+                mergedModule = true;
+            }
+        }
+
+        if (!mergedModule && plan.MergeMissing && missingReport?.Functions is { Length: > 0 } && File.Exists(mergeInfo.Psm1Path))
+        {
+            var existing = File.ReadAllText(mergeInfo.Psm1Path);
+            var merged = PrependFunctions(missingReport.Functions, existing);
+            WriteMergedPsm1(mergeInfo.Psm1Path, merged);
+        }
+
+        return mergedModule;
+    }
+
+
+    private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information, ExportSet exports)
+    {
+        var root = Path.GetFullPath(rootPath);
+        var psm1 = Path.Combine(root, $"{moduleName}.psm1");
+
+        var dirs = ResolveMergeDirectories(information);
+        var files = new List<string>();
+        foreach (var dir in dirs)
+        {
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            var full = Path.Combine(root, dir);
+            if (!Directory.Exists(full)) continue;
+            try
+            {
+                files.AddRange(Directory.EnumerateFiles(full, "*.ps1", SearchOption.AllDirectories));
+            }
+            catch
+            {
+                // best effort only
+            }
+        }
+
+        var ordered = files
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var merged = ordered.Length > 0 ? BuildMergedScriptContent(root, ordered, exports) : string.Empty;
+        var libRoot = Path.Combine(root, "Lib");
+        var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
+
+        return new MergeSourceInfo(psm1, ordered, merged, hasLib);
+    }
+
+    private static string[] ResolveMergeDirectories(InformationConfiguration? information)
+    {
+        var ordered = new List<string> { "Classes", "Enums", "Private", "Public" };
+
+        if (information?.IncludePS1 is { Length: > 0 })
+        {
+            foreach (var entry in information.IncludePS1)
+            {
+                if (string.IsNullOrWhiteSpace(entry)) continue;
+                if (ordered.Any(o => string.Equals(o, entry, StringComparison.OrdinalIgnoreCase))) continue;
+                ordered.Add(entry);
+            }
+        }
+
+        return ordered.ToArray();
+    }
+
+    private static string BuildMergedScriptContent(string rootPath, IReadOnlyList<string> files, ExportSet exports)
+    {
+        var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var body = new StringBuilder(8192);
+
+        foreach (var file in files)
+        {
+            if (string.IsNullOrWhiteSpace(file) || !File.Exists(file)) continue;
+
+            string[] lines;
+            try { lines = File.ReadAllLines(file); }
+            catch { continue; }
+
+            var block = new List<string>();
+
+            foreach (var line in lines)
+            {
+                var trimmed = line.TrimStart();
+                if (trimmed.StartsWith("#requires", StringComparison.OrdinalIgnoreCase))
+                {
+                    requires.Add(trimmed);
+                    continue;
+                }
+                if (trimmed.StartsWith("using ", StringComparison.OrdinalIgnoreCase))
+                {
+                    usingLines.Add(trimmed);
+                    continue;
+                }
+                block.Add(line);
+            }
+
+            if (block.Count == 0) continue;
+
+            foreach (var line in block) body.AppendLine(line);
+            body.AppendLine();
+        }
+
+        var header = new StringBuilder(1024);
+        foreach (var req in requires.OrderBy(r => r, StringComparer.OrdinalIgnoreCase))
+            header.AppendLine(req);
+        foreach (var use in usingLines.OrderBy(r => r, StringComparer.OrdinalIgnoreCase))
+            header.AppendLine(use);
+
+        if (header.Length > 0)
+            header.AppendLine();
+
+        header.Append(body.ToString().TrimEnd());
+
+        var merged = header.ToString().TrimEnd();
+        var exportBlock = BuildExportBlock(exports);
+        if (!string.IsNullOrWhiteSpace(exportBlock))
+        {
+            if (!string.IsNullOrWhiteSpace(merged))
+                merged += Environment.NewLine + Environment.NewLine;
+            merged += exportBlock.TrimEnd();
+        }
+
+        return merged;
+    }
+
+    private static string BuildExportBlock(ExportSet exports)
+    {
+        var sb = new StringBuilder(256);
+        sb.AppendLine("$FunctionsToExport = " + FormatPsStringList(exports.Functions));
+        sb.AppendLine("$CmdletsToExport = " + FormatPsStringList(exports.Cmdlets));
+        sb.AppendLine("$AliasesToExport = " + FormatPsStringList(exports.Aliases));
+        sb.AppendLine("Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport");
+        return sb.ToString();
+    }
+
+    private static string FormatPsStringList(IReadOnlyList<string>? values)
+    {
+        var list = (values ?? Array.Empty<string>())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (list.Length == 0) return "@()";
+
+        var sb = new StringBuilder();
+        sb.Append("@(");
+        for (var i = 0; i < list.Length; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append('\'').Append(EscapePsSingleQuoted(list[i])).Append('\'');
+        }
+        sb.Append(')');
+        return sb.ToString();
+    }
+
+    private static string EscapePsSingleQuoted(string value)
+        => value?.Replace("'", "''") ?? string.Empty;
+
+    private void TryRegenerateBootstrapperFromManifest(ModuleBuildResult buildResult, string moduleName, IReadOnlyList<string>? exportAssemblies)
+    {
+        try
+        {
+            var exports = ReadExportsFromManifest(buildResult.ManifestPath);
+            ModuleBootstrapperGenerator.Generate(buildResult.StagingPath, moduleName, exports, exportAssemblies);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to regenerate module bootstrapper exports for '{moduleName}'. Error: {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+        }
+    }
+
+    private static ExportSet ReadExportsFromManifest(string psd1Path)
+        => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
+            ReadStringOrArray(psd1Path, "CmdletsToExport"),
+            ReadStringOrArray(psd1Path, "AliasesToExport"));
+
+    private static string[] ReadStringOrArray(string psd1Path, string key)
+    {
+        if (ManifestEditor.TryGetTopLevelStringArray(psd1Path, key, out var values) && values is not null)
+            return values;
+        if (ManifestEditor.TryGetTopLevelString(psd1Path, key, out var value) && !string.IsNullOrWhiteSpace(value))
+            return new[] { value! };
+        return Array.Empty<string>();
+    }
+
+    private static string PrependFunctions(string[] functions, string content)
+    {
+        var block = (functions ?? Array.Empty<string>())
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .ToArray();
+        if (block.Length == 0) return content;
+
+        var prefix = string.Join(Environment.NewLine, block);
+        return string.IsNullOrWhiteSpace(content)
+            ? prefix
+            : prefix + Environment.NewLine + Environment.NewLine + content;
+    }
+
+    private static void WriteMergedPsm1(string path, string content)
+    {
+        var normalized = NormalizeCrLf(content);
+        File.WriteAllText(path, normalized, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private static bool IsAutoGeneratedPsm1(string content)
+        => !string.IsNullOrWhiteSpace(content) &&
+           content.IndexOf("Auto-generated by PowerForge", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static string NormalizeCrLf(string text)
+        => string.IsNullOrEmpty(text)
+            ? string.Empty
+            : text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+
+    private MissingFunctionsReport? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) && string.IsNullOrWhiteSpace(code))
+            return null;
+
+        var approved = plan.ApprovedModules ?? Array.Empty<string>();
+        var analyzer = new MissingFunctionsAnalyzer();
+        var options = new MissingFunctionsOptions(
+            approvedModules: approved,
+            ignoreFunctions: Array.Empty<string>(),
+            includeFunctionsRecursively: true);
+        try
+        {
+            return analyzer.Analyze(filePath, code, options);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Missing function analysis failed. {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            return null;
+        }
+    }
+
+    private static string[] GetRequiredModuleNames(ModulePipelinePlan plan)
+    {
+        if (plan is null) return Array.Empty<string>();
+        return (plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>())
+            .Select(m => m.ModuleName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private void ValidateMissingFunctions(
+        MissingFunctionsReport report,
+        ModulePipelinePlan plan,
+        IReadOnlyCollection<string>? dependentModules)
+    {
+        if (report is null) return;
+
+        var requiredModules = GetRequiredModuleNames(plan);
+
+        var required = new HashSet<string>(requiredModules, StringComparer.OrdinalIgnoreCase);
+        var approved = new HashSet<string>(plan.ApprovedModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var dependentRequiredModules = dependentModules ?? ResolveDependentRequiredModules(requiredModules, approved);
+        var dependent = new HashSet<string>(dependentRequiredModules, StringComparer.OrdinalIgnoreCase);
+        var ignoreModules = new HashSet<string>(plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var ignoreFunctions = new HashSet<string>(plan.ModuleSkip?.IgnoreFunctionName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var force = plan.ModuleSkip?.Force == true;
+
+        var apps = report.Summary
+            .Where(c => string.Equals(c.CommandType, "Application", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Source)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (apps.Length > 0)
+            _logger.Warn($"Applications used by module: {string.Join(", ", apps)}");
+
+        var failures = new List<string>();
+
+        var moduleCommands = report.Summary
+            .Where(c => !string.IsNullOrWhiteSpace(c.CommandType))
+            .Where(c => !string.Equals(c.CommandType, "Application", StringComparison.OrdinalIgnoreCase))
+            .Where(c => !string.IsNullOrWhiteSpace(c.Source))
+            .GroupBy(c => c.Source, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in moduleCommands)
+        {
+            var moduleName = group.Key ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(moduleName))
+                continue;
+            if (IsBuiltInModule(moduleName))
+                continue;
+            if (required.Contains(moduleName) || approved.Contains(moduleName) || dependent.Contains(moduleName))
+                continue;
+
+            var allIgnored = group.All(c => ignoreFunctions.Contains(c.Name));
+            if (force || ignoreModules.Contains(moduleName) || allIgnored)
+            {
+                _logger.Warn($"Missing module '{moduleName}' ignored by configuration.");
+                continue;
+            }
+
+            failures.Add(moduleName);
+            foreach (var cmd in group)
+                _logger.Error($"Missing module '{moduleName}' provides '{cmd.Name}' (CommandType: {cmd.CommandType}).");
+        }
+
+        var unresolved = report.Summary
+            .Where(c => string.IsNullOrWhiteSpace(c.CommandType))
+            .ToArray();
+
+        foreach (var cmd in unresolved)
+        {
+            var name = cmd.Name;
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            if (name.StartsWith("$", StringComparison.Ordinal))
+                continue;
+            if (IsBuiltInCommand(name))
+                continue;
+            if (ignoreFunctions.Contains(name))
+            {
+                _logger.Warn($"Unresolved command '{name}' ignored by configuration.");
+                continue;
+            }
+
+            if (force)
+            {
+                _logger.Warn($"Unresolved command '{name}' (ignored by Force).");
+                continue;
+            }
+
+            failures.Add(name);
+            _logger.Error($"Unresolved command '{name}' (no module source).");
+        }
+
+        if (failures.Count > 0 && !force)
+        {
+            var unique = failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            throw new InvalidOperationException(
+                $"Missing commands detected during merge. Resolve dependencies or configure ModuleSkip. Missing: {string.Join(", ", unique)}.");
+        }
+    }
+
+    private void LogMergeSummary(
+        ModulePipelinePlan plan,
+        MergeSourceInfo mergeInfo,
+        MissingFunctionsReport? missingReport,
+        IReadOnlyCollection<string>? dependentModules)
+    {
+        if (plan is null) return;
+
+        var requiredModules = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        var approvedModules = plan.ApprovedModules ?? Array.Empty<string>();
+        var dependent = dependentModules ?? Array.Empty<string>();
+
+        _logger.Info($"Merge/dependency summary (required {requiredModules.Length}, approved {approvedModules.Length}, dependent {dependent.Count}).");
+        if (requiredModules.Length > 0)
+        {
+            var formatted = requiredModules
+                .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
+                .OrderBy(m => m.ModuleName, StringComparer.OrdinalIgnoreCase)
+                .Select(FormatRequiredModule)
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .ToArray();
+
+            if (formatted.Length > 0)
+            {
+                _logger.Info($"  Required modules ({formatted.Length}):");
+                foreach (var module in formatted)
+                    _logger.Info($"    - {module}");
+            }
+        }
+
+        if (approvedModules.Length > 0)
+        {
+            var ordered = approvedModules
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(m => m, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (ordered.Length > 0)
+            {
+                _logger.Info($"  Approved modules ({ordered.Length}):");
+                foreach (var module in ordered)
+                    _logger.Info($"    - {module}");
+            }
+        }
+
+        if (dependent.Count > 0)
+        {
+            var ordered = dependent
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(m => m, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (ordered.Length > 0)
+            {
+                _logger.Info($"  Dependent modules ({ordered.Length}):");
+                foreach (var module in ordered)
+                    _logger.Info($"    - {module}");
+            }
+        }
+
+        if (plan.MergeModule)
+        {
+            if (mergeInfo.HasScripts)
+                _logger.Info($"MergeModule: {mergeInfo.ScriptFiles.Length} script file(s) found for merge.");
+            else if (File.Exists(mergeInfo.Psm1Path))
+                _logger.Info("MergeModule: using existing PSM1 (no script sources).");
+        }
+
+        if (plan.MergeMissing)
+        {
+            if (missingReport is null)
+            {
+                _logger.Warn("MergeMissing: missing function analysis failed; no functions inlined.");
+            }
+            else
+            {
+                var topLevel = missingReport.FunctionsTopLevelOnly?.Length ?? 0;
+                var total = missingReport.Functions?.Length ?? 0;
+                _logger.Info($"MergeMissing: {topLevel} top-level function(s) inlined (total {total} including dependencies).");
+            }
+        }
+    }
+
+    private static string FormatRequiredModule(ManifestEditor.RequiredModule module)
+    {
+        if (module is null || string.IsNullOrWhiteSpace(module.ModuleName))
+            return string.Empty;
+
+        var parts = new List<string>(4);
+        if (!string.IsNullOrWhiteSpace(module.RequiredVersion))
+            parts.Add($"required {module.RequiredVersion}");
+        if (!string.IsNullOrWhiteSpace(module.ModuleVersion))
+            parts.Add($"minimum {module.ModuleVersion}");
+        if (!string.IsNullOrWhiteSpace(module.MaximumVersion))
+            parts.Add($"maximum {module.MaximumVersion}");
+        if (!string.IsNullOrWhiteSpace(module.Guid))
+            parts.Add($"guid {module.Guid}");
+
+        return parts.Count == 0
+            ? module.ModuleName
+            : $"{module.ModuleName} ({string.Join(", ", parts)})";
+    }
+
+    private string[] ResolveDependentRequiredModules(IEnumerable<string> requiredModules, IReadOnlyCollection<string> approvedModules)
+    {
+        var deps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var module in requiredModules ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(module))
+                continue;
+            if (approvedModules is not null && approvedModules.Contains(module))
+                continue;
+
+            CollectModuleDependencies(module, visited, deps);
+        }
+
+        return deps.ToArray();
+    }
+
+    private void CollectModuleDependencies(string moduleName, HashSet<string> visited, HashSet<string> output)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName))
+            return;
+        if (!visited.Add(moduleName))
+            return;
+
+        var required = GetRequiredModulesFromInstalledModule(moduleName);
+        foreach (var dep in required)
+        {
+            if (string.IsNullOrWhiteSpace(dep))
+                continue;
+            if (output.Add(dep))
+                CollectModuleDependencies(dep, visited, output);
+        }
+    }
+
+    private string[] GetRequiredModulesFromInstalledModule(string moduleName)
+    {
+        try
+        {
+            using var ps = CreatePowerShell();
+            var script = @"
+param($name)
+$mod = Get-Module -ListAvailable -Name $name |
+  Sort-Object Version -Descending |
+  Select-Object -First 1
+if ($null -eq $mod) { return @() }
+$req = $mod.RequiredModules
+if ($null -eq $req) { return @() }
+$req | ForEach-Object { $_.Name }
+";
+            ps.AddScript(script).AddArgument(moduleName);
+            var results = ps.Invoke();
+            if (ps.HadErrors || results is null)
+                return Array.Empty<string>();
+
+            return results
+                .Select(r => r?.BaseObject?.ToString())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to resolve required modules for '{moduleName}': {ex.Message}");
+            if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+            return Array.Empty<string>();
+        }
+    }
+
+    private static PowerShell CreatePowerShell()
+    {
+        if (Runspace.DefaultRunspace is null)
+            return PowerShell.Create();
+        return PowerShell.Create(RunspaceMode.CurrentRunspace);
+    }
+
+    private static bool IsBuiltInModule(string moduleName)
+        => moduleName.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> BuiltInCommandNames =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Add-Content",
+            "Add-Type",
+            "Clear-Variable",
+            "ConvertFrom-Json",
+            "ConvertTo-Json",
+            "Copy-Item",
+            "Export-ModuleMember",
+            "ForEach-Object",
+            "Format-List",
+            "Format-Table",
+            "Get-ChildItem",
+            "Get-Command",
+            "Get-Content",
+            "Get-Date",
+            "Get-Item",
+            "Get-ItemProperty",
+            "Get-Location",
+            "Get-Member",
+            "Get-Variable",
+            "Import-Module",
+            "Join-Path",
+            "Measure-Object",
+            "Move-Item",
+            "New-Item",
+            "New-Object",
+            "Out-File",
+            "Pop-Location",
+            "Push-Location",
+            "Remove-Item",
+            "Remove-Variable",
+            "Resolve-Path",
+            "Select-Object",
+            "Set-Content",
+            "Set-Item",
+            "Set-ItemProperty",
+            "Set-Location",
+            "Set-Variable",
+            "Sort-Object",
+            "Split-Path",
+            "Start-Process",
+            "Start-Sleep",
+            "Test-Path",
+            "Where-Object",
+            "Write-Debug",
+            "Write-Error",
+            "Write-Host",
+            "Write-Information",
+            "Write-Output",
+            "Write-Progress",
+            "Write-Verbose",
+            "Write-Warning"
+        };
+
+    private static bool IsBuiltInCommand(string name)
+        => BuiltInCommandNames.Contains(name);
+
+    private sealed class MergeSourceInfo
+    {
+        public MergeSourceInfo(string psm1Path, string[] scriptFiles, string mergedScriptContent, bool hasLib)
+        {
+            Psm1Path = psm1Path;
+            ScriptFiles = scriptFiles ?? Array.Empty<string>();
+            MergedScriptContent = mergedScriptContent ?? string.Empty;
+            HasLib = hasLib;
+        }
+
+        public string Psm1Path { get; }
+        public string[] ScriptFiles { get; }
+        public string MergedScriptContent { get; }
+        public bool HasLib { get; }
+        public bool HasScripts => ScriptFiles.Length > 0;
+    }
+
     private static FormatterResult[] FormatPowerShellTree(
         string rootPath,
         string moduleName,
@@ -1478,6 +2558,12 @@ exit 0
         if (formatting is null) return Array.Empty<FormatterResult>();
 
         var cfg = formatting.Options ?? new FormattingOptions();
+        var standardPsd1 = cfg.Standard.FormatCodePSD1 ?? (string.IsNullOrWhiteSpace(cfg.Standard.Style?.PSD1)
+            ? null
+            : new FormatCodeOptions { Enabled = true });
+        var mergePsd1 = cfg.Merge.FormatCodePSD1 ?? (string.IsNullOrWhiteSpace(cfg.Merge.Style?.PSD1)
+            ? null
+            : new FormatCodeOptions { Enabled = true });
 
         var excludeDirs = MergeExcludeDirectories(
             primary: null,
@@ -1506,7 +2592,7 @@ exit 0
             if (cfg.Merge.FormatCodePSM1?.Enabled == true)
                 psm1Files = psm1Files.Where(p => !string.Equals(p, rootPsm1, StringComparison.OrdinalIgnoreCase)).ToArray();
 
-            if (cfg.Merge.FormatCodePSD1?.Enabled == true)
+            if (mergePsd1?.Enabled == true)
                 psd1Files = psd1Files.Where(p => !string.Equals(p, manifestPath, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
@@ -1520,16 +2606,16 @@ exit 0
         if (cfg.Standard.FormatCodePSM1?.Enabled == true && psm1Files.Length > 0)
             results.AddRange(pipeline.Run(psm1Files, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
 
-        if (cfg.Standard.FormatCodePSD1?.Enabled == true && psd1Files.Length > 0)
-            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(cfg.Standard.FormatCodePSD1)));        
+        if (standardPsd1?.Enabled == true && psd1Files.Length > 0)
+            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(standardPsd1)));
 
         if (includeMergeFormatting)
         {
             if (cfg.Merge.FormatCodePSM1?.Enabled == true && File.Exists(rootPsm1))
                 results.AddRange(pipeline.Run(new[] { rootPsm1 }, BuildFormatOptions(cfg.Merge.FormatCodePSM1)));
 
-            if (cfg.Merge.FormatCodePSD1?.Enabled == true && File.Exists(manifestPath))
-                results.AddRange(pipeline.Run(new[] { manifestPath }, BuildFormatOptions(cfg.Merge.FormatCodePSD1)));
+            if (mergePsd1?.Enabled == true && File.Exists(manifestPath))
+                results.AddRange(pipeline.Run(new[] { manifestPath }, BuildFormatOptions(mergePsd1)));
         }
 
         return results.ToArray();
@@ -1713,7 +2799,24 @@ exit 0
             Utf8Bom = true
         };
 
-    private static CheckStatus EvaluateFileConsistency(ProjectConsistencyReport report, FileConsistencySettings settings)
+    private static ValidationSeverity ResolveFileConsistencySeverity(FileConsistencySettings settings)
+    {
+        if (settings is null) return ValidationSeverity.Warning;
+        if (settings.Severity.HasValue) return settings.Severity.Value;
+        return settings.FailOnInconsistency ? ValidationSeverity.Error : ValidationSeverity.Warning;
+    }
+
+    private static ValidationSeverity ResolveCompatibilitySeverity(CompatibilitySettings settings)
+    {
+        if (settings is null) return ValidationSeverity.Warning;
+        if (settings.Severity.HasValue) return settings.Severity.Value;
+        return settings.FailOnIncompatibility ? ValidationSeverity.Error : ValidationSeverity.Warning;
+    }
+
+    private static CheckStatus EvaluateFileConsistency(
+        ProjectConsistencyReport report,
+        FileConsistencySettings settings,
+        ValidationSeverity severity)
     {
         var total = report.Summary.TotalFiles;
         if (total <= 0) return CheckStatus.Pass;
@@ -1724,7 +2827,12 @@ exit 0
 
         var max = Clamp(settings.MaxInconsistencyPercentage, 0, 100);
         var percent = (filesWithIssues / (double)total) * 100.0;
-        return percent <= max ? CheckStatus.Warning : CheckStatus.Fail;
+        var status = percent <= max ? CheckStatus.Warning : CheckStatus.Fail;
+
+        if (severity == ValidationSeverity.Off) return CheckStatus.Pass;
+        if (severity == ValidationSeverity.Warning && status == CheckStatus.Fail)
+            return CheckStatus.Warning;
+        return status;
     }
 
     private static string BuildFileConsistencyMessage(ProjectConsistencyReport report, FileConsistencySettings settings)
@@ -1762,7 +2870,10 @@ exit 0
         return filesWithIssues;
     }
 
-    private static PowerShellCompatibilityReport ApplyCompatibilitySettings(PowerShellCompatibilityReport report, CompatibilitySettings settings)
+    private static PowerShellCompatibilityReport ApplyCompatibilitySettings(
+        PowerShellCompatibilityReport report,
+        CompatibilitySettings settings,
+        ValidationSeverity severity)
     {
         if (report is null) throw new ArgumentNullException(nameof(report));
         if (settings is null) return report;
@@ -1792,6 +2903,15 @@ exit 0
         var status = failures.Count > 0
             ? CheckStatus.Fail
             : s.FilesWithIssues > 0 ? CheckStatus.Warning : CheckStatus.Pass;
+
+        if (severity == ValidationSeverity.Off)
+        {
+            status = CheckStatus.Pass;
+        }
+        else if (severity == ValidationSeverity.Warning && status == CheckStatus.Fail)
+        {
+            status = CheckStatus.Warning;
+        }
 
         var message = status switch
         {
@@ -1828,24 +2948,88 @@ exit 0
 
         try
         {
-            var internals = string.IsNullOrWhiteSpace(delivery.InternalsPath) ? "Internals" : delivery.InternalsPath.Trim();
-            ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "Schema", delivery.Schema ?? "1.3");
-            ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "InternalsPath", internals);
+            var internals = string.IsNullOrWhiteSpace(delivery.InternalsPath)
+                ? "Internals"
+                : delivery.InternalsPath.Trim();
 
-            if (!string.IsNullOrWhiteSpace(delivery.IntroFile))
-                ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "IntroFile", delivery.IntroFile!.Trim());
-            if (!string.IsNullOrWhiteSpace(delivery.UpgradeFile))
-                ManifestEditor.TrySetPsDataSubString(manifestPath, "Delivery", "UpgradeFile", delivery.UpgradeFile!.Trim());
-
-            if (delivery.DocumentationOrder is { Length: > 0 })
+            void ApplyTo(string parentKey)
             {
-                var ordered = delivery.DocumentationOrder
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(s => s.Trim())
-                    .ToArray();
-                if (ordered.Length > 0)
-                    ManifestEditor.TrySetPsDataSubStringArray(manifestPath, "Delivery", "DocumentationOrder", ordered);
+                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "Schema", delivery.Schema ?? "1.3");
+                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "Enable", delivery.Enable);
+                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "InternalsPath", internals);
+                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootReadme", delivery.IncludeRootReadme);
+                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootChangelog", delivery.IncludeRootChangelog);
+                ManifestEditor.TrySetPsDataSubBool(manifestPath, parentKey, "IncludeRootLicense", delivery.IncludeRootLicense);
+                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "ReadmeDestination", delivery.ReadmeDestination.ToString());
+                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "ChangelogDestination", delivery.ChangelogDestination.ToString());
+                ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "LicenseDestination", delivery.LicenseDestination.ToString());
+
+                if (!string.IsNullOrWhiteSpace(delivery.IntroFile))
+                    ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "IntroFile", delivery.IntroFile!.Trim());
+                if (!string.IsNullOrWhiteSpace(delivery.UpgradeFile))
+                    ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "UpgradeFile", delivery.UpgradeFile!.Trim());
+
+                if (delivery.DocumentationOrder is { Length: > 0 })
+                {
+                    var ordered = delivery.DocumentationOrder
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (ordered.Length > 0)
+                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "DocumentationOrder", ordered);
+                }
+
+                if (delivery.RepositoryPaths is { Length: > 0 })
+                {
+                    var repoPaths = delivery.RepositoryPaths
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (repoPaths.Length > 0)
+                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "RepositoryPaths", repoPaths);
+                }
+
+                if (!string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
+                    ManifestEditor.TrySetPsDataSubString(manifestPath, parentKey, "RepositoryBranch", delivery.RepositoryBranch!.Trim());
+
+                if (delivery.IntroText is { Length: > 0 })
+                {
+                    var intro = delivery.IntroText
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (intro.Length > 0)
+                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "IntroText", intro);
+                }
+
+                if (delivery.UpgradeText is { Length: > 0 })
+                {
+                    var upgrade = delivery.UpgradeText
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .ToArray();
+                    if (upgrade.Length > 0)
+                        ManifestEditor.TrySetPsDataSubStringArray(manifestPath, parentKey, "UpgradeText", upgrade);
+                }
+
+                if (delivery.ImportantLinks is { Length: > 0 })
+                {
+                    var items = delivery.ImportantLinks
+                        .Where(l => l is not null && !string.IsNullOrWhiteSpace(l.Title) && !string.IsNullOrWhiteSpace(l.Url))
+                        .Select(l => new Dictionary<string, string>
+                        {
+                            ["Title"] = l.Title.Trim(),
+                            ["Url"] = l.Url.Trim()
+                        })
+                        .ToArray();
+
+                    if (items.Length > 0)
+                        ManifestEditor.TrySetPsDataSubHashtableArray(manifestPath, parentKey, "ImportantLinks", items);
+                }
             }
+
+            ApplyTo("Delivery");
+            ApplyTo("PSPublishModuleDelivery");
 
             if (delivery.RepositoryPaths is { Length: > 0 } || !string.IsNullOrWhiteSpace(delivery.RepositoryBranch))
             {
@@ -1854,23 +3038,6 @@ exit 0
                     branch: string.IsNullOrWhiteSpace(delivery.RepositoryBranch) ? null : delivery.RepositoryBranch!.Trim(),
                     paths: delivery.RepositoryPaths);
             }
-
-            BuildServices.SetDeliveryTexts(manifestPath, delivery.IntroText, delivery.UpgradeText);
-
-            if (delivery.ImportantLinks is { Length: > 0 })
-            {
-                var items = delivery.ImportantLinks
-                    .Where(l => l is not null && !string.IsNullOrWhiteSpace(l.Title) && !string.IsNullOrWhiteSpace(l.Url))
-                    .Select(l => new Dictionary<string, string>
-                    {
-                        ["Title"] = l.Title.Trim(),
-                        ["Url"] = l.Url.Trim()
-                    })
-                    .ToArray();
-
-                if (items.Length > 0)
-                    ManifestEditor.TrySetPsDataSubHashtableArray(manifestPath, "Delivery", "ImportantLinks", items);
-            }
         }
         catch
         {
@@ -1878,3 +3045,6 @@ exit 0
         }
     }
 }
+
+
+

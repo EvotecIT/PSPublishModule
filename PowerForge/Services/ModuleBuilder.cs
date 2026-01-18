@@ -185,13 +185,22 @@ public sealed class ModuleBuilder
         // 3) Exports
         IEnumerable<string>? functionsToSet = null;
         var publicFolder = Path.Combine(opts.ProjectRoot, "Public");
+        string[] scripts = Array.Empty<string>();
         if (Directory.Exists(publicFolder))
         {
-            string[] scripts;
             try { scripts = Directory.EnumerateFiles(publicFolder, "*.ps1", SearchOption.AllDirectories).ToArray(); }
             catch { scripts = Array.Empty<string>(); }
-            functionsToSet = ExportDetector.DetectScriptFunctions(scripts);
         }
+
+        if (scripts.Length == 0)
+        {
+            var rootPsm1 = Path.Combine(opts.ProjectRoot, $"{opts.ModuleName}.psm1");
+            if (File.Exists(rootPsm1))
+                scripts = new[] { rootPsm1 };
+        }
+
+        if (scripts.Length > 0)
+            functionsToSet = ExportDetector.DetectScriptFunctions(scripts);
 
         IEnumerable<string>? cmdletsToSet = null;
         IEnumerable<string>? aliasesToSet = null;

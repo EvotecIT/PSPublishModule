@@ -36,10 +36,24 @@ internal sealed class Preprocessor
                         "\"Utf8Bom\":" + (options.Utf8Bom ? "true" : "false") +
                         "}";
         var flagsB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(flagsJson));
-        var args = new List<string>(list.Length + 2) { flagsB64, "--" };
+        var args = new List<string>(list.Length + 1) { flagsB64 };
         args.AddRange(list);
         var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds))));
         try { File.Delete(scriptPath); } catch { /* ignore */ }
+
+        if (result.ExitCode != 0)
+        {
+            var reason = ExtractFirstLine(result.StdErr) ?? ExtractFirstLine(result.StdOut);
+            var msg = string.IsNullOrWhiteSpace(reason)
+                ? $"Preprocessor failed (exit {result.ExitCode})."
+                : $"Preprocessor failed (exit {result.ExitCode}): {reason}";
+            _logger.Error(msg);
+            if (_logger.IsVerbose)
+            {
+                if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
+                if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            }
+        }
 
         if (result.ExitCode == 127)
         {
@@ -80,10 +94,32 @@ internal sealed class Preprocessor
         {
             if (!outputs.Any(o => string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
             {
-                outputs.Add(new FormatterResult(p, false, "No result returned"));
+                if (result.ExitCode != 0)
+                {
+                    var reason = ExtractFirstLine(result.StdErr) ?? ExtractFirstLine(result.StdOut);
+                    var extra = string.IsNullOrWhiteSpace(reason) ? string.Empty : $": {reason}";
+                    outputs.Add(new FormatterResult(p, false, $"Error: Preprocessor failed (exit {result.ExitCode}){extra}"));
+                }
+                else
+                {
+                    outputs.Add(new FormatterResult(p, false, "Error: Preprocessor returned no result"));
+                }
             }
         }
         return outputs;
+    }
+
+    private static string? ExtractFirstLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var parts = text!.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            var line = part.Trim();
+            if (line.Length == 0) continue;
+            return line.Length > 200 ? line.Substring(0, 200) + "..." : line;
+        }
+        return null;
     }
 
     private static string BuildScript()

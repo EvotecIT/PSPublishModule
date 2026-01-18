@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using PowerForge;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -90,7 +92,17 @@ internal static class PipelineConsoleUi
                     iconLookup,
                     startLookup,
                     doneLookup);
-                result = runner.Run(spec, plan, reporter);
+                using var refreshCts = new CancellationTokenSource();
+                var refresher = StartRefreshLoop(ctx, refreshCts.Token);
+                try
+                {
+                    result = runner.Run(spec, plan, reporter);
+                }
+                finally
+                {
+                    refreshCts.Cancel();
+                    try { refresher.GetAwaiter().GetResult(); } catch { /* best effort */ }
+                }
             });
 
         return result!;
@@ -105,6 +117,16 @@ internal static class PipelineConsoleUi
         if (viewportWidth >= 80) return 12;
         return 10;
     }
+
+    private static Task StartRefreshLoop(ProgressContext ctx, CancellationToken token)
+        => Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try { ctx.Refresh(); } catch { /* best effort */ }
+                try { await Task.Delay(100, token).ConfigureAwait(false); } catch { }
+            }
+        }, token);
 
     private static ProgressColumn[] BuildColumns(
         bool includeBar,
@@ -181,6 +203,7 @@ internal static class PipelineConsoleUi
         var validations = new List<string>();
         if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
         if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
+        if (plan.ValidationSettings?.Enable == true) validations.Add("Module validation");
         AddInfoRow(
             unicode ? "🔎" : "VAL",
             "Validation",

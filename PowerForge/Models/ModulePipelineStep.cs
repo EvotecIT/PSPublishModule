@@ -13,7 +13,7 @@ public enum ModulePipelineStepKind
     Formatting = 7,
     /// <summary>Sign module output (Authenticode).</summary>
     Signing = 8,
-    /// <summary>Run validation checks (compatibility, consistency).</summary>
+    /// <summary>Run validation checks (compatibility, consistency, module validation).</summary>
     Validation = 6,
     /// <summary>Create an artefact output (packed/unpacked).</summary>
     Artefact = 2,
@@ -134,12 +134,16 @@ public sealed class ModulePipelineStep
         // 5) Validation checks (after build/docs/formatting/signing, before packaging/publish/install).
         if (plan.FileConsistencySettings?.Enable == true)
         {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Validation,
-                key: "validate:fileconsistency",
-                title: "Check file consistency"));
+            var scope = plan.FileConsistencySettings.ResolveScope();
+            if (scope != FileConsistencyScope.ProjectOnly)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Validation,
+                    key: "validate:fileconsistency",
+                    title: "Check file consistency"));
+            }
 
-            if (plan.FileConsistencySettings.UpdateProjectRoot)
+            if (scope != FileConsistencyScope.StagingOnly)
             {
                 steps.Add(new ModulePipelineStep(
                     kind: ModulePipelineStepKind.Validation,
@@ -154,6 +158,14 @@ public sealed class ModulePipelineStep
                 kind: ModulePipelineStepKind.Validation,
                 key: "validate:compatibility",
                 title: "Check PowerShell compatibility"));
+        }
+
+        if (plan.ValidationSettings?.Enable == true)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Validation,
+                key: "validate:module",
+                title: "Validate module"));
         }
 
         // 6) Artefacts

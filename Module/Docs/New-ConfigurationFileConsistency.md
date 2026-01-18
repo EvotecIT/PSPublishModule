@@ -11,7 +11,7 @@ Creates configuration for file consistency checking (encoding and line endings) 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationFileConsistency [-Enable] [-FailOnInconsistency] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-AutoFix] [-CreateBackups] [-MaxInconsistencyPercentage <int>] [-ExcludeDirectories <string[]>] [-ExportReport] [-ReportFileName <string>] [-CheckMixedLineEndings] [-CheckMissingFinalNewline] [-UpdateProjectRoot] [<CommonParameters>]
+New-ConfigurationFileConsistency [-Enable] [-FailOnInconsistency] [-Severity <ValidationSeverity>] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-ProjectKind <ProjectKind>] [-IncludePatterns <string[]>] [-Scope <FileConsistencyScope>] [-AutoFix] [-CreateBackups] [-MaxInconsistencyPercentage <int>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-EncodingOverrides <hashtable>] [-LineEndingOverrides <hashtable>] [-ExportReport] [-ReportFileName <string>] [-CheckMixedLineEndings] [-CheckMissingFinalNewline] [-UpdateProjectRoot] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -29,7 +29,7 @@ Enforces consistency and exports a CSV report; backups are created before fixes 
 
 ### EXAMPLE 2
 ```powershell
-PS>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -UpdateProjectRoot
+PS>New-ConfigurationFileConsistency -Enable -RequiredEncoding UTF8BOM -RequiredLineEnding CRLF -ExportReport -Scope StagingAndProject
 ```
 
 Runs validation on staging and project root, exports a report, and does not apply automatic fixes.
@@ -111,8 +111,38 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -EncodingOverrides
+Per-path encoding overrides (patterns mapped to encodings).
+
+```yaml
+Type: Hashtable
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -ExcludeDirectories
 Directory names to exclude from consistency analysis.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExcludeFiles
+File patterns to exclude from consistency analysis.
 
 ```yaml
 Type: String[]
@@ -156,11 +186,56 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -IncludePatterns
+Custom include patterns (override default project kind patterns).
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -LineEndingOverrides
+Per-path line ending overrides (patterns mapped to line endings).
+
+```yaml
+Type: Hashtable
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -MaxInconsistencyPercentage
 Maximum percentage of files that can have consistency issues. Default is 5.
 
 ```yaml
 Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ProjectKind
+Project kind used to derive default include patterns.
+
+```yaml
+Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -216,8 +291,38 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -Scope
+Scope for file consistency checks (staging/project).
+
+```yaml
+Type: FileConsistencyScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -Severity
+Severity for consistency issues (overrides FailOnInconsistency when specified).
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -UpdateProjectRoot
-When set, applies encoding/line-ending consistency fixes to the project root as well as staging output.
+Legacy switch. When set, applies encoding/line-ending consistency fixes to the project root as well as staging output.
 
 ```yaml
 Type: SwitchParameter

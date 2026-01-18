@@ -251,6 +251,17 @@ public sealed class DocumentationEngine
         }
     }
 
+    internal DocumentationExtractionPayload ExtractHelpPayload(
+        string stagingPath,
+        string moduleManifestPath,
+        TimeSpan? timeout = null)
+    {
+        return ExtractHelpAsJson(
+            stagingPath: stagingPath,
+            moduleManifestPath: moduleManifestPath,
+            timeout: timeout ?? TimeSpan.FromMinutes(5));
+    }
+
     private DocumentationExtractionPayload ExtractHelpAsJson(
         string stagingPath,
         string moduleManifestPath,

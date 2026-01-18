@@ -46,6 +46,11 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
     [ArgumentCompleter(typeof(AutoLatestCompleter))]
     public string? Version { get; set; }
 
+    /// <summary>Minimum version of the dependency module (preferred over -Version).</summary>
+    [Parameter]
+    [ArgumentCompleter(typeof(AutoLatestCompleter))]
+    public string? MinimumVersion { get; set; }
+
     /// <summary>Required version of the dependency module (exact match).</summary>
     [Parameter] public string? RequiredVersion { get; set; }
 
@@ -57,8 +62,13 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
     /// <summary>Emits module dependency configuration objects.</summary>
     protected override void ProcessRecord()
     {
-        if (!string.IsNullOrWhiteSpace(Version) && !string.IsNullOrWhiteSpace(RequiredVersion))
-            throw new PSArgumentException("You cannot use both Version and RequiredVersion at the same time for the same module. Please choose one or the other (New-ConfigurationModule) ");
+        if (!string.IsNullOrWhiteSpace(Version) && !string.IsNullOrWhiteSpace(MinimumVersion))
+            throw new PSArgumentException("You cannot use both Version and MinimumVersion at the same time for the same module. Please choose one or the other (New-ConfigurationModule).");
+
+        var min = string.IsNullOrWhiteSpace(MinimumVersion) ? Version : MinimumVersion;
+
+        if (!string.IsNullOrWhiteSpace(RequiredVersion) && !string.IsNullOrWhiteSpace(min))
+            throw new PSArgumentException("You cannot use both RequiredVersion and a minimum version for the same module. Please choose one or the other (New-ConfigurationModule).");
 
         foreach (var n in Name)
         {
@@ -68,7 +78,8 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
                 Configuration = new ModuleDependencyConfiguration
                 {
                     ModuleName = n,
-                    ModuleVersion = Version,
+                    ModuleVersion = null,
+                    MinimumVersion = min,
                     RequiredVersion = RequiredVersion,
                     Guid = Guid
                 }

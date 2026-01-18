@@ -49,6 +49,48 @@
         "ExternalHelpCulture": "en-US"
       }
     },
+    {
+      "Type": "Validation",
+      "Settings": {
+        "Enable": true,
+        "ScriptAnalyzer": { "Enable": true },
+        "FileIntegrity": {
+          "CheckTrailingWhitespace": true,
+          "CheckSyntax": true
+        }
+      }
+    },
+    {
+      "Type": "FileConsistency",
+      "Settings": {
+        "Enable": true,
+        "RequiredEncoding": "UTF8BOM",
+        "RequiredLineEnding": "CRLF",
+        "Scope": "StagingAndProject",
+        "ExcludeDirectories": [
+          "Build",
+          "Docs",
+          "Documentation",
+          "Examples",
+          "Tests"
+        ],
+        "EncodingOverrides": {
+          "*.xml": "UTF8"
+        },
+        "ExportReport": true,
+        "CheckMixedLineEndings": true,
+        "CheckMissingFinalNewline": true
+      }
+    },
+    {
+      "Type": "Compatibility",
+      "Settings": {
+        "Enable": true,
+        "RequireCrossCompatibility": true,
+        "MinimumCompatibilityPercentage": 95,
+        "ExportReport": true
+      }
+    },
     { "Type": "Packed", "Configuration": { "Enabled": true, "Path": "Artefacts/Packed" } },
     { "Type": "Unpacked", "Configuration": { "Enabled": true, "Path": "Artefacts/Unpacked" } }
   ]

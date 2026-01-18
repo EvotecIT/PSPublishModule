@@ -48,6 +48,14 @@
       "type": "string",
       "enum": ["CRLF", "LF"]
     },
+    "FileConsistencyScope": {
+      "type": "string",
+      "enum": ["StagingOnly", "ProjectOnly", "StagingAndProject"]
+    },
+    "ProjectKind": {
+      "type": "string",
+      "enum": ["PowerShell", "CSharp", "Mixed", "All"]
+    },
     "DeliveryBundleDestination": {
       "type": "string",
       "enum": ["Internals", "Root", "Both", "None"]
@@ -59,6 +67,10 @@
     "TestExecutionWhen": {
       "type": "string",
       "enum": ["AfterMerge"]
+    },
+    "ValidationSeverity": {
+      "type": "string",
+      "enum": ["Off", "Warning", "Error"]
     }
   }
 }

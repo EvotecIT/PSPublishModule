@@ -14,6 +14,7 @@ public static class ProjectFileEnumerator
     public static IEnumerable<string> Enumerate(ProjectEnumeration e)
     {
         var excludes = new HashSet<string>(e.ExcludeDirectories, System.StringComparer.OrdinalIgnoreCase);
+        var excludeFiles = e.ExcludeFiles ?? System.Array.Empty<string>();
         var stack = new Stack<string>();
         stack.Push(e.EnumerationRoot());
         var patterns = e.CustomExtensions ?? GetDefaultPatterns(e.Kind);
@@ -26,9 +27,18 @@ public static class ProjectFileEnumerator
 
             foreach (var pattern in patterns)
             {
-                IEnumerable<string> files = System.Array.Empty<string>();
+                IEnumerable<string> files = System.Array.Empty<string>();       
                 try { files = Directory.EnumerateFiles(current, pattern, SearchOption.TopDirectoryOnly); } catch { }
-                foreach (var f in files) yield return f;
+                foreach (var f in files)
+                {
+                    if (excludeFiles.Count > 0)
+                    {
+                        var rel = ComputeRelativePath(e.EnumerationRoot(), f);
+                        if (ShouldExcludeFile(rel, excludeFiles))
+                            continue;
+                    }
+                    yield return f;
+                }
             }
 
             IEnumerable<string> dirs = System.Array.Empty<string>();
@@ -49,5 +59,40 @@ public static class ProjectFileEnumerator
             _ => new[] { "*.ps1", "*.psm1", "*.psd1", "*.ps1xml", "*.cs", "*.csx", "*.csproj", "*.sln", "*.config", "*.json", "*.xml" }
         };
     }
+
+    private static bool ShouldExcludeFile(string relativePath, IReadOnlyList<string> patterns)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || patterns is null || patterns.Count == 0)
+            return false;
+
+        foreach (var pattern in patterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            if (FileConsistencyOverrideResolver.Matches(pattern, relativePath))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string ComputeRelativePath(string baseDir, string fullPath)
+    {
+        try
+        {
+            var baseUri = new Uri(AppendDirectorySeparatorChar(baseDir));
+            var pathUri = new Uri(fullPath);
+            var rel = Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString());
+            return rel.Replace('/', Path.DirectorySeparatorChar);
+        }
+        catch
+        {
+            return Path.GetFileName(fullPath) ?? fullPath;
+        }
+    }
+
+    private static string AppendDirectorySeparatorChar(string path)
+        => path.EndsWith(Path.DirectorySeparatorChar.ToString())
+            ? path
+            : path + Path.DirectorySeparatorChar;
 }
 
