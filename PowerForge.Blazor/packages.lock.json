@@ -16,6 +16,12 @@
           "System.IO.Pipelines": "8.0.0"
         }
       },
+      "OfficeIMO.Markdown": {
+        "type": "Direct",
+        "requested": "[0.5.0, )",
+        "resolved": "0.5.0",
+        "contentHash": "oIJJotGTO9G74XKKxQCtg7h5cTDmq0l8d//Imzm7REB3DUI1AdWqkms/LVWn2/u5ExITK+GbTcquv5OlOJJeog=="
+      },
       "JetBrains.Annotations": {
         "type": "Transitive",
         "resolved": "2021.2.0",
@@ -800,9 +806,6 @@
         "type": "Transitive",
         "resolved": "8.0.0",
         "contentHash": "Obg3a90MkOw9mYKxrardLpY2u0axDMrSmy4JCdq2cYbelM2cUwmUir5Bomvd1yxmPL9h5LVHU1tuKBZpUjfASg=="
-      },
-      "officeimo.markdown": {
-        "type": "Project"
       },
       "powerforge": {
         "type": "Project",
