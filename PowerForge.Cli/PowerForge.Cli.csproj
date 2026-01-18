@@ -10,6 +10,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>powerforge</ToolCommandName>
     <Description>PowerForge command-line interface for building and publishing PowerShell modules.</Description>
+    <VersionPrefix>1.0.0</VersionPrefix>
   </PropertyGroup>
 
   <ItemGroup>
