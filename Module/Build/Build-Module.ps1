@@ -180,32 +180,32 @@ Build-Module @buildParams -Settings {
 
     $signEnabled = if ($NoSign.IsPresent) { $false } elseif ($SignModule.IsPresent) { $true } else { $Env:COMPUTERNAME -eq 'EVOMONSTER' }
     $newConfigurationBuildSplat = @{
-        Enable                            = $true
-        SignModule                        = $signEnabled
+        Enable                         = $true
+        SignModule                     = $signEnabled
         # DeleteTargetModuleBeforeBuild     = $true
-        MergeModuleOnBuild                = $true
-        CertificateThumbprint             = $CertificateThumbprint
+        MergeModuleOnBuild             = $true
+        CertificateThumbprint          = $CertificateThumbprint
         #CertificatePFXBase64           = $BasePfx
         #CertificatePFXPassword         = "zGT"
-        DoNotAttemptToFixRelativePaths    = $false
-        SkipBuiltinReplacements           = $true
+        DoNotAttemptToFixRelativePaths = $false
+        SkipBuiltinReplacements        = $true
 
         # required for Cmdlet/Alias functionality
-        NETProjectPath                    = "$PSScriptRoot\..\..\PSPublishModule"
-        ResolveBinaryConflicts            = $true
-        ResolveBinaryConflictsName        = 'PSPublishModule'
-        NETProjectName                    = 'PSPublishModule'
-        NETConfiguration                  = 'Release'
-        NETFramework                      = 'net8.0', 'net472'
-        NETHandleAssemblyWithSameName     = $true
+        NETProjectPath                 = "$PSScriptRoot\..\..\PSPublishModule"
+        ResolveBinaryConflicts         = $true
+        ResolveBinaryConflictsName     = 'PSPublishModule'
+        NETProjectName                 = 'PSPublishModule'
+        NETConfiguration               = 'Release'
+        NETFramework                   = 'net8.0', 'net472'
+        NETHandleAssemblyWithSameName  = $true
         #NETDocumentation                  = $true
-        DotSourceLibraries                = $true
-        DotSourceClasses                  = $true
+        DotSourceLibraries             = $true
+        DotSourceClasses               = $true
 
-        VersionedInstallStrategy          = 'AutoRevision'   # or 'Exact'       
-        VersionedInstallKeep              = 3                # how many versions to retain
-        KillLockersBeforeInstall          = $true
-        KillLockersForce                  = $true
+        VersionedInstallStrategy       = 'AutoRevision'   # or 'Exact'
+        VersionedInstallKeep           = 3                # how many versions to retain
+        KillLockersBeforeInstall       = $true
+        KillLockersForce               = $true
     }
 
     if ($PSBoundParameters.ContainsKey('SignIncludeBinaries')) {
@@ -232,6 +232,8 @@ Build-Module @buildParams -Settings {
 
     New-ConfigurationArtefact -Type Packed -Enable -Path "$PSScriptRoot\..\Artefacts\Packed" -IncludeTagName -ID 'ToGitHub' -ArtefactName "PSPublishModule.<TagModuleVersionWithPreRelease>.zip"
 
+
+    New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Utility', 'ActiveDirectory' -IgnoreFunctionName 'Get-ADUser'
     # Disabled because PSPublishModule testing itself after build causes multiple module instances
     # which breaks InModuleScope tests. The module is tested separately via PSPublishModule.Tests.ps1
     #New-ConfigurationTest -TestsPath "$PSScriptRoot\..\Tests" -Enable

@@ -620,7 +620,8 @@ public sealed class ModulePipelineRunner
                     }
                 }
 
-                TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
+                if (!mergedScripts)
+                    TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
                 SafeDone(manifestStep);
             }
@@ -1879,7 +1880,7 @@ exit 0
         if (plan is null || buildResult is null) return false;
         if (!plan.MergeModule && !plan.MergeMissing) return false;
 
-        var mergeInfo = BuildMergeSources(buildResult.StagingPath, plan.ModuleName, plan.Information);
+        var mergeInfo = BuildMergeSources(buildResult.StagingPath, plan.ModuleName, plan.Information, buildResult.Exports);
         if (!mergeInfo.HasScripts && !File.Exists(mergeInfo.Psm1Path))
         {
             _logger.Warn("Merge requested but no script sources or PSM1 file were found.");
@@ -1950,7 +1951,7 @@ exit 0
     }
 
 
-    private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information)
+    private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information, ExportSet exports)
     {
         var root = Path.GetFullPath(rootPath);
         var psm1 = Path.Combine(root, $"{moduleName}.psm1");
@@ -1979,7 +1980,7 @@ exit 0
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var merged = ordered.Length > 0 ? BuildMergedScriptContent(root, ordered) : string.Empty;
+        var merged = ordered.Length > 0 ? BuildMergedScriptContent(root, ordered, exports) : string.Empty;
         var libRoot = Path.Combine(root, "Lib");
         var hasLib = Directory.Exists(libRoot) && Directory.EnumerateDirectories(libRoot).Any();
 
@@ -2003,7 +2004,7 @@ exit 0
         return ordered.ToArray();
     }
 
-    private static string BuildMergedScriptContent(string rootPath, IReadOnlyList<string> files)
+    private static string BuildMergedScriptContent(string rootPath, IReadOnlyList<string> files, ExportSet exports)
     {
         var requires = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usingLines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2017,7 +2018,6 @@ exit 0
             try { lines = File.ReadAllLines(file); }
             catch { continue; }
 
-            var rel = ProjectTextInspection.ComputeRelativePath(rootPath, file);
             var block = new List<string>();
 
             foreach (var line in lines)
@@ -2038,9 +2038,7 @@ exit 0
 
             if (block.Count == 0) continue;
 
-            body.AppendLine($"#region {rel}");
             foreach (var line in block) body.AppendLine(line);
-            body.AppendLine($"#endregion {rel}");
             body.AppendLine();
         }
 
@@ -2054,8 +2052,52 @@ exit 0
             header.AppendLine();
 
         header.Append(body.ToString().TrimEnd());
-        return header.ToString();
+
+        var merged = header.ToString().TrimEnd();
+        var exportBlock = BuildExportBlock(exports);
+        if (!string.IsNullOrWhiteSpace(exportBlock))
+        {
+            if (!string.IsNullOrWhiteSpace(merged))
+                merged += Environment.NewLine + Environment.NewLine;
+            merged += exportBlock.TrimEnd();
+        }
+
+        return merged;
     }
+
+    private static string BuildExportBlock(ExportSet exports)
+    {
+        var sb = new StringBuilder(256);
+        sb.AppendLine("$FunctionsToExport = " + FormatPsStringList(exports.Functions));
+        sb.AppendLine("$CmdletsToExport = " + FormatPsStringList(exports.Cmdlets));
+        sb.AppendLine("$AliasesToExport = " + FormatPsStringList(exports.Aliases));
+        sb.AppendLine("Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport");
+        return sb.ToString();
+    }
+
+    private static string FormatPsStringList(IReadOnlyList<string>? values)
+    {
+        var list = (values ?? Array.Empty<string>())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (list.Length == 0) return "@()";
+
+        var sb = new StringBuilder();
+        sb.Append("@(");
+        for (var i = 0; i < list.Length; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append('\'').Append(EscapePsSingleQuoted(list[i])).Append('\'');
+        }
+        sb.Append(')');
+        return sb.ToString();
+    }
+
+    private static string EscapePsSingleQuoted(string value)
+        => value?.Replace("'", "''") ?? string.Empty;
 
     private void TryRegenerateBootstrapperFromManifest(ModuleBuildResult buildResult, string moduleName, IReadOnlyList<string>? exportAssemblies)
     {
@@ -2516,6 +2558,12 @@ $req | ForEach-Object { $_.Name }
         if (formatting is null) return Array.Empty<FormatterResult>();
 
         var cfg = formatting.Options ?? new FormattingOptions();
+        var standardPsd1 = cfg.Standard.FormatCodePSD1 ?? (string.IsNullOrWhiteSpace(cfg.Standard.Style?.PSD1)
+            ? null
+            : new FormatCodeOptions { Enabled = true });
+        var mergePsd1 = cfg.Merge.FormatCodePSD1 ?? (string.IsNullOrWhiteSpace(cfg.Merge.Style?.PSD1)
+            ? null
+            : new FormatCodeOptions { Enabled = true });
 
         var excludeDirs = MergeExcludeDirectories(
             primary: null,
@@ -2544,7 +2592,7 @@ $req | ForEach-Object { $_.Name }
             if (cfg.Merge.FormatCodePSM1?.Enabled == true)
                 psm1Files = psm1Files.Where(p => !string.Equals(p, rootPsm1, StringComparison.OrdinalIgnoreCase)).ToArray();
 
-            if (cfg.Merge.FormatCodePSD1?.Enabled == true)
+            if (mergePsd1?.Enabled == true)
                 psd1Files = psd1Files.Where(p => !string.Equals(p, manifestPath, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
@@ -2558,16 +2606,16 @@ $req | ForEach-Object { $_.Name }
         if (cfg.Standard.FormatCodePSM1?.Enabled == true && psm1Files.Length > 0)
             results.AddRange(pipeline.Run(psm1Files, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
 
-        if (cfg.Standard.FormatCodePSD1?.Enabled == true && psd1Files.Length > 0)
-            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(cfg.Standard.FormatCodePSD1)));        
+        if (standardPsd1?.Enabled == true && psd1Files.Length > 0)
+            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(standardPsd1)));
 
         if (includeMergeFormatting)
         {
             if (cfg.Merge.FormatCodePSM1?.Enabled == true && File.Exists(rootPsm1))
                 results.AddRange(pipeline.Run(new[] { rootPsm1 }, BuildFormatOptions(cfg.Merge.FormatCodePSM1)));
 
-            if (cfg.Merge.FormatCodePSD1?.Enabled == true && File.Exists(manifestPath))
-                results.AddRange(pipeline.Run(new[] { manifestPath }, BuildFormatOptions(cfg.Merge.FormatCodePSD1)));
+            if (mergePsd1?.Enabled == true && File.Exists(manifestPath))
+                results.AddRange(pipeline.Run(new[] { manifestPath }, BuildFormatOptions(mergePsd1)));
         }
 
         return results.ToArray();

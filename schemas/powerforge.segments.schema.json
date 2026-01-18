@@ -461,6 +461,7 @@
       "additionalProperties": false,
       "properties": {
         "Enable": { "type": "boolean" },
+        "Severity": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" }, { "type": "null" }] },
         "FailOnIncompatibility": { "type": "boolean" },
         "RequirePS51Compatibility": { "type": "boolean" },
         "RequirePS7Compatibility": { "type": "boolean" },
@@ -477,17 +478,25 @@
       "additionalProperties": false,
       "properties": {
         "Enable": { "type": "boolean" },
+        "Severity": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ValidationSeverity" }, { "type": "null" }] },
         "FailOnInconsistency": { "type": "boolean" },
         "RequiredEncoding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" },
         "RequiredLineEnding": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyLineEnding" },
+        "ProjectKind": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/ProjectKind" }, { "type": "null" }] },
+        "IncludePatterns": { "type": ["array", "null"], "items": { "type": "string" } },
         "Scope": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyScope" }, { "type": "null" }] },
         "AutoFix": { "type": "boolean" },
         "CreateBackups": { "type": "boolean" },
         "MaxInconsistencyPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
         "ExcludeDirectories": { "type": "array", "items": { "type": "string" } },
+        "ExcludeFiles": { "type": ["array", "null"], "items": { "type": "string" } },
         "EncodingOverrides": {
           "type": ["object", "null"],
           "additionalProperties": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyEncoding" }
+        },
+        "LineEndingOverrides": {
+          "type": ["object", "null"],
+          "additionalProperties": { "$ref": "powerforge.common.schema.json#/$defs/FileConsistencyLineEnding" }
         },
         "UpdateProjectRoot": { "type": "boolean" },
         "ExportReport": { "type": "boolean" },

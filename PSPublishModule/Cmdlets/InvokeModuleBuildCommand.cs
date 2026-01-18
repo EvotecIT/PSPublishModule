@@ -199,6 +199,13 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfiguration)]
     public SwitchParameter Legacy { get; set; }
 
+    /// <summary>
+    /// Disables the interactive progress UI and emits plain log output.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
+    public SwitchParameter NoInteractive { get; set; }
+
     /// <summary>Staging directory for the PowerForge pipeline. When omitted, a temporary folder is generated.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string? StagingPath { get; set; }
@@ -381,7 +388,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 var plan = planningRunner.Plan(pipelineSpec);
                 lastPlan = plan;
 
-                var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                var interactive = !NoInteractive.IsPresent &&
+                    SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
                 usedInteractiveView = interactive;
                 var result = interactive
                     ? SpectrePipelineConsoleUi.RunInteractive(

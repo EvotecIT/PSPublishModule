@@ -52,6 +52,10 @@
       "type": "string",
       "enum": ["StagingOnly", "ProjectOnly", "StagingAndProject"]
     },
+    "ProjectKind": {
+      "type": "string",
+      "enum": ["PowerShell", "CSharp", "Mixed", "All"]
+    },
     "DeliveryBundleDestination": {
       "type": "string",
       "enum": ["Internals", "Root", "Both", "None"]
