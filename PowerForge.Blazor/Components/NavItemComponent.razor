@@ -1,0 +1,111 @@
+@namespace PowerForge.Blazor
+
+<li class="nav-item @(IsActive ? "active" : "") @(IsExpanded ? "expanded" : "collapsed") level-@Level">
+    <div class="nav-item-content">
+        @if (Item.Children.Count > 0)
+        {
+            <button class="nav-toggle" @onclick="ToggleExpanded" @onclick:stopPropagation="true">
+                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    @if (IsExpanded)
+                    {
+                        <path d="M19 9l-7 7-7-7"/>
+                    }
+                    else
+                    {
+                        <path d="M9 5l7 7-7 7"/>
+                    }
+                </svg>
+            </button>
+        }
+        else
+        {
+            <span class="nav-toggle-placeholder"></span>
+        }
+
+        @if (!string.IsNullOrEmpty(Item.Slug))
+        {
+            <a href="@GetHref()" class="nav-link" @onclick="HandleClick" @onclick:preventDefault="true">
+                @if (!string.IsNullOrEmpty(Item.Icon))
+                {
+                    <span class="nav-icon">@Item.Icon</span>
+                }
+                <span class="nav-text">@Item.Title</span>
+                @if (!string.IsNullOrEmpty(Item.Badge))
+                {
+                    <span class="nav-badge @Item.BadgeClass">@Item.Badge</span>
+                }
+            </a>
+        }
+        else if (!string.IsNullOrEmpty(Item.ExternalUrl))
+        {
+            <a href="@Item.ExternalUrl" target="_blank" rel="noopener" class="nav-link external">
+                <span class="nav-text">@Item.Title</span>
+                <svg class="external-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+                </svg>
+            </a>
+        }
+        else
+        {
+            <span class="nav-section-header" @onclick="ToggleExpanded">
+                <span class="nav-text">@Item.Title</span>
+            </span>
+        }
+    </div>
+
+    @if (Item.Children.Count > 0 && IsExpanded)
+    {
+        <ul class="nav-children">
+            @foreach (var child in Item.Children)
+            {
+                <NavItemComponent Item="@child"
+                                  CurrentSlug="@CurrentSlug"
+                                  OnNavigate="@OnNavigate"
+                                  Level="@(Level + 1)" />
+            }
+        </ul>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired]
+    public DocNavItem Item { get; set; } = null!;
+
+    [Parameter]
+    public string? CurrentSlug { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnNavigate { get; set; }
+
+    [Parameter]
+    public int Level { get; set; }
+
+    private bool IsExpanded { get; set; } = true;
+
+    private bool IsActive => !string.IsNullOrEmpty(Item.Slug) &&
+                             Item.Slug.Equals(CurrentSlug, StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        IsExpanded = Item.IsExpanded;
+    }
+
+    private void ToggleExpanded()
+    {
+        IsExpanded = !IsExpanded;
+    }
+
+    private string GetHref()
+    {
+        // Convert slug to URL path
+        return $"/docs/{Item.Slug}";
+    }
+
+    private async Task HandleClick()
+    {
+        if (!string.IsNullOrEmpty(Item.Slug))
+        {
+            await OnNavigate.InvokeAsync(Item.Slug);
+        }
+    }
+}

@@ -1,0 +1,180 @@
+@namespace PowerForge.Blazor
+
+<div class="doc-search @(IsOpen ? "open" : "") @CssClass">
+    <div class="search-input-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text"
+               class="search-input"
+               placeholder="@Placeholder"
+               @bind="Query"
+               @bind:event="oninput"
+               @onkeydown="HandleKeyDown"
+               @onfocus="() => IsOpen = true" />
+        @if (!string.IsNullOrEmpty(Query))
+        {
+            <button class="search-clear" @onclick="ClearSearch">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+            </button>
+        }
+    </div>
+
+    @if (IsOpen && (Results.Count > 0 || IsSearching || !string.IsNullOrEmpty(Query)))
+    {
+        <div class="search-results">
+            @if (IsSearching)
+            {
+                <div class="search-loading">Searching...</div>
+            }
+            else if (Results.Count == 0 && !string.IsNullOrEmpty(Query))
+            {
+                <div class="search-no-results">No results found for "@Query"</div>
+            }
+            else
+            {
+                @foreach (var result in Results)
+                {
+                    <div class="search-result" @onclick="() => SelectResult(result)">
+                        <div class="result-title">@result.Page.Title</div>
+                        <div class="result-source">@result.SourceName</div>
+                        @if (!string.IsNullOrEmpty(result.Snippet))
+                        {
+                            <div class="result-snippet">@result.Snippet</div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Documentation service for searching.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public DocumentationService DocService { get; set; } = null!;
+
+    /// <summary>
+    /// Placeholder text for the search input.
+    /// </summary>
+    [Parameter]
+    public string Placeholder { get; set; } = "Search documentation...";
+
+    /// <summary>
+    /// Maximum results to show.
+    /// </summary>
+    [Parameter]
+    public int MaxResults { get; set; } = 10;
+
+    /// <summary>
+    /// Callback when a result is selected.
+    /// </summary>
+    [Parameter]
+    public EventCallback<SearchResult> OnResultSelected { get; set; }
+
+    /// <summary>
+    /// Additional CSS class.
+    /// </summary>
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    private string Query { get; set; } = string.Empty;
+    private List<SearchResult> Results { get; set; } = new();
+    private bool IsOpen { get; set; }
+    private bool IsSearching { get; set; }
+    private CancellationTokenSource? _searchCts;
+    private System.Timers.Timer? _debounceTimer;
+
+    protected override void OnInitialized()
+    {
+        _debounceTimer = new System.Timers.Timer(300);
+        _debounceTimer.Elapsed += async (_, _) => await PerformSearch();
+        _debounceTimer.AutoReset = false;
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Trigger debounced search when query changes
+        _debounceTimer?.Stop();
+        _debounceTimer?.Start();
+    }
+
+    private async Task PerformSearch()
+    {
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+
+        if (string.IsNullOrWhiteSpace(Query))
+        {
+            await InvokeAsync(() =>
+            {
+                Results.Clear();
+                StateHasChanged();
+            });
+            return;
+        }
+
+        await InvokeAsync(() =>
+        {
+            IsSearching = true;
+            StateHasChanged();
+        });
+
+        try
+        {
+            var results = await DocService.SearchAsync(Query, MaxResults, _searchCts.Token);
+            await InvokeAsync(() =>
+            {
+                Results = results.ToList();
+                IsSearching = false;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            // Search was cancelled, ignore
+        }
+        catch
+        {
+            await InvokeAsync(() =>
+            {
+                Results.Clear();
+                IsSearching = false;
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task SelectResult(SearchResult result)
+    {
+        IsOpen = false;
+        await OnResultSelected.InvokeAsync(result);
+    }
+
+    private void ClearSearch()
+    {
+        Query = string.Empty;
+        Results.Clear();
+        IsOpen = false;
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            IsOpen = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+    }
+}

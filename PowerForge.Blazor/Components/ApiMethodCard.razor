@@ -1,0 +1,127 @@
+@namespace PowerForge.Blazor
+
+<div class="api-method-card">
+    <div class="method-signature">
+        <code>
+            @if (Method.Modifiers.Count > 0)
+            {
+                <span class="modifiers">@string.Join(" ", Method.Modifiers) </span>
+            }
+            @if (!Method.IsConstructor)
+            {
+                <span class="return-type">@Method.ReturnType </span>
+            }
+            <span class="method-name">@Method.Name</span>@if (Method.TypeParameters.Count > 0)
+            {
+                <span class="type-params">&lt;@string.Join(", ", Method.TypeParameters.Select(t => t.Name))&gt;</span>
+            }(<span class="params">@FormatParameters()</span>)
+        </code>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Method.Summary))
+    {
+        <div class="method-summary">
+            @((MarkupString)Method.Summary)
+        </div>
+    }
+
+    @if (Method.TypeParameters.Count > 0)
+    {
+        <div class="method-type-params">
+            <h4>Type Parameters</h4>
+            <dl>
+                @foreach (var tp in Method.TypeParameters)
+                {
+                    <dt><code>@tp.Name</code></dt>
+                    <dd>@tp.Description</dd>
+                }
+            </dl>
+        </div>
+    }
+
+    @if (Method.Parameters.Count > 0)
+    {
+        <div class="method-params">
+            <h4>Parameters</h4>
+            <dl>
+                @foreach (var param in Method.Parameters)
+                {
+                    <dt>
+                        @if (!string.IsNullOrEmpty(param.Modifier))
+                        {
+                            <span class="param-modifier">@param.Modifier </span>
+                        }
+                        <code>@param.Type</code>
+                        <strong>@param.Name</strong>
+                        @if (param.IsOptional && !string.IsNullOrEmpty(param.DefaultValue))
+                        {
+                            <span class="param-default"> = @param.DefaultValue</span>
+                        }
+                    </dt>
+                    <dd>@param.Description</dd>
+                }
+            </dl>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Method.Returns) && !Method.IsConstructor)
+    {
+        <div class="method-returns">
+            <h4>Returns</h4>
+            <p><code>@Method.ReturnType</code> - @Method.Returns</p>
+        </div>
+    }
+
+    @if (Method.Exceptions.Count > 0)
+    {
+        <div class="method-exceptions">
+            <h4>Exceptions</h4>
+            <dl>
+                @foreach (var ex in Method.Exceptions)
+                {
+                    <dt><code>@ex.Type</code></dt>
+                    <dd>@ex.Description</dd>
+                }
+            </dl>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Method.Remarks))
+    {
+        <div class="method-remarks">
+            <h4>Remarks</h4>
+            <div>@((MarkupString)Method.Remarks)</div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Method.Example))
+    {
+        <div class="method-example">
+            <h4>Example</h4>
+            <pre><code>@Method.Example</code></pre>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ApiMethod Method { get; set; } = null!;
+
+    private string FormatParameters()
+    {
+        if (Method.Parameters.Count == 0) return string.Empty;
+
+        return string.Join(", ", Method.Parameters.Select(p =>
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(p.Modifier)) parts.Add(p.Modifier);
+            parts.Add(p.Type);
+            parts.Add(p.Name);
+            if (p.IsOptional && !string.IsNullOrEmpty(p.DefaultValue))
+            {
+                parts.Add($"= {p.DefaultValue}");
+            }
+            return string.Join(" ", parts);
+        }));
+    }
+}
