@@ -7,7 +7,7 @@
         [System.Collections.IDictionary] $CmdletsAliases
     )
     if ($Configuration.Information.Manifest.FunctionsToExport -and $Configuration.Information.Manifest.AliasesToExport -and $Configuration.Information.Manifest.CmdletsToExport) {
-        return $true
+        return [ordered] @{ }
     }
 
     $AliasesAndFunctions = Write-TextWithTime -Text 'Preparing function and aliases names' {
