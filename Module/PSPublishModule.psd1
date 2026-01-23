@@ -4,12 +4,12 @@
     CmdletsToExport        = @()
     CompanyName            = 'Evotec'
     CompatiblePSEditions   = @('Desktop', 'Core')
-    Copyright              = '(c) 2011 - 2025 Przemyslaw Klys @ Evotec. All rights reserved.'
+    Copyright              = '(c) 2011 - 2026 Przemyslaw Klys @ Evotec. All rights reserved.'
     Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @('Convert-ProjectEncoding', 'Convert-ProjectLineEnding', 'Export-CertificateForNuGet', 'Get-MissingFunctions', 'Get-ModuleInformation', 'Get-ModuleTestFailures', 'Get-PowerShellAssemblyMetadata', 'Get-PowerShellCompatibility', 'Get-ProjectConsistency', 'Get-ProjectEncoding', 'Get-ProjectLineEnding', 'Get-ProjectVersion', 'Initialize-PortableModule', 'Initialize-PortableScript', 'Initialize-ProjectManager', 'Install-ProjectDocumentation', 'Invoke-DotNetReleaseBuild', 'Invoke-ModuleBuild', 'Invoke-ModuleTestSuite', 'New-ConfigurationArtefact', 'New-ConfigurationBuild', 'New-ConfigurationCommand', 'New-ConfigurationCompatibility', 'New-ConfigurationDelivery', 'New-ConfigurationDocumentation', 'New-ConfigurationExecute', 'New-ConfigurationFileConsistency', 'New-ConfigurationFormat', 'New-ConfigurationImportModule', 'New-ConfigurationInformation', 'New-ConfigurationManifest', 'New-ConfigurationModule', 'New-ConfigurationModuleSkip', 'New-ConfigurationPlaceHolder', 'New-ConfigurationPublish', 'New-ConfigurationTest', 'Publish-GitHubReleaseAsset', 'Publish-NugetPackage', 'Register-Certificate', 'Remove-Comments', 'Remove-ProjectFiles', 'Send-GitHubRelease', 'Set-ProjectVersion', 'Show-ProjectDocumentation')
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'
-    ModuleVersion          = '2.0.26'
+    ModuleVersion          = '2.0.27'
     PowerShellVersion      = '5.1'
     PrivateData            = @{
         PSData = @{
