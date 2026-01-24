@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ assets.css_html }}
+</head>
+<body>
+  <div class="cgx-shell">
+    {{ include "header" }}
+
+    <main class="cgx-main">
+      <section class="cgx-hero">
+        <div class="cgx-container cgx-hero-grid">
+          <div class="cgx-hero-content">
+            {{ if data.hero.badge }}
+            <div class="cgx-hero-badge"><span class="cgx-dot"></span>{{ data.hero.badge }}</div>
+            {{ end }}
+            <h1>{{ data.hero.title }}</h1>
+            <p class="cgx-hero-tagline">{{ data.hero.tagline }}</p>
+            {{ if data.hero.status }}<p class="cgx-hero-status">{{ data.hero.status }}</p>{{ end }}
+            <div class="cgx-hero-actions">
+              {{ for cta in data.hero.ctas }}
+              <a class="cgx-button {{ if cta.style == "primary" }}cgx-button-primary{{ else }}cgx-button-ghost{{ end }}" href="{{ cta.href }}">{{ cta.label }}</a>
+              {{ end }}
+            </div>
+            {{ if data.hero.install }}
+            <div class="cgx-install">
+              <code>{{ data.hero.install }}</code>
+              <button class="cgx-copy" type="button" data-copy="{{ data.hero.install }}">Copy</button>
+            </div>
+            {{ end }}
+            {{ if data.hero.badges }}
+            <div class="cgx-hero-badges">
+              {{ for badge in data.hero.badges }}
+              <img src="{{ badge.src }}" alt="{{ badge.alt }}" width="100" height="20" loading="lazy" />
+              {{ end }}
+            </div>
+            {{ end }}
+          </div>
+          <div class="cgx-hero-panel">
+            <div class="cgx-panel-title">Quick preview</div>
+            <div class="cgx-preview-grid">
+              {{ for preview in data.hero.previews }}
+              <div class="cgx-preview-card">
+                <div class="cgx-preview-icon"></div>
+                <span>{{ preview.label }}</span>
+              </div>
+              {{ end }}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cgx-stats">
+        <div class="cgx-container cgx-stats-grid">
+          {{ for stat in data.stats }}
+          <div class="cgx-stat">
+            <strong>{{ stat.value }}</strong>
+            <span>{{ stat.label }}</span>
+          </div>
+          {{ end }}
+        </div>
+      </section>
+
+      <section class="cgx-section" id="features">
+        <div class="cgx-container">
+          <div class="cgx-section-header">
+            <span>Why CodeGlyphX?</span>
+            <h2>Built for modern .NET development</h2>
+            <p>Everything you need for barcode generation and scanning with none of the bloat.</p>
+          </div>
+          {{ for group in data.feature_groups }}
+          <div class="cgx-feature-group">
+            <div class="cgx-feature-group-header">
+              <div>
+                <span class="cgx-group-label">{{ group.label }}</span>
+                <span class="cgx-group-note">{{ group.note }}</span>
+              </div>
+            </div>
+            <div class="cgx-feature-grid">
+              {{ for card in group.cards }}
+              <div class="cgx-feature-card">
+                <div class="cgx-feature-icon">{{ card.icon }}</div>
+                <h3>{{ card.title }}</h3>
+                <p>{{ card.text }}</p>
+              </div>
+              {{ end }}
+            </div>
+          </div>
+          {{ end }}
+        </div>
+      </section>
+
+      <section class="cgx-section" id="formats">
+        <div class="cgx-container">
+          <div class="cgx-section-header">
+            <span>Supported formats</span>
+            <h2>Every barcode you need</h2>
+          </div>
+          <div class="cgx-format-grid">
+            <div class="cgx-format-card">
+              <h3>2D Matrix Codes</h3>
+              <div class="cgx-chip-row">
+                {{ for item in data.formats.matrix }}
+                <span class="cgx-chip">{{ item }}</span>
+                {{ end }}
+              </div>
+            </div>
+            <div class="cgx-format-card">
+              <h3>1D Linear Barcodes</h3>
+              <div class="cgx-chip-row">
+                {{ for item in data.formats.linear }}
+                <span class="cgx-chip">{{ item }}</span>
+                {{ end }}
+              </div>
+            </div>
+            <div class="cgx-format-card">
+              <h3>Output Formats</h3>
+              <div class="cgx-chip-row">
+                {{ for item in data.outputs }}
+                <span class="cgx-chip">{{ item }}</span>
+                {{ end }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cgx-section" id="showcase">
+        <div class="cgx-container">
+          <div class="cgx-section-header">
+            <span>Showcase</span>
+            <h2>CodeGlyphX in the real world</h2>
+            <p>Powering apps across desktop and enterprise workflows.</p>
+          </div>
+          <div class="cgx-showcase-grid">
+            {{ for item in data.showcase }}
+            <div class="cgx-showcase-card">
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.summary }}</p>
+              <div class="cgx-chip-row">
+                {{ for tag in item.tags }}
+                <span class="cgx-chip">{{ tag }}</span>
+                {{ end }}
+              </div>
+            </div>
+            {{ end }}
+          </div>
+        </div>
+      </section>
+    </main>
+
+    {{ include "footer" }}
+  </div>
+  {{ assets.js_html }}
+</body>
+</html>

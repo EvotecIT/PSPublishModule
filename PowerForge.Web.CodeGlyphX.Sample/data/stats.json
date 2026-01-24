@@ -1,0 +1,6 @@
+[
+  { "value": "18+", "label": "Barcode Formats" },
+  { "value": "15+", "label": "Output Formats" },
+  { "value": "0", "label": "Dependencies" },
+  { "value": "Any", "label": "Runs Wherever .NET Runs" }
+]
