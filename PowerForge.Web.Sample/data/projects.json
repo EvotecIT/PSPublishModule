@@ -1,0 +1,26 @@
+[
+  {
+    "title": "CodeGlyphX",
+    "summary": "Barcodes, QR, Data Matrix, and more with zero dependencies.",
+    "link": "/projects/codeglyphx/",
+    "badges": [".NET", "Graphics", "Playground"]
+  },
+  {
+    "title": "HtmlForgeX",
+    "summary": "HTML dashboards, reports, and exports with typed builders.",
+    "link": "/projects/htmlforgex/",
+    "badges": ["HTML", "Dashboards", "Reports"]
+  },
+  {
+    "title": "TestimoX",
+    "summary": "Infrastructure diagnostics and compliance checks.",
+    "link": "/projects/testimox/",
+    "badges": ["PowerShell", "Automation", "Security"]
+  },
+  {
+    "title": "PSPublishModule",
+    "summary": "Module build, packaging, and release automation.",
+    "link": "/projects/pspublishmodule/",
+    "badges": ["CI", "Release", "PowerShell"]
+  }
+]

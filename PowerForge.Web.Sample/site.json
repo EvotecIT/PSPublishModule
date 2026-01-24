@@ -1,0 +1,89 @@
+{
+  "$schema": "../schemas/powerforge.web.sitespec.schema.json",
+  "SchemaVersion": 1,
+  "Name": "ExampleSite",
+  "BaseUrl": "https://example.com",
+  "DefaultTheme": "base-scriban",
+  "TrailingSlash": "always",
+  "ContentRoot": "content",
+  "ProjectsRoot": "projects",
+  "ThemesRoot": "themes",
+  "SharedRoot": "shared",
+  "DataRoot": "data",
+  "Collections": [
+    {
+      "Name": "pages",
+      "Input": "content/pages",
+      "Output": "/",
+      "DefaultLayout": "page",
+      "Include": ["**/*.md"]
+    },
+    {
+      "Name": "docs",
+      "Input": "content/docs",
+      "Output": "/docs",
+      "DefaultLayout": "docs",
+      "Include": ["**/*.md"]
+    },
+    {
+      "Name": "blog",
+      "Input": "content/blog",
+      "Output": "/blog",
+      "DefaultLayout": "post",
+      "Include": ["**/*.md"],
+      "SortBy": "date",
+      "SortOrder": "desc"
+    },
+    {
+      "Name": "projects",
+      "Input": "projects/*/content",
+      "Output": "/projects/{project}",
+      "DefaultLayout": "project",
+      "Include": ["**/*.md"]
+    }
+  ],
+  "EditLinks": {
+    "Enabled": true,
+    "Template": "https://github.com/EvotecIT/Repo/edit/main/{path}",
+    "PathBase": ""
+  },
+  "RouteOverrides": [
+    { "From": "/about", "To": "/company/about", "Status": 301, "MatchType": "Exact", "PreserveQuery": true }
+  ],
+  "Redirects": [
+    { "From": "/old-blog-url", "To": "/blog/new-url", "Status": 301, "MatchType": "Exact", "PreserveQuery": true },
+    { "From": "/legacy/*", "To": "/blog/{path}", "Status": 302, "MatchType": "Wildcard", "PreserveQuery": true }
+  ],
+  "AssetRegistry": {
+    "Bundles": [
+      { "Name": "global", "Css": ["/themes/base-scriban/assets/site.css"], "Js": [] },
+      { "Name": "docs", "Css": [], "Js": ["/themes/base-scriban/assets/search.js"] }
+    ],
+    "RouteBundles": [
+      { "Match": "/docs/**", "Bundles": ["global", "docs"] },
+      { "Match": "/**", "Bundles": ["global"] }
+    ],
+    "Preloads": [],
+    "CriticalCss": [
+      { "Name": "base", "Path": "themes/base-scriban/critical.css" }
+    ]
+  },
+  "A11y": {
+    "SkipLinkLabel": "Skip to content",
+    "ExternalLinkLabel": "Opens in a new tab",
+    "NavToggleLabel": "Toggle navigation",
+    "SearchLabel": "Search"
+  },
+  "LinkRules": {
+    "ExternalRel": "noopener",
+    "ExternalTarget": "_blank",
+    "AddExternalIcon": true
+  },
+  "Analytics": {
+    "Enabled": false,
+    "Provider": "FirstParty",
+    "Endpoint": "/api/track",
+    "RespectDnt": true,
+    "SampleRate": 1.0
+  }
+}

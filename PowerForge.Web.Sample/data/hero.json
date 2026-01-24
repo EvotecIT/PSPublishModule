@@ -1,0 +1,39 @@
+{
+  "panel_title": "Quick start",
+  "links": [
+    {
+      "label": "Docs overview",
+      "href": "/docs/"
+    },
+    {
+      "label": "Project hub",
+      "href": "/projects/"
+    },
+    {
+      "label": "Release notes",
+      "href": "/blog/"
+    }
+  ],
+  "install": "dotnet tool install --global powerforge-web",
+  "badges": [
+    "Markdown-first",
+    "Themeable",
+    "API docs",
+    "Blazor-ready"
+  ],
+  "terminal": "dotnet tool install --global powerforge-web\npowerforge-web build --config site.json --out ./dist",
+  "stats": [
+    {
+      "label": "Projects",
+      "value": "50+"
+    },
+    {
+      "label": "Build time",
+      "value": "<30s"
+    },
+    {
+      "label": "Deploys",
+      "value": "GitHub Pages, Azure, S3"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../schemas/powerforge.web.projectspec.schema.json",
+  "SchemaVersion": 1,
+  "Name": "HtmlForgeX",
+  "Slug": "htmlforgex",
+  "Theme": "base-scriban",
+  "Repository": {
+    "Provider": "GitHub",
+    "Owner": "EvotecIT",
+    "Name": "HtmlForgeX",
+    "Branch": "main",
+    "PathBase": ""
+  },
+  "Packages": [
+    { "Type": "NuGet", "Id": "HtmlForgeX", "Version": "1.2.3" },
+    { "Type": "NuGet", "Id": "HtmlForgeX.Email", "Version": "0.9.1" }
+  ],
+  "Links": [
+    { "Title": "GitHub", "Url": "https://github.com/EvotecIT/HtmlForgeX" },
+    { "Title": "NuGet", "Url": "https://www.nuget.org/packages/HtmlForgeX" }
+  ],
+  "ApiDocs": {
+    "Type": "CSharp",
+    "AssemblyPath": "artifacts/HtmlForgeX.dll",
+    "XmlDocPath": "artifacts/HtmlForgeX.xml",
+    "OutputPath": "api"
+  },
+  "Redirects": [
+    { "From": "/htmlforgex/docs/getting-started", "To": "/projects/htmlforgex/docs/getting-started", "Status": 301, "MatchType": "Exact", "PreserveQuery": true }
+  ],
+  "EditLinks": {
+    "Enabled": true,
+    "Template": "https://github.com/EvotecIT/HtmlForgeX/edit/main/{path}"
+  }
+}
