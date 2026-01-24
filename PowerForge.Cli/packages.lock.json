@@ -274,6 +274,11 @@
         "resolved": "13.0.3",
         "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
       },
+      "OfficeIMO.Markdown": {
+        "type": "Transitive",
+        "resolved": "0.5.0",
+        "contentHash": "oIJJotGTO9G74XKKxQCtg7h5cTDmq0l8d//Imzm7REB3DUI1AdWqkms/LVWn2/u5ExITK+GbTcquv5OlOJJeog=="
+      },
       "runtime.linux-arm.runtime.native.System.IO.Ports": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -335,6 +340,11 @@
         "type": "Transitive",
         "resolved": "4.4.0",
         "contentHash": "YhEdSQUsTx+C8m8Bw7ar5/VesXvCFMItyZF7G1AUY+OM0VPZUOeAVpJ4Wl6fydBGUYZxojTDR3I6Bj/+BPkJNA=="
+      },
+      "Scriban": {
+        "type": "Transitive",
+        "resolved": "5.11.0",
+        "contentHash": "Lf9pyyUbtW83XYLOR2UALuPpNxPYRy+PfrdcokEjc8wApLxsh51FDytrFAVXEC2yiWy6mwZN/7XF5ZKzBakJLA=="
       },
       "System.CodeDom": {
         "type": "Transitive",
@@ -604,6 +614,14 @@
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "System.IO.Packaging": "[10.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+        }
+      },
+      "powerforge.web": {
+        "type": "Project",
+        "dependencies": {
+          "OfficeIMO.Markdown": "[0.5.0, )",
+          "PowerForge": "[1.0.0, )",
+          "Scriban": "[5.11.0, )"
         }
       }
     },
@@ -882,6 +900,11 @@
         "resolved": "13.0.3",
         "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
       },
+      "OfficeIMO.Markdown": {
+        "type": "Transitive",
+        "resolved": "0.5.0",
+        "contentHash": "oIJJotGTO9G74XKKxQCtg7h5cTDmq0l8d//Imzm7REB3DUI1AdWqkms/LVWn2/u5ExITK+GbTcquv5OlOJJeog=="
+      },
       "runtime.linux-arm.runtime.native.System.IO.Ports": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -943,6 +966,11 @@
         "type": "Transitive",
         "resolved": "4.4.0",
         "contentHash": "YhEdSQUsTx+C8m8Bw7ar5/VesXvCFMItyZF7G1AUY+OM0VPZUOeAVpJ4Wl6fydBGUYZxojTDR3I6Bj/+BPkJNA=="
+      },
+      "Scriban": {
+        "type": "Transitive",
+        "resolved": "5.11.0",
+        "contentHash": "Lf9pyyUbtW83XYLOR2UALuPpNxPYRy+PfrdcokEjc8wApLxsh51FDytrFAVXEC2yiWy6mwZN/7XF5ZKzBakJLA=="
       },
       "System.CodeDom": {
         "type": "Transitive",
@@ -1217,6 +1245,14 @@
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
           "System.IO.Packaging": "[10.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"
+        }
+      },
+      "powerforge.web": {
+        "type": "Project",
+        "dependencies": {
+          "OfficeIMO.Markdown": "[0.5.0, )",
+          "PowerForge": "[1.0.0, )",
+          "Scriban": "[5.11.0, )"
         }
       }
     }
