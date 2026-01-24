@@ -20,7 +20,12 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebSitemapResult))]
 [JsonSerializable(typeof(WebApiDocsResult))]
 [JsonSerializable(typeof(WebPipelineResult))]
+[JsonSerializable(typeof(WebPublishSpec))]
+[JsonSerializable(typeof(WebPublishResult))]
 [JsonSerializable(typeof(WebOptimizeResult))]
+[JsonSerializable(typeof(WebDotNetBuildResult))]
+[JsonSerializable(typeof(WebDotNetPublishResult))]
+[JsonSerializable(typeof(WebStaticOverlayResult))]
 internal partial class PowerForgeWebCliJsonContext : JsonSerializerContext
 {
 }

@@ -103,6 +103,130 @@ try
             logger.Info($"Redirects: {res.RedirectsPath}");
             return 0;
         }
+        case "publish":
+        {
+            var configPath = TryGetOptionValue(subArgs, "--config");
+            if (string.IsNullOrWhiteSpace(configPath))
+                return Fail("Missing required --config.", outputJson, logger, "web.publish");
+
+            var fullConfigPath = ResolveExistingFilePath(configPath);
+            var publishSpec = JsonSerializer.Deserialize<WebPublishSpec>(
+                File.ReadAllText(fullConfigPath), WebCliJson.Options);
+            if (publishSpec is null)
+                return Fail("Invalid publish spec.", outputJson, logger, "web.publish");
+
+            if (string.IsNullOrWhiteSpace(publishSpec.Build.Config) || string.IsNullOrWhiteSpace(publishSpec.Build.Out))
+                return Fail("Publish spec requires Build.Config and Build.Out.", outputJson, logger, "web.publish");
+            if (string.IsNullOrWhiteSpace(publishSpec.Publish.Project) || string.IsNullOrWhiteSpace(publishSpec.Publish.Out))
+                return Fail("Publish spec requires Publish.Project and Publish.Out.", outputJson, logger, "web.publish");
+
+            var baseDir = Path.GetDirectoryName(fullConfigPath) ?? ".";
+            var buildConfig = ResolvePathRelative(baseDir, publishSpec.Build.Config);
+            var buildOut = ResolvePathRelative(baseDir, publishSpec.Build.Out);
+
+            var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(buildConfig, WebCliJson.Options);
+            var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+            var build = WebSiteBuilder.Build(spec, plan, buildOut, WebCliJson.Options);
+
+            int? overlayCopied = null;
+            if (publishSpec.Overlay is not null)
+            {
+                if (string.IsNullOrWhiteSpace(publishSpec.Overlay.Source) ||
+                    string.IsNullOrWhiteSpace(publishSpec.Overlay.Destination))
+                    return Fail("Overlay requires Source and Destination.", outputJson, logger, "web.publish");
+
+                var overlay = WebStaticOverlay.Apply(new WebStaticOverlayOptions
+                {
+                    SourceRoot = ResolvePathRelative(baseDir, publishSpec.Overlay.Source),
+                    DestinationRoot = ResolvePathRelative(baseDir, publishSpec.Overlay.Destination),
+                    Include = publishSpec.Overlay.Include ?? Array.Empty<string>(),
+                    Exclude = publishSpec.Overlay.Exclude ?? Array.Empty<string>()
+                });
+                overlayCopied = overlay.CopiedCount;
+            }
+
+            var publishOut = ResolvePathRelative(baseDir, publishSpec.Publish.Out);
+            var publishResult = WebDotNetRunner.Publish(new WebDotNetPublishOptions
+            {
+                ProjectPath = ResolvePathRelative(baseDir, publishSpec.Publish.Project),
+                OutputPath = publishOut,
+                Configuration = publishSpec.Publish.Configuration,
+                Framework = publishSpec.Publish.Framework,
+                Runtime = publishSpec.Publish.Runtime,
+                SelfContained = publishSpec.Publish.SelfContained,
+                NoBuild = publishSpec.Publish.NoBuild,
+                NoRestore = publishSpec.Publish.NoRestore
+            });
+
+            if (!publishResult.Success)
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(publishResult.Error)
+                    ? "dotnet publish failed."
+                    : publishResult.Error);
+
+            if (publishSpec.Publish.ApplyBlazorFixes)
+            {
+                WebBlazorPublishFixer.Apply(new WebBlazorPublishFixOptions
+                {
+                    PublishRoot = publishOut,
+                    BaseHref = publishSpec.Publish.BaseHref
+                });
+            }
+
+            int? optimizeUpdated = null;
+            if (publishSpec.Optimize is not null)
+            {
+                var optimizeRoot = string.IsNullOrWhiteSpace(publishSpec.Optimize.SiteRoot)
+                    ? publishOut
+                    : ResolvePathRelative(baseDir, publishSpec.Optimize.SiteRoot);
+
+                var optimizerOptions = new WebAssetOptimizerOptions
+                {
+                    SiteRoot = optimizeRoot,
+                    CriticalCssPath = string.IsNullOrWhiteSpace(publishSpec.Optimize.CriticalCss)
+                        ? null
+                        : ResolvePathRelative(baseDir, publishSpec.Optimize.CriticalCss),
+                    MinifyHtml = publishSpec.Optimize.MinifyHtml,
+                    MinifyCss = publishSpec.Optimize.MinifyCss,
+                    MinifyJs = publishSpec.Optimize.MinifyJs
+                };
+                if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CssPattern))
+                    optimizerOptions.CssLinkPattern = publishSpec.Optimize.CssPattern;
+
+                optimizeUpdated = WebAssetOptimizer.Optimize(optimizerOptions);
+            }
+
+            var publishSummary = new WebPublishResult
+            {
+                Success = true,
+                BuildOutputPath = buildOut,
+                OverlayCopiedCount = overlayCopied,
+                PublishOutputPath = publishOut,
+                OptimizeUpdatedCount = optimizeUpdated
+            };
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.publish",
+                    Success = true,
+                    ExitCode = 0,
+                    Config = "web.publish",
+                    ConfigPath = fullConfigPath,
+                    Spec = WebCliJson.SerializeToElement(publishSpec, WebCliJson.Context.WebPublishSpec),
+                    Result = WebCliJson.SerializeToElement(publishSummary, WebCliJson.Context.WebPublishResult)
+                });
+                return 0;
+            }
+
+            logger.Success("Web publish completed.");
+            logger.Info($"Build output: {buildOut}");
+            if (overlayCopied.HasValue) logger.Info($"Overlay copied: {overlayCopied.Value}");
+            logger.Info($"Publish output: {publishOut}");
+            if (optimizeUpdated.HasValue) logger.Info($"Optimize updated: {optimizeUpdated.Value}");
+            return 0;
+        }
         case "verify":
         {
             var configPath = TryGetOptionValue(subArgs, "--config");
@@ -346,6 +470,162 @@ try
 
             return result.Success ? 0 : 1;
         }
+        case "dotnet-build":
+        {
+            var project = TryGetOptionValue(subArgs, "--project") ??
+                          TryGetOptionValue(subArgs, "--solution") ??
+                          TryGetOptionValue(subArgs, "--path");
+            var configuration = TryGetOptionValue(subArgs, "--configuration");
+            var framework = TryGetOptionValue(subArgs, "--framework");
+            var runtime = TryGetOptionValue(subArgs, "--runtime");
+            var noRestore = subArgs.Any(a => a.Equals("--no-restore", StringComparison.OrdinalIgnoreCase));
+
+            if (string.IsNullOrWhiteSpace(project))
+                return Fail("Missing required --project.", outputJson, logger, "web.dotnet-build");
+
+            var result = WebDotNetRunner.Build(new WebDotNetBuildOptions
+            {
+                ProjectOrSolution = project,
+                Configuration = configuration,
+                Framework = framework,
+                Runtime = runtime,
+                Restore = !noRestore
+            });
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.dotnet-build",
+                    Success = result.Success,
+                    ExitCode = result.ExitCode,
+                    Result = WebCliJson.SerializeToElement(new WebDotNetBuildResult
+                    {
+                        Success = result.Success,
+                        ExitCode = result.ExitCode,
+                        Output = result.Output,
+                        Error = result.Error
+                    }, WebCliJson.Context.WebDotNetBuildResult)
+                });
+                return result.Success ? 0 : 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.Output))
+                Console.WriteLine(result.Output);
+            if (!string.IsNullOrWhiteSpace(result.Error))
+                Console.Error.WriteLine(result.Error);
+
+            return result.Success ? 0 : 1;
+        }
+        case "dotnet-publish":
+        {
+            var project = TryGetOptionValue(subArgs, "--project");
+            var outPath = TryGetOptionValue(subArgs, "--out") ??
+                          TryGetOptionValue(subArgs, "--out-path") ??
+                          TryGetOptionValue(subArgs, "--output-path");
+            var configuration = TryGetOptionValue(subArgs, "--configuration");
+            var framework = TryGetOptionValue(subArgs, "--framework");
+            var runtime = TryGetOptionValue(subArgs, "--runtime");
+            var selfContained = subArgs.Any(a => a.Equals("--self-contained", StringComparison.OrdinalIgnoreCase));
+            var noBuild = subArgs.Any(a => a.Equals("--no-build", StringComparison.OrdinalIgnoreCase));
+            var noRestore = subArgs.Any(a => a.Equals("--no-restore", StringComparison.OrdinalIgnoreCase));
+            var baseHref = TryGetOptionValue(subArgs, "--base-href");
+            var blazorFixes = !subArgs.Any(a => a.Equals("--no-blazor-fixes", StringComparison.OrdinalIgnoreCase));
+
+            if (string.IsNullOrWhiteSpace(project))
+                return Fail("Missing required --project.", outputJson, logger, "web.dotnet-publish");
+            if (string.IsNullOrWhiteSpace(outPath))
+                return Fail("Missing required --out.", outputJson, logger, "web.dotnet-publish");
+
+            var result = WebDotNetRunner.Publish(new WebDotNetPublishOptions
+            {
+                ProjectPath = project,
+                OutputPath = outPath,
+                Configuration = configuration,
+                Framework = framework,
+                Runtime = runtime,
+                SelfContained = selfContained,
+                NoBuild = noBuild,
+                NoRestore = noRestore
+            });
+
+            if (result.Success && blazorFixes)
+            {
+                WebBlazorPublishFixer.Apply(new WebBlazorPublishFixOptions
+                {
+                    PublishRoot = outPath,
+                    BaseHref = baseHref
+                });
+            }
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.dotnet-publish",
+                    Success = result.Success,
+                    ExitCode = result.ExitCode,
+                    Result = WebCliJson.SerializeToElement(new WebDotNetPublishResult
+                    {
+                        Success = result.Success,
+                        ExitCode = result.ExitCode,
+                        Output = result.Output,
+                        Error = result.Error,
+                        OutputPath = outPath
+                    }, WebCliJson.Context.WebDotNetPublishResult)
+                });
+                return result.Success ? 0 : 1;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.Output))
+                Console.WriteLine(result.Output);
+            if (!string.IsNullOrWhiteSpace(result.Error))
+                Console.Error.WriteLine(result.Error);
+
+            return result.Success ? 0 : 1;
+        }
+        case "overlay":
+        {
+            var source = TryGetOptionValue(subArgs, "--source");
+            var destination = TryGetOptionValue(subArgs, "--destination") ??
+                              TryGetOptionValue(subArgs, "--dest");
+            var include = TryGetOptionValue(subArgs, "--include");
+            var exclude = TryGetOptionValue(subArgs, "--exclude");
+
+            if (string.IsNullOrWhiteSpace(source))
+                return Fail("Missing required --source.", outputJson, logger, "web.overlay");
+            if (string.IsNullOrWhiteSpace(destination))
+                return Fail("Missing required --destination.", outputJson, logger, "web.overlay");
+
+            var result = WebStaticOverlay.Apply(new WebStaticOverlayOptions
+            {
+                SourceRoot = source,
+                DestinationRoot = destination,
+                Include = CliPatternHelper.SplitPatterns(include),
+                Exclude = CliPatternHelper.SplitPatterns(exclude)
+            });
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.overlay",
+                    Success = true,
+                    ExitCode = 0,
+                    Result = WebCliJson.SerializeToElement(new WebStaticOverlayResult
+                    {
+                        CopiedCount = result.CopiedCount
+                    }, WebCliJson.Context.WebStaticOverlayResult)
+                });
+                return 0;
+            }
+
+            logger.Success($"Overlay copied: {result.CopiedCount} files");
+            return 0;
+        }
         case "llms":
         {
             var siteRoot = TryGetOptionValue(subArgs, "--site-root") ??
@@ -411,6 +691,7 @@ try
                              TryGetOptionValue(subArgs, "--out-path") ??
                              TryGetOptionValue(subArgs, "--output-path");
             var apiSitemap = TryGetOptionValue(subArgs, "--api-sitemap");
+            var entriesPath = TryGetOptionValue(subArgs, "--entries");
 
             if (string.IsNullOrWhiteSpace(siteRoot))
                 return Fail("Missing required --site-root.", outputJson, logger, "web.sitemap");
@@ -422,7 +703,8 @@ try
                 SiteRoot = siteRoot,
                 BaseUrl = baseUrl,
                 OutputPath = outputPath,
-                ApiSitemapPath = apiSitemap
+                ApiSitemapPath = apiSitemap,
+                Entries = LoadSitemapEntries(entriesPath)
             });
 
             if (outputJson)
@@ -472,6 +754,7 @@ static void PrintUsage()
     Console.WriteLine("Usage:");
     Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
     Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--output json]");
+    Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
     Console.WriteLine("  powerforge-web verify --config <site.json> [--output json]");
     Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
@@ -480,11 +763,15 @@ static void PrintUsage()
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
+    Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
+    Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>]");
+    Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
+    Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
     Console.WriteLine("  powerforge-web pipeline --config <pipeline.json>");
     Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
     Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
     Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
-    Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>]");
+    Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
 }
 
 static int Fail(string message, bool outputJson, WebConsoleLogger logger, string command)
@@ -524,6 +811,22 @@ static string ResolveExistingFilePath(string path)
     return full;
 }
 
+static string ResolvePathRelative(string baseDir, string? value)
+{
+    if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+    if (Path.IsPathRooted(value))
+        return Path.GetFullPath(value);
+    return Path.GetFullPath(Path.Combine(baseDir, value));
+}
+
+static WebSitemapEntry[] LoadSitemapEntries(string? path)
+{
+    if (string.IsNullOrWhiteSpace(path)) return Array.Empty<WebSitemapEntry>();
+    var full = ResolveExistingFilePath(path);
+    var json = File.ReadAllText(full);
+    return JsonSerializer.Deserialize<WebSitemapEntry[]>(json, WebCliJson.Options) ?? Array.Empty<WebSitemapEntry>();
+}
+
 static bool IsJsonOutput(string[] argv)
 {
     foreach (var a in argv)
@@ -542,6 +845,15 @@ internal sealed class WebConsoleLogger
     public void Success(string message) => Console.WriteLine($"✅ {message}");
     public void Warn(string message) => Console.WriteLine($"⚠️ {message}");
     public void Error(string message) => Console.WriteLine($"❌ {message}");
+}
+
+internal static class CliPatternHelper
+{
+    internal static string[] SplitPatterns(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Array.Empty<string>();
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
 }
 
 internal static class WebPipelineRunner
@@ -649,12 +961,19 @@ internal static class WebPipelineRunner
                         if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(baseUrl))
                             throw new InvalidOperationException("sitemap requires siteRoot and baseUrl.");
 
+                        var entries = GetSitemapEntries(step, "entries");
+                        var includeHtml = GetBool(step, "includeHtmlFiles");
+                        var includeText = GetBool(step, "includeTextFiles");
                         var res = WebSitemapGenerator.Generate(new WebSitemapOptions
                         {
                             SiteRoot = siteRoot,
                             BaseUrl = baseUrl,
                             OutputPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output")),
-                            ApiSitemapPath = ResolvePath(baseDir, GetString(step, "apiSitemap") ?? GetString(step, "api-sitemap"))
+                            ApiSitemapPath = ResolvePath(baseDir, GetString(step, "apiSitemap") ?? GetString(step, "api-sitemap")),
+                            ExtraPaths = GetArrayOfStrings(step, "extraPaths") ?? GetArrayOfStrings(step, "extra-paths"),
+                            Entries = entries.Length == 0 ? null : entries,
+                            IncludeHtmlFiles = includeHtml ?? true,
+                            IncludeTextFiles = includeText ?? true
                         });
                         stepResult.Success = true;
                         stepResult.Message = $"Sitemap {res.UrlCount} urls";
@@ -680,6 +999,91 @@ internal static class WebPipelineRunner
                         });
                         stepResult.Success = true;
                         stepResult.Message = $"Optimized {updated} files";
+                        break;
+                    }
+                    case "dotnet-build":
+                    {
+                        var project = ResolvePath(baseDir, GetString(step, "project") ?? GetString(step, "solution") ?? GetString(step, "path"));
+                        var configuration = GetString(step, "configuration");
+                        var framework = GetString(step, "framework");
+                        var runtime = GetString(step, "runtime");
+                        var noRestore = GetBool(step, "noRestore") ?? false;
+                        if (string.IsNullOrWhiteSpace(project))
+                            throw new InvalidOperationException("dotnet-build requires project.");
+
+                        var res = WebDotNetRunner.Build(new WebDotNetBuildOptions
+                        {
+                            ProjectOrSolution = project,
+                            Configuration = configuration,
+                            Framework = framework,
+                            Runtime = runtime,
+                            Restore = !noRestore
+                        });
+                        stepResult.Success = res.Success;
+                        stepResult.Message = res.Success ? "dotnet build ok" : res.Error;
+                        if (!res.Success) throw new InvalidOperationException(res.Error);
+                        break;
+                    }
+                    case "dotnet-publish":
+                    {
+                        var project = ResolvePath(baseDir, GetString(step, "project"));
+                        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                        var configuration = GetString(step, "configuration");
+                        var framework = GetString(step, "framework");
+                        var runtime = GetString(step, "runtime");
+                        var selfContained = GetBool(step, "selfContained") ?? false;
+                        var noBuild = GetBool(step, "noBuild") ?? false;
+                        var noRestore = GetBool(step, "noRestore") ?? false;
+                        var baseHref = GetString(step, "baseHref");
+                        var blazorFixes = GetBool(step, "blazorFixes") ?? true;
+
+                        if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(outPath))
+                            throw new InvalidOperationException("dotnet-publish requires project and out.");
+
+                        var res = WebDotNetRunner.Publish(new WebDotNetPublishOptions
+                        {
+                            ProjectPath = project,
+                            OutputPath = outPath,
+                            Configuration = configuration,
+                            Framework = framework,
+                            Runtime = runtime,
+                            SelfContained = selfContained,
+                            NoBuild = noBuild,
+                            NoRestore = noRestore
+                        });
+
+                        if (!res.Success) throw new InvalidOperationException(res.Error);
+                        if (blazorFixes)
+                        {
+                            WebBlazorPublishFixer.Apply(new WebBlazorPublishFixOptions
+                            {
+                                PublishRoot = outPath,
+                                BaseHref = baseHref
+                            });
+                        }
+
+                        stepResult.Success = true;
+                        stepResult.Message = "dotnet publish ok";
+                        break;
+                    }
+                    case "overlay":
+                    {
+                        var source = ResolvePath(baseDir, GetString(step, "source"));
+                        var destination = ResolvePath(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
+                        var include = GetString(step, "include");
+                        var exclude = GetString(step, "exclude");
+                        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination))
+                            throw new InvalidOperationException("overlay requires source and destination.");
+
+                        var res = WebStaticOverlay.Apply(new WebStaticOverlayOptions
+                        {
+                            SourceRoot = source,
+                            DestinationRoot = destination,
+                            Include = CliPatternHelper.SplitPatterns(include),
+                            Exclude = CliPatternHelper.SplitPatterns(exclude)
+                        });
+                        stepResult.Success = true;
+                        stepResult.Message = $"overlay {res.CopiedCount} files";
                         break;
                     }
                     default:
@@ -719,6 +1123,46 @@ internal static class WebPipelineRunner
         if (!element.TryGetProperty(name, out var value)) return null;
         return value.ValueKind == JsonValueKind.True ? true :
                value.ValueKind == JsonValueKind.False ? false : null;
+    }
+
+    private static string[]? GetArrayOfStrings(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var list = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+                list.Add(item.GetString() ?? string.Empty);
+            else if (item.ValueKind != JsonValueKind.Null)
+                list.Add(item.ToString());
+        }
+        return list.Count == 0 ? null : list.ToArray();
+    }
+
+    private static WebSitemapEntry[] GetSitemapEntries(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return Array.Empty<WebSitemapEntry>();
+        if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return Array.Empty<WebSitemapEntry>();
+
+        var list = new List<WebSitemapEntry>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            var path = GetString(item, "path") ?? GetString(item, "route") ?? GetString(item, "url");
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            list.Add(new WebSitemapEntry
+            {
+                Path = path,
+                ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
+                Priority = GetString(item, "priority"),
+                LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified")
+            });
+        }
+        return list.ToArray();
     }
 
     private static string? ResolvePath(string baseDir, string? value)
