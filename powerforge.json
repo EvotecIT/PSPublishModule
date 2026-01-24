@@ -1,5 +1,5 @@
 {
-  "$schema": "./schemas/powerforge.pipelinespec.schema.json",
+  "$schema": "./Schemas/powerforge.pipelinespec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Name": "PSPublishModule",

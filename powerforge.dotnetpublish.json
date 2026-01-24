@@ -1,5 +1,5 @@
 {
-  "$schema": "./schemas/powerforge.dotnetpublish.schema.json",
+  "$schema": "./Schemas/powerforge.dotnetpublish.schema.json",
   "SchemaVersion": 1,
   "DotNet": {
     "ProjectRoot": ".",

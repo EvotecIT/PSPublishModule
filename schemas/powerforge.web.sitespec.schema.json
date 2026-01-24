@@ -46,6 +46,7 @@
         "Output": { "type": "string" },
         "DefaultLayout": { "type": "string" },
         "Include": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } },
         "SortBy": { "type": "string" },
         "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
       },

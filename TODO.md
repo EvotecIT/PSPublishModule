@@ -187,7 +187,7 @@
   - [x] Add `--quiet` and `--diagnostics` (keep stdout pure when `--output json` is used).
   - [x] Add `--view auto|standard|ansi` (auto disables live UI in CI).
   - [x] Add interactive Spectre.Console progress for `docs`/`pack`/`pipeline` in Standard view (auto disables in CI and when `--output json`/`--no-color`/`--quiet`).
-  - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `schemas/`.
+  - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `Schemas/`.
 - [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [x] Add GitHub composite actions calling the CLI.
 - [ ] Validate AOT publish for CLI (code is AOT/trim-friendly; verify end-to-end publish in CI with a native toolchain on Windows runners).

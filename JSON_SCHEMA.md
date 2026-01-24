@@ -4,16 +4,18 @@ PowerForge CLI commands accept JSON configuration files (`--config <file.json>`)
 
 ## Input config schemas (v1)
 
-- Build: `schemas/powerforge.buildspec.schema.json` (maps to `PowerForge.ModuleBuildSpec`)
-- Install: `schemas/powerforge.installspec.schema.json` (maps to `PowerForge.ModuleInstallSpec`)
-- Test: `schemas/powerforge.testsuitespec.schema.json` (maps to `PowerForge.ModuleTestSuiteSpec`)
-- DotNet publish: `schemas/powerforge.dotnetpublish.schema.json` (maps to `PowerForge.DotNetPublishSpec`)
-- Pipeline / Plan: `schemas/powerforge.pipelinespec.schema.json` (maps to `PowerForge.ModulePipelineSpec`)
-  - Segments: `schemas/powerforge.segments.schema.json` (maps to `PowerForge.IConfigurationSegment` + concrete segment types)
-- Web site: `schemas/powerforge.web.sitespec.schema.json` (maps to `PowerForge.Web.SiteSpec`)
-- Web project: `schemas/powerforge.web.projectspec.schema.json` (maps to `PowerForge.Web.ProjectSpec`)
-- Web front matter: `schemas/powerforge.web.frontmatter.schema.json`
-- Shared enums: `schemas/powerforge.common.schema.json`
+- Build: `Schemas/powerforge.buildspec.schema.json` (maps to `PowerForge.ModuleBuildSpec`)
+- Install: `Schemas/powerforge.installspec.schema.json` (maps to `PowerForge.ModuleInstallSpec`)
+- Test: `Schemas/powerforge.testsuitespec.schema.json` (maps to `PowerForge.ModuleTestSuiteSpec`)
+- DotNet publish: `Schemas/powerforge.dotnetpublish.schema.json` (maps to `PowerForge.DotNetPublishSpec`)
+- Pipeline / Plan: `Schemas/powerforge.pipelinespec.schema.json` (maps to `PowerForge.ModulePipelineSpec`)
+  - Segments: `Schemas/powerforge.segments.schema.json` (maps to `PowerForge.IConfigurationSegment` + concrete segment types)
+- Web site: `Schemas/powerforge.web.sitespec.schema.json` (maps to `PowerForge.Web.SiteSpec`, includes `Collections[].Include`/`Exclude`)
+- Web project: `Schemas/powerforge.web.projectspec.schema.json` (maps to `PowerForge.Web.ProjectSpec`, includes `Content.Include`/`Content.Exclude`)
+- Web front matter: `Schemas/powerforge.web.frontmatter.schema.json`
+- Web pipeline: `Schemas/powerforge.web.pipelinespec.schema.json` (maps to `powerforge-web pipeline` JSON)
+- Web publish: `Schemas/powerforge.web.publishspec.schema.json` (maps to `powerforge-web publish` JSON)
+- Shared enums: `Schemas/powerforge.common.schema.json`
 
 ## Using with VSCode
 
@@ -21,7 +23,7 @@ Add a `$schema` property to your JSON file (PowerForge ignores unknown propertie
 
 ```json
 {
-  "$schema": "./schemas/powerforge.pipelinespec.schema.json",
+  "$schema": "./Schemas/powerforge.pipelinespec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Name": "MyModule",

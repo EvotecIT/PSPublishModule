@@ -34,7 +34,7 @@ PowerForge.Web is a website/docs engine that builds static, high-performance sit
   - Asset optimization and validation.
   - Asset + A11y registry (policy-driven, per-route bundles and defaults).
 - PowerForge.Cli gains: `powerforge site`, `powerforge site plan`, `powerforge site verify`.
-- JSON schemas added under `schemas/` for new specs and segments.
+- JSON schemas added under `Schemas/` for new specs and segments.
 
 ## Content model (collections-first)
 We should be flexible like Hugo/Jekyll: collections are first-class, and `projects/` is optional. This lets PowerForge.Web power simple company sites, doc portals, or multi-project hubs without changing the engine.
@@ -113,7 +113,7 @@ Fallbacks when front matter is missing:
 - tags: inferred by folder or empty
 - collection: inferred by folder
 
-Schema: `schemas/powerforge.web.frontmatter.schema.json`
+Schema: `Schemas/powerforge.web.frontmatter.schema.json`
 
 ## Markdown rendering spec (v1)
 Markdown should be rendered consistently across sites with a small, opinionated extension set.
@@ -144,7 +144,7 @@ It shows collections, asset/a11y registries, edit links, redirects, and analytic
 
 ```json
 {
-  "$schema": "./schemas/powerforge.web.sitespec.schema.json",
+  "$schema": "./Schemas/powerforge.web.sitespec.schema.json",
   "SchemaVersion": 1,
   "Name": "ExampleSite",
   "BaseUrl": "https://example.com",
@@ -249,7 +249,7 @@ It shows collections, asset/a11y registries, edit links, redirects, and analytic
 ## Sample project.json (v1, draft)
 ```json
 {
-  "$schema": "../schemas/powerforge.web.projectspec.schema.json",
+  "$schema": "../Schemas/powerforge.web.projectspec.schema.json",
   "SchemaVersion": 1,
   "Name": "HtmlForgeX",
   "Slug": "htmlforgex",
@@ -493,6 +493,7 @@ AssetsOptimize
 
 Sitemap
 - Generates sitemap.xml and robots.txt.
+- Supports per-route overrides for `priority`, `changefreq`, and `lastmod` (via pipeline or CLI entries list).
 
 Redirects
 - Builds redirect map (WordPress to new slugs).
@@ -534,7 +535,40 @@ We should formalize the CodeGlyphX performance practices as defaults:
 - Data files: JSON files in `data/` are loaded and exposed as `data.*` to Scriban templates.
 - Shortcodes (initial): `{{< cards data="features" >}}`, `{{< metrics data="metrics" >}}`, `{{< showcase data="showcase" >}}`.
 - Theme tokens: `themes/<name>/theme.json` exposes CSS variables via the `theme-tokens` partial for fast theming (data overrides can be added later if needed).
-- CLI: `powerforge-web` provides `plan/build/verify/scaffold/serve` commands, separate from the main `powerforge` tool.
+- CLI: `powerforge-web` provides `plan/build/verify/scaffold/serve/publish/pipeline` commands, separate from the main `powerforge` tool.
+- Publish spec (`web.publish`): one config that chains `build → overlay → dotnet publish → optimize` with optional Blazor fixes.
+
+### Publish spec example
+```json
+{
+  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
+  "SchemaVersion": 1,
+  "Build": {
+    "Config": "./site.json",
+    "Out": "./Artifacts/site"
+  },
+  "Overlay": {
+    "Source": "./Artifacts/site",
+    "Destination": "./Artifacts/publish/wwwroot",
+    "Include": ["**/*"]
+  },
+  "Publish": {
+    "Project": "./PowerForge.Web.Sample.App/PowerForge.Web.Sample.App.csproj",
+    "Out": "./Artifacts/publish",
+    "Configuration": "Release",
+    "Framework": "net10.0",
+    "BaseHref": "/",
+    "ApplyBlazorFixes": true
+  },
+  "Optimize": {
+    "SiteRoot": "./Artifacts/publish/wwwroot",
+    "CriticalCss": "./themes/codeglyphx/critical.css",
+    "MinifyHtml": true,
+    "MinifyCss": true,
+    "MinifyJs": true
+  }
+}
+```
 
 ## Playground and interactive blocks
 - Markdown blocks define a demo with structured metadata.

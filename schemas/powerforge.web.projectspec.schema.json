@@ -20,6 +20,7 @@
       "items": { "$ref": "#/$defs/LinkSpec" }
     },
     "ApiDocs": { "$ref": "#/$defs/ApiDocsSpec" },
+    "Content": { "$ref": "#/$defs/ProjectContentSpec" },
     "Redirects": {
       "type": "array",
       "items": { "$ref": "#/$defs/RedirectSpec" }
@@ -69,6 +70,14 @@
         "OutputPath": { "type": "string" }
       },
       "required": ["Type", "OutputPath"]
+    },
+    "ProjectContentSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Include": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } }
+      }
     },
     "RedirectSpec": {
       "type": "object",
