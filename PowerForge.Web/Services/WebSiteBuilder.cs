@@ -43,7 +43,10 @@ public static class WebSiteBuilder
         var projectMap = projectSpecs
             .Where(p => !string.IsNullOrWhiteSpace(p.Slug))
             .ToDictionary(p => p.Slug, StringComparer.OrdinalIgnoreCase);
-        var items = BuildContentItems(spec, plan, redirects, data, projectMap);
+        var projectContentMap = projectSpecs
+            .Where(p => p.Content is not null && !string.IsNullOrWhiteSpace(p.Slug))
+            .ToDictionary(p => p.Slug, p => p.Content!, StringComparer.OrdinalIgnoreCase);
+        var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap);
         foreach (var item in items)
         {
             WriteContentItem(outDir, spec, plan.RootPath, item, data, projectMap);
@@ -340,7 +343,8 @@ public static class WebSiteBuilder
         WebSitePlan plan,
         List<RedirectSpec> redirects,
         IReadOnlyDictionary<string, object?> data,
-        IReadOnlyDictionary<string, ProjectSpec> projectMap)
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        IReadOnlyDictionary<string, ProjectContentSpec> projectContentMap)
     {
         var items = new List<ContentItem>();
         if (spec.Collections is null || spec.Collections.Length == 0)
@@ -349,7 +353,10 @@ public static class WebSiteBuilder
         foreach (var collection in spec.Collections)
         {
             if (collection is null) continue;
-            foreach (var file in EnumerateCollectionFiles(plan.RootPath, collection.Input))
+            var include = collection.Include;
+            var exclude = collection.Exclude;
+
+            foreach (var file in EnumerateCollectionFiles(plan.RootPath, collection.Input, include, exclude))
             {
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
@@ -380,6 +387,15 @@ public static class WebSiteBuilder
                 var htmlContent = MarkdownRenderer.RenderToHtml(processedBody);
                 var toc = BuildTableOfContents(htmlContent);
                 var projectSlug = ResolveProjectSlug(plan, file);
+                if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(projectSlug) &&
+                    projectContentMap.TryGetValue(projectSlug, out var perProject))
+                {
+                    var projectInclude = perProject.Include;
+                    var projectExclude = perProject.Exclude;
+                    if (!MatchesFile(plan.RootPath, file, collection.Input, projectInclude, projectExclude))
+                        continue;
+                }
                 items.Add(new ContentItem
                 {
                     SourcePath = file,
@@ -418,6 +434,24 @@ public static class WebSiteBuilder
         }
 
         return null;
+    }
+
+    private static bool MatchesFile(string rootPath, string filePath, string input, string[] includePatterns, string[] excludePatterns)
+    {
+        var full = Path.IsPathRooted(input) ? input : Path.Combine(rootPath, input);
+        var basePath = full.Contains('*')
+            ? full.Split('*')[0].TrimEnd(Path.DirectorySeparatorChar)
+            : full;
+        if (!Directory.Exists(basePath))
+            return false;
+
+        var includes = NormalizePatterns(includePatterns);
+        var excludes = NormalizePatterns(excludePatterns);
+        if (excludes.Length > 0 && MatchesAny(excludes, basePath, filePath))
+            return false;
+        if (includes.Length == 0)
+            return true;
+        return MatchesAny(includes, basePath, filePath);
     }
 
     private static void WriteContentItem(
@@ -666,22 +700,25 @@ public static class WebSiteBuilder
         return slug.Trim('-');
     }
 
-    private static IEnumerable<string> EnumerateCollectionFiles(string rootPath, string input)
+    private static IEnumerable<string> EnumerateCollectionFiles(string rootPath, string input, string[]? includePatterns, string[]? excludePatterns)
     {
         if (string.IsNullOrWhiteSpace(input))
             return Array.Empty<string>();
 
         var full = Path.IsPathRooted(input) ? input : Path.Combine(rootPath, input);
         if (full.Contains('*'))
-            return EnumerateCollectionFilesWithWildcard(full);
+            return EnumerateCollectionFilesWithWildcard(full, includePatterns ?? Array.Empty<string>(), excludePatterns ?? Array.Empty<string>());
 
         if (!Directory.Exists(full))
             return Array.Empty<string>();
 
-        return Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories);
+        return FilterByPatterns(full,
+            Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories),
+            includePatterns ?? Array.Empty<string>(),
+            excludePatterns ?? Array.Empty<string>());
     }
 
-    private static IEnumerable<string> EnumerateCollectionFilesWithWildcard(string path)
+    private static IEnumerable<string> EnumerateCollectionFilesWithWildcard(string path, string[] includePatterns, string[] excludePatterns)
     {
         var normalized = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         var parts = normalized.Split('*');
@@ -699,10 +736,51 @@ public static class WebSiteBuilder
             var candidate = string.IsNullOrEmpty(tail) ? dir : Path.Combine(dir, tail);
             if (!Directory.Exists(candidate))
                 continue;
-            results.AddRange(Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories));
+            var files = Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories);
+            results.AddRange(FilterByPatterns(candidate, files, includePatterns, excludePatterns));
         }
 
         return results;
+    }
+
+    private static IEnumerable<string> FilterByPatterns(string basePath, IEnumerable<string> files, string[] includePatterns, string[] excludePatterns)
+    {
+        var includes = NormalizePatterns(includePatterns);
+        var excludes = NormalizePatterns(excludePatterns);
+
+        foreach (var file in files)
+        {
+            if (excludes.Length > 0 && MatchesAny(excludes, basePath, file))
+                continue;
+            if (includes.Length == 0 || MatchesAny(includes, basePath, file))
+                yield return file;
+        }
+    }
+
+    private static string[] NormalizePatterns(string[] patterns)
+    {
+        return patterns
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Replace('\\', '/').Trim())
+            .ToArray();
+    }
+
+    private static bool MatchesAny(string[] patterns, string basePath, string file)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (Path.IsPathRooted(pattern))
+            {
+                if (GlobMatch(pattern.Replace('\\', '/'), file.Replace('\\', '/')))
+                    return true;
+                continue;
+            }
+
+            var relative = Path.GetRelativePath(basePath, file).Replace('\\', '/');
+            if (GlobMatch(pattern, relative))
+                return true;
+        }
+        return false;
     }
 
     private static void WriteRedirectOutputs(string outputRoot, IReadOnlyList<RedirectSpec> redirects)

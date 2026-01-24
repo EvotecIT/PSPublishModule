@@ -7,6 +7,7 @@ public sealed class CollectionSpec
     public string Output { get; set; } = string.Empty;
     public string? DefaultLayout { get; set; }
     public string[] Include { get; set; } = Array.Empty<string>();
+    public string[] Exclude { get; set; } = Array.Empty<string>();
     public string? SortBy { get; set; }
     public SortOrder? SortOrder { get; set; }
 }

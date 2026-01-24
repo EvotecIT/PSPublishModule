@@ -44,7 +44,7 @@ public static class WebSitePlanner
         {
             if (c is null) continue;
             var inputPath = ResolvePath(root, c.Input);
-            var fileCount = CountMarkdownFiles(inputPath);
+            var fileCount = CountMarkdownFiles(inputPath, c.Include, c.Exclude);
             list.Add(new WebCollectionPlan
             {
                 Name = c.Name,
@@ -81,7 +81,7 @@ public static class WebSitePlanner
             }
 
             var contentPath = Path.Combine(dir, "content");
-            var fileCount = CountMarkdownFiles(contentPath);
+            var fileCount = CountMarkdownFiles(contentPath, Array.Empty<string>(), Array.Empty<string>());
 
             list.Add(new WebProjectPlan
             {
@@ -105,21 +105,22 @@ public static class WebSitePlanner
         return Path.GetFullPath(Path.Combine(root, path));
     }
 
-    private static int CountMarkdownFiles(string? path)
+    private static int CountMarkdownFiles(string? path, string[]? includePatterns, string[]? excludePatterns)
     {
         if (string.IsNullOrWhiteSpace(path))
             return 0;
 
         if (path.Contains('*'))
-            return CountMarkdownFilesWithWildcard(path);
+            return CountMarkdownFilesWithWildcard(path, includePatterns ?? Array.Empty<string>(), excludePatterns ?? Array.Empty<string>());
 
         if (!Directory.Exists(path))
             return 0;
 
-        return Directory.EnumerateFiles(path, "*.md", SearchOption.AllDirectories).Count();
+        var files = Directory.EnumerateFiles(path, "*.md", SearchOption.AllDirectories);
+        return FilterByPatterns(path, files, includePatterns ?? Array.Empty<string>(), excludePatterns ?? Array.Empty<string>()).Count();
     }
 
-    private static int CountMarkdownFilesWithWildcard(string path)
+    private static int CountMarkdownFilesWithWildcard(string path, string[] includePatterns, string[] excludePatterns)
     {
         var normalized = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
         var parts = normalized.Split('*');
@@ -137,9 +138,59 @@ public static class WebSitePlanner
             var candidate = string.IsNullOrEmpty(tail) ? dir : Path.Combine(dir, tail);
             if (!Directory.Exists(candidate))
                 continue;
-            total += Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories).Count();
+            var files = Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories);
+            total += FilterByPatterns(candidate, files, includePatterns, excludePatterns).Count();
         }
 
         return total;
+    }
+
+    private static IEnumerable<string> FilterByPatterns(string basePath, IEnumerable<string> files, string[] includePatterns, string[] excludePatterns)
+    {
+        var includes = NormalizePatterns(includePatterns);
+        var excludes = NormalizePatterns(excludePatterns);
+
+        foreach (var file in files)
+        {
+            if (excludes.Length > 0 && MatchesAny(excludes, basePath, file))
+                continue;
+            if (includes.Length == 0 || MatchesAny(includes, basePath, file))
+                yield return file;
+        }
+    }
+
+    private static string[] NormalizePatterns(string[] patterns)
+    {
+        return patterns
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Replace('\\', '/').Trim())
+            .ToArray();
+    }
+
+    private static bool MatchesAny(string[] patterns, string basePath, string file)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (Path.IsPathRooted(pattern))
+            {
+                if (GlobMatch(pattern.Replace('\\', '/'), file.Replace('\\', '/')))
+                    return true;
+                continue;
+            }
+
+            var relative = Path.GetRelativePath(basePath, file).Replace('\\', '/');
+            if (GlobMatch(pattern, relative))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool GlobMatch(string pattern, string value)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
+            .Replace("\\*\\*", ".*")
+            .Replace("\\*", "[^/]*") + "$";
+        return System.Text.RegularExpressions.Regex.IsMatch(value, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 }

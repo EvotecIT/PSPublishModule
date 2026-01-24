@@ -404,37 +404,28 @@ public static class WebApiDocsGenerator
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
+        var fallbackCss = LoadEmbeddedRaw("fallback.css");
+        var cssBlock = string.IsNullOrWhiteSpace(cssLink)
+            ? WrapStyle(fallbackCss)
+            : cssLink;
 
-        var indexHtml = new StringBuilder();
-        indexHtml.AppendLine("<!doctype html>");
-        indexHtml.AppendLine("<html lang=\"en\">");
-        indexHtml.AppendLine("<head>");
-        indexHtml.AppendLine("  <meta charset=\"utf-8\" />");
-        indexHtml.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />");
-        indexHtml.AppendLine($"  <title>{System.Web.HttpUtility.HtmlEncode(options.Title)}</title>");
-        if (!string.IsNullOrWhiteSpace(cssLink)) indexHtml.AppendLine($"  {cssLink}");
-        if (string.IsNullOrWhiteSpace(cssLink)) indexHtml.AppendLine(FallbackCss);
-        indexHtml.AppendLine("</head>");
-        indexHtml.AppendLine("<body>");
-        if (!string.IsNullOrWhiteSpace(header)) indexHtml.AppendLine(header);
-        indexHtml.AppendLine("  <main class=\"pf-api\">");
-        indexHtml.AppendLine($"    <h1>{System.Web.HttpUtility.HtmlEncode(options.Title)}</h1>");
-        indexHtml.AppendLine($"    <p>Types: {types.Count}</p>");
-        indexHtml.AppendLine("    <div class=\"pf-api-search\">");
-        indexHtml.AppendLine("      <input id=\"api-search\" type=\"search\" placeholder=\"Search API\" autocomplete=\"off\" />");
-        indexHtml.AppendLine("      <div id=\"api-results\" class=\"pf-api-results\"></div>");
-        indexHtml.AppendLine("    </div>");
-        indexHtml.AppendLine("    <div class=\"pf-api-types\">");
+        var indexTemplate = LoadEmbeddedRaw("index.html");
+        var typeLinks = new StringBuilder();
         foreach (var type in types)
         {
-            indexHtml.AppendLine($"      <a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
+            typeLinks.AppendLine($"      <a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
         }
-        indexHtml.AppendLine("    </div>");
-        indexHtml.AppendLine("  </main>");
-        indexHtml.AppendLine(ApiSearchScript);
-        if (!string.IsNullOrWhiteSpace(footer)) indexHtml.AppendLine(footer);
-        indexHtml.AppendLine("</body>");
-        indexHtml.AppendLine("</html>");
+        var searchScript = WrapScript(LoadEmbeddedRaw("search.js"));
+        var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
+        {
+            ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["CSS"] = cssBlock,
+            ["HEADER"] = header,
+            ["FOOTER"] = footer,
+            ["TYPE_COUNT"] = types.Count.ToString(),
+            ["TYPE_LINKS"] = typeLinks.ToString().TrimEnd(),
+            ["SEARCH_SCRIPT"] = searchScript
+        });
 
         File.WriteAllText(Path.Combine(outputPath, "index.html"), indexHtml.ToString(), Encoding.UTF8);
 
@@ -442,37 +433,34 @@ public static class WebApiDocsGenerator
         Directory.CreateDirectory(typesDir);
         foreach (var type in types)
         {
-            var typeHtml = new StringBuilder();
-            typeHtml.AppendLine("<!doctype html>");
-            typeHtml.AppendLine("<html lang=\"en\">");
-            typeHtml.AppendLine("<head>");
-            typeHtml.AppendLine("  <meta charset=\"utf-8\" />");
-            typeHtml.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />");
-            typeHtml.AppendLine($"  <title>{System.Web.HttpUtility.HtmlEncode(type.FullName)} - {System.Web.HttpUtility.HtmlEncode(options.Title)}</title>");
-            if (!string.IsNullOrWhiteSpace(cssLink)) typeHtml.AppendLine($"  {cssLink}");
-            if (string.IsNullOrWhiteSpace(cssLink)) typeHtml.AppendLine(FallbackCss);
-            typeHtml.AppendLine("</head>");
-            typeHtml.AppendLine("<body>");
-            if (!string.IsNullOrWhiteSpace(header)) typeHtml.AppendLine(header);
-            typeHtml.AppendLine("  <main class=\"pf-api\">");
-            typeHtml.AppendLine($"    <a href=\"../index.html\">← API Index</a>");
-            typeHtml.AppendLine($"    <h1>{System.Web.HttpUtility.HtmlEncode(type.FullName)}</h1>");
-            if (!string.IsNullOrWhiteSpace(type.Summary))
-                typeHtml.AppendLine($"    <p>{System.Web.HttpUtility.HtmlEncode(type.Summary)}</p>");
-            if (!string.IsNullOrWhiteSpace(type.Remarks))
-                typeHtml.AppendLine($"    <div class=\"pf-api-remarks\">{System.Web.HttpUtility.HtmlEncode(type.Remarks)}</div>");
+            var memberHtml = new StringBuilder();
+            AppendMembers(memberHtml, "Methods", type.Methods);
+            AppendMembers(memberHtml, "Properties", type.Properties);
+            AppendMembers(memberHtml, "Fields", type.Fields);
+            AppendMembers(memberHtml, "Events", type.Events);
 
-            AppendMembers(typeHtml, "Methods", type.Methods);
-            AppendMembers(typeHtml, "Properties", type.Properties);
-            AppendMembers(typeHtml, "Fields", type.Fields);
-            AppendMembers(typeHtml, "Events", type.Events);
+            var summaryHtml = string.IsNullOrWhiteSpace(type.Summary)
+                ? string.Empty
+                : $"    <p>{System.Web.HttpUtility.HtmlEncode(type.Summary)}</p>";
+            var remarksHtml = string.IsNullOrWhiteSpace(type.Remarks)
+                ? string.Empty
+                : $"    <div class=\"pf-api-remarks\">{System.Web.HttpUtility.HtmlEncode(type.Remarks)}</div>";
 
-            typeHtml.AppendLine("  </main>");
-            if (!string.IsNullOrWhiteSpace(footer)) typeHtml.AppendLine(footer);
-            typeHtml.AppendLine("</body>");
-            typeHtml.AppendLine("</html>");
+            var typeTitle = $"{type.FullName} - {options.Title}";
+            var typeTemplate = LoadEmbeddedRaw("type.html");
+            var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
+            {
+                ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
+                ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
+                ["CSS"] = cssBlock,
+                ["HEADER"] = header,
+                ["FOOTER"] = footer,
+                ["TYPE_SUMMARY"] = summaryHtml,
+                ["TYPE_REMARKS"] = remarksHtml,
+                ["MEMBERS"] = memberHtml.ToString().TrimEnd()
+            });
 
-            File.WriteAllText(Path.Combine(typesDir, $"{type.Slug}.html"), typeHtml.ToString(), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(typesDir, $"{type.Slug}.html"), typeHtml, Encoding.UTF8);
         }
 
         var sitemapPath = Path.Combine(outputPath, "sitemap.xml");
@@ -543,61 +531,34 @@ public static class WebApiDocsGenerator
         return File.ReadAllText(full);
     }
 
-    private const string ApiSearchScript = @"<script>
-(() => {
-  const input = document.getElementById('api-search');
-  const results = document.getElementById('api-results');
-  if (!input || !results) return;
-  let data = [];
-  fetch('search.json')
-    .then(r => r.json())
-    .then(items => { data = items || []; });
-  const render = (items) => {
-    results.innerHTML = '';
-    if (!items.length) {
-      results.innerHTML = '<div class=""pf-api-empty"">No results</div>';
-      return;
+    private static string LoadEmbeddedRaw(string fileName)
+    {
+        var assembly = typeof(WebApiDocsGenerator).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith($"Assets.ApiDocs.{fileName}", StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(resourceName)) return string.Empty;
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null) return string.Empty;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
-    const frag = document.createDocumentFragment();
-    items.slice(0, 24).forEach(item => {
-      const link = document.createElement('a');
-      link.className = 'pf-api-result';
-      const slug = item.slug || '';
-      link.href = 'types/' + slug + '.html';
-      link.innerHTML = '<strong>' + (item.title || '') + '</strong><span>' + (item.summary || '') + '</span>';
-      frag.appendChild(link);
-    });
-    results.appendChild(frag);
-  };
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    if (!q) { results.innerHTML = ''; return; }
-    const filtered = data.filter(x => (x.title || '').toLowerCase().includes(q) || (x.summary || '').toLowerCase().includes(q));
-    render(filtered);
-  });
-})();
-</script>";
 
-    private const string FallbackCss = @"<style>
-body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#0b0b12;color:#e6e9f3}
-a{color:inherit;text-decoration:none}
-a:hover{color:#a78bfa}
-.pf-api{max-width:1100px;margin:0 auto;padding:32px 24px}
-.pf-api-types{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin-top:16px}
-.pf-api-type{background:#111827;border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 12px}
-.pf-api-section{margin-top:24px}
-.pf-api-section h2{margin-bottom:8px}
-.pf-api-section ul{list-style:none;padding:0;margin:0;display:grid;gap:8px}
-.pf-api-section li{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:10px;padding:10px 12px}
-.pf-api-params ul{list-style:none;padding:6px 0 0;margin:0;display:grid;gap:6px}
-.pf-api-returns{margin-top:8px;font-size:.9rem;color:#94a3b8}
-.pf-api-search{margin:18px 0}
-.pf-api-search input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(148,163,184,.3);background:#0f172a;color:#e6e9f3}
-.pf-api-results{display:grid;gap:8px;margin-top:10px}
-.pf-api-result{background:#111827;border:1px solid rgba(148,163,184,.18);border-radius:10px;padding:10px 12px;display:grid;gap:4px}
-.pf-api-result span{color:#94a3b8;font-size:.85rem}
-.pf-api-empty{color:#94a3b8;font-size:.9rem}
-</style>";
+    private static string WrapStyle(string content)
+        => string.IsNullOrWhiteSpace(content) ? string.Empty : $"<style>{content}</style>";
+
+    private static string WrapScript(string content)
+        => string.IsNullOrWhiteSpace(content) ? string.Empty : $"<script>{content}</script>";
+
+    private static string ApplyTemplate(string template, IReadOnlyDictionary<string, string?> replacements)
+    {
+        if (string.IsNullOrWhiteSpace(template)) return string.Empty;
+        var result = template;
+        foreach (var kvp in replacements)
+        {
+            result = result.Replace($"{{{{{kvp.Key}}}}}", kvp.Value ?? string.Empty);
+        }
+        return result;
+    }
 
     private sealed class ApiDocModel
     {

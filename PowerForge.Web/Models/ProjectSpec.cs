@@ -13,6 +13,7 @@ public sealed class ProjectSpec
     public ApiDocsSpec? ApiDocs { get; set; }
     public RedirectSpec[] Redirects { get; set; } = Array.Empty<RedirectSpec>();
     public EditLinksSpec? EditLinks { get; set; }
+    public ProjectContentSpec? Content { get; set; }
 }
 
 public sealed class RepositorySpec
@@ -44,4 +45,10 @@ public sealed class ApiDocsSpec
     public string? XmlDocPath { get; set; }
     public string? HelpPath { get; set; }
     public string OutputPath { get; set; } = string.Empty;
+}
+
+public sealed class ProjectContentSpec
+{
+    public string[] Include { get; set; } = Array.Empty<string>();
+    public string[] Exclude { get; set; } = Array.Empty<string>();
 }

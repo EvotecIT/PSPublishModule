@@ -33,6 +33,15 @@ public sealed class WebPipelineResult
     public List<WebPipelineStepResult> Steps { get; set; } = new();
 }
 
+public sealed class WebPublishResult
+{
+    public bool Success { get; set; }
+    public string? BuildOutputPath { get; set; }
+    public int? OverlayCopiedCount { get; set; }
+    public string? PublishOutputPath { get; set; }
+    public int? OptimizeUpdatedCount { get; set; }
+}
+
 public sealed class WebPipelineStepResult
 {
     public string Task { get; set; } = string.Empty;
@@ -43,4 +52,26 @@ public sealed class WebPipelineStepResult
 public sealed class WebOptimizeResult
 {
     public int UpdatedCount { get; set; }
+}
+
+public sealed class WebDotNetBuildResult
+{
+    public bool Success { get; set; }
+    public int ExitCode { get; set; }
+    public string Output { get; set; } = string.Empty;
+    public string Error { get; set; } = string.Empty;
+}
+
+public sealed class WebDotNetPublishResult
+{
+    public bool Success { get; set; }
+    public int ExitCode { get; set; }
+    public string Output { get; set; } = string.Empty;
+    public string Error { get; set; } = string.Empty;
+    public string OutputPath { get; set; } = string.Empty;
+}
+
+public sealed class WebStaticOverlayResult
+{
+    public int CopiedCount { get; set; }
 }
