@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ assets.css_html }}
+</head>
+<body>
+  <div class="pf-shell">
+    {{ include "header" }}
+    <section class="pf-hero">
+      <div class="pf-container">
+        <div class="pf-hero-card">
+          <div class="pf-hero-eyebrow">
+            {{ if page.collection != "" }}<span class="pf-pill">{{ page.collection }}</span>{{ end }}
+            <span class="pf-pill pf-pill-accent">PowerForge.Web</span>
+          </div>
+          <h1>{{ page.title }}</h1>
+          {{ if page.description != "" }}<p>{{ page.description }}</p>{{ end }}
+          <div class="pf-hero-actions">
+            <a class="pf-button" href="/docs/">Read the docs</a>
+            <a class="pf-button pf-button-ghost" href="/projects/">Browse projects</a>
+          </div>
+        </div>
+      </div>
+    </section>
+    <main class="pf-main">
+      <div class="pf-container">
+        <div class="pf-content">
+          {{ content }}
+        </div>
+      </div>
+    </main>
+    {{ include "footer" }}
+  </div>
+  {{ assets.js_html }}
+</body>
+</html>

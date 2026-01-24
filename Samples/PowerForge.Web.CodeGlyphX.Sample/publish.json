@@ -1,0 +1,26 @@
+{
+  "$schema": "../Schemas/powerforge.web.publishspec.schema.json",
+  "SchemaVersion": 1,
+  "Build": {
+    "Config": "./site.json",
+    "Out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site"
+  },
+  "Overlay": {
+    "Source": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+    "Destination": "../../../CodeMatrix/CodeGlyphX.Website/wwwroot",
+    "Include": ["**/*"]
+  },
+  "Publish": {
+    "Project": "../../../CodeMatrix/CodeGlyphX.Website/CodeGlyphX.Website.csproj",
+    "Out": "../../../CodeMatrix/CodeGlyphX.Website/bin/Release/net10.0/publish",
+    "Configuration": "Release",
+    "Framework": "net10.0",
+    "BaseHref": "/"
+  },
+  "Optimize": {
+    "CriticalCss": "./themes/codeglyphx/critical.css",
+    "MinifyHtml": true,
+    "MinifyCss": true,
+    "MinifyJs": true
+  }
+}

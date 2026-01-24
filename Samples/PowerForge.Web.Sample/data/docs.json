@@ -1,0 +1,18 @@
+{
+  "groups": [
+    {
+      "title": "Getting Started",
+      "items": [
+        { "title": "Overview", "link": "/docs/" },
+        { "title": "Getting Started", "link": "/docs/getting-started/" }
+      ]
+    },
+    {
+      "title": "Pipelines",
+      "items": [
+        { "title": "Build", "link": "/docs/build/" },
+        { "title": "Publish", "link": "/docs/publish/" }
+      ]
+    }
+  ]
+}

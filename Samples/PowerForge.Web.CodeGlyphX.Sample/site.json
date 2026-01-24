@@ -1,0 +1,43 @@
+{
+  "$schema": "../Schemas/powerforge.web.sitespec.schema.json",
+  "SchemaVersion": 1,
+  "Name": "CodeGlyphX",
+  "BaseUrl": "https://codeglyphx.com",
+  "DefaultTheme": "codeglyphx",
+  "TrailingSlash": "always",
+  "ContentRoot": "content",
+  "ThemesRoot": "themes",
+  "DataRoot": "data",
+  "Collections": [
+    {
+      "Name": "pages",
+      "Input": "content/pages",
+      "Output": "/",
+      "DefaultLayout": "home",
+      "Include": ["**/*.md"]
+    }
+  ],
+  "AssetRegistry": {
+    "Bundles": [
+      { "Name": "global", "Css": ["/themes/codeglyphx/assets/app.css"], "Js": ["/themes/codeglyphx/assets/site.js"] }
+    ],
+    "RouteBundles": [
+      { "Match": "/**", "Bundles": ["global"] }
+    ],
+    "Preloads": [],
+    "CriticalCss": [
+      { "Name": "base", "Path": "themes/codeglyphx/critical.css" }
+    ]
+  },
+  "A11y": {
+    "SkipLinkLabel": "Skip to content",
+    "ExternalLinkLabel": "Opens in a new tab",
+    "NavToggleLabel": "Toggle navigation",
+    "SearchLabel": "Search"
+  },
+  "LinkRules": {
+    "ExternalRel": "noopener",
+    "ExternalTarget": "_blank",
+    "AddExternalIcon": true
+  }
+}

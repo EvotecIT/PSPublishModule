@@ -1,0 +1,22 @@
+[
+  {
+    "title": "Docs at scale",
+    "text": "Generate docs, API references, and release notes from one pipeline.",
+    "tag": "Docs"
+  },
+  {
+    "title": "Theme system",
+    "text": "Reusable themes let each project keep its own identity.",
+    "tag": "Brand"
+  },
+  {
+    "title": "Automation first",
+    "text": "PowerForge handles build, test, and publish consistently.",
+    "tag": "Pipeline"
+  },
+  {
+    "title": "Interactive blocks",
+    "text": "Optional Blazor islands or PowerShell playgrounds per page.",
+    "tag": "Playground"
+  }
+]

@@ -1,0 +1,55 @@
+{
+  "$schema": "../Schemas/powerforge.web.pipelinespec.schema.json",
+  "steps": [
+    {
+      "task": "build",
+      "config": "./site.json",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site"
+    },
+    {
+      "task": "apidocs",
+      "xml": "../../../CodeMatrix/CodeGlyphX/bin/Release/net10.0/CodeGlyphX.xml",
+      "assembly": "../../../CodeMatrix/CodeGlyphX/bin/Release/net10.0/CodeGlyphX.dll",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api",
+      "title": "CodeGlyphX API Reference",
+      "baseUrl": "/api",
+      "format": "hybrid",
+      "css": "/css/api-docs.css"
+    },
+    {
+      "task": "llms",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "apiIndex": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api/index.json",
+      "apiBase": "/api",
+      "name": "CodeGlyphX",
+      "package": "CodeGlyphX",
+      "license": "Apache-2.0",
+      "targets": ".NET 8+, .NET 10+, .NET Standard 2.0"
+    },
+    {
+      "task": "sitemap",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "baseUrl": "https://codeglyphx.com",
+      "apiSitemap": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api/sitemap.xml",
+      "entries": [
+        { "path": "/", "priority": "1.0", "changefreq": "weekly" },
+        { "path": "/playground/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/docs/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/faq/", "priority": "0.8", "changefreq": "monthly" },
+        { "path": "/showcase/", "priority": "0.7", "changefreq": "monthly" },
+        { "path": "/api/", "priority": "0.8", "changefreq": "weekly" },
+        { "path": "/llms.txt", "priority": "0.3", "changefreq": "monthly" },
+        { "path": "/llms.json", "priority": "0.3", "changefreq": "monthly" },
+        { "path": "/llms-full.txt", "priority": "0.4", "changefreq": "monthly" }
+      ]
+    },
+    {
+      "task": "optimize",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "criticalCss": "./themes/codeglyphx/critical.css",
+      "minifyHtml": true,
+      "minifyCss": true,
+      "minifyJs": true
+    }
+  ]
+}

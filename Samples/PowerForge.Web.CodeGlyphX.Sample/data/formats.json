@@ -1,0 +1,4 @@
+{
+  "matrix": ["QR Code", "Micro QR", "Data Matrix", "PDF417", "Aztec"],
+  "linear": ["Code 128", "Code 39", "Code 93", "EAN-13", "UPC-A", "ITF-14", "Codabar"]
+}

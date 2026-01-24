@@ -1,0 +1,15 @@
+<header class="pf-header">
+  <div class="pf-container pf-header-inner">
+    <a class="pf-brand" href="/">{{ site.name }}</a>
+    <nav class="pf-nav">
+      {{ if data.navigation && data.navigation.header }}
+        {{ for link in data.navigation.header }}
+          <a href="{{ link.link }}">{{ link.title }}</a>
+        {{ end }}
+      {{ end }}
+    </nav>
+    <div class="pf-actions">
+      <a class="pf-button" href="/docs/">Get Started</a>
+    </div>
+  </div>
+</header>
