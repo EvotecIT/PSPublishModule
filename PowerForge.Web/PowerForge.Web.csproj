@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PowerForge.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge\PowerForge.csproj">
+      <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OfficeIMO.Markdown" Version="0.5.0" />
+    <PackageReference Include="Scriban" Version="5.11.0" />
+  </ItemGroup>
+
+</Project>
