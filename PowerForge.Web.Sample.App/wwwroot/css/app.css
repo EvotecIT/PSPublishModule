@@ -1,0 +1,10 @@
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #0f1117;
+  color: #e2e8f0;
+}
+
+#app {
+  padding: 40px;
+}
