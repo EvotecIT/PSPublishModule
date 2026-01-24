@@ -1,7 +1,0 @@
-{
-  "name": "base",
-  "engine": "simple",
-  "layoutsPath": "layouts",
-  "partialsPath": "partials",
-  "assetsPath": "assets"
-}
