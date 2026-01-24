@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.sitespec.schema.json",
+  "title": "PowerForge Web SiteSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Name": { "type": "string" },
+    "BaseUrl": { "type": "string" },
+    "DefaultTheme": { "type": "string" },
+    "ThemeEngine": { "type": "string" },
+    "TrailingSlash": { "type": "string", "enum": ["always", "never", "ignore"] },
+    "ContentRoot": { "type": "string" },
+    "ProjectsRoot": { "type": "string" },
+    "ThemesRoot": { "type": "string" },
+    "SharedRoot": { "type": "string" },
+    "DataRoot": { "type": "string" },
+    "Collections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/CollectionSpec" }
+    },
+    "EditLinks": { "$ref": "#/$defs/EditLinksSpec" },
+    "RouteOverrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RedirectSpec" }
+    },
+    "Redirects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RedirectSpec" }
+    },
+    "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
+    "A11y": { "$ref": "#/$defs/A11ySpec" },
+    "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
+    "Analytics": { "$ref": "#/$defs/AnalyticsSpec" }
+  },
+  "required": ["Name", "BaseUrl", "Collections"],
+  "$defs": {
+    "CollectionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Input": { "type": "string" },
+        "Output": { "type": "string" },
+        "DefaultLayout": { "type": "string" },
+        "Include": { "type": "array", "items": { "type": "string" } },
+        "SortBy": { "type": "string" },
+        "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
+      },
+      "required": ["Name", "Input", "Output"]
+    },
+    "EditLinksSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Template": { "type": "string" },
+        "PathBase": { "type": "string" }
+      }
+    },
+    "RedirectSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "From": { "type": "string" },
+        "To": { "type": "string" },
+        "Status": { "type": "integer", "enum": [301, 302, 307, 308] },
+        "MatchType": { "type": "string", "enum": ["Exact", "Prefix", "Wildcard", "Regex"] },
+        "PreserveQuery": { "type": "boolean" }
+      },
+      "required": ["From", "To"]
+    },
+    "AssetRegistrySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Bundles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssetBundleSpec" }
+        },
+        "RouteBundles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RouteBundleSpec" }
+        },
+        "Preloads": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PreloadSpec" }
+        },
+        "CriticalCss": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CriticalCssSpec" }
+        }
+      }
+    },
+    "AssetBundleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Css": { "type": "array", "items": { "type": "string" } },
+        "Js": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Name"]
+    },
+    "RouteBundleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Match": { "type": "string" },
+        "Bundles": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Match", "Bundles"]
+    },
+    "PreloadSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Href": { "type": "string" },
+        "As": { "type": "string" },
+        "Type": { "type": "string" },
+        "Crossorigin": { "type": "string" }
+      },
+      "required": ["Href", "As"]
+    },
+    "CriticalCssSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Path": { "type": "string" }
+      },
+      "required": ["Name", "Path"]
+    },
+    "A11ySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SkipLinkLabel": { "type": "string" },
+        "ExternalLinkLabel": { "type": "string" },
+        "NavToggleLabel": { "type": "string" },
+        "SearchLabel": { "type": "string" }
+      }
+    },
+    "LinkRulesSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ExternalRel": { "type": "string" },
+        "ExternalTarget": { "type": "string" },
+        "AddExternalIcon": { "type": "boolean" }
+      }
+    },
+    "AnalyticsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Provider": { "type": "string", "enum": ["FirstParty", "None"] },
+        "Endpoint": { "type": "string" },
+        "RespectDnt": { "type": "boolean" },
+        "SampleRate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

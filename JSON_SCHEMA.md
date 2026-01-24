@@ -10,6 +10,9 @@ PowerForge CLI commands accept JSON configuration files (`--config <file.json>`)
 - DotNet publish: `schemas/powerforge.dotnetpublish.schema.json` (maps to `PowerForge.DotNetPublishSpec`)
 - Pipeline / Plan: `schemas/powerforge.pipelinespec.schema.json` (maps to `PowerForge.ModulePipelineSpec`)
   - Segments: `schemas/powerforge.segments.schema.json` (maps to `PowerForge.IConfigurationSegment` + concrete segment types)
+- Web site: `schemas/powerforge.web.sitespec.schema.json` (maps to `PowerForge.Web.SiteSpec`)
+- Web project: `schemas/powerforge.web.projectspec.schema.json` (maps to `PowerForge.Web.ProjectSpec`)
+- Web front matter: `schemas/powerforge.web.frontmatter.schema.json`
 - Shared enums: `schemas/powerforge.common.schema.json`
 
 ## Using with VSCode
