@@ -3135,8 +3135,6 @@ static JsonElement? LogsToJsonElement(BufferingLogger? logBuffer)
     return CliJson.SerializeToElement(logBuffer.Entries.ToArray(), CliJson.Context.LogEntryArray);
 }
 
-sealed record ProcessResult(int ExitCode, string Output, string Error);
-
 static ProcessResult RunProcess(string command, IEnumerable<string> args, string workingDirectory)
 {
     var psi = new ProcessStartInfo
@@ -3208,6 +3206,8 @@ static void WriteJson(CliJsonEnvelope envelope, Action<Utf8JsonWriter>? writeAdd
 {
     CliJsonWriter.Write(envelope, writeAdditionalProperties);
 }
+
+sealed record ProcessResult(int ExitCode, string Output, string Error);
 
 sealed class LogEntry
 {
