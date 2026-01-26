@@ -6,6 +6,7 @@ public sealed class AssetRegistrySpec
     public RouteBundleSpec[] RouteBundles { get; set; } = Array.Empty<RouteBundleSpec>();
     public PreloadSpec[] Preloads { get; set; } = Array.Empty<PreloadSpec>();
     public CriticalCssSpec[] CriticalCss { get; set; } = Array.Empty<CriticalCssSpec>();
+    public string? CssStrategy { get; set; }
 }
 
 public sealed class AssetBundleSpec

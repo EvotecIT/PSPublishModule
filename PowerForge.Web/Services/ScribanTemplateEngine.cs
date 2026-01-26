@@ -24,6 +24,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("content", context.Page.HtmlContent);
         globals.Add("toc", context.Page.TocHtml);
         globals.Add("project", context.Project);
+        globals.Add("navigation", context.Navigation);
+        globals.Add("breadcrumbs", context.Breadcrumbs);
+        globals.Add("shortcode", context.Shortcode);
         globals.Add("assets", new
         {
             css_html = context.CssHtml,
@@ -31,11 +34,18 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             preloads_html = context.PreloadsHtml,
             critical_css_html = context.CriticalCssHtml
         });
+        globals.Add("head_html", context.HeadHtml);
+        globals.Add("opengraph_html", context.OpenGraphHtml);
+        globals.Add("structured_data_html", context.StructuredDataHtml);
+        globals.Add("extra_css_html", context.ExtraCssHtml);
+        globals.Add("extra_scripts_html", context.ExtraScriptsHtml);
+        globals.Add("body_class", context.BodyClass);
         globals.Add("data", ToScriptValue(context.Data));
         globals.Add("canonical_html", context.CanonicalHtml);
         globals.Add("description_meta_html", context.DescriptionMetaHtml);
         globals.Add("site_name", context.Site.Name ?? string.Empty);
         globals.Add("base_url", context.Site.BaseUrl ?? string.Empty);
+        globals.Add("current_path", context.CurrentPath);
 
         var templateContext = new TemplateContext
         {

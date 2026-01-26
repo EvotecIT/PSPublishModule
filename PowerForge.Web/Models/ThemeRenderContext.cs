@@ -6,10 +6,20 @@ internal sealed class ThemeRenderContext
     public ContentItem Page { get; init; } = new();
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     public ProjectSpec? Project { get; init; }
+    public NavigationRuntime Navigation { get; init; } = new();
+    public BreadcrumbItem[] Breadcrumbs { get; init; } = Array.Empty<BreadcrumbItem>();
+    public string CurrentPath { get; init; } = string.Empty;
+    public ShortcodeContext? Shortcode { get; init; }
     public string CssHtml { get; init; } = string.Empty;
     public string JsHtml { get; init; } = string.Empty;
     public string PreloadsHtml { get; init; } = string.Empty;
     public string CriticalCssHtml { get; init; } = string.Empty;
     public string CanonicalHtml { get; init; } = string.Empty;
     public string DescriptionMetaHtml { get; init; } = string.Empty;
+    public string HeadHtml { get; init; } = string.Empty;
+    public string OpenGraphHtml { get; init; } = string.Empty;
+    public string StructuredDataHtml { get; init; } = string.Empty;
+    public string ExtraCssHtml { get; init; } = string.Empty;
+    public string ExtraScriptsHtml { get; init; } = string.Empty;
+    public string BodyClass { get; init; } = string.Empty;
 }

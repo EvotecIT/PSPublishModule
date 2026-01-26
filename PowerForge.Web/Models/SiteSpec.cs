@@ -13,8 +13,13 @@ public sealed class SiteSpec
     public string? ThemesRoot { get; set; }
     public string? SharedRoot { get; set; }
     public string? DataRoot { get; set; }
+    public StaticAssetSpec[] StaticAssets { get; set; } = Array.Empty<StaticAssetSpec>();
 
     public CollectionSpec[] Collections { get; set; } = Array.Empty<CollectionSpec>();
+
+    public HeadSpec? Head { get; set; }
+    public SocialSpec? Social { get; set; }
+    public StructuredDataSpec? StructuredData { get; set; }
 
     public EditLinksSpec? EditLinks { get; set; }
     public RedirectSpec[] RouteOverrides { get; set; } = Array.Empty<RedirectSpec>();
@@ -24,4 +29,5 @@ public sealed class SiteSpec
     public A11ySpec? A11y { get; set; }
     public LinkRulesSpec? LinkRules { get; set; }
     public AnalyticsSpec? Analytics { get; set; }
+    public NavigationSpec? Navigation { get; set; }
 }

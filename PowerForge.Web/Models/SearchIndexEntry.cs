@@ -8,4 +8,6 @@ public sealed class SearchIndexEntry
     public string Snippet { get; set; } = string.Empty;
     public string Collection { get; set; } = string.Empty;
     public string[] Tags { get; set; } = Array.Empty<string>();
+    public string? Project { get; set; }
+    public Dictionary<string, object?>? Meta { get; set; }
 }

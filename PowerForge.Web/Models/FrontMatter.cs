@@ -15,6 +15,7 @@ public sealed class FrontMatter
     public string? EditPath { get; set; }
     public string? Layout { get; set; }
     public string? Template { get; set; }
+    public Dictionary<string, object?> Meta { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class ContentItem
@@ -36,4 +37,5 @@ public sealed class ContentItem
     public string HtmlContent { get; set; } = string.Empty;
     public string TocHtml { get; set; } = string.Empty;
     public string? ProjectSlug { get; set; }
+    public Dictionary<string, object?> Meta { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

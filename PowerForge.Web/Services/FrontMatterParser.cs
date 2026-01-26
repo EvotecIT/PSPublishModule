@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
-internal static class FrontMatterParser
+public static class FrontMatterParser
 {
     private static readonly Regex H1Regex = new Regex(@"^#\s+(.+)$", RegexOptions.Multiline | RegexOptions.Compiled);
 
@@ -117,6 +117,9 @@ internal static class FrontMatterParser
                 case "aliases":
                     matter.Aliases = kv.Value.ToArray();
                     break;
+                default:
+                    SetMetaValue(matter.Meta, kv.Key, kv.Value.ToArray());
+                    break;
             }
         }
     }
@@ -162,7 +165,37 @@ internal static class FrontMatterParser
             case "template":
                 matter.Template = v;
                 break;
+            default:
+                SetMetaValue(matter.Meta, key, v);
+                break;
         }
+    }
+
+    private static void SetMetaValue(Dictionary<string, object?> meta, string key, object? value)
+    {
+        if (meta is null) return;
+        if (string.IsNullOrWhiteSpace(key)) return;
+        var normalized = key.Trim();
+        if (normalized.StartsWith("meta.", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized.Substring(5);
+        if (string.IsNullOrWhiteSpace(normalized)) return;
+
+        var parts = normalized.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return;
+
+        var current = meta;
+        for (var i = 0; i < parts.Length - 1; i++)
+        {
+            var part = parts[i];
+            if (!current.TryGetValue(part, out var existing) || existing is not Dictionary<string, object?> child)
+            {
+                child = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                current[part] = child;
+            }
+            current = child;
+        }
+
+        current[parts[^1]] = value;
     }
 
     private static string Unquote(string value)

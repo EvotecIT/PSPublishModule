@@ -49,8 +49,16 @@ public static class WebAssetOptimizer
             {
                 var html = File.ReadAllText(htmlFile);
                 if (string.IsNullOrWhiteSpace(html)) continue;
-                var minified = HtmlOptimizer.OptimizeHtml(html, cssDecodeEscapes: true, treatAsDocument: true);
-                if (!string.Equals(html, minified, StringComparison.Ordinal))
+                string? minified = null;
+                try
+                {
+                    minified = HtmlOptimizer.OptimizeHtml(html, cssDecodeEscapes: true, treatAsDocument: true);
+                }
+                catch
+                {
+                    minified = null;
+                }
+                if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(html, minified, StringComparison.Ordinal))
                     File.WriteAllText(htmlFile, minified);
             }
         }
@@ -61,8 +69,16 @@ public static class WebAssetOptimizer
             {
                 var css = File.ReadAllText(cssFile);
                 if (string.IsNullOrWhiteSpace(css)) continue;
-                var minified = HtmlOptimizer.OptimizeCss(css);
-                if (!string.Equals(css, minified, StringComparison.Ordinal))
+                string? minified = null;
+                try
+                {
+                    minified = HtmlOptimizer.OptimizeCss(css);
+                }
+                catch
+                {
+                    minified = null;
+                }
+                if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(css, minified, StringComparison.Ordinal))
                     File.WriteAllText(cssFile, minified);
             }
         }
@@ -73,8 +89,16 @@ public static class WebAssetOptimizer
             {
                 var js = File.ReadAllText(jsFile);
                 if (string.IsNullOrWhiteSpace(js)) continue;
-                var minified = HtmlOptimizer.OptimizeJavaScript(js);
-                if (!string.Equals(js, minified, StringComparison.Ordinal))
+                string? minified = null;
+                try
+                {
+                    minified = HtmlOptimizer.OptimizeJavaScript(js);
+                }
+                catch
+                {
+                    minified = null;
+                }
+                if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(js, minified, StringComparison.Ordinal))
                     File.WriteAllText(jsFile, minified);
             }
         }
@@ -101,7 +125,15 @@ public static class WebAssetOptimizer
         var full = Path.GetFullPath(path);
         if (!File.Exists(full)) return string.Empty;
         var css = File.ReadAllText(full);
-        return HtmlOptimizer.OptimizeCss(css);
+        try
+        {
+            var optimized = HtmlOptimizer.OptimizeCss(css);
+            return string.IsNullOrWhiteSpace(optimized) ? css : optimized;
+        }
+        catch
+        {
+            return css;
+        }
     }
 
 }

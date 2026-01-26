@@ -27,6 +27,12 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["CRITICAL_CSS"] = context.CriticalCssHtml,
             ["CANONICAL"] = context.CanonicalHtml,
             ["DESCRIPTION_META"] = context.DescriptionMetaHtml,
+            ["HEAD_HTML"] = context.HeadHtml,
+            ["OPENGRAPH"] = context.OpenGraphHtml,
+            ["STRUCTURED_DATA"] = context.StructuredDataHtml,
+            ["EXTRA_CSS"] = context.ExtraCssHtml,
+            ["EXTRA_SCRIPTS"] = context.ExtraScriptsHtml,
+            ["BODY_CLASS"] = string.IsNullOrWhiteSpace(context.BodyClass) ? string.Empty : $" class=\"{context.BodyClass}\"",
             ["SITE_NAME"] = context.Site.Name ?? string.Empty,
             ["BASE_URL"] = context.Site.BaseUrl ?? string.Empty
         };
