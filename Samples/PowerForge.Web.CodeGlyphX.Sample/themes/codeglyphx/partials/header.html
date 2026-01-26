@@ -2,9 +2,9 @@
     <div class="header-content">
         <a href="/" class="brand">
             <div class="brand-icon">
-                <img src="/codeglyphx-qr-icon.png" alt="CodeGlyphX logo" width="28" height="28" />
+                <img src="/codeglyphx-qr-icon.png" alt="{{ site.name }} logo" width="28" height="28" />
             </div>
-            <span>CodeGlyphX</span>
+            <span>{{ site.name }}</span>
         </a>
 
         <!-- Mobile hamburger toggle -->
@@ -17,11 +17,15 @@
 
         <nav class="nav" aria-label="Main navigation">
             <div class="nav-links">
-                <a href="/">Home</a>
-                <a href="/playground/">Playground</a>
-                <a href="/docs/">Docs</a>
-                <a href="/benchmarks/">Benchmarks</a>
-                <a href="/showcase/">Showcase</a>
+                {{~ for menu in navigation.menus ~}}
+                {{~ if menu.name == "main" ~}}
+                {{~ for item in menu.items ~}}
+                {{~ if item.url ~}}
+                <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+                {{~ end ~}}
+                {{~ end ~}}
+                {{~ end ~}}
+                {{~ end ~}}
             </div>
             <div class="nav-actions">
                 <div class="theme-toggle" role="group" aria-label="Theme selection">

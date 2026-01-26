@@ -27,6 +27,14 @@
       "Include": ["*.md", "**/*.md"]
     }
   ],
+  "Head": {
+    "Links": [
+      { "Rel": "icon", "Href": "/codeglyphx-qr-icon.png", "Type": "image/png" },
+      { "Rel": "apple-touch-icon", "Href": "/codeglyphx-qr-icon.png" },
+      { "Rel": "preconnect", "Href": "https://img.shields.io", "Crossorigin": "anonymous" },
+      { "Rel": "dns-prefetch", "Href": "https://img.shields.io" }
+    ]
+  },
   "Social": {
     "Enabled": true,
     "SiteName": "CodeGlyphX",
@@ -77,6 +85,32 @@
           { "Title": "Docs", "Url": "/docs/" },
           { "Title": "Benchmarks", "Url": "/benchmarks/" },
           { "Title": "Showcase", "Url": "/showcase/" }
+        ]
+      },
+      {
+        "Name": "footer-product",
+        "Items": [
+          { "Title": "Home", "Url": "/" },
+          { "Title": "Playground", "Url": "/playground/" },
+          { "Title": "Docs", "Url": "/docs/" },
+          { "Title": "Benchmarks", "Url": "/benchmarks/" },
+          { "Title": "Showcase", "Url": "/showcase/" }
+        ]
+      },
+      {
+        "Name": "footer-resources",
+        "Items": [
+          { "Title": "FAQ", "Url": "/faq/" },
+          { "Title": "NuGet Package", "Url": "https://www.nuget.org/packages/CodeGlyphX", "External": true },
+          { "Title": "GitHub Repository", "Url": "https://github.com/EvotecIT/CodeGlyphX", "External": true },
+          { "Title": "Report Issue", "Url": "https://github.com/EvotecIT/CodeGlyphX/issues", "External": true }
+        ]
+      },
+      {
+        "Name": "footer-company",
+        "Items": [
+          { "Title": "Evotec Services", "Url": "https://evotec.xyz", "External": true },
+          { "Title": "Blog", "Url": "https://evotec.xyz/hub", "External": true }
         ]
       }
     ]

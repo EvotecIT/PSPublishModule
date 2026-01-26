@@ -2,32 +2,48 @@
     <div class="footer-content">
         <div class="footer-brand">
             <div class="footer-logo">
-                <img src="/codeglyphx-qr-icon.png" alt="CodeGlyphX logo" width="28" height="28" />
-                <span>CodeGlyphX</span>
+                <img src="/codeglyphx-qr-icon.png" alt="{{ site.name }} logo" width="28" height="28" />
+                <span>{{ site.name }}</span>
             </div>
             <p>Zero-dependency QR &amp; barcode toolkit for .NET</p>
         </div>
         <div class="footer-links">
-            <div class="footer-section">
-                <h3>Product</h3>
-                <a href="/">Home</a>
-                <a href="/playground/">Playground</a>
-                <a href="/docs/">Docs</a>
-                <a href="/benchmarks/">Benchmarks</a>
-                <a href="/showcase/">Showcase</a>
-            </div>
-            <div class="footer-section">
-                <h3>Resources</h3>
-                <a href="/faq/">FAQ</a>
-                <a href="https://www.nuget.org/packages/CodeGlyphX" target="_blank" rel="noopener" aria-label="NuGet Package (opens in new tab)">NuGet Package</a>
-                <a href="https://github.com/EvotecIT/CodeGlyphX" target="_blank" rel="noopener" aria-label="GitHub Repository (opens in new tab)">GitHub Repository</a>
-                <a href="https://github.com/EvotecIT/CodeGlyphX/issues" target="_blank" rel="noopener" aria-label="Report Issue (opens in new tab)">Report Issue</a>
-            </div>
-            <div class="footer-section">
-                <h3>Company</h3>
-                <a href="https://evotec.xyz" target="_blank" rel="noopener" aria-label="Evotec Services (opens in new tab)">Evotec Services</a>
-                <a href="https://evotec.xyz/hub" target="_blank" rel="noopener" aria-label="Blog (opens in new tab)">Blog</a>
-            </div>
+      <div class="footer-section">
+        <h3>Product</h3>
+        {{~ for menu in navigation.menus ~}}
+        {{~ if menu.name == "footer-product" ~}}
+        {{~ for item in menu.items ~}}
+        {{~ if item.url ~}}
+        <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+      </div>
+      <div class="footer-section">
+        <h3>Resources</h3>
+        {{~ for menu in navigation.menus ~}}
+        {{~ if menu.name == "footer-resources" ~}}
+        {{~ for item in menu.items ~}}
+        {{~ if item.url ~}}
+        <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+      </div>
+      <div class="footer-section">
+        <h3>Company</h3>
+        {{~ for menu in navigation.menus ~}}
+        {{~ if menu.name == "footer-company" ~}}
+        {{~ for item in menu.items ~}}
+        {{~ if item.url ~}}
+        <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+      </div>
         </div>
         <div class="footer-bottom">
             <div class="footer-badges">
