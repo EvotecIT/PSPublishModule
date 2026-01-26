@@ -17,7 +17,8 @@
     "canonical": { "type": "string" },
     "editPath": { "type": "string" },
     "layout": { "type": "string" },
-    "template": { "type": "string" }
+    "template": { "type": "string" },
+    "meta": { "type": "object" }
   },
   "required": ["title"]
 }

@@ -17,6 +17,13 @@
     "ThemesRoot": { "type": "string" },
     "SharedRoot": { "type": "string" },
     "DataRoot": { "type": "string" },
+    "StaticAssets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/StaticAssetSpec" }
+    },
+    "Head": { "$ref": "#/$defs/HeadSpec" },
+    "Social": { "$ref": "#/$defs/SocialSpec" },
+    "StructuredData": { "$ref": "#/$defs/StructuredDataSpec" },
     "Collections": {
       "type": "array",
       "items": { "$ref": "#/$defs/CollectionSpec" }
@@ -33,7 +40,8 @@
     "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
     "A11y": { "$ref": "#/$defs/A11ySpec" },
     "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
-    "Analytics": { "$ref": "#/$defs/AnalyticsSpec" }
+    "Analytics": { "$ref": "#/$defs/AnalyticsSpec" },
+    "Navigation": { "$ref": "#/$defs/NavigationSpec" }
   },
   "required": ["Name", "BaseUrl", "Collections"],
   "$defs": {
@@ -92,7 +100,8 @@
         "CriticalCss": {
           "type": "array",
           "items": { "$ref": "#/$defs/CriticalCssSpec" }
-        }
+        },
+        "CssStrategy": { "type": "string", "enum": ["standard", "async"] }
       }
     },
     "AssetBundleSpec": {
@@ -134,6 +143,41 @@
       },
       "required": ["Name", "Path"]
     },
+    "StaticAssetSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Source": { "type": "string" },
+        "Destination": { "type": "string" }
+      },
+      "required": ["Source"]
+    },
+    "HeadSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Html": { "type": "string" },
+        "BodyClass": { "type": "string" }
+      }
+    },
+    "SocialSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "SiteName": { "type": "string" },
+        "Image": { "type": "string" },
+        "TwitterCard": { "type": "string" }
+      }
+    },
+    "StructuredDataSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Breadcrumbs": { "type": "boolean" }
+      }
+    },
     "A11ySpec": {
       "type": "object",
       "additionalProperties": false,
@@ -163,6 +207,50 @@
         "RespectDnt": { "type": "boolean" },
         "SampleRate": { "type": "number", "minimum": 0, "maximum": 1 }
       }
+    },
+    "NavigationSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Menus": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuSpec" }
+        }
+      }
+    },
+    "MenuSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Label": { "type": "string" },
+        "Items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        }
+      },
+      "required": ["Name"]
+    },
+    "MenuItemSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Title": { "type": "string" },
+        "Url": { "type": "string" },
+        "Icon": { "type": "string" },
+        "Badge": { "type": "string" },
+        "Description": { "type": "string" },
+        "Target": { "type": "string" },
+        "Rel": { "type": "string" },
+        "External": { "type": "boolean" },
+        "Weight": { "type": "number" },
+        "Match": { "type": "string" },
+        "Items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        }
+      },
+      "required": ["Title"]
     }
   }
 }

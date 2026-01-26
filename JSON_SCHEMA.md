@@ -13,6 +13,7 @@ PowerForge CLI commands accept JSON configuration files (`--config <file.json>`)
 - Web site: `Schemas/powerforge.web.sitespec.schema.json` (maps to `PowerForge.Web.SiteSpec`, includes `Collections[].Include`/`Exclude`)
 - Web project: `Schemas/powerforge.web.projectspec.schema.json` (maps to `PowerForge.Web.ProjectSpec`, includes `Content.Include`/`Content.Exclude`)
 - Web front matter: `Schemas/powerforge.web.frontmatter.schema.json`
+- Web theme: `Schemas/powerforge.web.themespec.schema.json` (maps to `theme.json`)
 - Web pipeline: `Schemas/powerforge.web.pipelinespec.schema.json` (maps to `powerforge-web pipeline` JSON)
 - Web publish: `Schemas/powerforge.web.publishspec.schema.json` (maps to `powerforge-web publish` JSON)
 - Shared enums: `Schemas/powerforge.common.schema.json`
@@ -42,6 +43,39 @@ Add a `$schema` property to your JSON file (PowerForge ignores unknown propertie
   ]
 }
 ```
+
+## Web site highlights
+
+`powerforge.web.sitespec.schema.json` supports a site-level `AssetRegistry` to centralize CSS/JS/performance policy:
+
+```json
+{
+  "$schema": "./Schemas/powerforge.web.sitespec.schema.json",
+  "SchemaVersion": 1,
+  "Name": "ExampleSite",
+  "BaseUrl": "https://example.com",
+  "AssetRegistry": {
+    "Bundles": [
+      { "Name": "global", "Css": ["/themes/base/assets/site.css"], "Js": ["/themes/base/assets/site.js"] },
+      { "Name": "docs", "Css": ["/themes/base/assets/docs.css"] }
+    ],
+    "RouteBundles": [
+      { "Match": "/**", "Bundles": ["global"] },
+      { "Match": "/docs/**", "Bundles": ["docs"] }
+    ],
+    "Preloads": [
+      { "Href": "/themes/base/assets/site.css", "As": "style" }
+    ],
+    "CriticalCss": [
+      { "Name": "base", "Path": "themes/base/critical.css" }
+    ]
+  }
+}
+```
+
+Notes:
+- `AssetRegistry` in `site.json` overrides theme asset choices.
+- Route matching uses glob-style patterns (e.g., `/docs/**`).
 
 ## Segment type discriminators
 
