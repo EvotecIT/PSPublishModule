@@ -1,0 +1,105 @@
+# PowerForge.Web CodeGlyphX Build Mapping (Draft)
+
+This guide shows how the existing CodeGlyphX site build can be expressed as PowerForge.Web specs.
+It does not modify CodeMatrix; it only demonstrates the equivalent PowerForge.Web steps.
+
+## Goals
+- Replace ad-hoc build scripts with a single JSON-driven pipeline.
+- Keep the CodeGlyphX look and performance practices intact.
+- Support both "Artifacts-only" and "full CodeMatrix publish" flows.
+
+## Recommended flow (Artifacts-only)
+Use this when you want a safe local demo with no CodeMatrix changes.
+
+Command:
+```
+powerforge-web publish --config Samples/PowerForge.Web.CodeGlyphX.Sample/publish-artifacts.json
+```
+
+What it does:
+1) Build static site (Markdown + theme) into `Artifacts/PowerForge.Web.CodeGlyphX.Sample/site`
+2) Overlay to `Artifacts/PowerForge.Web.CodeGlyphX.Sample/publish/wwwroot`
+3) `dotnet publish` a minimal Blazor host app into `Artifacts/PowerForge.Web.CodeGlyphX.Sample/publish`
+4) Optimize HTML/CSS/JS and apply critical CSS
+
+## Full publish flow (CodeMatrix-aware)
+Use this once you want to replace the current CodeGlyphX build chain.
+
+Command:
+```
+powerforge-web publish --config Samples/PowerForge.Web.CodeGlyphX.Sample/publish.json
+```
+
+What it does:
+1) Build static site into `Artifacts/PowerForge.Web.CodeGlyphX.Sample/site`
+2) Overlay into `CodeMatrix/CodeGlyphX.Website/wwwroot`
+3) `dotnet publish` the real CodeGlyphX website project
+4) Optimize HTML/CSS/JS and apply critical CSS
+
+## Pipeline form (granular steps)
+Use pipeline form when you want more fine‑grained tasks.
+
+Command:
+```
+powerforge-web pipeline --config Samples/PowerForge.Web.CodeGlyphX.Sample/pipeline.json
+```
+
+Pipeline steps (mapping):
+- `build` → static site generation from `site.json`
+- `apidocs` → generate API reference from XML + assembly
+- `llms` → create `llms.txt/llms.json` artifacts
+- `sitemap` → combine site + api routes
+- `optimize` → minify and apply critical CSS
+
+## Key inputs
+- `Samples/PowerForge.Web.CodeGlyphX.Sample/site.json`
+- `Samples/PowerForge.Web.CodeGlyphX.Sample/themes/codeglyphx/`
+- `Samples/PowerForge.Web.CodeGlyphX.Sample/content/`
+- `Samples/PowerForge.Web.CodeGlyphX.Sample/data/`
+
+## Replacement checklist
+Use this when swapping the current CodeGlyphX build:
+- [ ] Confirm `site.json` routes match existing URLs.
+- [ ] Confirm `sitemap` entries include special pages (playground, showcase).
+- [ ] Confirm `critical.css` matches above‑the‑fold layout.
+- [ ] Confirm API docs output location and base URL.
+- [ ] Run Lighthouse after `optimize`.
+
+## Playground / Blazor link
+If the playground is a Blazor WASM app, publish it separately and overlay into the site output:
+```
+dotnet publish <Playground.csproj> -c Release -o Artifacts/Playground
+powerforge-web overlay --source Artifacts/Playground/wwwroot --destination Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/playground --include "**/*"
+```
+
+Then link to it in markdown:
+```
+{{< app src="/playground/" label="Launch Playground" title="CodeGlyphX Playground" >}}
+```
+
+Pipeline form (single JSON flow):
+```json
+{
+  "steps": [
+    { "task": "build", "config": "./site.json", "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site" },
+    {
+      "task": "dotnet-publish",
+      "project": "<Playground.csproj>",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/playground",
+      "configuration": "Release"
+    },
+    {
+      "task": "overlay",
+      "source": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/playground/wwwroot",
+      "destination": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/playground",
+      "include": ["**/*"]
+    },
+    { "task": "optimize", "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site" }
+  ]
+}
+```
+
+## Next steps
+- Move old scripts into `powerforge-web pipeline` equivalents.
+- Add CI job that runs `publish.json` for release builds.
+- Extend the theme tokens to match CodeGlyphX visuals exactly.

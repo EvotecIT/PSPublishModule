@@ -537,6 +537,32 @@ We should formalize the CodeGlyphX performance practices as defaults:
 - Theme tokens: `themes/<name>/theme.json` exposes CSS variables via the `theme-tokens` partial for fast theming (data overrides can be added later if needed).
 - CLI: `powerforge-web` provides `plan/build/verify/scaffold/serve/publish/pipeline` commands, separate from the main `powerforge` tool.
 - Publish spec (`web.publish`): one config that chains `build → overlay → dotnet publish → optimize` with optional Blazor fixes.
+- Theme system details live in `Docs/PowerForge.Web.Theme.md`.
+
+## Navigation + page metadata
+- `site.json` supports `Navigation.Menus[]` with nested items (main, footer, docs sidebar).
+- Templates access runtime menus via `navigation` (active/ancestor flags).
+- Front matter supports arbitrary metadata via `page.meta`:
+  - Unknown keys are stored as metadata.
+  - Dot-notation (`hero.title`, `cta.primary`) builds nested objects.
+  - Lists are supported for custom meta fields.
+  
+## Shortcodes
+- Default shortcodes: `cards`, `metrics`, `showcase`.
+- Themes can override any shortcode via `partials/shortcodes/<name>.html`.
+- Scriban receives `shortcode.name`, `shortcode.attrs`, and `shortcode.data`.
+
+## Search index
+- Search index includes `project` and `meta` fields per entry.
+- Frontend can filter using optional controls:
+  - `[data-pf-search-collection]`
+  - `[data-pf-search-project]`
+  - `[data-pf-search-tag]`
+
+## Data merge rules
+- Site data: `data/<name>.json` → `data.<name>`
+- Project data: `projects/<slug>/data/<name>.json` → `data.projects.<slug>.<name>`
+- While rendering a project page, `data.project` is injected to point at that project's data bag.
 
 ### Publish spec example
 ```json
