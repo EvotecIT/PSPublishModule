@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
+    <ProjectReference Include="..\PowerForge.Web\PowerForge.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>
