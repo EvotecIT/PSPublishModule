@@ -1,0 +1,12 @@
+<header class="pf-header">
+  <div class="pf-container pf-header-inner">
+    <div class="pf-brand">{{ site.name }}</div>
+    <nav class="pf-nav">
+      {{ if navigation.menus && navigation.menus.size > 0 }}
+        {{ for link in navigation.menus[0].items }}
+          <a href="{{ link.url }}">{{ link.title }}</a>
+        {{ end }}
+      {{ end }}
+    </nav>
+  </div>
+</header>

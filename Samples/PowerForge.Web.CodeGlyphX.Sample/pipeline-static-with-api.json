@@ -1,0 +1,49 @@
+{
+  "$schema": "../Schemas/powerforge.web.pipelinespec.schema.json",
+  "steps": [
+    {
+      "task": "build",
+      "config": "./site.json",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site"
+    },
+    {
+      "task": "apidocs",
+      "xml": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.xml",
+      "assembly": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.dll",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api",
+      "baseUrl": "/api",
+      "format": "json"
+    },
+    {
+      "task": "apidocs",
+      "xml": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.xml",
+      "assembly": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.dll",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api-docs",
+      "baseUrl": "/api-docs",
+      "format": "hybrid",
+      "css": "/css/api-docs.css",
+      "headerHtml": "./apidocs/header.html",
+      "footerHtml": "./apidocs/footer.html"
+    },
+    {
+      "task": "sitemap",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "baseUrl": "https://codeglyphx.com",
+      "entries": [
+        { "path": "/", "priority": "1.0", "changefreq": "weekly" },
+        { "path": "/playground/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/docs/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/benchmarks/", "priority": "0.85", "changefreq": "monthly" },
+        { "path": "/faq/", "priority": "0.8", "changefreq": "monthly" },
+        { "path": "/showcase/", "priority": "0.7", "changefreq": "monthly" }
+      ]
+    },
+    {
+      "task": "optimize",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "minifyHtml": false,
+      "minifyCss": true,
+      "minifyJs": true
+    }
+  ]
+}

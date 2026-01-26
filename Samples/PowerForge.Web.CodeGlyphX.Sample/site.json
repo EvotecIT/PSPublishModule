@@ -8,25 +8,52 @@
   "ContentRoot": "content",
   "ThemesRoot": "themes",
   "DataRoot": "data",
+  "StaticAssets": [
+    { "Source": "static" }
+  ],
   "Collections": [
     {
       "Name": "pages",
       "Input": "content/pages",
       "Output": "/",
       "DefaultLayout": "home",
-      "Include": ["**/*.md"]
+      "Include": ["*.md", "**/*.md"]
+    },
+    {
+      "Name": "docs",
+      "Input": "content/docs",
+      "Output": "/docs",
+      "DefaultLayout": "docs",
+      "Include": ["*.md", "**/*.md"]
     }
   ],
+  "Social": {
+    "Enabled": true,
+    "SiteName": "CodeGlyphX",
+    "Image": "/codeglyphx-qr-icon.png",
+    "TwitterCard": "summary"
+  },
+  "StructuredData": {
+    "Enabled": true,
+    "Breadcrumbs": true
+  },
   "AssetRegistry": {
+    "CssStrategy": "async",
     "Bundles": [
-      { "Name": "global", "Css": ["/themes/codeglyphx/assets/app.css"], "Js": ["/themes/codeglyphx/assets/site.js"] }
+      { "Name": "global", "Css": ["/css/app.css"], "Js": ["/js/site.js"] },
+      { "Name": "docs", "Css": ["/css/api-docs.css"], "Js": ["/js/site.js"] }
     ],
     "RouteBundles": [
-      { "Match": "/**", "Bundles": ["global"] }
+      { "Match": "/docs/**", "Bundles": ["docs"] },
+      { "Match": "/", "Bundles": ["global"] },
+      { "Match": "/benchmarks/**", "Bundles": ["global"] },
+      { "Match": "/faq/**", "Bundles": ["global"] },
+      { "Match": "/showcase/**", "Bundles": ["global"] },
+      { "Match": "/playground/**", "Bundles": ["global"] }
     ],
     "Preloads": [],
     "CriticalCss": [
-      { "Name": "base", "Path": "themes/codeglyphx/critical.css" }
+      { "Name": "codeglyphx", "Path": "themes/codeglyphx/critical.css" }
     ]
   },
   "A11y": {
@@ -39,5 +66,19 @@
     "ExternalRel": "noopener",
     "ExternalTarget": "_blank",
     "AddExternalIcon": true
+  },
+  "Navigation": {
+    "Menus": [
+      {
+        "Name": "main",
+        "Items": [
+          { "Title": "Home", "Url": "/" },
+          { "Title": "Playground", "Url": "/playground/" },
+          { "Title": "Docs", "Url": "/docs/" },
+          { "Title": "Benchmarks", "Url": "/benchmarks/" },
+          { "Title": "Showcase", "Url": "/showcase/" }
+        ]
+      }
+    ]
   }
 }

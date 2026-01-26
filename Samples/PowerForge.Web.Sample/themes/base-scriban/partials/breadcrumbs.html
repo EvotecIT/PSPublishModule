@@ -1,0 +1,12 @@
+{{ if breadcrumbs && breadcrumbs.size > 1 }}
+  <nav class="pf-breadcrumbs" aria-label="Breadcrumbs">
+    {{ for crumb in breadcrumbs }}
+      {{ if for.last }}
+        <span class="pf-breadcrumbs-current">{{ crumb.title }}</span>
+      {{ else }}
+        <a href="{{ crumb.url }}">{{ crumb.title }}</a>
+        <span class="pf-breadcrumbs-sep">/</span>
+      {{ end }}
+    {{ end }}
+  </nav>
+{{ end }}

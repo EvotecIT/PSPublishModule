@@ -1,0 +1,48 @@
+{{ if data.hero }}
+<section class="nova-hero">
+  <div class="nova-container nova-hero-grid">
+    <div class="nova-hero-content">
+      {{ if data.hero.badge }}
+      <div class="nova-hero-badge"><span class="nova-dot"></span>{{ data.hero.badge }}</div>
+      {{ end }}
+      <h1>{{ data.hero.title }}</h1>
+      {{ if data.hero.tagline }}<p class="nova-hero-tagline">{{ data.hero.tagline }}</p>{{ end }}
+      {{ if data.hero.status }}<p class="nova-hero-status">{{ data.hero.status }}</p>{{ end }}
+      {{ if data.hero.ctas && data.hero.ctas.size > 0 }}
+      <div class="nova-hero-actions">
+        {{ for cta in data.hero.ctas }}
+        <a class="nova-button {{ if cta.style == "primary" }}nova-button-primary{{ else }}nova-button-ghost{{ end }}" href="{{ cta.href }}">{{ cta.label }}</a>
+        {{ end }}
+      </div>
+      {{ end }}
+      {{ if data.hero.install }}
+      <div class="nova-install">
+        <code>{{ data.hero.install }}</code>
+        <button class="nova-copy" type="button" data-copy="{{ data.hero.install }}">Copy</button>
+      </div>
+      {{ end }}
+      {{ if data.hero.badges }}
+      <div class="nova-hero-badges">
+        {{ for badge in data.hero.badges }}
+        <img src="{{ badge.src }}" alt="{{ badge.alt }}" width="100" height="20" loading="lazy" />
+        {{ end }}
+      </div>
+      {{ end }}
+    </div>
+    {{ if data.hero.previews }}
+    <div class="nova-hero-panel">
+      {{ panelTitle = data.hero.panelTitle; if panelTitle == ""; panelTitle = "Quick preview"; end }}
+      <div class="nova-panel-title">{{ panelTitle }}</div>
+      <div class="nova-preview-grid">
+        {{ for preview in data.hero.previews }}
+        <div class="nova-preview-card">
+          <div class="nova-preview-icon"></div>
+          <span>{{ preview.label }}</span>
+        </div>
+        {{ end }}
+      </div>
+    </div>
+    {{ end }}
+  </div>
+</section>
+{{ end }}

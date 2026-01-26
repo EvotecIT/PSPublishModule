@@ -14,6 +14,7 @@
         { "path": "/", "priority": "1.0", "changefreq": "weekly" },
         { "path": "/playground/", "priority": "0.9", "changefreq": "weekly" },
         { "path": "/docs/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/benchmarks/", "priority": "0.85", "changefreq": "monthly" },
         { "path": "/faq/", "priority": "0.8", "changefreq": "monthly" },
         { "path": "/showcase/", "priority": "0.7", "changefreq": "monthly" }
       ]
@@ -21,8 +22,7 @@
     {
       "task": "optimize",
       "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
-      "criticalCss": "./themes/codeglyphx/critical.css",
-      "minifyHtml": true,
+      "minifyHtml": false,
       "minifyCss": true,
       "minifyJs": true
     }

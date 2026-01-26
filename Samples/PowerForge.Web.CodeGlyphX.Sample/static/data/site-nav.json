@@ -1,0 +1,28 @@
+{
+  "primary": [
+    { "href": "/", "text": "Home", "spa": true },
+    { "href": "/playground/", "text": "Playground", "spa": true },
+    { "href": "/docs/", "text": "Docs", "spa": true },
+    { "href": "/benchmarks/", "text": "Benchmarks", "spa": false },
+    { "href": "/showcase/", "text": "Showcase", "spa": true }
+  ],
+  "footer": {
+    "product": [
+      { "href": "/", "text": "Home" },
+      { "href": "/playground/", "text": "Playground" },
+      { "href": "/docs/", "text": "Docs" },
+      { "href": "/benchmarks/", "text": "Benchmarks" },
+      { "href": "/showcase/", "text": "Showcase" }
+    ],
+    "resources": [
+      { "href": "/faq/", "text": "FAQ" },
+      { "href": "https://www.nuget.org/packages/CodeGlyphX", "text": "NuGet Package" },
+      { "href": "https://github.com/EvotecIT/CodeGlyphX", "text": "GitHub Repository" },
+      { "href": "https://github.com/EvotecIT/CodeGlyphX/issues", "text": "Report Issue" }
+    ],
+    "company": [
+      { "href": "https://evotec.xyz", "text": "Evotec Services" },
+      { "href": "https://evotec.xyz/hub", "text": "Blog" }
+    ]
+  }
+}

@@ -19,7 +19,7 @@
   },
   "Optimize": {
     "SiteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/publish/wwwroot",
-    "CriticalCss": "./themes/codeglyphx/critical.css",
+    "CriticalCss": "./themes/nova/critical.css",
     "MinifyHtml": true,
     "MinifyCss": true,
     "MinifyJs": true

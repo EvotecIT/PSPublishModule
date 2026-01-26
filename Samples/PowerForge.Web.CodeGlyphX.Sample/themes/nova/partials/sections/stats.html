@@ -1,0 +1,12 @@
+{{ if data.stats }}
+<section class="nova-stats">
+  <div class="nova-container nova-stats-grid">
+    {{ for stat in data.stats }}
+    <div class="nova-stat">
+      <strong>{{ stat.value }}</strong>
+      <span>{{ stat.label }}</span>
+    </div>
+    {{ end }}
+  </div>
+</section>
+{{ end }}

@@ -1,0 +1,11 @@
+<div class="pf-grid">
+  {{ for card in shortcode.data }}
+    <div class="pf-card">
+      {{ if card.tag && card.tag != "" }}
+        <div class="pf-card-tag">{{ card.tag }}</div>
+      {{ end }}
+      <h3>{{ card.title }}</h3>
+      <p>{{ card.text }}</p>
+    </div>
+  {{ end }}
+</div>

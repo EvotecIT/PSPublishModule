@@ -46,7 +46,7 @@
     {
       "task": "optimize",
       "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
-      "criticalCss": "./themes/codeglyphx/critical.css",
+      "criticalCss": "./themes/nova/critical.css",
       "minifyHtml": true,
       "minifyCss": true,
       "minifyJs": true

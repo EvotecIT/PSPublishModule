@@ -1,9 +1,13 @@
 {
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
   "name": "base-scriban",
   "engine": "scriban",
   "layoutsPath": "layouts",
   "partialsPath": "partials",
   "assetsPath": "assets",
+  "layouts": {
+    "docs-hero": "layouts/docs-hero.html"
+  },
   "tokens": {
     "color": {
       "bg0": "#0b0f14",

@@ -1,0 +1,29 @@
+{{ if data.showcase }}
+<section class="nova-section" id="showcase">
+  <div class="nova-container">
+    {{ showcaseLabel = data.sections.showcase.label; showcaseTitle = data.sections.showcase.title; showcaseDesc = data.sections.showcase.description; if showcaseLabel == ""; showcaseLabel = "Showcase"; end; if showcaseTitle == ""; showcaseTitle = "In the real world"; end }}
+    <div class="nova-section-header">
+      <span>{{ showcaseLabel }}</span>
+      <h2>{{ showcaseTitle }}</h2>
+      {{ if showcaseDesc }}
+      <p>{{ showcaseDesc }}</p>
+      {{ end }}
+    </div>
+    <div class="nova-showcase-grid">
+      {{ for item in data.showcase }}
+      <div class="nova-showcase-card">
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.summary }}</p>
+        {{ if item.tags }}
+        <div class="nova-chip-row">
+          {{ for tag in item.tags }}
+          <span class="nova-chip">{{ tag }}</span>
+          {{ end }}
+        </div>
+        {{ end }}
+      </div>
+      {{ end }}
+    </div>
+  </div>
+</section>
+{{ end }}

@@ -1,0 +1,11 @@
+{{ src = shortcode.attrs.src; label = shortcode.attrs.label; title = shortcode.attrs.title }}
+{{ if src == "" }}{{ src = "/playground/" }}{{ end }}
+{{ if label == "" }}{{ label = "Open app" }}{{ end }}
+{{ if title == "" }}{{ title = "Blazor app" }}{{ end }}
+<div class="nova-app-link">
+  <div class="nova-app-link-body">
+    <strong>{{ title }}</strong>
+    <span>{{ src }}</span>
+  </div>
+  <a class="nova-button nova-button-primary" href="{{ src }}">{{ label }}</a>
+</div>

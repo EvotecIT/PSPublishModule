@@ -1,0 +1,8 @@
+<div class="pf-metrics">
+  {{ for stat in shortcode.data }}
+    <div class="pf-metric">
+      <strong>{{ stat.value }}</strong>
+      <span>{{ stat.label }}</span>
+    </div>
+  {{ end }}
+</div>

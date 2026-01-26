@@ -57,7 +57,7 @@
   "AssetRegistry": {
     "Bundles": [
       { "Name": "global", "Css": ["/themes/base-scriban/assets/site.css"], "Js": [] },
-      { "Name": "docs", "Css": [], "Js": ["/themes/base-scriban/assets/search.js"] }
+      { "Name": "docs", "Css": ["/themes/base-scriban/assets/docs.css"], "Js": ["/themes/base-scriban/assets/search.js"] }
     ],
     "RouteBundles": [
       { "Match": "/docs/**", "Bundles": ["global", "docs"] },
@@ -78,6 +78,19 @@
     "ExternalRel": "noopener",
     "ExternalTarget": "_blank",
     "AddExternalIcon": true
+  },
+  "Navigation": {
+    "Menus": [
+      {
+        "Name": "main",
+        "Label": "Main",
+        "Items": [
+          { "Title": "Home", "Url": "/" },
+          { "Title": "Docs", "Url": "/docs/" },
+          { "Title": "Blog", "Url": "/blog/" }
+        ]
+      }
+    ]
   },
   "Analytics": {
     "Enabled": false,

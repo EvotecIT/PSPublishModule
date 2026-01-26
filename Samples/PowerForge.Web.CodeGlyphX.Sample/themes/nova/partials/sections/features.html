@@ -1,0 +1,33 @@
+{{ if data.feature_groups }}
+<section class="nova-section" id="features">
+  <div class="nova-container">
+    {{ featuresLabel = data.sections.features.label; featuresTitle = data.sections.features.title; featuresDesc = data.sections.features.description; if featuresLabel == ""; featuresLabel = "Features"; end; if featuresTitle == ""; featuresTitle = "Built for modern teams"; end }}
+    <div class="nova-section-header">
+      <span>{{ featuresLabel }}</span>
+      <h2>{{ featuresTitle }}</h2>
+      {{ if featuresDesc }}
+      <p>{{ featuresDesc }}</p>
+      {{ end }}
+    </div>
+    {{ for group in data.feature_groups }}
+    <div class="nova-feature-group">
+      <div class="nova-feature-group-header">
+        <div>
+          <span class="nova-group-label">{{ group.label }}</span>
+          <span class="nova-group-note">{{ group.note }}</span>
+        </div>
+      </div>
+      <div class="nova-feature-grid">
+        {{ for card in group.cards }}
+        <div class="nova-feature-card">
+          <div class="nova-feature-icon">{{ card.icon }}</div>
+          <h3>{{ card.title }}</h3>
+          <p>{{ card.text }}</p>
+        </div>
+        {{ end }}
+      </div>
+    </div>
+    {{ end }}
+  </div>
+</section>
+{{ end }}

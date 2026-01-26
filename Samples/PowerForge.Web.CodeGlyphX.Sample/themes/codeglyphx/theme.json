@@ -1,6 +1,8 @@
 {
-  "name": "CodeGlyphX",
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
+  "name": "codeglyphx",
   "engine": "scriban",
+  "extends": "nova",
   "tokens": {
     "color": {
       "bg": "#0b0b12",

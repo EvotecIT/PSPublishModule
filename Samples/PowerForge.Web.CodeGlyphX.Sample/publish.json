@@ -18,7 +18,7 @@
     "BaseHref": "/"
   },
   "Optimize": {
-    "CriticalCss": "./themes/codeglyphx/critical.css",
+    "CriticalCss": "./themes/nova/critical.css",
     "MinifyHtml": true,
     "MinifyCss": true,
     "MinifyJs": true

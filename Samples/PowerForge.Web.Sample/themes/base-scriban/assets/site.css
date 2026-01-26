@@ -98,6 +98,15 @@ a:hover {
   color: var(--muted);
 }
 
+.pf-nav a.is-active {
+  color: var(--accent);
+}
+
+.pf-nav a.is-ancestor {
+  color: var(--ink);
+  opacity: 0.8;
+}
+
 .pf-actions {
   display: flex;
   align-items: center;
@@ -429,6 +438,33 @@ a:hover {
   align-items: start;
 }
 
+.pf-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.pf-breadcrumbs a {
+  color: var(--muted);
+}
+
+.pf-breadcrumbs a:hover {
+  color: var(--accent);
+}
+
+.pf-breadcrumbs-sep {
+  opacity: 0.5;
+}
+
+.pf-breadcrumbs-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .pf-docs-toc {
   position: sticky;
   top: 90px;
@@ -518,6 +554,23 @@ a:hover {
 .pf-docs-search input {
   width: 100%;
   padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--ink);
+}
+
+.pf-docs-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pf-docs-filters input,
+.pf-docs-filters select {
+  width: 100%;
+  padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.3);
   background: rgba(15, 23, 42, 0.6);

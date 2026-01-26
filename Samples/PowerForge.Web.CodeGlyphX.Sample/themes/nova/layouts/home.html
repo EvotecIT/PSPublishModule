@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  <link rel="icon" type="image/png" href="/codeglyphx-qr-icon.png" />
+  <link rel="apple-touch-icon" href="/codeglyphx-qr-icon.png" />
+  <link rel="preconnect" href="https://img.shields.io" crossorigin />
+  <link rel="dns-prefetch" href="https://img.shields.io" />
+  <script>(function(){const t=localStorage.getItem('theme')||'auto';document.documentElement.dataset.theme=t;})();</script>
+  {{ assets.critical_css_html }}
+  {{ assets.css_html }}
+</head>
+<body>
+  <div class="page">
+{{ include "header" }}
+<main>
+{{ content }}
+</main>
+{{ include "footer" }}
+  </div>
+  {{ assets.js_html }}
+</body>
+</html>

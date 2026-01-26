@@ -74,6 +74,18 @@ Shortcodes let markdown stay clean while rendering rich components:
 {{< showcase data="showcase" >}}
 ```
 
+Shortcodes can be overridden by theme partials:
+`themes/<name>/partials/shortcodes/<name>.html`.
+
+## Navigation
+
+Navigation is defined in `site.json` under `Navigation.Menus` and exposed to Scriban as `navigation`:
+```
+{{ for item in navigation.menus[0].items }}
+  <a href="{{ item.url }}">{{ item.title }}</a>
+{{ end }}
+```
+
 ## Theme tokens
 
 Theme tokens live in `themes/<name>/theme.json` and are injected via the `theme-tokens` partial:
@@ -96,6 +108,12 @@ powerforge-web pipeline --config Samples/PowerForge.Web.CodeGlyphX.Sample/pipeli
 Builds and optimizes a static site into Artifacts without touching CodeMatrix.
 ```
 powerforge-web pipeline --config Samples/PowerForge.Web.CodeGlyphX.Sample/pipeline-static.json
+```
+
+### Pipeline (with playground publish + overlay)
+Publishes a Blazor app, overlays it under `/playground/`, then optimizes.
+```
+powerforge-web pipeline --config Samples/PowerForge.Web.CodeGlyphX.Sample/pipeline-playground.json
 ```
 
 ### Publish spec (build + overlay + dotnet publish + optimize)

@@ -1,0 +1,64 @@
+{
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
+  "name": "nova",
+  "engine": "scriban",
+  "layoutsPath": "layouts",
+  "partialsPath": "partials",
+  "assetsPath": "assets",
+  "defaultLayout": "home",
+  "tokens": {
+    "color": {
+      "bg": "#0b0b12",
+      "panel": "rgba(13, 18, 30, 0.85)",
+      "ink": "#e6e9f3",
+      "inkStrong": "#ffffff",
+      "muted": "#9aa3b2",
+      "accent": "#a78bfa",
+      "accent2": "#22d3ee",
+      "border": "rgba(148, 163, 184, 0.18)",
+      "glowPrimary": "rgba(167, 139, 250, 0.2)",
+      "glowSecondary": "rgba(34, 211, 238, 0.16)",
+      "headerBg": "rgba(8, 10, 16, 0.7)",
+      "buttonPrimaryFrom": "rgba(167, 139, 250, 0.35)",
+      "buttonPrimaryTo": "rgba(34, 211, 238, 0.35)",
+      "buttonPrimaryBorder": "rgba(167, 139, 250, 0.5)",
+      "buttonGhostBorder": "rgba(148, 163, 184, 0.4)",
+      "badgeBg": "rgba(167, 139, 250, 0.15)",
+      "badgeBorder": "rgba(167, 139, 250, 0.35)",
+      "dotGlow": "rgba(34, 211, 238, 0.8)",
+      "installBg": "rgba(2, 6, 23, 0.7)",
+      "installBorder": "rgba(148, 163, 184, 0.2)",
+      "installHighlight": "#fbbf24",
+      "copyBg": "rgba(167, 139, 250, 0.2)",
+      "copyBorder": "rgba(167, 139, 250, 0.4)",
+      "previewBg": "rgba(12, 16, 26, 0.7)",
+      "previewBorder": "rgba(148, 163, 184, 0.15)",
+      "previewIconFrom": "rgba(167, 139, 250, 0.4)",
+      "previewIconTo": "rgba(34, 211, 238, 0.4)",
+      "statBg": "rgba(167, 139, 250, 0.08)",
+      "statBorder": "rgba(167, 139, 250, 0.25)",
+      "featureCardBg": "rgba(12, 16, 26, 0.7)",
+      "featureIconBg": "rgba(167, 139, 250, 0.2)",
+      "formatCardBg": "rgba(13, 18, 30, 0.7)",
+      "chipBorder": "rgba(148, 163, 184, 0.3)",
+      "showcaseBg": "rgba(12, 16, 26, 0.7)"
+    },
+    "radius": {
+      "base": "20px",
+      "sm": "12px"
+    },
+    "shadow": {
+      "button": "0 14px 30px rgba(2, 6, 23, 0.45)",
+      "panel": "0 24px 48px rgba(2, 6, 23, 0.45)",
+      "card": "0 18px 32px rgba(2, 6, 23, 0.35)"
+    },
+    "layout": {
+      "maxWidth": "1120px"
+    },
+    "font": {
+      "body": "Urbanist, Segoe UI, sans-serif",
+      "display": "Space Grotesk, Segoe UI, sans-serif",
+      "mono": "JetBrains Mono, Consolas, monospace"
+    }
+  }
+}

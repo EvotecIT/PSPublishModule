@@ -1,4 +1,5 @@
 {
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
   "name": "base",
   "engine": "simple",
   "layoutsPath": "layouts",

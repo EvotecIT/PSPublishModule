@@ -1,0 +1,19 @@
+{
+  "features": {
+    "label": "Why CodeGlyphX?",
+    "title": "Built for modern .NET development",
+    "description": "Everything you need for barcode generation and scanning with none of the bloat."
+  },
+  "formats": {
+    "label": "Supported formats",
+    "title": "Every barcode you need",
+    "matrixTitle": "2D Matrix Codes",
+    "linearTitle": "1D Linear Barcodes",
+    "outputTitle": "Output Formats"
+  },
+  "showcase": {
+    "label": "Showcase",
+    "title": "CodeGlyphX in the real world",
+    "description": "Powering apps across desktop and enterprise workflows."
+  }
+}

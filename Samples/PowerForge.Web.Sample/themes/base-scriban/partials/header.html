@@ -2,7 +2,11 @@
   <div class="pf-container pf-header-inner">
     <a class="pf-brand" href="/">{{ site.name }}</a>
     <nav class="pf-nav">
-      {{ if data.navigation && data.navigation.header }}
+      {{ if navigation.menus && navigation.menus.size > 0 }}
+        {{ for link in navigation.menus[0].items }}
+          <a href="{{ link.url }}" class="{{ if link.is_active }}is-active{{ end }}{{ if link.is_ancestor }} is-ancestor{{ end }}">{{ link.title }}</a>
+        {{ end }}
+      {{ else if data.navigation && data.navigation.header }}
         {{ for link in data.navigation.header }}
           <a href="{{ link.link }}">{{ link.title }}</a>
         {{ end }}

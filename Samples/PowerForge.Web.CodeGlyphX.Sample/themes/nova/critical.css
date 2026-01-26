@@ -1,0 +1,4 @@
+body { font-family: var(--pf-font-body, system-ui, sans-serif); margin: 0; background: var(--pf-bg, #0f172a); color: var(--pf-ink, #e2e8f0); }
+.pf-header, .pf-footer { padding: 16px 24px; background: rgba(15, 23, 42, 0.8); border-bottom: 1px solid var(--pf-border, rgba(148, 163, 184, 0.2)); }
+.pf-nav a { margin-right: 12px; text-decoration: none; color: var(--pf-muted, #94a3b8); }
+.pf-web-content { padding: 24px; }

@@ -1,0 +1,8 @@
+{
+  "tagline": "Zero-dependency barcode toolkit for modern .NET.",
+  "links": [
+    { "label": "GitHub", "href": "https://github.com/EvotecIT/CodeGlyphX" },
+    { "label": "NuGet", "href": "https://www.nuget.org/packages/CodeGlyphX" },
+    { "label": "Docs", "href": "/docs/" }
+  ]
+}
