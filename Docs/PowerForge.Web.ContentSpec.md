@@ -60,12 +60,36 @@ Supported fields:
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
   - `meta.raw_html` (skip markdown rendering, treat content as HTML)
+  - `meta.render` = `html` (skip markdown rendering)
+  - `meta.format` = `html` (skip markdown rendering)
   - `meta.body_class` (optional body class)
   - `meta.social` (enable social tags for this page when configured)
   - `meta.structured_data` (enable JSON‑LD breadcrumbs for this page when configured)
   - `meta.head_html` (raw HTML appended into `<head>`)
+  - `meta.head_file` (path to a file appended into `<head>`)
   - `meta.extra_css` (raw CSS link tags appended into `<head>`)
   - `meta.extra_scripts` (raw script tags appended before `</body>`)
+  - `meta.extra_scripts_file` (path to a file appended before `</body>`)
+
+### Front matter resolution rules
+PowerForge.Web resolves missing values using simple defaults:
+- `title`: `front matter title` → first `# H1` → filename
+- `slug`: `front matter slug` → filename
+- `description`: `front matter description` (no automatic fallback)
+- `date`: `front matter date` (no git/mtime fallback yet)
+
+### Route + slug rules
+Routes are built from `Collection.Output` + `slug`:
+- `index.md` or `slug: index` maps to the collection root
+- `slug` can include slashes to create nested paths
+
+Examples (collection output = `/docs`):
+- `getting-started.md` → `/docs/getting-started/`
+- `index.md` → `/docs/`
+- `slug: guides/install` → `/docs/guides/install/`
+
+Trailing slash behavior is controlled by `site.json` → `TrailingSlash`:
+- `always` / `never` / `ignore`
 
 ## Collections
 Collections map markdown inputs to output routes:
@@ -129,6 +153,16 @@ Templates receive a computed `navigation` object with active states.
 Use `aliases` in front matter for old URLs.  
 Use `Redirects` or `RouteOverrides` in `site.json` for permanent site‑level rules.
 
+Notes:
+- Aliases emit **exact** 301 redirects to the final page route.
+- `RouteOverrides` are applied before `Redirects` when generating redirect outputs.
+- Redirects are emitted to host-specific formats:
+  - `_redirects` (Netlify)
+  - `staticwebapp.config.json` (Azure Static Web Apps)
+  - `vercel.json` (Vercel)
+- A full machine-readable list is written to:
+  - `_powerforge/redirects.json`
+
 ## Themes + tokens
 Themes provide layouts/partials/assets. Tokens map to CSS variables:
 ```
@@ -157,6 +191,24 @@ Pages opt‑in using front matter:
 ```
 meta.social: true
 meta.structured_data: true
+```
+
+## Head links + meta (site.json)
+Use structured head tags so themes don’t repeat favicons or preconnects.
+```
+{
+  "Head": {
+    "Links": [
+      { "Rel": "icon", "Href": "/favicon.png", "Type": "image/png" },
+      { "Rel": "apple-touch-icon", "Href": "/apple-touch-icon.png" },
+      { "Rel": "preconnect", "Href": "https://img.shields.io", "Crossorigin": "anonymous" },
+      { "Rel": "dns-prefetch", "Href": "https://img.shields.io" }
+    ],
+    "Meta": [
+      { "Name": "theme-color", "Content": "#0a0e14" }
+    ]
+  }
+}
 ```
 
 ## Playgrounds / apps

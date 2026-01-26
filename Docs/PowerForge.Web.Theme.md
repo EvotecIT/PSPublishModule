@@ -117,6 +117,11 @@ Partials are shared building blocks (header, footer, nav, cards, tabs).
 They should be pure HTML with placeholders or Scriban logic.
 Use `partials/` and name them explicitly in `theme.json` or by convention.
 
+Recommended conventions:
+- Render navigation from `navigation.menus` instead of hard‑coding links.
+- Render favicons/preconnects from `head_html` (or `site.head` structured links).
+- Keep product‑specific URLs in `site.json` so themes stay reusable.
+
 ## Asset registry
 Theme assets should map to site asset registry with a clear override order:
 1) Site `AssetRegistry` (authoritative, can override any theme bundle)

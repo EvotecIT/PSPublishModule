@@ -157,8 +157,32 @@
       "additionalProperties": false,
       "properties": {
         "Html": { "type": "string" },
-        "BodyClass": { "type": "string" }
+        "BodyClass": { "type": "string" },
+        "Links": { "type": "array", "items": { "$ref": "#/$defs/HeadLinkSpec" } },
+        "Meta": { "type": "array", "items": { "$ref": "#/$defs/HeadMetaSpec" } }
       }
+    },
+    "HeadLinkSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Rel": { "type": "string" },
+        "Href": { "type": "string" },
+        "Type": { "type": "string" },
+        "Sizes": { "type": "string" },
+        "Crossorigin": { "type": "string" }
+      },
+      "required": ["Rel", "Href"]
+    },
+    "HeadMetaSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Property": { "type": "string" },
+        "Content": { "type": "string" }
+      },
+      "required": ["Content"]
     },
     "SocialSpec": {
       "type": "object",

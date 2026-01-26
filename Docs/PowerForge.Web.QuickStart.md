@@ -102,6 +102,9 @@ powerforge-web pipeline --config ./pipeline.json
 powerforge-web publish --config ./publish.json
 ```
 
+See `Docs/PowerForge.Web.Workflow.md` for the full end-to-end pipeline flow.
+See `Docs/PowerForge.Web.Pipeline.md` for spec details and examples.
+
 ## Asset registry (bundles, preloads, critical CSS)
 Define shared CSS/JS once and map to routes. This keeps performance rules centralized.
 ```json
