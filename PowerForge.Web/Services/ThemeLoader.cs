@@ -2,14 +2,24 @@ using System.Text.Json;
 
 namespace PowerForge.Web;
 
+/// <summary>Loads theme manifests and resolves theme assets.</summary>
 public sealed class ThemeLoader
 {
+    /// <summary>Loads a theme manifest and resolves inheritance.</summary>
+    /// <param name="themeRoot">Root directory of the theme.</param>
+    /// <param name="themesRoot">Optional parent directory for theme inheritance.</param>
+    /// <returns>The resolved theme manifest, or null if not found.</returns>
     public ThemeManifest? Load(string themeRoot, string? themesRoot = null)
     {
         var chain = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         return LoadInternal(themeRoot, themesRoot, chain);
     }
 
+    /// <summary>Resolves a layout path for the specified theme.</summary>
+    /// <param name="themeRoot">Root directory of the theme.</param>
+    /// <param name="manifest">Theme manifest.</param>
+    /// <param name="layoutName">Layout name or path.</param>
+    /// <returns>Resolved layout path, or null when not found.</returns>
     public string? ResolveLayoutPath(string themeRoot, ThemeManifest? manifest, string layoutName)
     {
         if (string.IsNullOrWhiteSpace(themeRoot)) return null;
@@ -32,6 +42,11 @@ public sealed class ThemeLoader
         return null;
     }
 
+    /// <summary>Resolves a partial path for the specified theme.</summary>
+    /// <param name="themeRoot">Root directory of the theme.</param>
+    /// <param name="manifest">Theme manifest.</param>
+    /// <param name="partialName">Partial name or path.</param>
+    /// <returns>Resolved partial path, or null when not found.</returns>
     public string? ResolvePartialPath(string themeRoot, ThemeManifest? manifest, string partialName)
     {
         if (string.IsNullOrWhiteSpace(themeRoot)) return null;

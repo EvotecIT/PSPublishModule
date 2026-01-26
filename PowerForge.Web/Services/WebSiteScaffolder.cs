@@ -2,8 +2,15 @@ using System.Text.Json;
 
 namespace PowerForge.Web;
 
+/// <summary>Scaffolds a starter site with content and theme.</summary>
 public static class WebSiteScaffolder
 {
+    /// <summary>Creates a new site scaffold.</summary>
+    /// <param name="outputPath">Output directory.</param>
+    /// <param name="siteName">Optional site name.</param>
+    /// <param name="baseUrl">Optional base URL.</param>
+    /// <param name="themeEngine">Template engine identifier.</param>
+    /// <returns>Result payload describing created files.</returns>
     public static WebScaffoldResult Scaffold(string outputPath, string? siteName, string? baseUrl, string? themeEngine)
     {
         if (string.IsNullOrWhiteSpace(outputPath))

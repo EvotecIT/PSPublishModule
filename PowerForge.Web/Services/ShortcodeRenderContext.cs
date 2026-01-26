@@ -1,11 +1,17 @@
 namespace PowerForge.Web;
 
+/// <summary>Runtime context passed into shortcode rendering.</summary>
 public sealed class ShortcodeRenderContext
 {
+    /// <summary>Resolved site configuration.</summary>
     public SiteSpec Site { get; init; } = new();
+    /// <summary>Front matter for the current page, if any.</summary>
     public FrontMatter? FrontMatter { get; init; }
+    /// <summary>Data dictionary available to shortcodes.</summary>
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
+    /// <summary>Resolved theme manifest.</summary>
     public ThemeManifest? ThemeManifest { get; init; }
+    /// <summary>Resolved theme root path.</summary>
     public string? ThemeRoot { get; init; }
     internal ITemplateEngine? Engine { get; init; }
     internal Func<string, string?>? PartialResolver { get; init; }

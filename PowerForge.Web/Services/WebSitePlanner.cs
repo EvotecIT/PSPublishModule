@@ -4,8 +4,14 @@ using System.Text.Json;
 
 namespace PowerForge.Web;
 
+/// <summary>Builds a site plan from configuration.</summary>
 public static class WebSitePlanner
 {
+    /// <summary>Resolves a site plan from a site spec.</summary>
+    /// <param name="spec">Site configuration.</param>
+    /// <param name="configPath">Path to the site config file.</param>
+    /// <param name="options">Optional JSON serializer options.</param>
+    /// <returns>Resolved site plan.</returns>
     public static WebSitePlan Plan(SiteSpec spec, string configPath, JsonSerializerOptions? options = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));

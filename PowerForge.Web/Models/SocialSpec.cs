@@ -1,9 +1,14 @@
 namespace PowerForge.Web;
 
+/// <summary>Social metadata used for OpenGraph and Twitter cards.</summary>
 public sealed class SocialSpec
 {
+    /// <summary>When true, emit social metadata.</summary>
     public bool Enabled { get; set; } = true;
+    /// <summary>Optional site name override.</summary>
     public string? SiteName { get; set; }
+    /// <summary>Default preview image URL.</summary>
     public string? Image { get; set; }
+    /// <summary>Twitter card type (summary, summary_large_image, etc.).</summary>
     public string? TwitterCard { get; set; } = "summary";
 }

@@ -5,21 +5,35 @@ using System.Xml.Linq;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for API documentation generation.</summary>
 public sealed class WebApiDocsOptions
 {
+    /// <summary>Path to the XML documentation file.</summary>
     public string XmlPath { get; set; } = string.Empty;
+    /// <summary>Optional assembly path for version metadata.</summary>
     public string? AssemblyPath { get; set; }
+    /// <summary>Output directory for generated docs.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Documentation title.</summary>
     public string Title { get; set; } = "API Reference";
+    /// <summary>Base URL for API documentation routes.</summary>
     public string BaseUrl { get; set; } = "/api";
+    /// <summary>Output format hint (json, html, hybrid, both).</summary>
     public string? Format { get; set; }
+    /// <summary>Optional stylesheet href for HTML output.</summary>
     public string? CssHref { get; set; }
+    /// <summary>Optional path to header HTML fragment.</summary>
     public string? HeaderHtmlPath { get; set; }
+    /// <summary>Optional path to footer HTML fragment.</summary>
     public string? FooterHtmlPath { get; set; }
 }
 
+/// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static class WebApiDocsGenerator
 {
+    /// <summary>Generates API documentation output.</summary>
+    /// <param name="options">Generation options.</param>
+    /// <returns>Result payload describing generated artifacts.</returns>
     public static WebApiDocsResult Generate(WebApiDocsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

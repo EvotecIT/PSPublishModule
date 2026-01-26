@@ -4,17 +4,26 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for fixing Blazor publish output.</summary>
 public sealed class WebBlazorPublishFixOptions
 {
+    /// <summary>Publish output root path.</summary>
     public string PublishRoot { get; set; } = string.Empty;
+    /// <summary>Optional base href override.</summary>
     public string? BaseHref { get; set; }
+    /// <summary>When true, update blazor.boot.json integrity hashes.</summary>
     public bool UpdateBootIntegrity { get; set; } = true;
+    /// <summary>When true, copy fingerprinted blazor.webassembly.*.js to stable name.</summary>
     public bool CopyFingerprintBlazorJs { get; set; } = true;
+    /// <summary>When true, append cache-busting query to blazor JS.</summary>
     public bool AddCacheBuster { get; set; } = true;
 }
 
+/// <summary>Applies fixes to Blazor static publish output.</summary>
 public static class WebBlazorPublishFixer
 {
+    /// <summary>Applies configured fixes to the publish output.</summary>
+    /// <param name="options">Fix options.</param>
     public static void Apply(WebBlazorPublishFixOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

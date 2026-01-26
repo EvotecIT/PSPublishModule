@@ -4,24 +4,41 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for llms.txt generation.</summary>
 public sealed class WebLlmsOptions
 {
+    /// <summary>Root directory of the site.</summary>
     public string SiteRoot { get; set; } = ".";
+    /// <summary>Optional project file for metadata lookup.</summary>
     public string? ProjectFile { get; set; }
+    /// <summary>Optional API index path.</summary>
     public string? ApiIndexPath { get; set; }
+    /// <summary>Base URL for API docs.</summary>
     public string ApiBase { get; set; } = "/api";
+    /// <summary>Optional project name override.</summary>
     public string? Name { get; set; }
+    /// <summary>Optional package identifier override.</summary>
     public string? PackageId { get; set; }
+    /// <summary>Optional version override.</summary>
     public string? Version { get; set; }
+    /// <summary>Optional quickstart snippet path.</summary>
     public string? QuickstartPath { get; set; }
+    /// <summary>Optional overview text.</summary>
     public string? Overview { get; set; }
+    /// <summary>Optional license text.</summary>
     public string? License { get; set; }
+    /// <summary>Optional target framework list.</summary>
     public string? Targets { get; set; }
+    /// <summary>Optional path to extra content for llms-full.</summary>
     public string? ExtraContentPath { get; set; }
 }
 
+/// <summary>Generates llms.txt files for documentation consumers.</summary>
 public static class WebLlmsGenerator
 {
+    /// <summary>Generates llms.txt, llms.json, and llms-full.txt.</summary>
+    /// <param name="options">Generation options.</param>
+    /// <returns>Result payload describing generated outputs.</returns>
     public static WebLlmsResult Generate(WebLlmsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

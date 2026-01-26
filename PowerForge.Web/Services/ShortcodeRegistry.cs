@@ -2,8 +2,13 @@ using System.Collections.Concurrent;
 
 namespace PowerForge.Web;
 
+/// <summary>Delegate signature for shortcode handlers.</summary>
+/// <param name="context">Render context.</param>
+/// <param name="attrs">Shortcode attributes.</param>
+/// <returns>Rendered HTML.</returns>
 public delegate string ShortcodeHandler(ShortcodeRenderContext context, Dictionary<string, string> attrs);
 
+/// <summary>Registers and resolves shortcode handlers.</summary>
 public static class ShortcodeRegistry
 {
     private static readonly ConcurrentDictionary<string, ShortcodeHandler> Handlers =
@@ -16,6 +21,9 @@ public static class ShortcodeRegistry
         Register("showcase", ShortcodeDefaults.RenderShowcase);
     }
 
+    /// <summary>Registers a shortcode handler.</summary>
+    /// <param name="name">Shortcode name.</param>
+    /// <param name="handler">Handler implementation.</param>
     public static void Register(string name, ShortcodeHandler handler)
     {
         if (string.IsNullOrWhiteSpace(name))

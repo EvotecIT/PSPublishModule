@@ -3,18 +3,29 @@ using HtmlTinkerX;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for asset optimization.</summary>
 public sealed class WebAssetOptimizerOptions
 {
+    /// <summary>Root directory of the generated site.</summary>
     public string SiteRoot { get; set; } = ".";
+    /// <summary>Optional critical CSS file path.</summary>
     public string? CriticalCssPath { get; set; }
+    /// <summary>Regex pattern used to match stylesheet links.</summary>
     public string CssLinkPattern { get; set; } = "(app|api-docs)\\.css";
+    /// <summary>When true, minify HTML files.</summary>
     public bool MinifyHtml { get; set; } = false;
+    /// <summary>When true, minify CSS files.</summary>
     public bool MinifyCss { get; set; } = false;
+    /// <summary>When true, minify JavaScript files.</summary>
     public bool MinifyJs { get; set; } = false;
 }
 
+/// <summary>Optimizes generated site assets (critical CSS, minification).</summary>
 public static class WebAssetOptimizer
 {
+    /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
+    /// <param name="options">Optimization options.</param>
+    /// <returns>Number of HTML files updated with critical CSS.</returns>
     public static int Optimize(WebAssetOptimizerOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

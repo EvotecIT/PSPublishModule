@@ -3,28 +3,46 @@ using System.Xml.Linq;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for sitemap generation.</summary>
 public sealed class WebSitemapOptions
 {
+    /// <summary>Root directory of the generated site.</summary>
     public string SiteRoot { get; set; } = ".";
+    /// <summary>Base URL for sitemap entries.</summary>
     public string BaseUrl { get; set; } = string.Empty;
+    /// <summary>Optional output path override.</summary>
     public string? OutputPath { get; set; }
+    /// <summary>Optional existing API sitemap path to merge.</summary>
     public string? ApiSitemapPath { get; set; }
+    /// <summary>Additional paths to include.</summary>
     public string[]? ExtraPaths { get; set; }
+    /// <summary>Explicit sitemap entries.</summary>
     public WebSitemapEntry[]? Entries { get; set; }
+    /// <summary>When true, include HTML files.</summary>
     public bool IncludeHtmlFiles { get; set; } = true;
+    /// <summary>When true, include text files (robots/llms).</summary>
     public bool IncludeTextFiles { get; set; } = true;
 }
 
+/// <summary>Explicit sitemap entry metadata.</summary>
 public sealed class WebSitemapEntry
 {
+    /// <summary>Route path (relative to base URL).</summary>
     public string Path { get; set; } = "/";
+    /// <summary>Optional change frequency value.</summary>
     public string? ChangeFrequency { get; set; }
+    /// <summary>Optional priority value.</summary>
     public string? Priority { get; set; }
+    /// <summary>Optional last-modified date.</summary>
     public string? LastModified { get; set; }
 }
 
+/// <summary>Generates sitemap.xml for the site output.</summary>
 public static class WebSitemapGenerator
 {
+    /// <summary>Generates a sitemap from site output.</summary>
+    /// <param name="options">Generation options.</param>
+    /// <returns>Result payload describing the sitemap output.</returns>
     public static WebSitemapResult Generate(WebSitemapOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

@@ -2,16 +2,25 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for copying static overlay assets.</summary>
 public sealed class WebStaticOverlayOptions
 {
+    /// <summary>Source root directory.</summary>
     public string SourceRoot { get; set; } = string.Empty;
+    /// <summary>Destination root directory.</summary>
     public string DestinationRoot { get; set; } = string.Empty;
+    /// <summary>Optional include glob patterns.</summary>
     public string[] Include { get; set; } = Array.Empty<string>();
+    /// <summary>Optional exclude glob patterns.</summary>
     public string[] Exclude { get; set; } = Array.Empty<string>();
 }
 
+/// <summary>Copies overlay assets into a publish output.</summary>
 public static class WebStaticOverlay
 {
+    /// <summary>Applies the overlay copy operation.</summary>
+    /// <param name="options">Overlay options.</param>
+    /// <returns>Result payload describing copied file count.</returns>
     public static WebStaticOverlayResult Apply(WebStaticOverlayOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

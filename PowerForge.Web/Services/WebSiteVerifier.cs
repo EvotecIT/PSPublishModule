@@ -4,8 +4,13 @@ using System.Linq;
 
 namespace PowerForge.Web;
 
+/// <summary>Verifies site content and routing integrity.</summary>
 public static class WebSiteVerifier
 {
+    /// <summary>Validates the site spec against discovered content.</summary>
+    /// <param name="spec">Site configuration.</param>
+    /// <param name="plan">Resolved site plan.</param>
+    /// <returns>Verification result.</returns>
     public static WebVerifyResult Verify(SiteSpec spec, WebSitePlan plan)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));

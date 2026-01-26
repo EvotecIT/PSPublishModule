@@ -1,49 +1,76 @@
 namespace PowerForge.Web;
 
+/// <summary>Controls trailing slash handling for generated URLs.</summary>
 public enum TrailingSlashMode
 {
+    /// <summary>Always append a trailing slash.</summary>
     Always,
+    /// <summary>Never append a trailing slash.</summary>
     Never,
+    /// <summary>Leave existing slashes unchanged.</summary>
     Ignore
 }
 
+/// <summary>Controls sorting direction.</summary>
 public enum SortOrder
 {
+    /// <summary>Ascending order.</summary>
     Asc,
+    /// <summary>Descending order.</summary>
     Desc
 }
 
+/// <summary>Redirect match strategy.</summary>
 public enum RedirectMatchType
 {
+    /// <summary>Exact path match.</summary>
     Exact,
+    /// <summary>Prefix match.</summary>
     Prefix,
+    /// <summary>Wildcard match.</summary>
     Wildcard,
+    /// <summary>Regular expression match.</summary>
     Regex
 }
 
+/// <summary>Analytics provider selection.</summary>
 public enum AnalyticsProvider
 {
+    /// <summary>No analytics.</summary>
     None,
+    /// <summary>First-party analytics collector.</summary>
     FirstParty
 }
 
+/// <summary>API documentation source type.</summary>
 public enum ApiDocsType
 {
+    /// <summary>C# XML documentation.</summary>
     CSharp,
+    /// <summary>PowerShell help output.</summary>
     PowerShell
 }
 
+/// <summary>Repository provider selection.</summary>
 public enum RepositoryProvider
 {
+    /// <summary>GitHub.</summary>
     GitHub,
+    /// <summary>Azure DevOps.</summary>
     AzureDevOps,
+    /// <summary>GitLab.</summary>
     GitLab,
+    /// <summary>Other provider.</summary>
     Other
 }
 
+/// <summary>Package registry selection.</summary>
 public enum PackageType
 {
+    /// <summary>NuGet package.</summary>
     NuGet,
+    /// <summary>PowerShell Gallery module.</summary>
     PowerShellGallery,
+    /// <summary>Other registry.</summary>
     Other
 }

@@ -6,8 +6,15 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
+/// <summary>Builds a static site from configuration and content.</summary>
 public static class WebSiteBuilder
 {
+    /// <summary>Builds the site output.</summary>
+    /// <param name="spec">Site configuration.</param>
+    /// <param name="plan">Resolved site plan.</param>
+    /// <param name="outputPath">Output directory.</param>
+    /// <param name="options">Optional JSON serializer options.</param>
+    /// <returns>Result payload describing the build output.</returns>
     public static WebBuildResult Build(SiteSpec spec, WebSitePlan plan, string outputPath, JsonSerializerOptions? options = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
@@ -752,13 +759,13 @@ public static class WebSiteBuilder
             {
                 Name = m.Name,
                 Label = m.Label,
-                Items = BuildMenuItems(m.Items, currentPath)
+                Items = BuildMenuItems(m.Items, currentPath, spec.LinkRules)
             })
             .ToArray();
         return nav;
     }
 
-    private static NavigationItem[] BuildMenuItems(MenuItemSpec[] items, string currentPath)
+    private static NavigationItem[] BuildMenuItems(MenuItemSpec[] items, string currentPath, LinkRulesSpec? linkRules)
     {
         if (items is null || items.Length == 0) return Array.Empty<NavigationItem>();
 
@@ -772,7 +779,14 @@ public static class WebSiteBuilder
             var isActive = !isExternal && MatchesMenuItem(item, currentPath, normalized, exactOnly: true);
             var isAncestor = !isExternal && !isActive && MatchesMenuItem(item, currentPath, normalized, exactOnly: false);
 
-            var children = BuildMenuItems(item.Items, currentPath);
+            var target = item.Target;
+            var rel = item.Rel;
+            if (isExternal && string.IsNullOrWhiteSpace(target) && !string.IsNullOrWhiteSpace(linkRules?.ExternalTarget))
+                target = linkRules.ExternalTarget;
+            if (isExternal && string.IsNullOrWhiteSpace(rel) && !string.IsNullOrWhiteSpace(linkRules?.ExternalRel))
+                rel = linkRules.ExternalRel;
+
+            var children = BuildMenuItems(item.Items, currentPath, linkRules);
             if (children.Any(c => c.IsActive || c.IsAncestor))
                 isAncestor = true;
 
@@ -783,8 +797,8 @@ public static class WebSiteBuilder
                 Icon = item.Icon,
                 Badge = item.Badge,
                 Description = item.Description,
-                Target = item.Target,
-                Rel = item.Rel,
+                Target = target,
+                Rel = rel,
                 External = isExternal,
                 Weight = item.Weight,
                 Match = item.Match,
@@ -986,8 +1000,21 @@ public static class WebSiteBuilder
     private static string BuildHeadHtml(SiteSpec spec, ContentItem item, string rootPath)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(spec.Head?.Html))
-            parts.Add(spec.Head.Html!);
+        var head = spec.Head;
+        if (head is not null)
+        {
+            var links = RenderHeadLinks(head);
+            if (!string.IsNullOrWhiteSpace(links))
+                parts.Add(links);
+
+            var meta = RenderHeadMeta(head);
+            if (!string.IsNullOrWhiteSpace(meta))
+                parts.Add(meta);
+
+            if (!string.IsNullOrWhiteSpace(head.Html))
+                parts.Add(head.Html!);
+        }
+
         var pageHead = GetMetaString(item.Meta, "head_html");
         if (!string.IsNullOrWhiteSpace(pageHead))
             parts.Add(pageHead);
@@ -999,6 +1026,49 @@ public static class WebSiteBuilder
                 parts.Add(File.ReadAllText(resolved));
         }
         return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string RenderHeadLinks(HeadSpec head)
+    {
+        if (head.Links.Length == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var link in head.Links)
+        {
+            if (string.IsNullOrWhiteSpace(link.Rel) || string.IsNullOrWhiteSpace(link.Href))
+                continue;
+
+            var rel = System.Web.HttpUtility.HtmlEncode(link.Rel);
+            var href = System.Web.HttpUtility.HtmlEncode(link.Href);
+            var type = string.IsNullOrWhiteSpace(link.Type) ? string.Empty : $" type=\"{System.Web.HttpUtility.HtmlEncode(link.Type)}\"";
+            var sizes = string.IsNullOrWhiteSpace(link.Sizes) ? string.Empty : $" sizes=\"{System.Web.HttpUtility.HtmlEncode(link.Sizes)}\"";
+            var cross = string.IsNullOrWhiteSpace(link.Crossorigin) ? string.Empty : $" crossorigin=\"{System.Web.HttpUtility.HtmlEncode(link.Crossorigin)}\"";
+            sb.AppendLine($"<link rel=\"{rel}\" href=\"{href}\"{type}{sizes}{cross} />");
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static string RenderHeadMeta(HeadSpec head)
+    {
+        if (head.Meta.Length == 0)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var meta in head.Meta)
+        {
+            if (string.IsNullOrWhiteSpace(meta.Content))
+                continue;
+
+            var name = string.IsNullOrWhiteSpace(meta.Name) ? string.Empty : $" name=\"{System.Web.HttpUtility.HtmlEncode(meta.Name)}\"";
+            var property = string.IsNullOrWhiteSpace(meta.Property) ? string.Empty : $" property=\"{System.Web.HttpUtility.HtmlEncode(meta.Property)}\"";
+            if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(property))
+                continue;
+
+            var content = System.Web.HttpUtility.HtmlEncode(meta.Content);
+            sb.AppendLine($"<meta{name}{property} content=\"{content}\" />");
+        }
+        return sb.ToString().TrimEnd();
     }
 
     private static string BuildExtraScriptsHtml(ContentItem item, string rootPath)

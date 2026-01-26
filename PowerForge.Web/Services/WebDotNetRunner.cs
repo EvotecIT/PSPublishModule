@@ -3,37 +3,61 @@ using System.Text;
 
 namespace PowerForge.Web;
 
+/// <summary>Options for dotnet build.</summary>
 public sealed class WebDotNetBuildOptions
 {
+    /// <summary>Project or solution path.</summary>
     public string ProjectOrSolution { get; set; } = string.Empty;
+    /// <summary>Build configuration.</summary>
     public string? Configuration { get; set; }
+    /// <summary>Target framework.</summary>
     public string? Framework { get; set; }
+    /// <summary>Runtime identifier.</summary>
     public string? Runtime { get; set; }
+    /// <summary>When true, restore packages.</summary>
     public bool Restore { get; set; } = true;
 }
 
+/// <summary>Options for dotnet publish.</summary>
 public sealed class WebDotNetPublishOptions
 {
+    /// <summary>Project path.</summary>
     public string ProjectPath { get; set; } = string.Empty;
+    /// <summary>Output directory.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Build configuration.</summary>
     public string? Configuration { get; set; }
+    /// <summary>Target framework.</summary>
     public string? Framework { get; set; }
+    /// <summary>Runtime identifier.</summary>
     public string? Runtime { get; set; }
+    /// <summary>Whether to publish as self-contained.</summary>
     public bool SelfContained { get; set; } = false;
+    /// <summary>Skip build step.</summary>
     public bool NoBuild { get; set; } = false;
+    /// <summary>Skip restore step.</summary>
     public bool NoRestore { get; set; } = false;
 }
 
+/// <summary>Result payload for dotnet build/publish commands.</summary>
 public sealed class WebDotNetResult
 {
+    /// <summary>Execution success status.</summary>
     public bool Success { get; set; }
+    /// <summary>Process exit code.</summary>
     public int ExitCode { get; set; }
+    /// <summary>Captured stdout.</summary>
     public string Output { get; set; } = string.Empty;
+    /// <summary>Captured stderr.</summary>
     public string Error { get; set; } = string.Empty;
 }
 
+/// <summary>Runs dotnet build and publish commands.</summary>
 public static class WebDotNetRunner
 {
+    /// <summary>Executes dotnet build with provided options.</summary>
+    /// <param name="options">Build options.</param>
+    /// <returns>Execution result.</returns>
     public static WebDotNetResult Build(WebDotNetBuildOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
@@ -53,6 +77,9 @@ public static class WebDotNetRunner
         return Run("dotnet", args);
     }
 
+    /// <summary>Executes dotnet publish with provided options.</summary>
+    /// <param name="options">Publish options.</param>
+    /// <returns>Execution result.</returns>
     public static WebDotNetResult Publish(WebDotNetPublishOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));

@@ -2,8 +2,13 @@ using System.Text.Json;
 
 namespace PowerForge.Web;
 
+/// <summary>Loads site and project specifications from disk.</summary>
 public static class WebSiteSpecLoader
 {
+    /// <summary>Loads a site spec and returns the resolved path.</summary>
+    /// <param name="configPath">Path to site.json.</param>
+    /// <param name="options">Optional JSON serializer options.</param>
+    /// <returns>Deserialized spec and full path.</returns>
     public static (SiteSpec Spec, string FullPath) LoadWithPath(string configPath, JsonSerializerOptions? options = null)
     {
         if (string.IsNullOrWhiteSpace(configPath))
@@ -22,6 +27,10 @@ public static class WebSiteSpecLoader
         return (spec, fullPath);
     }
 
+    /// <summary>Loads a project spec and returns the resolved path.</summary>
+    /// <param name="projectPath">Path to project.json.</param>
+    /// <param name="options">Optional JSON serializer options.</param>
+    /// <returns>Deserialized spec and full path.</returns>
     public static (ProjectSpec Spec, string FullPath) LoadProjectWithPath(string projectPath, JsonSerializerOptions? options = null)
     {
         if (string.IsNullOrWhiteSpace(projectPath))

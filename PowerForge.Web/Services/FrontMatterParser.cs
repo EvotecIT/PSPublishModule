@@ -6,10 +6,14 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
+/// <summary>Parses YAML-like front matter from markdown content.</summary>
 public static class FrontMatterParser
 {
     private static readonly Regex H1Regex = new Regex(@"^#\s+(.+)$", RegexOptions.Multiline | RegexOptions.Compiled);
 
+    /// <summary>Extracts front matter and body from markdown.</summary>
+    /// <param name="markdown">Raw markdown content.</param>
+    /// <returns>Front matter (if any) and remaining body.</returns>
     public static (FrontMatter? Matter, string Body) Parse(string markdown)
     {
         if (string.IsNullOrEmpty(markdown))
@@ -34,6 +38,9 @@ public static class FrontMatterParser
         return (matter, body.TrimStart('\r', '\n'));
     }
 
+    /// <summary>Extracts the first H1 heading from markdown.</summary>
+    /// <param name="markdown">Markdown content.</param>
+    /// <returns>Heading text or null if missing.</returns>
     public static string? ExtractTitleFromMarkdown(string markdown)
     {
         if (string.IsNullOrWhiteSpace(markdown)) return null;

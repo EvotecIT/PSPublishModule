@@ -3,8 +3,15 @@ using System.Text;
 
 namespace PowerForge.Web;
 
+/// <summary>Lightweight static file server for local preview.</summary>
 public static class WebStaticServer
 {
+    /// <summary>Starts a blocking static file server.</summary>
+    /// <param name="rootPath">Root directory to serve.</param>
+    /// <param name="host">Host/IP to bind.</param>
+    /// <param name="port">Port to bind.</param>
+    /// <param name="token">Cancellation token to stop the server.</param>
+    /// <param name="log">Optional log callback.</param>
     public static void Serve(string rootPath, string host, int port, CancellationToken token, Action<string>? log = null)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
