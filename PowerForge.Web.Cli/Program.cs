@@ -449,13 +449,15 @@ try
             var cssHref = TryGetOptionValue(subArgs, "--css");
             var headerHtml = TryGetOptionValue(subArgs, "--header-html");
             var footerHtml = TryGetOptionValue(subArgs, "--footer-html");
+            var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
+            var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
 
             if (string.IsNullOrWhiteSpace(xmlPath))
                 return Fail("Missing required --xml.", outputJson, logger, "web.apidocs");
             if (string.IsNullOrWhiteSpace(outPath))
                 return Fail("Missing required --out.", outputJson, logger, "web.apidocs");
 
-            var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            var options = new WebApiDocsOptions
             {
                 XmlPath = xmlPath,
                 AssemblyPath = assemblyPath,
@@ -466,7 +468,13 @@ try
                 CssHref = cssHref,
                 HeaderHtmlPath = headerHtml,
                 FooterHtmlPath = footerHtml
-            });
+            };
+            if (includeNamespaces.Count > 0)
+                options.IncludeNamespacePrefixes.AddRange(includeNamespaces);
+            if (excludeNamespaces.Count > 0)
+                options.ExcludeNamespacePrefixes.AddRange(excludeNamespaces);
+
+            var result = WebApiDocsGenerator.Generate(options);
 
             if (outputJson)
             {
@@ -866,7 +874,7 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
-    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>]");
+    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
@@ -910,6 +918,42 @@ static string? TryGetOptionValue(string[] argv, string optionName)
         return ++i < argv.Length ? argv[i] : null;
     }
     return null;
+}
+
+static List<string> ReadOptionList(string[] argv, params string[] optionNames)
+{
+    var values = new List<string>();
+    foreach (var optionName in optionNames)
+    {
+        values.AddRange(GetOptionValues(argv, optionName));
+    }
+
+    var results = new List<string>();
+    foreach (var value in values)
+    {
+        if (string.IsNullOrWhiteSpace(value)) continue;
+        var parts = value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+                results.Add(trimmed);
+        }
+    }
+
+    return results;
+}
+
+static List<string> GetOptionValues(string[] argv, string optionName)
+{
+    var values = new List<string>();
+    for (var i = 0; i < argv.Length; i++)
+    {
+        if (!argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase)) continue;
+        if (++i < argv.Length && !string.IsNullOrWhiteSpace(argv[i]))
+            values.Add(argv[i]);
+    }
+    return values;
 }
 
 static bool HasOption(string[] argv, string optionName)

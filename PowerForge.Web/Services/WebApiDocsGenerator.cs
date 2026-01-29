@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -26,6 +27,10 @@ public sealed class WebApiDocsOptions
     public string? HeaderHtmlPath { get; set; }
     /// <summary>Optional path to footer HTML fragment.</summary>
     public string? FooterHtmlPath { get; set; }
+    /// <summary>Optional list of namespace prefixes to include.</summary>
+    public List<string> IncludeNamespacePrefixes { get; } = new();
+    /// <summary>Optional list of namespace prefixes to exclude.</summary>
+    public List<string> ExcludeNamespacePrefixes { get; } = new();
 }
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
@@ -46,7 +51,20 @@ public static class WebApiDocsGenerator
         var outputPath = Path.GetFullPath(options.OutputPath);
         Directory.CreateDirectory(outputPath);
 
-        var apiDoc = ParseXml(xmlPath);
+        Assembly? assembly = null;
+        if (!string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
+        {
+            try
+            {
+                assembly = Assembly.LoadFrom(options.AssemblyPath);
+            }
+            catch
+            {
+                assembly = null;
+            }
+        }
+
+        var apiDoc = ParseXml(xmlPath, assembly, options);
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
 
@@ -66,7 +84,10 @@ public static class WebApiDocsGenerator
             }
         }
 
-        var types = apiDoc.Types.Values.OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+        var types = apiDoc.Types.Values
+            .Where(t => ShouldIncludeType(t, options))
+            .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var index = new Dictionary<string, object?>
         {
             ["title"] = options.Title,
@@ -166,7 +187,7 @@ public static class WebApiDocsGenerator
         };
     }
 
-    private static ApiDocModel ParseXml(string xmlPath)
+    private static ApiDocModel ParseXml(string xmlPath, Assembly? assembly, WebApiDocsOptions options)
     {
         var apiDoc = new ApiDocModel();
         if (!File.Exists(xmlPath))
@@ -201,7 +222,7 @@ public static class WebApiDocsGenerator
                     apiDoc.Types[type.FullName] = type;
                     break;
                 case 'M':
-                    AddMethod(apiDoc, member, fullName);
+                    AddMethod(apiDoc, member, fullName, assembly);
                     break;
                 case 'P':
                     AddProperty(apiDoc, member, fullName);
@@ -236,7 +257,7 @@ public static class WebApiDocsGenerator
         };
     }
 
-    private static void AddMethod(ApiDocModel doc, XElement member, string fullName)
+    private static void AddMethod(ApiDocModel doc, XElement member, string fullName, Assembly? assembly)
     {
         var typeName = ExtractTypeName(fullName);
         if (!doc.Types.TryGetValue(typeName, out var type)) return;
@@ -245,7 +266,8 @@ public static class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(name)) return;
 
         var parameterTypes = ParseParameterTypes(fullName);
-        var parameters = ParseParameters(member, parameterTypes);
+        var parameterNames = TryResolveParameterNames(assembly, typeName, name, parameterTypes);
+        var parameters = ParseParameters(member, parameterTypes, parameterNames);
 
         type.Methods.Add(new ApiMemberModel
         {
@@ -321,14 +343,18 @@ public static class WebApiDocsGenerator
         return lastDot > 0 ? trimmed.Substring(lastDot + 1) : trimmed;
     }
 
-    private static List<ApiParameterModel> ParseParameters(XElement member, IReadOnlyList<string> parameterTypes)
+    private static List<ApiParameterModel> ParseParameters(XElement member, IReadOnlyList<string> parameterTypes, IReadOnlyList<string>? parameterNames)
     {
         var results = new List<ApiParameterModel>();
         var paramElements = member.Elements("param").ToList();
         var count = Math.Max(paramElements.Count, parameterTypes.Count);
         for (var i = 0; i < count; i++)
         {
-            var paramName = i < paramElements.Count ? paramElements[i].Attribute("name")?.Value ?? $"arg{i + 1}" : $"arg{i + 1}";
+            var paramName = i < paramElements.Count
+                ? paramElements[i].Attribute("name")?.Value ?? $"arg{i + 1}"
+                : (parameterNames != null && i < parameterNames.Count && !string.IsNullOrWhiteSpace(parameterNames[i])
+                    ? parameterNames[i]
+                    : $"arg{i + 1}");
             var summary = i < paramElements.Count ? Normalize(paramElements[i].Value) : null;
             var type = i < parameterTypes.Count ? parameterTypes[i] : string.Empty;
             results.Add(new ApiParameterModel
@@ -339,6 +365,180 @@ public static class WebApiDocsGenerator
             });
         }
         return results;
+    }
+
+    private static bool ShouldIncludeType(ApiTypeModel type, WebApiDocsOptions options)
+    {
+        var ns = type.Namespace ?? string.Empty;
+        if (options.IncludeNamespacePrefixes.Count > 0)
+        {
+            var matches = options.IncludeNamespacePrefixes.Any(prefix =>
+                ns.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                type.FullName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (!matches) return false;
+        }
+
+        if (options.ExcludeNamespacePrefixes.Count > 0)
+        {
+            var excluded = options.ExcludeNamespacePrefixes.Any(prefix =>
+                ns.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                type.FullName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (excluded) return false;
+        }
+
+        return true;
+    }
+
+    private static IReadOnlyList<string>? TryResolveParameterNames(Assembly? assembly, string typeName, string memberName, IReadOnlyList<string> parameterTypes)
+    {
+        if (assembly is null) return null;
+        var type = ResolveType(assembly, typeName);
+        if (type is null) return null;
+
+        if (memberName == "#ctor")
+        {
+            var ctors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+            return ResolveParameterNamesFromCandidates(ctors, parameterTypes, assembly);
+        }
+
+        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            .Where(m => string.Equals(m.Name, memberName, StringComparison.Ordinal))
+            .ToArray();
+
+        return ResolveParameterNamesFromCandidates(methods, parameterTypes, assembly);
+    }
+
+    private static IReadOnlyList<string>? ResolveParameterNamesFromCandidates(MethodBase[] candidates, IReadOnlyList<string> parameterTypes, Assembly assembly)
+    {
+        foreach (var candidate in candidates)
+        {
+            var parameters = candidate.GetParameters();
+            if (!ParameterTypesMatch(parameters, parameterTypes, assembly)) continue;
+            return parameters.Select(p => p.Name ?? string.Empty).ToList();
+        }
+
+        var countMatches = candidates
+            .Where(m => m.GetParameters().Length == parameterTypes.Count)
+            .ToArray();
+        if (countMatches.Length == 1)
+        {
+            return countMatches[0].GetParameters().Select(p => p.Name ?? string.Empty).ToList();
+        }
+
+        return null;
+    }
+
+    private static bool ParameterTypesMatch(ParameterInfo[] parameters, IReadOnlyList<string> parameterTypes, Assembly assembly)
+    {
+        if (parameters.Length != parameterTypes.Count) return false;
+        for (var i = 0; i < parameterTypes.Count; i++)
+        {
+            var resolved = ResolveXmlType(parameterTypes[i], assembly);
+            if (resolved is null) return false;
+            if (parameters[i].ParameterType != resolved) return false;
+        }
+        return true;
+    }
+
+    private static Type? ResolveXmlType(string xmlType, Assembly assembly)
+    {
+        if (string.IsNullOrWhiteSpace(xmlType)) return null;
+        var typeName = xmlType.Trim();
+        var byRef = false;
+        if (typeName.EndsWith("@", StringComparison.Ordinal) || typeName.EndsWith("&", StringComparison.Ordinal))
+        {
+            byRef = true;
+            typeName = typeName.TrimEnd('@', '&');
+        }
+
+        var arrayRanks = 0;
+        while (typeName.EndsWith("[]", StringComparison.Ordinal))
+        {
+            arrayRanks++;
+            typeName = typeName.Substring(0, typeName.Length - 2);
+        }
+
+        Type? resolved;
+        var genericStart = typeName.IndexOf('{');
+        if (genericStart >= 0 && typeName.EndsWith("}", StringComparison.Ordinal))
+        {
+            var outer = typeName.Substring(0, genericStart);
+            var argsText = typeName.Substring(genericStart + 1, typeName.Length - genericStart - 2);
+            var argTokens = SplitTypeArguments(argsText);
+            var argTypes = new List<Type>();
+            foreach (var token in argTokens)
+            {
+                var arg = ResolveXmlType(token, assembly);
+                if (arg is null) return null;
+                argTypes.Add(arg);
+            }
+            var genericName = $"{outer}`{argTypes.Count}";
+            var genericType = ResolveType(assembly, genericName);
+            if (genericType is null) return null;
+            resolved = genericType.MakeGenericType(argTypes.ToArray());
+        }
+        else
+        {
+            resolved = ResolveType(assembly, typeName);
+        }
+
+        if (resolved is null) return null;
+        for (var i = 0; i < arrayRanks; i++)
+        {
+            resolved = resolved.MakeArrayType();
+        }
+        if (byRef) resolved = resolved.MakeByRefType();
+        return resolved;
+    }
+
+    private static List<string> SplitTypeArguments(string argsText)
+    {
+        var results = new List<string>();
+        if (string.IsNullOrWhiteSpace(argsText)) return results;
+        var sb = new StringBuilder();
+        var depth = 0;
+        foreach (var ch in argsText)
+        {
+            if (ch == '{' || ch == '[')
+                depth++;
+            if (ch == '}' || ch == ']')
+                depth = Math.Max(0, depth - 1);
+
+            if (ch == ',' && depth == 0)
+            {
+                results.Add(sb.ToString().Trim());
+                sb.Clear();
+                continue;
+            }
+            sb.Append(ch);
+        }
+        if (sb.Length > 0) results.Add(sb.ToString().Trim());
+        return results;
+    }
+
+    private static Type? ResolveType(Assembly assembly, string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return null;
+        var candidate = fullName;
+        var type = assembly.GetType(candidate) ?? Type.GetType(candidate);
+        if (type is not null) return type;
+
+        while (true)
+        {
+            var lastDot = candidate.LastIndexOf('.');
+            if (lastDot <= 0) break;
+            candidate = candidate.Substring(0, lastDot) + "+" + candidate.Substring(lastDot + 1);
+            type = assembly.GetType(candidate) ?? Type.GetType(candidate);
+            if (type is not null) return type;
+        }
+
+        foreach (var loaded in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            type = loaded.GetType(fullName);
+            if (type is not null) return type;
+        }
+
+        return null;
     }
 
     private static List<string> ParseParameterTypes(string fullName)
