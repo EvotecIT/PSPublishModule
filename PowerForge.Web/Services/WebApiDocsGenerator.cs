@@ -198,10 +198,10 @@ public static class WebApiDocsGenerator
         var docElement = doc.Element("doc");
         if (docElement is null) return apiDoc;
 
-        var assembly = docElement.Element("assembly");
-        if (assembly is not null)
+        var assemblyElement = docElement.Element("assembly");
+        if (assemblyElement is not null)
         {
-            apiDoc.AssemblyName = assembly.Element("name")?.Value ?? string.Empty;
+            apiDoc.AssemblyName = assemblyElement.Element("name")?.Value ?? string.Empty;
         }
 
         var members = docElement.Element("members");
