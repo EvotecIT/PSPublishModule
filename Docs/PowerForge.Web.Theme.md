@@ -205,6 +205,21 @@ Example:
 </nav>
 ```
 
+## List pages + taxonomies
+Section pages (`_index.md`) and taxonomy pages expose extra data in Scriban:
+- `items`: list of child pages (for sections/taxonomies/terms)
+- `taxonomy`: taxonomy spec (when rendering taxonomy/term pages)
+- `term`: current term (string)
+
+Example list template:
+```html
+<ul>
+  {{ for page in items }}
+    <li><a href="{{ page.output_path }}">{{ page.title }}</a></li>
+  {{ end }}
+</ul>
+```
+
 ## Performance rules (theme responsibility)
 - `critical.css` is required for above-the-fold content.
 - All scripts are deferred (no blocking scripts).

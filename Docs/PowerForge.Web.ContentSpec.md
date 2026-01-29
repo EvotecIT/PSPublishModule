@@ -46,6 +46,9 @@ aliases:
   - /getting-started/
 layout: docs
 template: page
+outputs:
+  - html
+  - json
 meta.eyebrow: Documentation
 ---
 
@@ -88,6 +91,32 @@ Examples (collection output = `/docs`):
 - `index.md` → `/docs/`
 - `slug: guides/install` → `/docs/guides/install/`
 
+### Folder-driven routes
+When files live inside folders, the folder path becomes part of the route:
+```
+content/docs/guides/install.md -> /docs/guides/install/
+```
+
+### Section index pages (`_index.md`)
+If a folder contains `_index.md`, it becomes a **section/list page** for that folder.
+The route is the folder path:
+```
+content/docs/guides/_index.md -> /docs/guides/
+```
+
+### Page bundles (`index.md`)
+If a folder contains `index.md` and no other markdown files, it becomes a **leaf bundle**.
+All non‑markdown files in that folder are copied to the page output folder:
+```
+content/docs/getting-started/index.md
+content/docs/getting-started/hero.png
+```
+Output:
+```
+/docs/getting-started/index.html
+/docs/getting-started/hero.png
+```
+
 Trailing slash behavior is controlled by `site.json` → `TrailingSlash`:
 - `always` / `never` / `ignore`
 
@@ -99,9 +128,22 @@ Collections map markdown inputs to output routes:
   "Input": "content/docs",
   "Output": "/docs",
   "DefaultLayout": "docs",
+  "ListLayout": "docs-list",
   "Include": ["*.md", "**/*.md"]
 }
 ```
+
+`ListLayout` is used for `_index.md` section pages.
+
+### TOC overrides
+Collections can define a table of contents file (DocFX‑style):
+```json
+{
+  "TocFile": "content/docs/toc.json"
+}
+```
+If present, this TOC drives navigation instead of folder structure.
+Supported formats: `toc.json`, `toc.yml`, `toc.yaml`.
 
 ## Data files
 JSON files under `data/` become `data.<fileName>` in Scriban.
@@ -148,6 +190,26 @@ Shortcodes can be implemented as:
 ## Navigation
 Navigation lives in `site.json` under `Navigation.Menus`.
 Templates receive a computed `navigation` object with active states.
+
+### Auto navigation (folder‑driven)
+You can also generate navigation from folder structure:
+```json
+{
+  "Navigation": {
+    "Auto": [
+      { "Collection": "docs", "Menu": "docs", "MaxDepth": 3 }
+    ]
+  }
+}
+```
+
+### Front matter nav overrides
+Use `meta.nav.*` to override auto‑nav labels:
+```
+meta.nav.title: Install
+meta.nav.weight: 20
+meta.nav.hidden: true
+```
 
 ## Redirects + aliases
 Use `aliases` in front matter for old URLs.  
@@ -214,6 +276,80 @@ Use structured head tags so themes don’t repeat favicons or preconnects.
 ## Playgrounds / apps
 Publish the app separately and overlay it under `/playground/`.
 Use the `app` shortcode to link to it.
+
+## Taxonomies
+Define taxonomies (tags/categories) in `site.json`:
+```json
+{
+  "Taxonomies": [
+    { "Name": "tags", "BasePath": "/tags", "ListLayout": "taxonomy", "TermLayout": "term" }
+  ]
+}
+```
+PowerForge.Web generates:
+- `/tags/` (taxonomy list)
+- `/tags/<term>/` (term pages)
+
+## Outputs
+Enable multiple outputs (HTML/JSON/RSS) per page kind:
+```json
+{
+  "Outputs": {
+    "Rules": [
+      { "Kind": "section", "Formats": ["html", "rss"] },
+      { "Kind": "page", "Formats": ["html", "json"] }
+    ]
+  }
+}
+```
+
+## Versioning
+Versioning metadata can be stored in `site.json` and used in templates:
+```json
+{
+  "Versioning": {
+    "Enabled": true,
+    "BasePath": "/docs",
+    "Current": "v2",
+    "Versions": [
+      { "Name": "v2", "Label": "v2", "Url": "/docs/v2/", "Latest": true },
+      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Deprecated": true }
+    ]
+  }
+}
+```
+This data is available under `site.versioning` in templates.
+
+## Link checking
+Enable link checking in `site.json`:
+```json
+{
+  "LinkCheck": {
+    "Enabled": true,
+    "IncludeExternal": false,
+    "Skip": ["**/external/**"]
+  }
+}
+```
+Results are written to `_powerforge/linkcheck.json`.
+
+## Build cache
+Enable a simple markdown render cache:
+```json
+{
+  "Cache": {
+    "Enabled": true,
+    "Root": ".cache/powerforge-web",
+    "Mode": "contenthash"
+  }
+}
+```
+You can override per page via front matter:
+```
+outputs:
+  - html
+  - json
+```
 
 ## Recommended defaults
 - Markdown for most pages

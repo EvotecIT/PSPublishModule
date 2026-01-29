@@ -67,6 +67,13 @@ Supported fields:
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
 
+## 3b) Create new content quickly
+Use archetypes to scaffold content:
+```
+powerforge-web new --config ./MySite/site.json --collection docs --title "Getting Started"
+```
+Archetypes live under `archetypes/` (or `ArchetypesRoot` in `site.json`).
+
 ## 4) Create a theme
 Theme manifests live in `themes/<name>/theme.json`:
 ```json

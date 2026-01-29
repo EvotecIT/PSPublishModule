@@ -17,6 +17,7 @@ Commit (source):
 Do not commit (generated):
 - `Artifacts/` (build outputs, API docs, publish outputs)
 - final site output (any `site/` or `wwwroot/` under Artifacts)
+- `.cache/` (build cache, if enabled)
 
 Rule of thumb: if a file can be regenerated from `site.json` + source content, it
 belongs in `Artifacts/` and should not live in source folders like `static/`.
@@ -30,7 +31,7 @@ Recommended order:
 2) **verify**: validate content routes and missing titles
 3) **build**: render markdown + theme into static HTML
 4) **apidocs**: generate API JSON/HTML (optional)
-5) **sitemap**: create sitemap.xml (optional)
+5) **sitemap**: create sitemap.xml + optional sitemap.html (optional)
 6) **llms**: create llms.txt / llms.json (optional)
 7) **optimize**: critical CSS + minify HTML/CSS/JS (optional)
 8) **publish**: optional overlay + dotnet publish for Blazor host
@@ -75,6 +76,7 @@ Output:
 - `Artifacts/site/_powerforge/` (build meta, plan/spec/redirects)
 - `Artifacts/site/search.json` (search index)
 - `Artifacts/site/redirects.json` (if redirects were defined)
+- `Artifacts/site/_powerforge/linkcheck.json` (if link check enabled)
 
 ## 5) Generate API docs (clean sources)
 
@@ -106,7 +108,7 @@ Example pipeline:
       "headerHtmlPath": "./apidocs/header.html",
       "footerHtmlPath": "./apidocs/footer.html"
     },
-    { "task": "sitemap", "siteRoot": "./Artifacts/site", "baseUrl": "https://example.com" },
+    { "task": "sitemap", "siteRoot": "./Artifacts/site", "baseUrl": "https://example.com", "html": true },
     { "task": "optimize", "siteRoot": "./Artifacts/site" }
   ]
 }

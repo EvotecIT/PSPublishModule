@@ -66,13 +66,17 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```
 
 #### sitemap
-Generates `sitemap.xml`.
+Generates `sitemap.xml` and (optionally) `sitemap.html`.
 ```json
 {
   "task": "sitemap",
   "siteRoot": "./Artifacts/site",
   "baseUrl": "https://example.com",
   "extraPaths": ["/robots.txt"],
+  "html": true,
+  "htmlTemplate": "./themes/nova/templates/sitemap.html",
+  "htmlTitle": "Sitemap",
+  "htmlCss": "/themes/nova/assets/app.css",
   "entries": [
     { "path": "/docs/", "changefreq": "weekly", "priority": "0.8" }
   ]
@@ -212,4 +216,3 @@ If you need API docs, multiple overlays, or per-project outputs, use pipeline.
 - **Generated output in source**: keep API docs in `Artifacts/` and overlay into output.
 - **Wrong base URL**: set `BaseUrl` in `site.json` and `baseUrl` in sitemap step.
 - **Paths resolve wrong**: remember specs resolve relative to their own JSON file.
-
