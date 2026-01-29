@@ -433,16 +433,15 @@ public static class WebApiDocsGenerator
         if (parameters.Length != parameterTypes.Count) return false;
         for (var i = 0; i < parameterTypes.Count; i++)
         {
-            var resolved = ResolveXmlType(parameterTypes[i], assembly);
-            if (resolved is null) return false;
-            if (parameters[i].ParameterType != resolved) return false;
+            if (!ParameterTypeMatches(parameters[i].ParameterType, parameterTypes[i], assembly))
+                return false;
         }
         return true;
     }
 
-    private static Type? ResolveXmlType(string xmlType, Assembly assembly)
+    private static bool ParameterTypeMatches(Type parameterType, string xmlType, Assembly assembly)
     {
-        if (string.IsNullOrWhiteSpace(xmlType)) return null;
+        if (string.IsNullOrWhiteSpace(xmlType)) return false;
         var typeName = xmlType.Trim();
         var byRef = false;
         if (typeName.EndsWith("@", StringComparison.Ordinal) || typeName.EndsWith("&", StringComparison.Ordinal))
@@ -451,6 +450,11 @@ public static class WebApiDocsGenerator
             typeName = typeName.TrimEnd('@', '&');
         }
 
+        if (parameterType.IsByRef != byRef)
+            return false;
+        if (byRef)
+            parameterType = parameterType.GetElementType() ?? parameterType;
+
         var arrayRanks = 0;
         while (typeName.EndsWith("[]", StringComparison.Ordinal))
         {
@@ -458,37 +462,69 @@ public static class WebApiDocsGenerator
             typeName = typeName.Substring(0, typeName.Length - 2);
         }
 
-        Type? resolved;
+        if (arrayRanks > 0)
+        {
+            for (var i = 0; i < arrayRanks; i++)
+            {
+                if (!parameterType.IsArray) return false;
+                parameterType = parameterType.GetElementType() ?? parameterType;
+            }
+        }
+        else if (parameterType.IsArray)
+        {
+            return false;
+        }
+
+        if (TryParseGenericParameterToken(typeName, out var isMethodParameter, out var position))
+        {
+            if (!parameterType.IsGenericParameter) return false;
+            if (parameterType.GenericParameterPosition != position) return false;
+            if (isMethodParameter && parameterType.DeclaringMethod is null) return false;
+            if (!isMethodParameter && parameterType.DeclaringMethod is not null) return false;
+            return true;
+        }
+
         var genericStart = typeName.IndexOf('{');
         if (genericStart >= 0 && typeName.EndsWith("}", StringComparison.Ordinal))
         {
+            if (!parameterType.IsGenericType) return false;
             var outer = typeName.Substring(0, genericStart);
             var argsText = typeName.Substring(genericStart + 1, typeName.Length - genericStart - 2);
             var argTokens = SplitTypeArguments(argsText);
-            var argTypes = new List<Type>();
-            foreach (var token in argTokens)
+            var genericDefName = $"{outer}`{argTokens.Count}";
+            var resolvedDef = ResolveType(assembly, genericDefName) ?? ResolveType(assembly, outer);
+            if (resolvedDef is null) return false;
+            if (parameterType.GetGenericTypeDefinition() != resolvedDef) return false;
+            var argTypes = parameterType.GetGenericArguments();
+            if (argTypes.Length != argTokens.Count) return false;
+            for (var i = 0; i < argTypes.Length; i++)
             {
-                var arg = ResolveXmlType(token, assembly);
-                if (arg is null) return null;
-                argTypes.Add(arg);
+                if (!ParameterTypeMatches(argTypes[i], argTokens[i], assembly))
+                    return false;
             }
-            var genericName = $"{outer}`{argTypes.Count}";
-            var genericType = ResolveType(assembly, genericName);
-            if (genericType is null) return null;
-            resolved = genericType.MakeGenericType(argTypes.ToArray());
-        }
-        else
-        {
-            resolved = ResolveType(assembly, typeName);
+            return true;
         }
 
-        if (resolved is null) return null;
-        for (var i = 0; i < arrayRanks; i++)
+        var resolved = ResolveType(assembly, typeName);
+        return resolved is not null && parameterType == resolved;
+    }
+
+    private static bool TryParseGenericParameterToken(string typeName, out bool isMethodParameter, out int position)
+    {
+        isMethodParameter = false;
+        position = -1;
+        if (string.IsNullOrWhiteSpace(typeName)) return false;
+        if (typeName.StartsWith("``", StringComparison.Ordinal))
         {
-            resolved = resolved.MakeArrayType();
+            isMethodParameter = true;
+            return int.TryParse(typeName.Substring(2), out position);
         }
-        if (byRef) resolved = resolved.MakeByRefType();
-        return resolved;
+        if (typeName.StartsWith("`", StringComparison.Ordinal))
+        {
+            isMethodParameter = false;
+            return int.TryParse(typeName.Substring(1), out position);
+        }
+        return false;
     }
 
     private static List<string> SplitTypeArguments(string argsText)
