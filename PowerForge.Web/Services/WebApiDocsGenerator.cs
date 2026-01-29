@@ -395,14 +395,15 @@ public static class WebApiDocsGenerator
         var type = ResolveType(assembly, typeName);
         if (type is null) return null;
 
-        if (memberName == "#ctor")
+        var lookupName = StripGenericArity(memberName);
+        if (lookupName == "#ctor")
         {
             var ctors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
             return ResolveParameterNamesFromCandidates(ctors, parameterTypes, assembly);
         }
 
         var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
-            .Where(m => string.Equals(m.Name, memberName, StringComparison.Ordinal))
+            .Where(m => string.Equals(m.Name, lookupName, StringComparison.Ordinal))
             .ToArray();
 
         return ResolveParameterNamesFromCandidates(methods, parameterTypes, assembly);
@@ -575,6 +576,12 @@ public static class WebApiDocsGenerator
         }
 
         return null;
+    }
+
+    private static string StripGenericArity(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return name;
+        return Regex.Replace(name, "`{1,2}\\d+", string.Empty);
     }
 
     private static List<string> ParseParameterTypes(string fullName)
