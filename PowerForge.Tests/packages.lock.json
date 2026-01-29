@@ -807,6 +807,11 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "YamlDotNet": {
+        "type": "Transitive",
+        "resolved": "15.1.2",
+        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
@@ -821,7 +826,8 @@
           "HtmlTinkerX": "[2.0.6, )",
           "OfficeIMO.Markdown": "[0.5.0, )",
           "PowerForge": "[1.0.0, )",
-          "Scriban": "[5.11.0, )"
+          "Scriban": "[5.11.0, )",
+          "YamlDotNet": "[15.1.2, )"
         }
       }
     }
