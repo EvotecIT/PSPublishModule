@@ -3,6 +3,15 @@ using PowerForge.Web;
 using PowerForge.Web.Cli;
 
 const int OutputSchemaVersion = 1;
+const string DefaultArchetypeTemplate = @"---
+title: {{title}}
+slug: {{slug}}
+date: {{date}}
+collection: {{collection}}
+---
+
+# {{title}}
+";
 
 var argv = args ?? Array.Empty<string>();
 if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
@@ -303,6 +312,85 @@ try
             logger.Success($"Web scaffold output: {res.OutputPath}");
             logger.Info($"Created files: {res.CreatedFileCount}");
             logger.Info($"Theme engine: {res.ThemeEngine}");
+            return 0;
+        }
+        case "new":
+        {
+            var configPath = TryGetOptionValue(subArgs, "--config");
+            var collectionName = TryGetOptionValue(subArgs, "--collection") ?? "pages";
+            var title = TryGetOptionValue(subArgs, "--title") ?? TryGetOptionValue(subArgs, "--name");
+            var slug = TryGetOptionValue(subArgs, "--slug");
+            var outPath = TryGetOptionValue(subArgs, "--out") ??
+                          TryGetOptionValue(subArgs, "--out-path") ??
+                          TryGetOptionValue(subArgs, "--output-path");
+
+            if (string.IsNullOrWhiteSpace(configPath))
+                return Fail("Missing required --config.", outputJson, logger, "web.new");
+            if (string.IsNullOrWhiteSpace(title))
+                return Fail("Missing required --title.", outputJson, logger, "web.new");
+
+            var fullConfigPath = ResolveExistingFilePath(configPath);
+            var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+            var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+
+            var collection = spec.Collections.FirstOrDefault(c =>
+                string.Equals(c.Name, collectionName, StringComparison.OrdinalIgnoreCase));
+            if (collection is null)
+                return Fail($"Collection not found: {collectionName}", outputJson, logger, "web.new");
+
+            var slugValue = string.IsNullOrWhiteSpace(slug) ? Slugify(title) : slug.Trim();
+            if (string.IsNullOrWhiteSpace(slugValue))
+                return Fail("Missing slug (could not derive from title).", outputJson, logger, "web.new");
+
+            var collectionRoot = ResolvePathRelative(plan.RootPath, collection.Input);
+            var targetPath = !string.IsNullOrWhiteSpace(outPath)
+                ? ResolvePathRelative(plan.RootPath, outPath)
+                : Path.Combine(collectionRoot, slugValue.Replace('/', Path.DirectorySeparatorChar) + ".md");
+
+            if (File.Exists(targetPath))
+                return Fail($"File already exists: {targetPath}", outputJson, logger, "web.new");
+
+            var archetypesRoot = ResolvePathRelative(plan.RootPath, spec.ArchetypesRoot ?? "archetypes");
+            var archetypePath = Path.Combine(archetypesRoot, $"{collection.Name}.md");
+            if (!File.Exists(archetypePath))
+                archetypePath = Path.Combine(archetypesRoot, "default.md");
+
+            var template = File.Exists(archetypePath)
+                ? File.ReadAllText(archetypePath)
+                : DefaultArchetypeTemplate;
+            var content = ApplyArchetypeTemplate(template, title, slugValue, collection.Name);
+
+            var targetDir = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrWhiteSpace(targetDir))
+                Directory.CreateDirectory(targetDir);
+            File.WriteAllText(targetPath, content);
+
+            var result = new WebContentScaffoldResult
+            {
+                OutputPath = targetPath,
+                Collection = collection.Name,
+                Title = title,
+                Slug = slugValue,
+                Created = true
+            };
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.new",
+                    Success = true,
+                    ExitCode = 0,
+                    Config = "web",
+                    Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebContentScaffoldResult)
+                });
+                return 0;
+            }
+
+            logger.Success($"Created {targetPath}");
+            logger.Info($"Collection: {collection.Name}");
+            logger.Info($"Slug: {slugValue}");
             return 0;
         }
         case "serve":
@@ -692,6 +780,17 @@ try
                              TryGetOptionValue(subArgs, "--output-path");
             var apiSitemap = TryGetOptionValue(subArgs, "--api-sitemap");
             var entriesPath = TryGetOptionValue(subArgs, "--entries");
+            var htmlOutput = TryGetOptionValue(subArgs, "--html-out") ??
+                             TryGetOptionValue(subArgs, "--html-output") ??
+                             TryGetOptionValue(subArgs, "--html-path");
+            var htmlTemplate = TryGetOptionValue(subArgs, "--html-template");
+            var htmlCss = TryGetOptionValue(subArgs, "--html-css");
+            var htmlTitle = TryGetOptionValue(subArgs, "--html-title");
+            var generateHtml = HasOption(subArgs, "--html") ||
+                               !string.IsNullOrWhiteSpace(htmlOutput) ||
+                               !string.IsNullOrWhiteSpace(htmlTemplate) ||
+                               !string.IsNullOrWhiteSpace(htmlCss) ||
+                               !string.IsNullOrWhiteSpace(htmlTitle);
 
             if (string.IsNullOrWhiteSpace(siteRoot))
                 return Fail("Missing required --site-root.", outputJson, logger, "web.sitemap");
@@ -704,7 +803,12 @@ try
                 BaseUrl = baseUrl,
                 OutputPath = outputPath,
                 ApiSitemapPath = apiSitemap,
-                Entries = LoadSitemapEntries(entriesPath)
+                Entries = LoadSitemapEntries(entriesPath),
+                GenerateHtml = generateHtml,
+                HtmlOutputPath = htmlOutput,
+                HtmlTemplatePath = htmlTemplate,
+                HtmlCssHref = htmlCss,
+                HtmlTitle = htmlTitle
             });
 
             if (outputJson)
@@ -722,6 +826,8 @@ try
 
             logger.Success($"Sitemap generated: {result.OutputPath}");
             logger.Info($"URL count: {result.UrlCount}");
+            if (!string.IsNullOrWhiteSpace(result.HtmlOutputPath))
+                logger.Info($"HTML sitemap: {result.HtmlOutputPath}");
             return 0;
         }
         default:
@@ -757,6 +863,7 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
     Console.WriteLine("  powerforge-web verify --config <site.json> [--output json]");
     Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
+    Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>]");
@@ -772,6 +879,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
     Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
     Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
+    Console.WriteLine("                     [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
 }
 
 static int Fail(string message, bool outputJson, WebConsoleLogger logger, string command)
@@ -804,6 +912,16 @@ static string? TryGetOptionValue(string[] argv, string optionName)
     return null;
 }
 
+static bool HasOption(string[] argv, string optionName)
+{
+    for (var i = 0; i < argv.Length; i++)
+    {
+        if (argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase))
+            return true;
+    }
+    return false;
+}
+
 static string ResolveExistingFilePath(string path)
 {
     var full = Path.GetFullPath(path.Trim().Trim('"'));
@@ -818,6 +936,32 @@ static string ResolvePathRelative(string baseDir, string? value)
         return Path.GetFullPath(value);
     return Path.GetFullPath(Path.Combine(baseDir, value));
 }
+
+static string ApplyArchetypeTemplate(string template, string title, string slug, string collection)
+{
+    var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
+    return template
+        .Replace("{{title}}", title, StringComparison.OrdinalIgnoreCase)
+        .Replace("{{slug}}", slug, StringComparison.OrdinalIgnoreCase)
+        .Replace("{{date}}", date, StringComparison.OrdinalIgnoreCase)
+        .Replace("{{collection}}", collection, StringComparison.OrdinalIgnoreCase);
+}
+
+static string Slugify(string input)
+{
+    if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+    var lower = input.Trim().ToLowerInvariant();
+    var sb = new System.Text.StringBuilder();
+    foreach (var ch in lower)
+    {
+        if (char.IsLetterOrDigit(ch)) sb.Append(ch);
+        else if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_') sb.Append('-');
+    }
+    var slug = sb.ToString();
+    while (slug.Contains("--")) slug = slug.Replace("--", "-");
+    return slug.Trim('-');
+}
+
 
 static WebSitemapEntry[] LoadSitemapEntries(string? path)
 {
@@ -964,6 +1108,18 @@ internal static class WebPipelineRunner
                         var entries = GetSitemapEntries(step, "entries");
                         var includeHtml = GetBool(step, "includeHtmlFiles");
                         var includeText = GetBool(step, "includeTextFiles");
+                        var htmlEnabled = GetBool(step, "html") ?? false;
+                        var htmlOutput = ResolvePath(baseDir, GetString(step, "htmlOutput") ?? GetString(step, "htmlOut") ?? GetString(step, "html-out"));
+                        var htmlTemplate = ResolvePath(baseDir, GetString(step, "htmlTemplate") ?? GetString(step, "html-template"));
+                        var htmlCss = GetString(step, "htmlCss") ?? GetString(step, "html-css");
+                        var htmlTitle = GetString(step, "htmlTitle") ?? GetString(step, "html-title");
+                        if (!htmlEnabled)
+                        {
+                            htmlEnabled = !string.IsNullOrWhiteSpace(htmlOutput) ||
+                                          !string.IsNullOrWhiteSpace(htmlTemplate) ||
+                                          !string.IsNullOrWhiteSpace(htmlCss) ||
+                                          !string.IsNullOrWhiteSpace(htmlTitle);
+                        }
                         var res = WebSitemapGenerator.Generate(new WebSitemapOptions
                         {
                             SiteRoot = siteRoot,
@@ -973,7 +1129,12 @@ internal static class WebPipelineRunner
                             ExtraPaths = GetArrayOfStrings(step, "extraPaths") ?? GetArrayOfStrings(step, "extra-paths"),
                             Entries = entries.Length == 0 ? null : entries,
                             IncludeHtmlFiles = includeHtml ?? true,
-                            IncludeTextFiles = includeText ?? true
+                            IncludeTextFiles = includeText ?? true,
+                            GenerateHtml = htmlEnabled,
+                            HtmlOutputPath = htmlOutput,
+                            HtmlTemplatePath = htmlTemplate,
+                            HtmlCssHref = htmlCss,
+                            HtmlTitle = htmlTitle
                         });
                         stepResult.Success = true;
                         stepResult.Message = $"Sitemap {res.UrlCount} urls";

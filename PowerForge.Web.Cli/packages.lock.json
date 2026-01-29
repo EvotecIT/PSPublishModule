@@ -715,6 +715,11 @@
         "resolved": "8.0.0",
         "contentHash": "Obg3a90MkOw9mYKxrardLpY2u0axDMrSmy4JCdq2cYbelM2cUwmUir5Bomvd1yxmPL9h5LVHU1tuKBZpUjfASg=="
       },
+      "YamlDotNet": {
+        "type": "Transitive",
+        "resolved": "15.1.2",
+        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
@@ -729,7 +734,8 @@
           "HtmlTinkerX": "[2.0.6, )",
           "OfficeIMO.Markdown": "[0.5.0, )",
           "PowerForge": "[1.0.0, )",
-          "Scriban": "[5.11.0, )"
+          "Scriban": "[5.11.0, )",
+          "YamlDotNet": "[15.1.2, )"
         }
       }
     },
@@ -1448,6 +1454,11 @@
         "resolved": "8.0.0",
         "contentHash": "Obg3a90MkOw9mYKxrardLpY2u0axDMrSmy4JCdq2cYbelM2cUwmUir5Bomvd1yxmPL9h5LVHU1tuKBZpUjfASg=="
       },
+      "YamlDotNet": {
+        "type": "Transitive",
+        "resolved": "15.1.2",
+        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
@@ -1462,7 +1473,8 @@
           "HtmlTinkerX": "[2.0.6, )",
           "OfficeIMO.Markdown": "[0.5.0, )",
           "PowerForge": "[1.0.0, )",
-          "Scriban": "[5.11.0, )"
+          "Scriban": "[5.11.0, )",
+          "YamlDotNet": "[15.1.2, )"
         }
       }
     }
