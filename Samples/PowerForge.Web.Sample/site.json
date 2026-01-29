@@ -10,6 +10,7 @@
   "ThemesRoot": "themes",
   "SharedRoot": "shared",
   "DataRoot": "data",
+  "ArchetypesRoot": "archetypes",
   "Collections": [
     {
       "Name": "pages",
@@ -23,6 +24,7 @@
       "Input": "content/docs",
       "Output": "/docs",
       "DefaultLayout": "docs",
+      "TocFile": "content/docs/toc.json",
       "Include": ["**/*.md"]
     },
     {
@@ -30,6 +32,7 @@
       "Input": "content/blog",
       "Output": "/blog",
       "DefaultLayout": "post",
+      "ListLayout": "list",
       "Include": ["**/*.md"],
       "SortBy": "date",
       "SortOrder": "desc"
@@ -79,6 +82,23 @@
     "ExternalTarget": "_blank",
     "AddExternalIcon": true
   },
+  "Outputs": {
+    "Rules": [
+      { "Kind": "home", "Formats": ["html", "rss"] },
+      { "Kind": "section", "Formats": ["html", "rss"] },
+      { "Kind": "page", "Formats": ["html", "json"] },
+      { "Kind": "taxonomy", "Formats": ["html", "json"] },
+      { "Kind": "term", "Formats": ["html", "json"] }
+    ]
+  },
+  "Taxonomies": [
+    {
+      "Name": "tags",
+      "BasePath": "/tags",
+      "ListLayout": "taxonomy",
+      "TermLayout": "term"
+    }
+  ],
   "Navigation": {
     "Menus": [
       {
@@ -87,8 +107,19 @@
         "Items": [
           { "Title": "Home", "Url": "/" },
           { "Title": "Docs", "Url": "/docs/" },
-          { "Title": "Blog", "Url": "/blog/" }
+          { "Title": "Blog", "Url": "/blog/" },
+          { "Title": "Tags", "Url": "/tags/" }
         ]
+      }
+    ],
+    "Auto": [
+      {
+        "Collection": "docs",
+        "Menu": "docs",
+        "Root": "/docs",
+        "IncludeIndex": true,
+        "MaxDepth": 2,
+        "Sort": "weight"
       }
     ]
   },
@@ -98,5 +129,24 @@
     "Endpoint": "/api/track",
     "RespectDnt": true,
     "SampleRate": 1.0
+  },
+  "Versioning": {
+    "Enabled": true,
+    "BasePath": "/docs",
+    "Current": "v2",
+    "Versions": [
+      { "Name": "v2", "Label": "v2", "Url": "/docs/", "Default": true, "Latest": true },
+      { "Name": "v1", "Label": "v1 (Legacy)", "Url": "/docs/v1/", "Deprecated": true }
+    ]
+  },
+  "LinkCheck": {
+    "Enabled": true,
+    "IncludeExternal": false,
+    "Skip": ["**/tags/**"]
+  },
+  "Cache": {
+    "Enabled": true,
+    "Root": ".cache/powerforge-web",
+    "Mode": "contenthash"
   }
 }

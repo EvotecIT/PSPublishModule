@@ -5,6 +5,8 @@ date: 2026-01-10
 tags: [install, quickstart]
 slug: getting-started
 order: 1
+nav.title: Start here
+nav.weight: 20
 collection: docs
 aliases:
   - /docs/intro

@@ -10,6 +10,9 @@
       "task": "sitemap",
       "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
       "baseUrl": "https://codeglyphx.com",
+      "html": true,
+      "htmlTemplate": "./themes/nova/templates/sitemap.html",
+      "htmlTitle": "CodeGlyphX Sitemap",
       "entries": [
         { "path": "/", "priority": "1.0", "changefreq": "weekly" },
         { "path": "/playground/", "priority": "0.9", "changefreq": "weekly" },

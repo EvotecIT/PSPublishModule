@@ -35,7 +35,26 @@
             </div>
             <div class="pf-docs-results" data-pf-search-results></div>
           </div>
-          {{ if data.docs && data.docs.groups }}
+          {{ if navigation.menus && navigation.menus.size > 0 }}
+            {{ for menu in navigation.menus }}
+              {{ if menu.name == "docs" }}
+                {{ for item in menu.items }}
+                  {{ if item.items && item.items.size > 0 }}
+                    <div class="pf-docs-group">
+                      <div class="pf-docs-group-title">{{ item.title }}</div>
+                      {{ for child in item.items }}
+                        <a class="pf-docs-link" href="{{ child.url }}">{{ child.title }}</a>
+                      {{ end }}
+                    </div>
+                  {{ else }}
+                    <div class="pf-docs-group">
+                      <a class="pf-docs-link" href="{{ item.url }}">{{ item.title }}</a>
+                    </div>
+                  {{ end }}
+                {{ end }}
+              {{ end }}
+            {{ end }}
+          {{ else if data.docs && data.docs.groups }}
             {{ for group in data.docs.groups }}
               <div class="pf-docs-group">
                 <div class="pf-docs-group-title">{{ group.title }}</div>

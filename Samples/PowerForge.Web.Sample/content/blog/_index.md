@@ -1,9 +1,9 @@
 ---
 title: Blog
 description: Releases, experiments, and field notes.
-slug: index
+nav.title: Releases
+nav.weight: 30
 collection: blog
-template: blog
 ---
 
 # Blog

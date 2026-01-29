@@ -86,6 +86,43 @@ Navigation is defined in `site.json` under `Navigation.Menus` and exposed to Scr
 {{ end }}
 ```
 
+Auto navigation can also be generated from folder structure or `toc.json` / `toc.yml`:
+```
+\"Navigation\": {
+  \"Auto\": [
+    { \"Collection\": \"docs\", \"Menu\": \"docs\", \"Root\": \"/docs\", \"IncludeIndex\": true }
+  ]
+}
+```
+
+## List pages and taxonomies
+
+Section, taxonomy, and term pages receive `items` with child content:
+```
+{{ for item in items }}
+  <a href=\"{{ item.output_path }}\">{{ item.title }}</a>
+{{ end }}
+```
+
+## Outputs
+
+Enable multi-format outputs (HTML + JSON/RSS):
+```
+\"Outputs\": {
+  \"Rules\": [
+    { \"Kind\": \"section\", \"Formats\": [\"html\", \"rss\"] },
+    { \"Kind\": \"page\", \"Formats\": [\"html\", \"json\"] }
+  ]
+}
+```
+
+## Archetypes
+
+Scaffold markdown from templates:
+```
+powerforge-web new --collection blog --name \"hello-world\"
+```
+
 ## Theme tokens
 
 Theme tokens live in `themes/<name>/theme.json` and are injected via the `theme-tokens` partial:

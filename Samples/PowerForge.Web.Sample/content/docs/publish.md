@@ -2,6 +2,8 @@
 title: Publish Pipeline
 description: Packaging and distribution stages.
 slug: publish
+order: 3
+nav.weight: 40
 collection: docs
 ---
 

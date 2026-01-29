@@ -1,9 +1,10 @@
 ---
 title: Documentation
 description: Getting started guides, architecture, and API docs.
-slug: index
 collection: docs
 layout: docs-hero
+nav.title: Overview
+nav.weight: 10
 ---
 
 # Documentation
