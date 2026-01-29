@@ -91,7 +91,13 @@
         "entries": { "type": "array", "items": { "$ref": "#/$defs/SitemapEntry" } },
         "includeHtmlFiles": { "type": "boolean" },
         "includeTextFiles": { "type": "boolean" },
-        "extraPaths": { "type": "array", "items": { "type": "string" } }
+        "extraPaths": { "type": "array", "items": { "type": "string" } },
+        "html": { "type": "boolean" },
+        "htmlOutput": { "type": "string" },
+        "htmlOut": { "type": "string" },
+        "htmlTemplate": { "type": "string" },
+        "htmlCss": { "type": "string" },
+        "htmlTitle": { "type": "string" }
       },
       "required": ["task", "siteRoot", "baseUrl"]
     },

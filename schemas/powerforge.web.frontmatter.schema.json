@@ -18,6 +18,9 @@
     "editPath": { "type": "string" },
     "layout": { "type": "string" },
     "template": { "type": "string" },
+    "outputs": { "type": "array", "items": { "type": "string" } },
+    "nav": { "type": "object" },
+    "menu": { "type": "object" },
     "meta": { "type": "object" }
   },
   "required": ["title"]

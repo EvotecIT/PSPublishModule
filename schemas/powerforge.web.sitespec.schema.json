@@ -17,6 +17,7 @@
     "ThemesRoot": { "type": "string" },
     "SharedRoot": { "type": "string" },
     "DataRoot": { "type": "string" },
+    "ArchetypesRoot": { "type": "string" },
     "StaticAssets": {
       "type": "array",
       "items": { "$ref": "#/$defs/StaticAssetSpec" }
@@ -27,6 +28,11 @@
     "Collections": {
       "type": "array",
       "items": { "$ref": "#/$defs/CollectionSpec" }
+    },
+    "Outputs": { "$ref": "#/$defs/OutputsSpec" },
+    "Taxonomies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/TaxonomySpec" }
     },
     "EditLinks": { "$ref": "#/$defs/EditLinksSpec" },
     "RouteOverrides": {
@@ -41,7 +47,10 @@
     "A11y": { "$ref": "#/$defs/A11ySpec" },
     "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
     "Analytics": { "$ref": "#/$defs/AnalyticsSpec" },
-    "Navigation": { "$ref": "#/$defs/NavigationSpec" }
+    "Navigation": { "$ref": "#/$defs/NavigationSpec" },
+    "Versioning": { "$ref": "#/$defs/VersioningSpec" },
+    "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
+    "Cache": { "$ref": "#/$defs/BuildCacheSpec" }
   },
   "required": ["Name", "BaseUrl", "Collections"],
   "$defs": {
@@ -53,10 +62,13 @@
         "Input": { "type": "string" },
         "Output": { "type": "string" },
         "DefaultLayout": { "type": "string" },
+        "ListLayout": { "type": "string" },
+        "TocFile": { "type": "string" },
         "Include": { "type": "array", "items": { "type": "string" } },
         "Exclude": { "type": "array", "items": { "type": "string" } },
         "SortBy": { "type": "string" },
-        "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
+        "SortOrder": { "type": "string", "enum": ["asc", "desc"] },
+        "Outputs": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["Name", "Input", "Output"]
     },
@@ -232,6 +244,98 @@
         "SampleRate": { "type": "number", "minimum": 0, "maximum": 1 }
       }
     },
+    "OutputsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Formats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputFormatSpec" }
+        },
+        "Rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputRuleSpec" }
+        }
+      }
+    },
+    "OutputFormatSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "MediaType": { "type": "string" },
+        "Suffix": { "type": "string" },
+        "Rel": { "type": "string" },
+        "IsPlainText": { "type": "boolean" }
+      },
+      "required": ["Name"]
+    },
+    "OutputRuleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Kind": { "type": "string" },
+        "Formats": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Kind", "Formats"]
+    },
+    "TaxonomySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "BasePath": { "type": "string" },
+        "ListLayout": { "type": "string" },
+        "TermLayout": { "type": "string" },
+        "SortBy": { "type": "string" },
+        "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
+      },
+      "required": ["Name", "BasePath"]
+    },
+    "VersioningSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "BasePath": { "type": "string" },
+        "Current": { "type": "string" },
+        "Versions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/VersionSpec" }
+        }
+      }
+    },
+    "VersionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Label": { "type": "string" },
+        "Url": { "type": "string" },
+        "Default": { "type": "boolean" },
+        "Latest": { "type": "boolean" },
+        "Deprecated": { "type": "boolean" }
+      },
+      "required": ["Name"]
+    },
+    "LinkCheckSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "IncludeExternal": { "type": "boolean" },
+        "Skip": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "BuildCacheSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Root": { "type": "string" },
+        "Mode": { "type": "string", "enum": ["contenthash", "mtime"] }
+      }
+    },
     "NavigationSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -239,6 +343,10 @@
         "Menus": {
           "type": "array",
           "items": { "$ref": "#/$defs/MenuSpec" }
+        },
+        "Auto": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NavigationAutoSpec" }
         }
       }
     },
@@ -275,6 +383,20 @@
         }
       },
       "required": ["Title"]
+    },
+    "NavigationAutoSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Collection": { "type": "string" },
+        "Menu": { "type": "string" },
+        "Root": { "type": "string" },
+        "MaxDepth": { "type": "integer", "minimum": 1 },
+        "IncludeIndex": { "type": "boolean" },
+        "IncludeDrafts": { "type": "boolean" },
+        "Sort": { "type": "string" }
+      },
+      "required": ["Collection", "Menu"]
     }
   }
 }
