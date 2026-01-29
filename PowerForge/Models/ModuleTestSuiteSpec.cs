@@ -17,6 +17,12 @@ public sealed class ModuleTestSuiteSpec
     /// <summary>Module names to skip during dependency installation.</summary>
     public string[] SkipModules { get; set; } = System.Array.Empty<string>();
 
+    /// <summary>Modules to import before running tests (legacy ImportModules segment support).</summary>
+    public ModuleDependency[] ImportModules { get; set; } = System.Array.Empty<ModuleDependency>();
+
+    /// <summary>When true, enables verbose output while importing modules.</summary>
+    public bool ImportModulesVerbose { get; set; }
+
     /// <summary>Test output verbosity.</summary>
     public ModuleTestSuiteOutputFormat OutputFormat { get; set; } = ModuleTestSuiteOutputFormat.Detailed;
 

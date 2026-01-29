@@ -15,6 +15,8 @@ public enum ModulePipelineStepKind
     Signing = 8,
     /// <summary>Run validation checks (compatibility, consistency, module validation).</summary>
     Validation = 6,
+    /// <summary>Run test suites.</summary>
+    Tests = 9,
     /// <summary>Create an artefact output (packed/unpacked).</summary>
     Artefact = 2,
     /// <summary>Publish to a repository or GitHub.</summary>
@@ -168,7 +170,29 @@ public sealed class ModulePipelineStep
                 title: "Validate module"));
         }
 
-        // 6) Artefacts
+        // 6) Tests (after validation, before packaging/publish/install).
+        if (plan.ImportModules is not null &&
+            (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Tests,
+                key: "tests:import-modules",
+                title: "Import modules"));
+        }
+
+        if (plan.TestsAfterMerge is { Length: > 0 })
+        {
+            for (int i = 0; i < plan.TestsAfterMerge.Length; i++)
+            {
+                var key = $"tests:{i + 1:00}:aftermerge";
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Tests,
+                    key: key,
+                    title: "Run tests"));
+            }
+        }
+
+        // 7) Artefacts
         if (plan.Artefacts is { Length: > 0 })
         {
             for (int i = 0; i < plan.Artefacts.Length; i++)
@@ -189,7 +213,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 7) Publishes
+        // 8) Publishes
         if (plan.Publishes is { Length: > 0 })
         {
             for (int i = 0; i < plan.Publishes.Length; i++)
@@ -214,7 +238,7 @@ public sealed class ModulePipelineStep
             }
         }
 
-        // 8) Install
+        // 9) Install
         if (plan.InstallEnabled)
         {
             steps.Add(new ModulePipelineStep(
@@ -223,7 +247,7 @@ public sealed class ModulePipelineStep
                 title: $"Install ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})"));
         }
 
-        // 9) Cleanup staging
+        // 10) Cleanup staging
         if (plan.DeleteGeneratedStagingAfterRun)
         {
             steps.Add(new ModulePipelineStep(

@@ -180,6 +180,20 @@
   - [x] `Invoke-ModuleBuild` → `PowerForge.ModuleScaffoldService` + `PowerForge.LegacySegmentAdapter` (cmdlet only maps params and invokes the PowerForge pipeline)
   - [x] `Invoke-DotNetReleaseBuild` → `PowerForge.DotNetReleaseBuildService` (cmdlet only handles `ShouldProcess` + optional `Register-Certificate` hook)
   - [x] `Get-PowerShellCompatibility` → `PowerForge.PowerShellCompatibilityAnalyzer` (typed report + C# CSV export; cmdlet only handles host/progress output)
+- **Deliberate exclusions (do not reintroduce)**
+  - Legacy public helper functions are intentionally removed from PSPublishModule (moved to PSMaintenance or deprecated):
+    - `Convert-ProjectEncoding`, `Convert-ProjectLineEnding`
+    - `Get-ProjectEncoding`, `Get-ProjectLineEnding`
+    - `Initialize-PortableModule`, `Initialize-PortableScript`, `Initialize-ProjectManager`
+    - `Install-ProjectDocumentation`, `Show-ProjectDocumentation`
+  - Hashtable-based DSL configuration is intentionally not supported; use typed cmdlets / JSON segments only.
+- [x] Close remaining DSL parity gaps in C# pipeline:
+  - [x] Wire `ImportModules` segment (self/required module import).
+  - [x] Wire `Command` segment (manifest `CommandModuleDependencies`).
+  - [x] Apply `PlaceHolder` + `PlaceHolderOption` segments during build.
+  - [x] Execute `TestsAfterMerge` segment (`New-ConfigurationTest`).
+- [x] Add opt-in auto-install of missing modules during build (PSResourceGet/PowerShellGet fallback).
+- [x] Add regression test for `Remove-Comments` script-level param block behavior (comment-based help preservation).
 - [x] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
   - [x] Include `schemaVersion` in all CLI JSON outputs.
   - [x] Serialize enums as strings in CLI JSON output.

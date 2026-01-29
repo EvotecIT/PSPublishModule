@@ -95,6 +95,11 @@ public sealed class ModulePipelineRunner
         bool localVersioning = false;
         InstallationStrategy? installStrategyFromSegments = null;
         int? keepVersionsFromSegments = null;
+        bool installMissingModules = false;
+        bool installMissingModulesForce = false;
+        bool installMissingModulesPrerelease = false;
+        string? installMissingModulesRepository = null;
+        RepositoryCredential? installMissingModulesCredential = null;
         bool signModule = false;
         bool mergeModule = false;
         bool mergeModuleSet = false;
@@ -118,6 +123,11 @@ public sealed class ModulePipelineRunner
         FileConsistencySettings? fileConsistencySettings = null;
         ModuleValidationSettings? validationSettings = null;
         ConfigurationFormattingSegment? formatting = null;
+        ImportModulesConfiguration? importModules = null;
+        PlaceHolderOptionConfiguration? placeHolderOption = null;
+        var placeHolders = new List<PlaceHolderReplacement>();
+        var commandDependencies = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var testsAfterMerge = new List<TestConfiguration>();
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
         var approvedModules = new List<string>();
@@ -155,6 +165,11 @@ public sealed class ModulePipelineRunner
                     if (b.LocalVersion.HasValue) localVersioning = b.LocalVersion.Value;
                     if (b.VersionedInstallStrategy.HasValue) installStrategyFromSegments = b.VersionedInstallStrategy.Value;
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
+                    if (b.InstallMissingModules.HasValue) installMissingModules = b.InstallMissingModules.Value;
+                    if (b.InstallMissingModulesForce.HasValue) installMissingModulesForce = b.InstallMissingModulesForce.Value;
+                    if (b.InstallMissingModulesPrerelease.HasValue) installMissingModulesPrerelease = b.InstallMissingModulesPrerelease.Value;
+                    if (!string.IsNullOrWhiteSpace(b.InstallMissingModulesRepository)) installMissingModulesRepository = b.InstallMissingModulesRepository;
+                    if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
                     if (b.Merge.HasValue)
                     {
@@ -242,6 +257,29 @@ public sealed class ModulePipelineRunner
                     if (cfg.Force) moduleSkipForce = true;
                     break;
                 }
+                case ConfigurationCommandSegment commandSeg:
+                {
+                    var cfg = commandSeg.Configuration ?? new CommandConfiguration();
+                    var moduleName = cfg.ModuleName;
+                    var commandNames = cfg.CommandName ?? Array.Empty<string>();
+                    if (string.IsNullOrWhiteSpace(moduleName) || commandNames.Length == 0)
+                        break;
+
+                    moduleName = moduleName.Trim();
+                    if (!commandDependencies.TryGetValue(moduleName, out var list))
+                    {
+                        list = new List<string>();
+                        commandDependencies[moduleName] = list;
+                    }
+
+                    foreach (var name in commandNames)
+                    {
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        if (list.Any(c => string.Equals(c, name, StringComparison.OrdinalIgnoreCase))) continue;
+                        list.Add(name.Trim());
+                    }
+                    break;
+                }
                 case ConfigurationInformationSegment info:
                 {
                     information = info.Configuration;
@@ -250,6 +288,15 @@ public sealed class ModulePipelineRunner
                 case ConfigurationDocumentationSegment docs:
                 {
                     documentation = docs.Configuration;
+                    break;
+                }
+                case ConfigurationImportModulesSegment importSeg:
+                {
+                    var cfg = importSeg.ImportModules ?? new ImportModulesConfiguration();
+                    importModules ??= new ImportModulesConfiguration();
+                    if (cfg.Self.HasValue) importModules.Self = cfg.Self;
+                    if (cfg.RequiredModules.HasValue) importModules.RequiredModules = cfg.RequiredModules;
+                    if (cfg.Verbose.HasValue) importModules.Verbose = cfg.Verbose;
                     break;
                 }
                 case ConfigurationBuildDocumentationSegment buildDocs:
@@ -272,9 +319,32 @@ public sealed class ModulePipelineRunner
                     formatting = MergeFormattingSegments(formatting, formattingSegment);
                     break;
                 }
+                case ConfigurationPlaceHolderSegment placeHolder:
+                {
+                    var cfg = placeHolder.Configuration;
+                    if (!string.IsNullOrWhiteSpace(cfg.Find) || !string.IsNullOrWhiteSpace(cfg.Replace))
+                        placeHolders.Add(cfg);
+                    break;
+                }
+                case ConfigurationPlaceHolderOptionSegment placeHolderOptionSeg:
+                {
+                    if (placeHolderOptionSeg.PlaceHolderOption?.SkipBuiltinReplacements == true)
+                    {
+                        placeHolderOption ??= new PlaceHolderOptionConfiguration();
+                        placeHolderOption.SkipBuiltinReplacements = true;
+                    }
+                    break;
+                }
                 case ConfigurationValidationSegment validationSegment:
                 {
                     validationSettings = validationSegment.Settings;
+                    break;
+                }
+                case ConfigurationTestSegment testSeg:
+                {
+                    var cfg = testSeg.Configuration ?? new TestConfiguration();
+                    if (!string.IsNullOrWhiteSpace(cfg.TestsPath))
+                        testsAfterMerge.Add(cfg);
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -443,6 +513,22 @@ public sealed class ModulePipelineRunner
             .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
 
+        var commandDeps = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in commandDependencies)
+        {
+            var cmds = kvp.Value
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (cmds.Length == 0) continue;
+            commandDeps[kvp.Key] = cmds;
+        }
+
+        var placeHolderEntries = placeHolders
+            .Where(p => p is not null && (!string.IsNullOrWhiteSpace(p.Find) || !string.IsNullOrWhiteSpace(p.Replace)))
+            .ToArray();
+
         return new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,
@@ -461,6 +547,11 @@ public sealed class ModulePipelineRunner
             fileConsistencySettings: fileConsistencySettings,
             validationSettings: validationSettings,
             formatting: formatting,
+            importModules: importModules,
+            placeHolders: placeHolderEntries,
+            placeHolderOption: placeHolderOption,
+            commandModuleDependencies: commandDeps,
+            testsAfterMerge: testsAfterMerge.ToArray(),
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
             approvedModules: approved,
@@ -473,6 +564,11 @@ public sealed class ModulePipelineRunner
             installStrategy: strategy,
             installKeepVersions: keep,
             installRoots: roots,
+            installMissingModules: installMissingModules,
+            installMissingModulesForce: installMissingModulesForce,
+            installMissingModulesPrerelease: installMissingModulesPrerelease,
+            installMissingModulesRepository: installMissingModulesRepository,
+            installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter);
     }
@@ -520,6 +616,8 @@ public sealed class ModulePipelineRunner
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
+        var importModulesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase));
+        var testSteps = steps.Where(s => s.Kind == ModulePipelineStepKind.Tests && s.Key.StartsWith("tests:", StringComparison.OrdinalIgnoreCase) && !string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase)).ToArray();
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -548,6 +646,20 @@ public sealed class ModulePipelineRunner
 
         try
         {
+            if (plan.InstallMissingModules)
+            {
+                try
+                {
+                    _ = EnsureBuildDependenciesInstalled(plan);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Dependency installation failed. {ex.Message}");
+                    if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+                    throw;
+                }
+            }
+
             ModuleBuildPipeline.StagingResult staged;
             SafeStart(stageStep);
             try
@@ -577,6 +689,7 @@ public sealed class ModulePipelineRunner
             }
 
             var mergedScripts = ApplyMerge(plan, buildResult);
+            ApplyPlaceholders(plan, buildResult);
 
             SafeStart(manifestStep);
             try
@@ -586,6 +699,9 @@ public sealed class ModulePipelineRunner
 
                 if (plan.RequiredModules is { Length: > 0 })
                     ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
+
+                if (plan.CommandModuleDependencies is { Count: > 0 })
+                    ManifestEditor.TrySetTopLevelHashtableStringArray(buildResult.ManifestPath, "CommandModuleDependencies", plan.CommandModuleDependencies);
 
                 if (!string.IsNullOrWhiteSpace(plan.PreRelease))
                     ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
@@ -1067,6 +1183,43 @@ public sealed class ModulePipelineRunner
             }
         }
 
+        if (plan.ImportModules is not null &&
+            (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
+        {
+            SafeStart(importModulesStep);
+            try
+            {
+                RunImportModules(plan, buildResult);
+                SafeDone(importModulesStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(importModulesStep, ex);
+                throw;
+            }
+        }
+
+        if (plan.TestsAfterMerge is { Length: > 0 })
+        {
+            var testService = new ModuleTestSuiteService(new PowerShellRunner(), _logger);
+            for (int i = 0; i < plan.TestsAfterMerge.Length; i++)
+            {
+                var cfg = plan.TestsAfterMerge[i];
+                var step = testSteps.Length > i ? testSteps[i] : null;
+                SafeStart(step);
+                try
+                {
+                    RunTestsAfterMerge(plan, buildResult, cfg, testService);
+                    SafeDone(step);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(step, ex);
+                    throw;
+                }
+            }
+        }
+
         var artefactResults = new List<ArtefactBuildResult>();
         if (plan.Artefacts is { Length: > 0 })
         {
@@ -1468,6 +1621,70 @@ public sealed class ModulePipelineRunner
         return modules
             .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName) && !approved.Contains(m.ModuleName!))
             .ToArray();
+    }
+
+    private ModuleDependencyInstallResult[] EnsureBuildDependenciesInstalled(ModulePipelinePlan plan)
+    {
+        if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
+
+        var required = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        if (required.Length == 0)
+        {
+            var manifestPath = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
+            if (File.Exists(manifestPath) &&
+                ManifestEditor.TryGetRequiredModules(manifestPath, out var fromManifest) &&
+                fromManifest is not null)
+            {
+                required = fromManifest;
+            }
+        }
+
+        if (required.Length == 0)
+        {
+            _logger.Info("InstallMissingModules enabled, but no RequiredModules were found.");
+            return Array.Empty<ModuleDependencyInstallResult>();
+        }
+
+        var deps = required
+            .Where(r => !string.IsNullOrWhiteSpace(r.ModuleName))
+            .Select(r => new ModuleDependency(
+                name: r.ModuleName.Trim(),
+                requiredVersion: r.RequiredVersion,
+                minimumVersion: r.ModuleVersion,
+                maximumVersion: r.MaximumVersion))
+            .ToArray();
+
+        if (deps.Length == 0)
+        {
+            _logger.Info("InstallMissingModules enabled, but no valid module dependencies were resolved.");
+            return Array.Empty<ModuleDependencyInstallResult>();
+        }
+
+        _logger.Info($"Installing missing modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
+
+        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), _logger);
+        var results = installer.EnsureInstalled(
+            dependencies: deps,
+            skipModules: plan.ModuleSkip?.IgnoreModuleName,
+            force: plan.InstallMissingModulesForce,
+            repository: plan.InstallMissingModulesRepository,
+            credential: plan.InstallMissingModulesCredential,
+            prerelease: plan.InstallMissingModulesPrerelease);
+
+        var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
+        if (failures.Length > 0)
+            throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+
+        if (results.Count > 0)
+        {
+            var installed = results.Count(r => r.Status == ModuleDependencyInstallStatus.Installed);
+            var updated = results.Count(r => r.Status == ModuleDependencyInstallStatus.Updated);
+            var satisfied = results.Count(r => r.Status == ModuleDependencyInstallStatus.Satisfied);
+            var skipped = results.Count(r => r.Status == ModuleDependencyInstallStatus.Skipped);
+            _logger.Info($"Dependency install summary: {installed} installed, {updated} updated, {satisfied} satisfied, {skipped} skipped.");
+        }
+
+        return results.ToArray();
     }
 
     private static string? ResolveAutoOrLatest(string? value, string? installedVersion)
@@ -1948,6 +2165,236 @@ exit 0
         }
 
         return mergedModule;
+    }
+
+    private void ApplyPlaceholders(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        if (plan is null || buildResult is null) return;
+
+        var psm1Path = Path.Combine(buildResult.StagingPath, $"{plan.ModuleName}.psm1");
+        if (!File.Exists(psm1Path)) return;
+
+        var moduleName = plan.ModuleName;
+        var moduleVersion = plan.ResolvedVersion;
+        var preRelease = plan.PreRelease;
+        var moduleVersionWithPreRelease = string.IsNullOrWhiteSpace(preRelease)
+            ? moduleVersion
+            : $"{moduleVersion}-{preRelease}";
+        var tagName = "v" + moduleVersion;
+        var tagModuleVersionWithPreRelease = "v" + moduleVersionWithPreRelease;
+
+        var replacements = new List<(string Find, string Replace)>();
+        if (plan.PlaceHolderOption?.SkipBuiltinReplacements != true)
+        {
+            replacements.Add(("{ModuleName}", moduleName));
+            replacements.Add(("<ModuleName>", moduleName));
+            replacements.Add(("{ModuleVersion}", moduleVersion));
+            replacements.Add(("<ModuleVersion>", moduleVersion));
+            replacements.Add(("{ModuleVersionWithPreRelease}", moduleVersionWithPreRelease));
+            replacements.Add(("<ModuleVersionWithPreRelease>", moduleVersionWithPreRelease));
+            replacements.Add(("{TagModuleVersionWithPreRelease}", tagModuleVersionWithPreRelease));
+            replacements.Add(("<TagModuleVersionWithPreRelease>", tagModuleVersionWithPreRelease));
+            replacements.Add(("{TagName}", tagName));
+            replacements.Add(("<TagName>", tagName));
+        }
+
+        if (plan.PlaceHolders is { Length: > 0 })
+        {
+            foreach (var entry in plan.PlaceHolders)
+            {
+                if (entry is null) continue;
+                if (string.IsNullOrWhiteSpace(entry.Find)) continue;
+                replacements.Add((entry.Find, entry.Replace ?? string.Empty));
+            }
+        }
+
+        if (replacements.Count == 0) return;
+
+        string content;
+        try { content = File.ReadAllText(psm1Path); }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to read PSM1 for placeholder replacement: {ex.Message}");
+            return;
+        }
+
+        var updated = content;
+        foreach (var item in replacements)
+        {
+            if (string.IsNullOrEmpty(item.Find)) continue;
+            updated = updated.Replace(item.Find, item.Replace ?? string.Empty);
+        }
+
+        if (string.Equals(content, updated, StringComparison.Ordinal)) return;
+
+        try
+        {
+            File.WriteAllText(psm1Path, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to write PSM1 after placeholder replacement: {ex.Message}");
+        }
+    }
+
+    private void RunImportModules(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        var cfg = plan.ImportModules;
+        if (cfg is null) return;
+
+        var importSelf = cfg.Self == true;
+        var importRequired = cfg.RequiredModules == true;
+        if (!importSelf && !importRequired) return;
+
+        var modules = importRequired
+            ? plan.RequiredModules
+                .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName))
+                .Select(m => new ImportModuleEntry
+                {
+                    Name = m.ModuleName.Trim(),
+                    MinimumVersion = string.IsNullOrWhiteSpace(m.ModuleVersion) ? null : m.ModuleVersion!.Trim(),
+                    RequiredVersion = string.IsNullOrWhiteSpace(m.RequiredVersion) ? null : m.RequiredVersion!.Trim()
+                })
+                .ToArray()
+            : Array.Empty<ImportModuleEntry>();
+
+        var modulesB64 = EncodeImportModules(modules);
+        var args = new List<string>(5)
+        {
+            modulesB64,
+            importRequired ? "1" : "0",
+            importSelf ? "1" : "0",
+            buildResult.ManifestPath,
+            cfg.Verbose == true ? "1" : "0"
+        };
+
+        var runner = new PowerShellRunner();
+        var script = BuildImportModulesScript();
+        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(5));
+        if (result.ExitCode != 0)
+        {
+            var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            if (string.IsNullOrWhiteSpace(message)) message = "Import-Module failed.";
+            throw new InvalidOperationException(message.Trim());
+        }
+    }
+
+    private void RunTestsAfterMerge(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        TestConfiguration testConfiguration,
+        ModuleTestSuiteService service)
+    {
+        if (plan is null || buildResult is null || testConfiguration is null) return;
+
+        var testsPath = testConfiguration.TestsPath ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(testsPath))
+            throw new InvalidOperationException("TestsAfterMerge is enabled but TestsPath is empty.");
+
+        if (!Path.IsPathRooted(testsPath))
+            testsPath = Path.GetFullPath(Path.Combine(plan.ProjectRoot, testsPath));
+
+        var importCfg = plan.ImportModules;
+        var importSelf = importCfg?.Self == true;
+        var importRequired = importCfg?.RequiredModules == true;
+        var importVerbose = importCfg?.Verbose == true;
+
+        var importModules = importRequired
+            ? plan.RequiredModules
+                .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName))
+                .Select(m => new ModuleDependency(
+                    name: m.ModuleName.Trim(),
+                    requiredVersion: m.RequiredVersion,
+                    minimumVersion: m.ModuleVersion,
+                    maximumVersion: m.MaximumVersion))
+                .ToArray()
+            : Array.Empty<ModuleDependency>();
+
+        var spec = new ModuleTestSuiteSpec
+        {
+            ProjectPath = buildResult.StagingPath,
+            TestPath = testsPath,
+            Force = testConfiguration.Force,
+            SkipDependencies = true,
+            SkipImport = !importSelf,
+            ImportModules = importModules,
+            ImportModulesVerbose = importVerbose
+        };
+
+        var result = service.Run(spec);
+        if (result.FailedCount > 0)
+        {
+            if (testConfiguration.Force)
+            {
+                _logger.Warn($"TestsAfterMerge failed ({result.FailedCount} failed) but Force was set; continuing.");
+            }
+            else
+            {
+                throw new InvalidOperationException($"TestsAfterMerge failed ({result.FailedCount} failed).");
+            }
+        }
+    }
+
+    private static string BuildImportModulesScript()
+    {
+        return @"
+param(
+  [string]$ModulesB64,
+  [string]$ImportRequired,
+  [string]$ImportSelf,
+  [string]$ModulePath,
+  [string]$VerboseFlag
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$importVerbose = ($VerboseFlag -eq '1')
+$VerbosePreference = if ($importVerbose) { 'Continue' } else { 'SilentlyContinue' }
+
+function DecodeModules([string]$b64) {
+  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
+  $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
+  if ([string]::IsNullOrWhiteSpace($json)) { return @() }
+  try { return $json | ConvertFrom-Json } catch { return @() }
+}
+
+if ($ImportRequired -eq '1') {
+  $modules = DecodeModules $ModulesB64
+  foreach ($m in $modules) {
+    if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
+    if ($m.RequiredVersion) {
+      Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+    } elseif ($m.MinimumVersion) {
+      Import-Module -Name $m.Name -MinimumVersion $m.MinimumVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+    } else {
+      Import-Module -Name $m.Name -Force -ErrorAction Stop -Verbose:$importVerbose
+    }
+  }
+}
+
+if ($ImportSelf -eq '1') {
+  if (-not [string]::IsNullOrWhiteSpace($ModulePath)) {
+    Import-Module -Name $ModulePath -Force -ErrorAction Stop -Verbose:$importVerbose
+  } else {
+    throw 'ModulePath is required for ImportSelf.'
+  }
+}
+exit 0
+";
+    }
+
+    private static string EncodeImportModules(IEnumerable<ImportModuleEntry> modules)
+    {
+        var list = modules?.Where(m => m is not null && !string.IsNullOrWhiteSpace(m.Name)).ToArray() ?? Array.Empty<ImportModuleEntry>();
+        if (list.Length == 0) return string.Empty;
+        var json = JsonSerializer.Serialize(list);
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+    }
+
+    private sealed class ImportModuleEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? MinimumVersion { get; set; }
+        public string? RequiredVersion { get; set; }
     }
 
 

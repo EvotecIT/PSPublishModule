@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -68,7 +69,8 @@ public sealed class ModuleTestSuiteService
             ? projectRoot
             : string.Empty;
 
-        var args = new List<string>(9)
+        var importModulesB64 = EncodeImportModules(spec.ImportModules);
+        var args = new List<string>(11)
         {
             testPath,
             spec.OutputFormat.ToString(),
@@ -78,7 +80,9 @@ public sealed class ModuleTestSuiteService
             moduleName,
             manifestPath,
             spec.SkipImport ? "1" : "0",
-            spec.Force ? "1" : "0"
+            spec.Force ? "1" : "0",
+            importModulesB64,
+            spec.ImportModulesVerbose ? "1" : "0"
         };
 
         PowerShellRunResult runResult;
@@ -208,6 +212,33 @@ public sealed class ModuleTestSuiteService
         if (!File.Exists(p) && !Directory.Exists(p))
             throw new FileNotFoundException($"Test path '{p}' does not exist", p);
         return p;
+    }
+
+    private static string EncodeImportModules(IEnumerable<ModuleDependency>? modules)
+    {
+        var list = new List<ImportModuleEntry>();
+        foreach (var m in modules ?? Array.Empty<ModuleDependency>())
+        {
+            if (m is null || string.IsNullOrWhiteSpace(m.Name)) continue;
+            list.Add(new ImportModuleEntry
+            {
+                Name = m.Name.Trim(),
+                MinimumVersion = string.IsNullOrWhiteSpace(m.MinimumVersion) ? null : m.MinimumVersion.Trim(),
+                RequiredVersion = string.IsNullOrWhiteSpace(m.RequiredVersion) ? null : m.RequiredVersion.Trim()
+            });
+        }
+
+        if (list.Count == 0) return string.Empty;
+
+        var json = JsonSerializer.Serialize(list);
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+    }
+
+    private sealed class ImportModuleEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? MinimumVersion { get; set; }
+        public string? RequiredVersion { get; set; }
     }
 
     private sealed class MarkerBag
@@ -375,12 +406,21 @@ param(
   [string]$ModuleName,
   [string]$ModuleImportPath,
   [string]$SkipImport,
-  [string]$ForceImport
+  [string]$ForceImport,
+  [string]$ImportModulesB64,
+  [string]$ImportVerbose
 )
 
 function Encode([string]$s) {
   if ([string]::IsNullOrWhiteSpace($s)) { return '' }
   return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s))
+}
+
+function DecodeModules([string]$b64) {
+  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
+  $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
+  if ([string]::IsNullOrWhiteSpace($json)) { return @() }
+  try { return $json | ConvertFrom-Json } catch { return @() }
 }
 
 try {
@@ -390,9 +430,24 @@ try {
     Write-Output ('PFTEST::PESTER::' + $p.Version.ToString())
   }
 
+  $importVerbose = ($ImportVerbose -eq '1')
+  $importModules = DecodeModules $ImportModulesB64
+  if ($importModules) {
+    foreach ($m in $importModules) {
+      if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
+      if ($m.RequiredVersion) {
+        Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+      } elseif ($m.MinimumVersion) {
+        Import-Module -Name $m.Name -MinimumVersion $m.MinimumVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+      } else {
+        Import-Module -Name $m.Name -Force -ErrorAction Stop -Verbose:$importVerbose
+      }
+    }
+  }
+
   $doImport = ($SkipImport -ne '1') -and (-not [string]::IsNullOrWhiteSpace($ModuleImportPath))
   if ($doImport) {
-    Import-Module -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ErrorAction Stop | Out-Null
+    Import-Module -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ErrorAction Stop -Verbose:$importVerbose | Out-Null
     Write-Output 'PFTEST::IMPORT::OK'
     try {
       $m = Get-Module -Name $ModuleName | Select-Object -First 1

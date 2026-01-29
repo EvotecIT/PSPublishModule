@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -148,6 +149,71 @@ public static class ManifestEditor
         else
             updated.Add(entry);
         return TrySetRequiredModules(filePath, updated.ToArray());
+    }
+
+    /// <summary>
+    /// Sets a top-level hashtable whose values are string arrays (e.g., CommandModuleDependencies).
+    /// </summary>
+    public static bool TrySetTopLevelHashtableStringArray(
+        string filePath,
+        string key,
+        IReadOnlyDictionary<string, string[]> values)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+
+        var items = values ?? new Dictionary<string, string[]>();
+        if (items.Count == 0) return false;
+
+        var content = File.ReadAllText(filePath);
+        Token[] tokens; ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+        var topHash = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (topHash == null) return false;
+
+        var ordered = items
+            .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key))
+            .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (ordered.Length == 0) return false;
+
+        var sb = new StringBuilder();
+        sb.Append("@{").Append(NewLine);
+        var hasEntries = false;
+        foreach (var kvp in ordered)
+        {
+            var cmds = (kvp.Value ?? Array.Empty<string>())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => EscapeAndQuote(c.Trim()))
+                .ToArray();
+            if (cmds.Length == 0) continue;
+
+            var list = "@(" + string.Join(", ", cmds) + ")";
+            sb.Append("    ").Append(EscapeAndQuote(kvp.Key.Trim())).Append(" = ").Append(list).Append(NewLine);
+            hasEntries = true;
+        }
+        sb.Append("}");
+
+        if (!hasEntries) return false;
+
+        var valueExpression = sb.ToString();
+        foreach (var kv in topHash.KeyValuePairs)
+        {
+            var keyName = GetKeyName(kv.Item1);
+            if (!string.Equals(keyName, key, StringComparison.OrdinalIgnoreCase)) continue;
+            var v = kv.Item2; if (v == null) break;
+            var start = v.Extent.StartOffset; var end = v.Extent.EndOffset;
+            var newContent = content.Substring(0, start) + valueExpression + content.Substring(end);
+            if (!string.Equals(content, newContent, StringComparison.Ordinal))
+            {
+                File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+                return true;
+            }
+            return false;
+        }
+
+        return InsertKeyValue(topHash, content, filePath, key, valueExpression);
     }
 
     /// <summary>Removes a RequiredModule entry by ModuleName. Returns true if modified.</summary>

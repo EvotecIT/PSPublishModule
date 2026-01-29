@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Management.Automation;
 using PowerForge;
 
@@ -84,6 +85,27 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
 
     /// <summary>How many versions to keep per module when using versioned installs.</summary>
     [Parameter] public int VersionedInstallKeep { get; set; }
+
+    /// <summary>Install missing module dependencies (Required/External) before build.</summary>
+    [Parameter] public SwitchParameter InstallMissingModules { get; set; }
+
+    /// <summary>Force re-install even if dependencies are already installed.</summary>
+    [Parameter] public SwitchParameter InstallMissingModulesForce { get; set; }
+
+    /// <summary>Allow prerelease versions when installing dependencies.</summary>
+    [Parameter] public SwitchParameter InstallMissingModulesPrerelease { get; set; }
+
+    /// <summary>Repository name used for dependency installation (defaults to PSGallery).</summary>
+    [Parameter] public string? InstallMissingModulesRepository { get; set; }
+
+    /// <summary>Credential user name for dependency installation.</summary>
+    [Parameter] public string? InstallMissingModulesCredentialUserName { get; set; }
+
+    /// <summary>Credential secret/token for dependency installation.</summary>
+    [Parameter] public string? InstallMissingModulesCredentialSecret { get; set; }
+
+    /// <summary>Path to a file containing the credential secret/token.</summary>
+    [Parameter] public string? InstallMissingModulesCredentialSecretFilePath { get; set; }
 
     /// <summary>Disables built-in replacements done by the module builder.</summary>
     [Parameter] public SwitchParameter SkipBuiltinReplacements { get; set; }
@@ -201,6 +223,40 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
 
         if (bound.ContainsKey(nameof(VersionedInstallStrategy))) { EnsureBuildModule(); buildModule!.VersionedInstallStrategy = VersionedInstallStrategy; }
         if (bound.ContainsKey(nameof(VersionedInstallKeep))) { EnsureBuildModule(); buildModule!.VersionedInstallKeep = VersionedInstallKeep; }
+
+        if (bound.ContainsKey(nameof(InstallMissingModules))) { EnsureBuildModule(); buildModule!.InstallMissingModules = InstallMissingModules.IsPresent; }
+        if (bound.ContainsKey(nameof(InstallMissingModulesForce))) { EnsureBuildModule(); buildModule!.InstallMissingModulesForce = InstallMissingModulesForce.IsPresent; }
+        if (bound.ContainsKey(nameof(InstallMissingModulesPrerelease))) { EnsureBuildModule(); buildModule!.InstallMissingModulesPrerelease = InstallMissingModulesPrerelease.IsPresent; }
+        if (bound.ContainsKey(nameof(InstallMissingModulesRepository))) { EnsureBuildModule(); buildModule!.InstallMissingModulesRepository = InstallMissingModulesRepository; }
+
+        string? missingModulesSecret = null;
+        if (bound.ContainsKey(nameof(InstallMissingModulesCredentialSecretFilePath)) &&
+            !string.IsNullOrWhiteSpace(InstallMissingModulesCredentialSecretFilePath))
+        {
+            missingModulesSecret = File.ReadAllText(InstallMissingModulesCredentialSecretFilePath!).Trim();
+        }
+        else if (bound.ContainsKey(nameof(InstallMissingModulesCredentialSecret)) &&
+                 !string.IsNullOrWhiteSpace(InstallMissingModulesCredentialSecret))
+        {
+            missingModulesSecret = InstallMissingModulesCredentialSecret!.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(missingModulesSecret) &&
+            string.IsNullOrWhiteSpace(InstallMissingModulesCredentialUserName))
+        {
+            throw new PSArgumentException("InstallMissingModulesCredentialUserName is required when InstallMissingModulesCredentialSecret/InstallMissingModulesCredentialSecretFilePath is provided.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(missingModulesSecret) &&
+            !string.IsNullOrWhiteSpace(InstallMissingModulesCredentialUserName))
+        {
+            EnsureBuildModule();
+            buildModule!.InstallMissingModulesCredential = new RepositoryCredential
+            {
+                UserName = InstallMissingModulesCredentialUserName!.Trim(),
+                Secret = missingModulesSecret
+            };
+        }
 
         if (bound.ContainsKey(nameof(DoNotAttemptToFixRelativePaths))) { EnsureBuildModule(); buildModule!.DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent; }
         if (bound.ContainsKey(nameof(NETMergeLibraryDebugging))) { EnsureBuildModule(); buildModule!.DebugDLL = NETMergeLibraryDebugging.IsPresent; }

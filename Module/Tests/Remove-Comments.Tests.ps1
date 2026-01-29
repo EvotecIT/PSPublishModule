@@ -54,4 +54,38 @@
         $Output = Get-Content -Path $OutputFilePath
         $Output.Count | Should -Be 28
     }
+
+    It 'Preserves comments before script param block by default' {
+        $Script = @"
+# Comment before param block
+<#
+.SYNOPSIS
+Script-level help should stay by default
+#>
+param(
+    [string]`$Name
+)
+Write-Host `$Name
+"@
+
+        $Output = Remove-Comments -Content $Script
+        $Output | Should -Match '\.SYNOPSIS'
+    }
+
+    It 'Removes comments before script param block when requested' {
+        $Script = @"
+# Comment before param block
+<#
+.SYNOPSIS
+Script-level help should be removed
+#>
+param(
+    [string]`$Name
+)
+Write-Host `$Name
+"@
+
+        $Output = Remove-Comments -Content $Script -RemoveCommentsBeforeParamBlock
+        $Output | Should -Not -Match '\.SYNOPSIS'
+    }
 }
