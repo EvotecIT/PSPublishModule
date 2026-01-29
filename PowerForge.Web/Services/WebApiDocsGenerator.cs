@@ -617,19 +617,63 @@ public static class WebApiDocsGenerator
 
     private static string? GetSummary(XElement member)
     {
-        var summary = member.Element("summary")?.Value;
-        return string.IsNullOrWhiteSpace(summary) ? null : Normalize(summary);
+        var summary = member.Element("summary");
+        return summary is null ? null : NormalizeXmlText(summary);
     }
 
     private static string? GetElement(XElement member, string name)
     {
-        var value = member.Element(name)?.Value;
-        return string.IsNullOrWhiteSpace(value) ? null : Normalize(value);
+        var element = member.Element(name);
+        return element is null ? null : NormalizeXmlText(element);
     }
 
     private static string Normalize(string value)
     {
         return Regex.Replace(value, "\\s+", " ").Trim();
+    }
+
+    private static string? NormalizeXmlText(XElement element)
+    {
+        var text = string.Concat(element.Nodes().Select(n =>
+        {
+            if (n is XText txt) return txt.Value;
+            if (n is XElement el)
+            {
+                return el.Name.LocalName switch
+                {
+                    "see" => RenderCref(el),
+                    "seealso" => RenderCref(el),
+                    "paramref" => el.Attribute("name")?.Value ?? el.Value,
+                    "typeparamref" => el.Attribute("name")?.Value ?? el.Value,
+                    "c" => el.Value,
+                    "code" => $" {el.Value} ",
+                    "para" => $" {el.Value} ",
+                    _ => el.Value
+                };
+            }
+            return string.Empty;
+        }));
+
+        return string.IsNullOrWhiteSpace(text) ? null : Normalize(text);
+    }
+
+    private static string RenderCref(XElement el)
+    {
+        var cref = el.Attribute("cref")?.Value;
+        if (!string.IsNullOrWhiteSpace(cref))
+        {
+            var cleaned = cref;
+            var colonIdx = cleaned.IndexOf(':');
+            if (colonIdx >= 0 && colonIdx + 1 < cleaned.Length)
+                cleaned = cleaned.Substring(colonIdx + 1);
+            return cleaned;
+        }
+
+        var langword = el.Attribute("langword")?.Value;
+        if (!string.IsNullOrWhiteSpace(langword))
+            return langword;
+
+        return el.Value;
     }
 
     private static string InferTypeKind(string name)
