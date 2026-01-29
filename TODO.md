@@ -29,6 +29,7 @@
 - `Module/Build/Build-ModuleSelf.ps1` self-builds by building `PowerForge.Cli` and running the JSON pipeline (`powerforge.json`) so PSPublishModule can self-build without file locking.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
 - PSResourceGet is used internally (out-of-proc wrapper for find/publish/install) and is not exposed as standalone cmdlets.
+- Repository-wide .NET package release flow is now available in C# (discover projects, resolve version, pack, publish).
 
 **Replacement roadmap (priority order)**
 - (done) Configuration is typed end-to-end: configuration “segments” are typed models + enums in `PowerForge`, with legacy DSL supported via adapters/translation.
@@ -180,6 +181,7 @@
   - [x] `Invoke-ModuleBuild` → `PowerForge.ModuleScaffoldService` + `PowerForge.LegacySegmentAdapter` (cmdlet only maps params and invokes the PowerForge pipeline)
   - [x] `Invoke-DotNetReleaseBuild` → `PowerForge.DotNetReleaseBuildService` (cmdlet only handles `ShouldProcess` + optional `Register-Certificate` hook)
   - [x] `Get-PowerShellCompatibility` → `PowerForge.PowerShellCompatibilityAnalyzer` (typed report + C# CSV export; cmdlet only handles host/progress output)
+- [x] Add repository-wide .NET package release workflow (discover, X-pattern versioning via NuGet, pack, publish).
 - **Deliberate exclusions (do not reintroduce)**
   - Legacy public helper functions are intentionally removed from PSPublishModule (moved to PSMaintenance or deprecated):
     - `Convert-ProjectEncoding`, `Convert-ProjectLineEnding`
