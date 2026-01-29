@@ -25,11 +25,18 @@ public sealed class SiteSpec
     public string? SharedRoot { get; set; }
     /// <summary>Optional data root.</summary>
     public string? DataRoot { get; set; }
+    /// <summary>Optional archetypes root for content scaffolding.</summary>
+    public string? ArchetypesRoot { get; set; }
     /// <summary>Static asset mappings to copy.</summary>
     public StaticAssetSpec[] StaticAssets { get; set; } = Array.Empty<StaticAssetSpec>();
 
     /// <summary>Content collections (pages, docs, blog, etc.).</summary>
     public CollectionSpec[] Collections { get; set; } = Array.Empty<CollectionSpec>();
+
+    /// <summary>Output format configuration.</summary>
+    public OutputsSpec? Outputs { get; set; }
+    /// <summary>Taxonomy definitions (tags, categories).</summary>
+    public TaxonomySpec[] Taxonomies { get; set; } = Array.Empty<TaxonomySpec>();
 
     /// <summary>Head configuration applied to all pages.</summary>
     public HeadSpec? Head { get; set; }
@@ -55,4 +62,11 @@ public sealed class SiteSpec
     public AnalyticsSpec? Analytics { get; set; }
     /// <summary>Navigation menus.</summary>
     public NavigationSpec? Navigation { get; set; }
+
+    /// <summary>Documentation versioning configuration.</summary>
+    public VersioningSpec? Versioning { get; set; }
+    /// <summary>Link checking configuration.</summary>
+    public LinkCheckSpec? LinkCheck { get; set; }
+    /// <summary>Build cache configuration.</summary>
+    public BuildCacheSpec? Cache { get; set; }
 }

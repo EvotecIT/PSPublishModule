@@ -48,6 +48,8 @@ public sealed class ContentItem
     public string Description { get; set; } = string.Empty;
     /// <summary>Publication date.</summary>
     public DateTime? Date { get; set; }
+    /// <summary>Ordering hint within a collection.</summary>
+    public int? Order { get; set; }
     /// <summary>URL slug.</summary>
     public string Slug { get; set; } = string.Empty;
     /// <summary>Tag list.</summary>
@@ -64,12 +66,18 @@ public sealed class ContentItem
     public string? Layout { get; set; }
     /// <summary>Template override.</summary>
     public string? Template { get; set; }
+    /// <summary>Page kind (page, section, taxonomy, term).</summary>
+    public PageKind Kind { get; set; } = PageKind.Page;
     /// <summary>Rendered HTML content.</summary>
     public string HtmlContent { get; set; } = string.Empty;
     /// <summary>Rendered table of contents HTML.</summary>
     public string TocHtml { get; set; } = string.Empty;
+    /// <summary>Optional resource list for page bundles.</summary>
+    public PageResource[] Resources { get; set; } = Array.Empty<PageResource>();
     /// <summary>Associated project slug.</summary>
     public string? ProjectSlug { get; set; }
     /// <summary>Additional meta values.</summary>
     public Dictionary<string, object?> Meta { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Output formats for the page.</summary>
+    public string[] Outputs { get; set; } = Array.Empty<string>();
 }

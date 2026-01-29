@@ -24,6 +24,8 @@ public sealed class WebSitemapResult
 {
     /// <summary>Path to the sitemap output.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Optional path to the HTML sitemap output.</summary>
+    public string? HtmlOutputPath { get; set; }
     /// <summary>Number of URLs emitted.</summary>
     public int UrlCount { get; set; }
 }

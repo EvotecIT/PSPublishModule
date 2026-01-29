@@ -33,6 +33,12 @@
         "resolved": "5.11.0",
         "contentHash": "Lf9pyyUbtW83XYLOR2UALuPpNxPYRy+PfrdcokEjc8wApLxsh51FDytrFAVXEC2yiWy6mwZN/7XF5ZKzBakJLA=="
       },
+      "YamlDotNet": {
+        "type": "Direct",
+        "requested": "[15.1.2, )",
+        "resolved": "15.1.2",
+        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+      },
       "Acornima": {
         "type": "Transitive",
         "resolved": "1.1.0",
@@ -758,6 +764,12 @@
         "requested": "[5.11.0, )",
         "resolved": "5.11.0",
         "contentHash": "Lf9pyyUbtW83XYLOR2UALuPpNxPYRy+PfrdcokEjc8wApLxsh51FDytrFAVXEC2yiWy6mwZN/7XF5ZKzBakJLA=="
+      },
+      "YamlDotNet": {
+        "type": "Direct",
+        "requested": "[15.1.2, )",
+        "resolved": "15.1.2",
+        "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
       },
       "Acornima": {
         "type": "Transitive",

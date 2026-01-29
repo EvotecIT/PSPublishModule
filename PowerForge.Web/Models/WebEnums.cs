@@ -74,3 +74,18 @@ public enum PackageType
     /// <summary>Other registry.</summary>
     Other
 }
+
+/// <summary>Page kind used for templating and outputs.</summary>
+public enum PageKind
+{
+    /// <summary>Regular content page.</summary>
+    Page,
+    /// <summary>Section/list page.</summary>
+    Section,
+    /// <summary>Taxonomy list page.</summary>
+    Taxonomy,
+    /// <summary>Taxonomy term page.</summary>
+    Term,
+    /// <summary>Home page.</summary>
+    Home
+}

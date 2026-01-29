@@ -11,6 +11,10 @@ public sealed class CollectionSpec
     public string Output { get; set; } = string.Empty;
     /// <summary>Default layout for items in the collection.</summary>
     public string? DefaultLayout { get; set; }
+    /// <summary>Layout for section/list pages.</summary>
+    public string? ListLayout { get; set; }
+    /// <summary>Optional TOC file path for navigation overrides.</summary>
+    public string? TocFile { get; set; }
     /// <summary>Include glob patterns.</summary>
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Exclude glob patterns.</summary>
@@ -19,4 +23,6 @@ public sealed class CollectionSpec
     public string? SortBy { get; set; }
     /// <summary>Sort order.</summary>
     public SortOrder? SortOrder { get; set; }
+    /// <summary>Optional output formats for the collection.</summary>
+    public string[] Outputs { get; set; } = Array.Empty<string>();
 }

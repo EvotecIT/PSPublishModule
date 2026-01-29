@@ -4,12 +4,15 @@ internal sealed class ThemeRenderContext
 {
     public SiteSpec Site { get; init; } = new();
     public ContentItem Page { get; init; } = new();
+    public IReadOnlyList<ContentItem> Items { get; init; } = Array.Empty<ContentItem>();
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     public ProjectSpec? Project { get; init; }
     public NavigationRuntime Navigation { get; init; } = new();
     public BreadcrumbItem[] Breadcrumbs { get; init; } = Array.Empty<BreadcrumbItem>();
     public string CurrentPath { get; init; } = string.Empty;
     public ShortcodeContext? Shortcode { get; init; }
+    public TaxonomySpec? Taxonomy { get; init; }
+    public string? Term { get; init; }
     public string CssHtml { get; init; } = string.Empty;
     public string JsHtml { get; init; } = string.Empty;
     public string PreloadsHtml { get; init; } = string.Empty;

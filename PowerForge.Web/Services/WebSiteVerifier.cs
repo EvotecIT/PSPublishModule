@@ -36,8 +36,12 @@ public static class WebSiteVerifier
                 continue;
             }
 
+            var leafBundleRoots = BuildLeafBundleRoots(files);
             foreach (var file in files)
             {
+                if (IsUnderAnyRoot(file, leafBundleRoots) && !IsLeafBundleIndex(file))
+                    continue;
+
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(body) ?? string.Empty;
@@ -46,14 +50,23 @@ public static class WebSiteVerifier
                     errors.Add($"Missing title in: {file}");
                 }
 
-                var slug = matter?.Slug ?? Slugify(Path.GetFileNameWithoutExtension(file));
-                if (string.IsNullOrWhiteSpace(slug))
+                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
+                var relativePath = ResolveRelativePath(collectionRoot, file);
+                var relativeDir = NormalizePath(Path.GetDirectoryName(relativePath) ?? string.Empty);
+                var isSectionIndex = IsSectionIndex(file);
+                var isBundleIndex = IsLeafBundleIndex(file);
+                var slugPath = ResolveSlugPath(relativePath, relativeDir, matter?.Slug);
+                if (isSectionIndex || isBundleIndex)
+                    slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
+                if (string.IsNullOrWhiteSpace(slugPath))
                 {
                     errors.Add($"Missing slug in: {file}");
                     continue;
                 }
 
-                var route = BuildRoute(collection.Output, slug, spec.TrailingSlash);
+                var projectSlug = ResolveProjectSlug(plan, file);
+                var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
+                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
                 if (routes.TryGetValue(route, out var existing))
                 {
                     errors.Add($"Duplicate route '{route}' from '{file}' and '{existing}'.");
@@ -146,6 +159,149 @@ public static class WebSiteVerifier
             return Array.Empty<string>();
 
         return Directory.EnumerateFiles(full, "*.md", SearchOption.AllDirectories);
+    }
+
+    private static HashSet<string> BuildLeafBundleRoots(IReadOnlyList<string> markdownFiles)
+    {
+        if (markdownFiles.Count == 0)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var byDir = markdownFiles
+            .GroupBy(f => Path.GetDirectoryName(f) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in byDir)
+        {
+            var dir = kvp.Key;
+            var files = kvp.Value;
+            var hasIndex = files.Any(IsLeafBundleIndex);
+            if (!hasIndex) continue;
+            if (files.Any(IsSectionIndex)) continue;
+
+            var hasOtherMarkdown = files.Any(f =>
+            {
+                var name = Path.GetFileName(f);
+                if (name.Equals("index.md", StringComparison.OrdinalIgnoreCase)) return false;
+                if (name.Equals("_index.md", StringComparison.OrdinalIgnoreCase)) return false;
+                return true;
+            });
+
+            if (!hasOtherMarkdown)
+                roots.Add(dir);
+        }
+
+        return roots;
+    }
+
+    private static bool IsLeafBundleIndex(string filePath)
+        => Path.GetFileName(filePath).Equals("index.md", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSectionIndex(string filePath)
+        => Path.GetFileName(filePath).Equals("_index.md", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsUnderAnyRoot(string filePath, HashSet<string> roots)
+    {
+        if (roots.Count == 0) return false;
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            if (filePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                filePath.Equals(root, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static string ResolveRelativePath(string? collectionRoot, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(collectionRoot))
+            return Path.GetFileName(filePath);
+        return Path.GetRelativePath(collectionRoot, filePath).Replace('\\', '/');
+    }
+
+    private static string ResolveSlugPath(string relativePath, string relativeDir, string? slugOverride)
+    {
+        var withoutExtension = NormalizePath(Path.ChangeExtension(relativePath, null) ?? string.Empty);
+        return ApplySlugOverride(withoutExtension, slugOverride);
+    }
+
+    private static string ApplySlugOverride(string basePath, string? slugOverride)
+    {
+        if (string.IsNullOrWhiteSpace(slugOverride))
+            return basePath;
+
+        var normalized = NormalizePath(slugOverride);
+        if (normalized.Contains('/'))
+            return normalized;
+
+        if (string.IsNullOrWhiteSpace(basePath))
+            return normalized;
+
+        var idx = basePath.LastIndexOf('/');
+        if (idx < 0)
+            return normalized;
+
+        var parent = basePath.Substring(0, idx);
+        if (string.IsNullOrWhiteSpace(parent))
+            return normalized;
+
+        return parent + "/" + normalized;
+    }
+
+    private static string? ResolveCollectionRootForFile(string rootPath, string input, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return null;
+
+        var full = Path.IsPathRooted(input) ? input : Path.Combine(rootPath, input);
+        if (!full.Contains('*'))
+            return Path.GetFullPath(full);
+
+        var normalized = full.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        var parts = normalized.Split('*');
+        if (parts.Length != 2)
+            return Path.GetFullPath(full);
+
+        var basePath = parts[0].TrimEnd(Path.DirectorySeparatorChar);
+        var tail = parts[1].TrimStart(Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(tail))
+            return Path.GetFullPath(full);
+
+        if (!filePath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(full);
+
+        var relative = Path.GetRelativePath(basePath, filePath);
+        var segments = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            return Path.GetFullPath(full);
+
+        var wildcardSegment = segments[0];
+        var candidate = Path.Combine(basePath, wildcardSegment, tail);
+        return Path.GetFullPath(candidate);
+    }
+
+    private static string ReplaceProjectPlaceholder(string output, string? projectSlug)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return output;
+        if (string.IsNullOrWhiteSpace(projectSlug))
+            return output.Replace("{project}", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return output.Replace("{project}", projectSlug, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolveProjectSlug(WebSitePlan plan, string filePath)
+    {
+        foreach (var project in plan.Projects)
+        {
+            if (string.IsNullOrWhiteSpace(project.ContentPath))
+                continue;
+
+            if (filePath.StartsWith(project.ContentPath, StringComparison.OrdinalIgnoreCase))
+                return project.Slug;
+        }
+
+        return null;
     }
 
     private static IEnumerable<string> EnumerateCollectionFilesWithWildcard(string path)

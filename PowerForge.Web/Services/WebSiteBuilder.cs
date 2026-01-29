@@ -1,8 +1,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace PowerForge.Web;
 
@@ -53,15 +57,19 @@ public static class WebSiteBuilder
         var projectContentMap = projectSpecs
             .Where(p => p.Content is not null && !string.IsNullOrWhiteSpace(p.Slug))
             .ToDictionary(p => p.Slug, p => p.Content!, StringComparer.OrdinalIgnoreCase);
-        var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap);
+        var cacheRoot = ResolveCacheRoot(spec, plan.RootPath);
+        var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
+        items.AddRange(BuildTaxonomyItems(spec, items));
+        var menuSpecs = BuildMenuSpecs(spec, items, plan.RootPath);
         foreach (var item in items)
         {
-            WriteContentItem(outDir, spec, plan.RootPath, item, data, projectMap);
+            WriteContentItem(outDir, spec, plan.RootPath, item, items, data, projectMap, menuSpecs);
         }
 
         CopyThemeAssets(spec, plan.RootPath, outDir);
         CopyStaticAssets(spec, plan.RootPath, outDir);
         WriteSearchIndex(outDir, items);
+        WriteLinkCheckReport(spec, items, metaDir);
 
         var redirectsPayload = new
         {
@@ -382,6 +390,8 @@ public static class WebSiteBuilder
         foreach (var item in items)
         {
             if (item.Draft) continue;
+            if (item.Kind != PageKind.Page && item.Kind != PageKind.Home)
+                continue;
 
             var snippet = BuildSnippet(item.HtmlContent, 240);
             entries.Add(new SearchIndexEntry
@@ -401,6 +411,108 @@ public static class WebSiteBuilder
         Directory.CreateDirectory(searchDir);
         var searchPath = Path.Combine(searchDir, "index.json");
         File.WriteAllText(searchPath, JsonSerializer.Serialize(entries, WebJson.Options));
+    }
+
+    private static void WriteLinkCheckReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)
+    {
+        if (spec.LinkCheck?.Enabled != true)
+            return;
+
+        var errors = new List<Dictionary<string, string>>();
+        var routes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in items)
+        {
+            if (item.Draft) continue;
+            if (item.Kind != PageKind.Page && item.Kind != PageKind.Home)
+                continue;
+            routes.Add(NormalizeRouteForMatch(item.OutputPath));
+        }
+
+        var skipPatterns = spec.LinkCheck.Skip ?? Array.Empty<string>();
+        foreach (var item in items)
+        {
+            if (item.Draft) continue;
+            if (item.Kind != PageKind.Page && item.Kind != PageKind.Home)
+                continue;
+
+            foreach (var href in ExtractLinks(item.HtmlContent))
+            {
+                if (string.IsNullOrWhiteSpace(href)) continue;
+                if (ShouldSkipLink(href, skipPatterns)) continue;
+                if (IsExternalUrl(href) && spec.LinkCheck.IncludeExternal != true) continue;
+                if (href.StartsWith("#")) continue;
+                if (href.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)) continue;
+                if (href.StartsWith("tel:", StringComparison.OrdinalIgnoreCase)) continue;
+                if (href.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var normalized = ResolveLinkTarget(item.OutputPath, href);
+                if (string.IsNullOrWhiteSpace(normalized)) continue;
+                if (!routes.Contains(normalized))
+                {
+                    errors.Add(new Dictionary<string, string>
+                    {
+                        ["page"] = item.OutputPath,
+                        ["href"] = href,
+                        ["target"] = normalized
+                    });
+                }
+            }
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["checkedAtUtc"] = DateTime.UtcNow.ToString("O"),
+            ["errorCount"] = errors.Count,
+            ["errors"] = errors
+        };
+
+        var path = Path.Combine(metaDir, "linkcheck.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(payload, WebJson.Options));
+    }
+
+    private static IEnumerable<string> ExtractLinks(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            yield break;
+
+        var matches = Regex.Matches(html, "href\\s*=\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase);
+        foreach (Match match in matches)
+        {
+            if (match.Groups.Count < 2) continue;
+            yield return match.Groups[1].Value;
+        }
+    }
+
+    private static string ResolveLinkTarget(string pagePath, string href)
+    {
+        var cleaned = href;
+        var hashIndex = cleaned.IndexOf('#');
+        if (hashIndex >= 0)
+            cleaned = cleaned.Substring(0, hashIndex);
+        var queryIndex = cleaned.IndexOf('?');
+        if (queryIndex >= 0)
+            cleaned = cleaned.Substring(0, queryIndex);
+
+        if (string.IsNullOrWhiteSpace(cleaned))
+            return string.Empty;
+
+        if (cleaned.StartsWith("/"))
+            return NormalizeRouteForMatch(cleaned);
+
+        var baseUri = new Uri("http://local" + NormalizeRouteForMatch(pagePath));
+        var target = new Uri(baseUri, cleaned);
+        return NormalizeRouteForMatch(target.AbsolutePath);
+    }
+
+    private static bool ShouldSkipLink(string href, string[] patterns)
+    {
+        if (patterns.Length == 0) return false;
+        foreach (var pattern in patterns)
+        {
+            if (GlobMatch(pattern, href))
+                return true;
+        }
+        return false;
     }
 
     private static string BuildSnippet(string html, int maxLength)
@@ -444,7 +556,8 @@ public static class WebSiteBuilder
         List<RedirectSpec> redirects,
         IReadOnlyDictionary<string, object?> data,
         IReadOnlyDictionary<string, ProjectSpec> projectMap,
-        IReadOnlyDictionary<string, ProjectContentSpec> projectContentMap)
+        IReadOnlyDictionary<string, ProjectContentSpec> projectContentMap,
+        string? cacheRoot)
     {
         var items = new List<ContentItem>();
         if (spec.Collections is null || spec.Collections.Length == 0)
@@ -471,8 +584,14 @@ public static class WebSiteBuilder
                 };
             }
 
-            foreach (var file in EnumerateCollectionFiles(plan.RootPath, collection.Input, include, exclude))
+            var markdownFiles = EnumerateCollectionFiles(plan.RootPath, collection.Input, include, exclude).ToList();
+            var leafBundleRoots = BuildLeafBundleRoots(markdownFiles);
+
+            foreach (var file in markdownFiles)
             {
+                if (IsUnderAnyRoot(file, leafBundleRoots) && !IsLeafBundleIndex(file))
+                    continue;
+
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
                 var effectiveBody = IncludePreprocessor.Apply(body, plan.RootPath);
@@ -491,9 +610,25 @@ public static class WebSiteBuilder
                 var processedBody = ShortcodeProcessor.Apply(effectiveBody, shortcodeContext);
 
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(processedBody) ?? Path.GetFileNameWithoutExtension(file);
-                var slug = matter?.Slug ?? Slugify(Path.GetFileNameWithoutExtension(file));
                 var description = matter?.Description ?? string.Empty;
-                var route = BuildRoute(collection.Output, slug, spec.TrailingSlash);
+                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
+                var relativePath = ResolveRelativePath(collectionRoot, file);
+                var relativeDir = NormalizePath(Path.GetDirectoryName(relativePath) ?? string.Empty);
+                var isSectionIndex = IsSectionIndex(file);
+                var isBundleIndex = IsLeafBundleIndex(file);
+                var slugPath = ResolveSlugPath(relativePath, relativeDir, matter?.Slug);
+                if (isSectionIndex || isBundleIndex)
+                    slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
+                var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
+                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                var kind = ResolvePageKind(route, collection, isSectionIndex);
+                var layout = matter?.Layout;
+                if (string.IsNullOrWhiteSpace(layout))
+                {
+                    layout = kind == PageKind.Section
+                        ? (string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout)
+                        : collection.DefaultLayout;
+                }
 
                 if (matter?.Aliases is { Length: > 0 })
                 {
@@ -512,7 +647,7 @@ public static class WebSiteBuilder
                 }
 
                 var htmlContent = ShouldRenderMarkdown(matter?.Meta)
-                    ? MarkdownRenderer.RenderToHtml(processedBody)
+                    ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
                     : processedBody;
                 var toc = BuildTableOfContents(htmlContent);
                 if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
@@ -532,23 +667,378 @@ public static class WebSiteBuilder
                     Title = title,
                     Description = description,
                     Date = matter?.Date,
-                    Slug = slug,
+                    Order = matter?.Order,
+                    Slug = slugPath,
                     Tags = matter?.Tags ?? Array.Empty<string>(),
                     Aliases = matter?.Aliases ?? Array.Empty<string>(),
                     Draft = matter?.Draft ?? false,
                     Canonical = matter?.Canonical,
                     EditPath = matter?.EditPath,
-                    Layout = matter?.Layout ?? collection.DefaultLayout,
+                    Layout = layout,
                     Template = matter?.Template,
+                    Kind = kind,
                     HtmlContent = htmlContent,
                     TocHtml = toc,
+                    Resources = isSectionIndex || isBundleIndex
+                        ? BuildBundleResources(Path.GetDirectoryName(file) ?? string.Empty)
+                        : Array.Empty<PageResource>(),
                     ProjectSlug = projectSlug,
-                    Meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    Meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+                    Outputs = ResolveOutputs(matter?.Meta, collection)
                 });
             }
         }
 
         return items;
+    }
+
+    private static List<ContentItem> BuildTaxonomyItems(SiteSpec spec, IReadOnlyList<ContentItem> items)
+    {
+        var results = new List<ContentItem>();
+        if (spec.Taxonomies is null || spec.Taxonomies.Length == 0)
+            return results;
+
+        var sourceItems = items
+            .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
+            .Where(i => !i.Draft)
+            .ToList();
+
+        foreach (var taxonomy in spec.Taxonomies)
+        {
+            if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || string.IsNullOrWhiteSpace(taxonomy.BasePath))
+                continue;
+
+            var termMap = new Dictionary<string, List<ContentItem>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in sourceItems)
+            {
+                foreach (var term in GetTaxonomyValues(item, taxonomy))
+                {
+                    if (!termMap.TryGetValue(term, out var list))
+                    {
+                        list = new List<ContentItem>();
+                        termMap[term] = list;
+                    }
+                    list.Add(item);
+                }
+            }
+
+            var taxRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
+            results.Add(new ContentItem
+            {
+                Collection = taxonomy.Name,
+                OutputPath = taxRoute,
+                Title = HumanizeSegment(taxonomy.Name),
+                Description = string.Empty,
+                Kind = PageKind.Taxonomy,
+                Layout = taxonomy.ListLayout ?? "taxonomy",
+                Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["taxonomy"] = taxonomy.Name
+                }
+            });
+
+            foreach (var term in termMap.Keys.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+            {
+                var slug = Slugify(term);
+                var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
+                results.Add(new ContentItem
+                {
+                    Collection = taxonomy.Name,
+                    OutputPath = termRoute,
+                    Title = term,
+                    Description = string.Empty,
+                    Kind = PageKind.Term,
+                    Layout = taxonomy.TermLayout ?? "term",
+                    Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["taxonomy"] = taxonomy.Name,
+                        ["term"] = term
+                    }
+                });
+            }
+        }
+
+        return results;
+    }
+
+    private static IEnumerable<string> GetTaxonomyValues(ContentItem item, TaxonomySpec taxonomy)
+    {
+        if (taxonomy.Name.Equals("tags", StringComparison.OrdinalIgnoreCase))
+            return item.Tags ?? Array.Empty<string>();
+
+        if (item.Meta is not null && TryGetMetaValue(item.Meta, taxonomy.Name, out var value))
+        {
+            if (value is IEnumerable<object?> list)
+                return list.Select(v => v?.ToString() ?? string.Empty)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .ToArray();
+
+            if (value is string s && !string.IsNullOrWhiteSpace(s))
+                return new[] { s };
+        }
+
+        return Array.Empty<string>();
+    }
+
+    private static HashSet<string> BuildLeafBundleRoots(IReadOnlyList<string> markdownFiles)
+    {
+        if (markdownFiles.Count == 0)
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var byDir = markdownFiles
+            .GroupBy(f => Path.GetDirectoryName(f) ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in byDir)
+        {
+            var dir = kvp.Key;
+            var files = kvp.Value;
+            var hasIndex = files.Any(IsLeafBundleIndex);
+            if (!hasIndex) continue;
+            if (files.Any(IsSectionIndex)) continue;
+
+            var hasOtherMarkdown = files.Any(f =>
+            {
+                var name = Path.GetFileName(f);
+                if (name.Equals("index.md", StringComparison.OrdinalIgnoreCase)) return false;
+                if (name.Equals("_index.md", StringComparison.OrdinalIgnoreCase)) return false;
+                return true;
+            });
+
+            if (!hasOtherMarkdown)
+                roots.Add(dir);
+        }
+
+        return roots;
+    }
+
+    private static bool IsLeafBundleIndex(string filePath)
+    {
+        return Path.GetFileName(filePath).Equals("index.md", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSectionIndex(string filePath)
+    {
+        return Path.GetFileName(filePath).Equals("_index.md", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsUnderAnyRoot(string filePath, HashSet<string> roots)
+    {
+        if (roots.Count == 0) return false;
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            if (filePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                filePath.Equals(root, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static string ResolveRelativePath(string? collectionRoot, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(collectionRoot))
+            return Path.GetFileName(filePath);
+        return Path.GetRelativePath(collectionRoot, filePath).Replace('\\', '/');
+    }
+
+    private static string ResolveSlugPath(string relativePath, string relativeDir, string? slugOverride)
+    {
+        var withoutExtension = NormalizePath(Path.ChangeExtension(relativePath, null) ?? string.Empty);
+        return ApplySlugOverride(withoutExtension, slugOverride);
+    }
+
+    private static string ApplySlugOverride(string basePath, string? slugOverride)
+    {
+        if (string.IsNullOrWhiteSpace(slugOverride))
+            return basePath;
+
+        var normalized = NormalizePath(slugOverride);
+        if (normalized.Contains('/'))
+            return normalized;
+
+        if (string.IsNullOrWhiteSpace(basePath))
+            return normalized;
+
+        var idx = basePath.LastIndexOf('/');
+        if (idx < 0)
+            return normalized;
+
+        var parent = basePath.Substring(0, idx);
+        if (string.IsNullOrWhiteSpace(parent))
+            return normalized;
+
+        return parent + "/" + normalized;
+    }
+
+    private static string? ResolveCollectionRootForFile(string rootPath, string input, string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return null;
+
+        var full = Path.IsPathRooted(input) ? input : Path.Combine(rootPath, input);
+        if (!full.Contains('*'))
+            return Path.GetFullPath(full);
+
+        var normalized = full.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+        var parts = normalized.Split('*');
+        if (parts.Length != 2)
+            return Path.GetFullPath(full);
+
+        var basePath = parts[0].TrimEnd(Path.DirectorySeparatorChar);
+        var tail = parts[1].TrimStart(Path.DirectorySeparatorChar);
+        if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(tail))
+            return Path.GetFullPath(full);
+
+        if (!filePath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(full);
+
+        var relative = Path.GetRelativePath(basePath, filePath);
+        var segments = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            return Path.GetFullPath(full);
+
+        var wildcardSegment = segments[0];
+        var candidate = Path.Combine(basePath, wildcardSegment, tail);
+        return Path.GetFullPath(candidate);
+    }
+
+    private static string ReplaceProjectPlaceholder(string output, string? projectSlug)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return output;
+        if (string.IsNullOrWhiteSpace(projectSlug))
+            return output.Replace("{project}", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return output.Replace("{project}", projectSlug, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static PageKind ResolvePageKind(string route, CollectionSpec collection, bool isSectionIndex)
+    {
+        if (isSectionIndex) return PageKind.Section;
+        if (string.Equals(route, "/", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(collection.Output, "/", StringComparison.OrdinalIgnoreCase))
+            return PageKind.Home;
+        return PageKind.Page;
+    }
+
+    private static PageResource[] BuildBundleResources(string bundleRoot)
+    {
+        if (string.IsNullOrWhiteSpace(bundleRoot) || !Directory.Exists(bundleRoot))
+            return Array.Empty<PageResource>();
+
+        var resources = new List<PageResource>();
+        foreach (var file in Directory.EnumerateFiles(bundleRoot, "*", SearchOption.AllDirectories))
+        {
+            if (file.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var relative = Path.GetRelativePath(bundleRoot, file).Replace('\\', '/');
+            resources.Add(new PageResource
+            {
+                SourcePath = file,
+                Name = Path.GetFileName(file),
+                RelativePath = relative,
+                MediaType = ResolveMediaType(file)
+            });
+        }
+
+        return resources.ToArray();
+    }
+
+    private static string? ResolveMediaType(string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        return ext switch
+        {
+            ".html" => "text/html",
+            ".htm" => "text/html",
+            ".css" => "text/css",
+            ".js" => "text/javascript",
+            ".json" => "application/json",
+            ".svg" => "image/svg+xml",
+            ".png" => "image/png",
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".woff" => "font/woff",
+            ".woff2" => "font/woff2",
+            ".ttf" => "font/ttf",
+            ".ico" => "image/x-icon",
+            _ => null
+        };
+    }
+
+    private static string[] ResolveOutputs(Dictionary<string, object?>? meta, CollectionSpec collection)
+    {
+        var outputs = TryGetMetaStringList(meta, "outputs");
+        if (outputs.Length > 0)
+            return outputs;
+        if (collection.Outputs.Length > 0)
+            return collection.Outputs;
+        return Array.Empty<string>();
+    }
+
+    private static string[] TryGetMetaStringList(Dictionary<string, object?>? meta, string key)
+    {
+        if (meta is null || meta.Count == 0) return Array.Empty<string>();
+        if (!TryGetMetaValue(meta, key, out var value) || value is null)
+            return Array.Empty<string>();
+
+        if (value is IEnumerable<object?> list)
+        {
+            return list.Select(v => v?.ToString() ?? string.Empty)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToArray();
+        }
+
+        if (value is string s && !string.IsNullOrWhiteSpace(s))
+            return new[] { s };
+
+        return Array.Empty<string>();
+    }
+
+    private static string? ResolveCacheRoot(SiteSpec spec, string rootPath)
+    {
+        if (spec.Cache?.Enabled != true)
+            return null;
+
+        var root = spec.Cache.Root;
+        if (string.IsNullOrWhiteSpace(root))
+            root = Path.Combine(rootPath, ".cache", "powerforge-web");
+
+        var full = Path.IsPathRooted(root) ? root : Path.Combine(rootPath, root);
+        Directory.CreateDirectory(full);
+        return full;
+    }
+
+    private static string RenderMarkdown(string content, string sourcePath, BuildCacheSpec? cache, string? cacheRoot)
+    {
+        if (cache?.Enabled != true || string.IsNullOrWhiteSpace(cacheRoot))
+            return MarkdownRenderer.RenderToHtml(content);
+
+        var key = ComputeCacheKey(content, sourcePath, cache);
+        var cacheFile = Path.Combine(cacheRoot, key + ".html");
+        if (File.Exists(cacheFile))
+            return File.ReadAllText(cacheFile);
+
+        var html = MarkdownRenderer.RenderToHtml(content);
+        File.WriteAllText(cacheFile, html);
+        return html;
+    }
+
+    private static string ComputeCacheKey(string content, string sourcePath, BuildCacheSpec? cache)
+    {
+        var mode = cache?.Mode ?? "contenthash";
+        var input = mode.Equals("mtime", StringComparison.OrdinalIgnoreCase)
+            ? $"{sourcePath}|{File.GetLastWriteTimeUtc(sourcePath).Ticks}"
+            : content;
+
+        using var sha = SHA256.Create();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+        var hash = sha.ComputeHash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static bool ShouldRenderMarkdown(Dictionary<string, object?>? meta)
@@ -570,7 +1060,7 @@ public static class WebSiteBuilder
     private static bool TryGetMetaBool(Dictionary<string, object?> meta, string key, out bool value)
     {
         value = false;
-        if (!meta.TryGetValue(key, out var obj) || obj is null) return false;
+        if (!TryGetMetaValue(meta, key, out var obj) || obj is null) return false;
         if (obj is bool b)
         {
             value = b;
@@ -587,9 +1077,44 @@ public static class WebSiteBuilder
     private static bool TryGetMetaString(Dictionary<string, object?> meta, string key, out string value)
     {
         value = string.Empty;
-        if (!meta.TryGetValue(key, out var obj) || obj is null) return false;
+        if (!TryGetMetaValue(meta, key, out var obj) || obj is null) return false;
         value = obj.ToString() ?? string.Empty;
         return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetMetaValue(Dictionary<string, object?> meta, string key, out object? value)
+    {
+        value = null;
+        if (meta is null || string.IsNullOrWhiteSpace(key)) return false;
+        var parts = key.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0) return false;
+
+        object? current = meta;
+        foreach (var part in parts)
+        {
+            if (current is IReadOnlyDictionary<string, object?> map)
+            {
+                if (!map.TryGetValue(part, out current))
+                    return false;
+                continue;
+            }
+
+            return false;
+        }
+
+        value = current;
+        return true;
+    }
+
+    private static int? GetMetaInt(Dictionary<string, object?>? meta, string key)
+    {
+        if (meta is null) return null;
+        if (!TryGetMetaValue(meta, key, out var value) || value is null)
+            return null;
+        if (value is int i) return i;
+        if (value is long l) return (int)l;
+        if (value is string s && int.TryParse(s, out var parsed)) return parsed;
+        return null;
     }
 
     private static string GetMetaString(Dictionary<string, object?>? meta, string key)
@@ -637,26 +1162,35 @@ public static class WebSiteBuilder
         SiteSpec spec,
         string rootPath,
         ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
         IReadOnlyDictionary<string, object?> data,
-        IReadOnlyDictionary<string, ProjectSpec> projectMap)
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        MenuSpec[] menuSpecs)
     {
         if (item.Draft) return;
 
         var targetDir = ResolveOutputDirectory(outputRoot, item.OutputPath);
         Directory.CreateDirectory(targetDir);
-        var outputFile = Path.Combine(targetDir, "index.html");
 
         var effectiveData = ResolveDataForProject(data, item.ProjectSlug);
-        var html = RenderHtmlPage(spec, rootPath, item, effectiveData, projectMap);
-        File.WriteAllText(outputFile, html);
+        var formats = ResolveOutputFormats(spec, item);
+        foreach (var format in formats)
+        {
+            var outputFile = Path.Combine(targetDir, ResolveOutputFileName(format));
+            var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format);
+            File.WriteAllText(outputFile, content);
+        }
+        CopyPageResources(item, targetDir);
     }
 
     private static string RenderHtmlPage(
         SiteSpec spec,
         string rootPath,
         ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
         IReadOnlyDictionary<string, object?> data,
-        IReadOnlyDictionary<string, ProjectSpec> projectMap)
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        MenuSpec[] menuSpecs)
     {
         var themeRoot = ResolveThemeRoot(spec, rootPath);
         var loader = new ThemeLoader();
@@ -675,7 +1209,8 @@ public static class WebSiteBuilder
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer></script>"));
         var descriptionMeta = string.IsNullOrWhiteSpace(item.Description) ? string.Empty : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(item.Description)}\" />";
         projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
-        var breadcrumbs = BuildBreadcrumbs(spec, item);
+        var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
+        var listItems = ResolveListItems(item, allItems);
         var headHtml = BuildHeadHtml(spec, item, rootPath);
         var bodyClass = BuildBodyClass(spec, item);
         var openGraph = BuildOpenGraphHtml(spec, item);
@@ -687,9 +1222,10 @@ public static class WebSiteBuilder
         {
             Site = spec,
             Page = item,
+            Items = listItems,
             Data = data,
             Project = projectSpec,
-            Navigation = BuildNavigation(spec, item.OutputPath),
+            Navigation = BuildNavigation(spec, item.OutputPath, menuSpecs),
             Breadcrumbs = breadcrumbs,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
@@ -703,7 +1239,9 @@ public static class WebSiteBuilder
             StructuredDataHtml = structuredData,
             ExtraCssHtml = extraCss,
             ExtraScriptsHtml = extraScripts,
-            BodyClass = bodyClass
+            BodyClass = bodyClass,
+            Taxonomy = ResolveTaxonomy(spec, item),
+            Term = ResolveTerm(item)
         };
 
         if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
@@ -748,13 +1286,514 @@ public static class WebSiteBuilder
 </html>";
     }
 
-    private static NavigationRuntime BuildNavigation(SiteSpec spec, string currentPath)
+    private static OutputFormatSpec[] ResolveOutputFormats(SiteSpec spec, ContentItem item)
+    {
+        var formatNames = item.Outputs.Length > 0 ? item.Outputs : ResolveOutputRule(spec, item);
+        if (formatNames.Length == 0)
+            formatNames = new[] { "html" };
+
+        var formats = new List<OutputFormatSpec>();
+        foreach (var name in formatNames)
+        {
+            var format = ResolveOutputFormatSpec(spec, name);
+            if (format is not null)
+                formats.Add(format);
+        }
+
+        if (formats.Count == 0)
+            formats.Add(new OutputFormatSpec { Name = "html", MediaType = "text/html", Suffix = "html" });
+
+        return formats.ToArray();
+    }
+
+    private static string[] ResolveOutputRule(SiteSpec spec, ContentItem item)
+    {
+        if (spec.Outputs?.Rules is null || spec.Outputs.Rules.Length == 0)
+            return Array.Empty<string>();
+
+        var kind = item.Kind.ToString().ToLowerInvariant();
+        foreach (var rule in spec.Outputs.Rules)
+        {
+            if (rule is null || string.IsNullOrWhiteSpace(rule.Kind)) continue;
+            if (string.Equals(rule.Kind, kind, StringComparison.OrdinalIgnoreCase))
+                return rule.Formats ?? Array.Empty<string>();
+        }
+
+        return Array.Empty<string>();
+    }
+
+    private static OutputFormatSpec? ResolveOutputFormatSpec(SiteSpec spec, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (spec.Outputs?.Formats is not null)
+        {
+            var match = spec.Outputs.Formats.FirstOrDefault(f =>
+                string.Equals(f.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match;
+        }
+
+        return name.ToLowerInvariant() switch
+        {
+            "html" => new OutputFormatSpec { Name = "html", MediaType = "text/html", Suffix = "html" },
+            "rss" => new OutputFormatSpec { Name = "rss", MediaType = "application/rss+xml", Suffix = "xml", Rel = "alternate" },
+            "json" => new OutputFormatSpec { Name = "json", MediaType = "application/json", Suffix = "json" },
+            _ => new OutputFormatSpec { Name = name, MediaType = "text/plain", Suffix = name, IsPlainText = true }
+        };
+    }
+
+    private static string ResolveOutputFileName(OutputFormatSpec format)
+    {
+        if (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
+            return "index.html";
+        return $"index.{format.Suffix}";
+    }
+
+    private static string RenderOutput(
+        SiteSpec spec,
+        string rootPath,
+        ContentItem item,
+        IReadOnlyList<ContentItem> allItems,
+        IReadOnlyDictionary<string, object?> data,
+        IReadOnlyDictionary<string, ProjectSpec> projectMap,
+        MenuSpec[] menuSpecs,
+        OutputFormatSpec format)
+    {
+        var name = format.Name.ToLowerInvariant();
+        return name switch
+        {
+            "json" => RenderJsonOutput(spec, item, allItems),
+            "rss" => RenderRssOutput(spec, item, allItems),
+            _ => RenderHtmlPage(spec, rootPath, item, allItems, data, projectMap, menuSpecs)
+        };
+    }
+
+    private static string RenderJsonOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var listItems = ResolveListItems(item, items);
+        var payload = new Dictionary<string, object?>
+        {
+            ["title"] = item.Title,
+            ["description"] = item.Description,
+            ["url"] = item.OutputPath,
+            ["kind"] = item.Kind.ToString().ToLowerInvariant(),
+            ["collection"] = item.Collection,
+            ["tags"] = item.Tags,
+            ["date"] = item.Date?.ToString("O"),
+            ["content"] = item.HtmlContent,
+            ["items"] = listItems.Select(i => new Dictionary<string, object?>
+            {
+                ["title"] = i.Title,
+                ["url"] = i.OutputPath,
+                ["description"] = i.Description,
+                ["date"] = i.Date?.ToString("O"),
+                ["tags"] = i.Tags
+            }).ToList()
+        };
+
+        return JsonSerializer.Serialize(payload, WebJson.Options);
+    }
+
+    private static string RenderRssOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var listItems = ResolveListItems(item, items);
+        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var channelTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
+        var channelLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
+        var channelDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+
+        var feedItems = listItems
+            .OrderByDescending(i => i.Date ?? DateTime.MinValue)
+            .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+            .Select(i =>
+            {
+                var link = string.IsNullOrWhiteSpace(baseUrl) ? i.OutputPath : baseUrl + i.OutputPath;
+                var description = string.IsNullOrWhiteSpace(i.Description) ? BuildSnippet(i.HtmlContent, 200) : i.Description;
+                var pubDate = i.Date?.ToUniversalTime().ToString("r") ?? DateTime.UtcNow.ToString("r");
+                return new XElement("item",
+                    new XElement("title", i.Title),
+                    new XElement("link", link),
+                    new XElement("description", description),
+                    new XElement("pubDate", pubDate));
+            })
+            .ToArray();
+
+        var doc = new XDocument(
+            new XDeclaration("1.0", "UTF-8", null),
+            new XElement("rss",
+                new XAttribute("version", "2.0"),
+                new XElement("channel",
+                    new XElement("title", channelTitle),
+                    new XElement("link", channelLink),
+                    new XElement("description", channelDescription),
+                    feedItems)));
+
+        using var sw = new StringWriter();
+        doc.Save(sw);
+        return sw.ToString();
+    }
+
+    private static void CopyPageResources(ContentItem item, string targetDir)
+    {
+        if (item.Resources is null || item.Resources.Length == 0)
+            return;
+
+        foreach (var resource in item.Resources)
+        {
+            if (string.IsNullOrWhiteSpace(resource.SourcePath) || !File.Exists(resource.SourcePath))
+                continue;
+
+            var relative = resource.RelativePath ?? string.Empty;
+            var target = string.IsNullOrWhiteSpace(relative)
+                ? Path.Combine(targetDir, resource.Name)
+                : Path.Combine(targetDir, relative.Replace('/', Path.DirectorySeparatorChar));
+            var targetFolder = Path.GetDirectoryName(target);
+            if (!string.IsNullOrWhiteSpace(targetFolder))
+                Directory.CreateDirectory(targetFolder);
+            File.Copy(resource.SourcePath, target, overwrite: true);
+        }
+    }
+
+    private static IReadOnlyList<ContentItem> ResolveListItems(ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        if (item.Kind == PageKind.Section)
+        {
+            var current = NormalizeRouteForMatch(item.OutputPath);
+            return items
+                .Where(i => !i.Draft)
+                .Where(i => i.Collection == item.Collection)
+                .Where(i => i.OutputPath != item.OutputPath)
+                .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
+                .Where(i => NormalizeRouteForMatch(i.OutputPath).StartsWith(current, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(i => i.Order ?? int.MaxValue)
+                .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (item.Kind == PageKind.Taxonomy)
+        {
+            var taxonomy = GetMetaString(item.Meta, "taxonomy");
+            return items
+                .Where(i => i.Kind == PageKind.Term)
+                .Where(i => string.Equals(GetMetaString(i.Meta, "taxonomy"), taxonomy, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (item.Kind == PageKind.Term)
+        {
+            var taxonomy = GetMetaString(item.Meta, "taxonomy");
+            var term = GetMetaString(item.Meta, "term");
+            if (string.IsNullOrWhiteSpace(term))
+                return Array.Empty<ContentItem>();
+
+            return items
+                .Where(i => !i.Draft)
+                .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
+                .Where(i => GetTaxonomyValues(i, new TaxonomySpec { Name = taxonomy }).Any(t =>
+                    string.Equals(t, term, StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(i => i.Order ?? int.MaxValue)
+                .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return Array.Empty<ContentItem>();
+    }
+
+    private static TaxonomySpec? ResolveTaxonomy(SiteSpec spec, ContentItem item)
+    {
+        var key = GetMetaString(item.Meta, "taxonomy");
+        if (string.IsNullOrWhiteSpace(key)) return null;
+        return spec.Taxonomies.FirstOrDefault(t => string.Equals(t.Name, key, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? ResolveTerm(ContentItem item)
+    {
+        var term = GetMetaString(item.Meta, "term");
+        return string.IsNullOrWhiteSpace(term) ? null : term;
+    }
+
+    private static MenuSpec[] BuildMenuSpecs(SiteSpec spec, IReadOnlyList<ContentItem> items, string rootPath)
+    {
+        var result = new Dictionary<string, MenuSpec>(StringComparer.OrdinalIgnoreCase);
+
+        if (spec.Navigation?.Menus is not null)
+        {
+            foreach (var menu in spec.Navigation.Menus)
+            {
+                if (menu is null || string.IsNullOrWhiteSpace(menu.Name)) continue;
+                result[menu.Name] = CloneMenu(menu);
+            }
+        }
+
+        if (spec.Navigation?.Auto is not null && spec.Navigation.Auto.Length > 0)
+        {
+            foreach (var auto in spec.Navigation.Auto)
+            {
+                if (auto is null || string.IsNullOrWhiteSpace(auto.Collection) || string.IsNullOrWhiteSpace(auto.Menu))
+                    continue;
+
+                var collection = spec.Collections.FirstOrDefault(c =>
+                    string.Equals(c.Name, auto.Collection, StringComparison.OrdinalIgnoreCase));
+                var menuItems = BuildAutoMenuItems(auto, collection, items, rootPath);
+                if (menuItems.Length == 0) continue;
+
+                if (result.TryGetValue(auto.Menu, out var existing))
+                {
+                    existing.Items = existing.Items.Concat(menuItems).ToArray();
+                }
+                else
+                {
+                    result[auto.Menu] = new MenuSpec
+                    {
+                        Name = auto.Menu,
+                        Label = auto.Menu,
+                        Items = menuItems
+                    };
+                }
+            }
+        }
+
+        return result.Values.ToArray();
+    }
+
+    private static MenuItemSpec[] BuildAutoMenuItems(NavigationAutoSpec auto, CollectionSpec? collection, IReadOnlyList<ContentItem> items, string rootPath)
+    {
+        if (collection is null) return Array.Empty<MenuItemSpec>();
+        var tocItems = LoadTocItems(collection, rootPath);
+        if (tocItems.Length > 0)
+            return BuildMenuItemsFromToc(tocItems, auto);
+        var root = string.IsNullOrWhiteSpace(auto.Root) ? collection.Output : auto.Root;
+        var rootNormalized = NormalizeRouteForMatch(string.IsNullOrWhiteSpace(root) ? "/" : root);
+        var includeDrafts = auto.IncludeDrafts;
+        var includeIndex = auto.IncludeIndex;
+        var maxDepth = auto.MaxDepth;
+
+        var nodes = new Dictionary<string, NavNode>(StringComparer.OrdinalIgnoreCase);
+        var rootNode = new NavNode(rootNormalized, string.Empty, 0);
+        nodes[rootNormalized] = rootNode;
+
+        foreach (var item in items)
+        {
+            if (!string.Equals(item.Collection, auto.Collection, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!includeDrafts && item.Draft)
+                continue;
+            if (!includeIndex && item.Kind == PageKind.Section)
+                continue;
+
+            var normalized = NormalizeRouteForMatch(item.OutputPath);
+            if (!IsUnderRoot(normalized, rootNormalized))
+                continue;
+
+            var relative = normalized.Substring(rootNormalized.Length).Trim('/');
+            if (string.IsNullOrWhiteSpace(relative))
+            {
+                rootNode.Item = item;
+                continue;
+            }
+
+            var segments = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            var current = rootNode;
+            var path = rootNormalized.TrimEnd('/');
+            for (var i = 0; i < segments.Length; i++)
+            {
+                var segment = segments[i];
+                path = path + "/" + segment + "/";
+                if (!current.Children.TryGetValue(segment, out var next))
+                {
+                    next = new NavNode(path, segment, current.Depth + 1);
+                    current.Children[segment] = next;
+                    nodes[path] = next;
+                }
+                current = next;
+            }
+
+            current.Item = item;
+        }
+
+        var menuItems = BuildMenuItemsFromNodes(rootNode, auto, maxDepth);
+        return OrderMenuItems(menuItems, auto.Sort);
+    }
+
+    private static TocItem[] LoadTocItems(CollectionSpec collection, string rootPath)
+    {
+        var tocPath = collection.TocFile;
+        if (!string.IsNullOrWhiteSpace(tocPath))
+        {
+            var resolved = Path.IsPathRooted(tocPath) ? tocPath : Path.Combine(rootPath, tocPath);
+            return LoadTocFromPath(resolved);
+        }
+
+        var inputRoot = Path.IsPathRooted(collection.Input)
+            ? collection.Input
+            : Path.Combine(rootPath, collection.Input);
+        if (inputRoot.Contains('*'))
+            return Array.Empty<TocItem>();
+
+        var jsonPath = Path.Combine(inputRoot, "toc.json");
+        if (File.Exists(jsonPath))
+            return LoadTocFromPath(jsonPath);
+
+        var yamlPath = Path.Combine(inputRoot, "toc.yml");
+        if (File.Exists(yamlPath))
+            return LoadTocFromPath(yamlPath);
+
+        var yamlAltPath = Path.Combine(inputRoot, "toc.yaml");
+        if (File.Exists(yamlAltPath))
+            return LoadTocFromPath(yamlAltPath);
+
+        return Array.Empty<TocItem>();
+    }
+
+    private static TocItem[] LoadTocFromPath(string path)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<TocItem>();
+
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        if (ext == ".json")
+        {
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<TocItem[]>(json, WebJson.Options) ?? Array.Empty<TocItem>();
+        }
+
+        if (ext is ".yml" or ".yaml")
+        {
+            var yaml = File.ReadAllText(path);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+
+            var items = deserializer.Deserialize<List<TocItem>>(yaml);
+            return items?.ToArray() ?? Array.Empty<TocItem>();
+        }
+
+        return Array.Empty<TocItem>();
+    }
+
+    private static MenuItemSpec[] BuildMenuItemsFromToc(TocItem[] items, NavigationAutoSpec auto, int depth = 1)
+    {
+        if (items is null || items.Length == 0)
+            return Array.Empty<MenuItemSpec>();
+
+        if (auto.MaxDepth.HasValue && depth > auto.MaxDepth.Value)
+            return Array.Empty<MenuItemSpec>();
+
+        var list = new List<MenuItemSpec>();
+        foreach (var item in items)
+        {
+            if (item is null) continue;
+            if (item.Hidden) continue;
+            var title = item.Title ?? item.Name ?? item.Href ?? item.Url ?? "Untitled";
+            var menuItem = new MenuItemSpec
+            {
+                Title = title,
+                Url = item.Url ?? item.Href,
+                Items = BuildMenuItemsFromToc(item.Items ?? Array.Empty<TocItem>(), auto, depth + 1)
+            };
+            list.Add(menuItem);
+        }
+
+        return list.ToArray();
+    }
+
+    private static MenuItemSpec[] BuildMenuItemsFromNodes(NavNode node, NavigationAutoSpec auto, int? maxDepth)
+    {
+        if (node.Children.Count == 0)
+            return Array.Empty<MenuItemSpec>();
+
+        var list = new List<MenuItemSpec>();
+        foreach (var child in node.Children.Values.OrderBy(c => c.Segment, StringComparer.OrdinalIgnoreCase))
+        {
+            if (maxDepth.HasValue && child.Depth > maxDepth.Value)
+                continue;
+
+            if (child.Item is not null && IsNavHidden(child.Item))
+                continue;
+
+            var title = ResolveNavTitle(child);
+            var url = child.Item?.OutputPath;
+            var icon = child.Item is null ? null : GetMetaString(child.Item.Meta, "nav.icon");
+            var badge = child.Item is null ? null : GetMetaString(child.Item.Meta, "nav.badge");
+            var description = child.Item is null ? null : GetMetaString(child.Item.Meta, "nav.description");
+            var weight = child.Item?.Order;
+            var navWeight = child.Item is null ? null : GetMetaInt(child.Item.Meta, "nav.weight");
+            if (navWeight.HasValue) weight = navWeight;
+
+            var itemSpec = new MenuItemSpec
+            {
+                Title = title,
+                Url = url,
+                Icon = icon,
+                Badge = badge,
+                Description = description,
+                Weight = weight,
+                Match = child.Path
+            };
+
+            itemSpec.Items = BuildMenuItemsFromNodes(child, auto, maxDepth);
+            list.Add(itemSpec);
+        }
+
+        return list.ToArray();
+    }
+
+    private static bool IsNavHidden(ContentItem item)
+    {
+        if (item.Meta is null || item.Meta.Count == 0) return false;
+        if (TryGetMetaBool(item.Meta, "nav.hidden", out var hidden))
+            return hidden;
+        return false;
+    }
+
+    private static string ResolveNavTitle(NavNode node)
+    {
+        if (node.Item is not null)
+        {
+            var overrideTitle = GetMetaString(node.Item.Meta, "nav.title");
+            return string.IsNullOrWhiteSpace(overrideTitle) ? node.Item.Title : overrideTitle;
+        }
+
+        return HumanizeSegment(node.Segment);
+    }
+
+    private static MenuSpec CloneMenu(MenuSpec menu)
+    {
+        return new MenuSpec
+        {
+            Name = menu.Name,
+            Label = menu.Label,
+            Items = CloneMenuItems(menu.Items)
+        };
+    }
+
+    private static MenuItemSpec[] CloneMenuItems(MenuItemSpec[] items)
+    {
+        if (items is null || items.Length == 0) return Array.Empty<MenuItemSpec>();
+        return items.Select(i => new MenuItemSpec
+        {
+            Title = i.Title,
+            Url = i.Url,
+            Icon = i.Icon,
+            Badge = i.Badge,
+            Description = i.Description,
+            Target = i.Target,
+            Rel = i.Rel,
+            External = i.External,
+            Weight = i.Weight,
+            Match = i.Match,
+            Items = CloneMenuItems(i.Items)
+        }).ToArray();
+    }
+
+    private static NavigationRuntime BuildNavigation(SiteSpec spec, string currentPath, MenuSpec[] menuSpecs)
     {
         var nav = new NavigationRuntime();
-        if (spec.Navigation?.Menus is null || spec.Navigation.Menus.Length == 0)
+        if (menuSpecs.Length == 0)
             return nav;
 
-        nav.Menus = spec.Navigation.Menus
+        nav.Menus = menuSpecs
             .Select(m => new NavigationMenu
             {
                 Name = m.Name,
@@ -763,6 +1802,32 @@ public static class WebSiteBuilder
             })
             .ToArray();
         return nav;
+    }
+
+    private sealed class NavNode
+    {
+        public NavNode(string path, string segment, int depth)
+        {
+            Path = path;
+            Segment = segment;
+            Depth = depth;
+        }
+
+        public string Path { get; }
+        public string Segment { get; }
+        public int Depth { get; }
+        public ContentItem? Item { get; set; }
+        public Dictionary<string, NavNode> Children { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class TocItem
+    {
+        public string? Name { get; set; }
+        public string? Title { get; set; }
+        public string? Href { get; set; }
+        public string? Url { get; set; }
+        public bool Hidden { get; set; }
+        public TocItem[]? Items { get; set; }
     }
 
     private static NavigationItem[] BuildMenuItems(MenuItemSpec[] items, string currentPath, LinkRulesSpec? linkRules)
@@ -823,6 +1888,41 @@ public static class WebSiteBuilder
             .ToList();
     }
 
+    private static MenuItemSpec[] OrderMenuItems(MenuItemSpec[] items, string? sort)
+    {
+        if (items is null || items.Length == 0) return Array.Empty<MenuItemSpec>();
+        if (string.IsNullOrWhiteSpace(sort))
+            return OrderMenuItems(items).ToArray();
+
+        var tokens = sort.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .ToArray();
+
+        var list = items.ToList();
+        IOrderedEnumerable<MenuItemSpec>? ordered = null;
+        foreach (var token in tokens)
+        {
+            switch (token)
+            {
+                case "order":
+                case "weight":
+                    ordered = ordered is null
+                        ? list.OrderBy(i => i.Weight ?? 0)
+                        : ordered.ThenBy(i => i.Weight ?? 0);
+                    break;
+                case "title":
+                    ordered = ordered is null
+                        ? list.OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+                        : ordered.ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        return (ordered ?? list.OrderBy(i => i.Weight ?? 0).ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)).ToArray();
+    }
+
     private static bool MatchesMenuItem(MenuItemSpec item, string currentPath, string normalizedUrl, bool exactOnly)
     {
         if (!string.IsNullOrWhiteSpace(item.Match))
@@ -868,6 +1968,15 @@ public static class WebSiteBuilder
         return trimmed;
     }
 
+    private static bool IsUnderRoot(string path, string root)
+    {
+        var rootNormalized = NormalizeRouteForMatch(root);
+        var pathNormalized = NormalizeRouteForMatch(path);
+        if (string.IsNullOrWhiteSpace(rootNormalized) || rootNormalized == "/")
+            return true;
+        return pathNormalized.StartsWith(rootNormalized, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsExternalUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return false;
@@ -876,11 +1985,11 @@ public static class WebSiteBuilder
                url.StartsWith("//", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static BreadcrumbItem[] BuildBreadcrumbs(SiteSpec spec, ContentItem item)
+    private static BreadcrumbItem[] BuildBreadcrumbs(SiteSpec spec, ContentItem item, MenuSpec[] menuSpecs)
     {
         var current = NormalizeRouteForMatch(item.OutputPath);
         var crumbs = new List<BreadcrumbItem>();
-        var nav = BuildNavigation(spec, item.OutputPath);
+        var nav = BuildNavigation(spec, item.OutputPath, menuSpecs);
 
         var homeTitle = FindNavTitle(nav, "/") ?? "Home";
         crumbs.Add(new BreadcrumbItem { Title = homeTitle, Url = "/", IsCurrent = current == "/" });

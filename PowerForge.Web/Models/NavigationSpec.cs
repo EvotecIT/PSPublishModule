@@ -5,6 +5,9 @@ public sealed class NavigationSpec
 {
     /// <summary>Named menus to expose in templates.</summary>
     public MenuSpec[] Menus { get; set; } = Array.Empty<MenuSpec>();
+
+    /// <summary>Auto-generated menus derived from content structure.</summary>
+    public NavigationAutoSpec[] Auto { get; set; } = Array.Empty<NavigationAutoSpec>();
 }
 
 /// <summary>Defines a named menu and its items.</summary>
@@ -55,4 +58,29 @@ public sealed class MenuItemSpec
 
     /// <summary>Child menu items.</summary>
     public MenuItemSpec[] Items { get; set; } = Array.Empty<MenuItemSpec>();
+}
+
+/// <summary>Configuration for auto-generated navigation menus.</summary>
+public sealed class NavigationAutoSpec
+{
+    /// <summary>Collection name used as the source.</summary>
+    public string Collection { get; set; } = string.Empty;
+
+    /// <summary>Menu name to populate.</summary>
+    public string Menu { get; set; } = string.Empty;
+
+    /// <summary>Optional route root for the menu (defaults to collection output).</summary>
+    public string? Root { get; set; }
+
+    /// <summary>Maximum depth to include.</summary>
+    public int? MaxDepth { get; set; }
+
+    /// <summary>Include section index pages in the menu.</summary>
+    public bool IncludeIndex { get; set; } = true;
+
+    /// <summary>Include draft content in the menu.</summary>
+    public bool IncludeDrafts { get; set; }
+
+    /// <summary>Optional sort expression (order,title).</summary>
+    public string? Sort { get; set; }
 }

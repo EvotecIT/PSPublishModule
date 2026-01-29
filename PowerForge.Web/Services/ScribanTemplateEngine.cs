@@ -21,12 +21,15 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         var globals = new ScriptObject();
         globals.Add("site", context.Site);
         globals.Add("page", context.Page);
+        globals.Add("items", context.Items);
         globals.Add("content", context.Page.HtmlContent);
         globals.Add("toc", context.Page.TocHtml);
         globals.Add("project", context.Project);
         globals.Add("navigation", context.Navigation);
         globals.Add("breadcrumbs", context.Breadcrumbs);
         globals.Add("shortcode", context.Shortcode);
+        globals.Add("taxonomy", context.Taxonomy);
+        globals.Add("term", context.Term);
         globals.Add("assets", new
         {
             css_html = context.CssHtml,
