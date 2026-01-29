@@ -220,11 +220,13 @@ public sealed class ModuleTestSuiteService
         foreach (var m in modules ?? Array.Empty<ModuleDependency>())
         {
             if (m is null || string.IsNullOrWhiteSpace(m.Name)) continue;
+            var minVersion = m.MinimumVersion;
+            var reqVersion = m.RequiredVersion;
             list.Add(new ImportModuleEntry
             {
                 Name = m.Name.Trim(),
-                MinimumVersion = string.IsNullOrWhiteSpace(m.MinimumVersion) ? null : m.MinimumVersion.Trim(),
-                RequiredVersion = string.IsNullOrWhiteSpace(m.RequiredVersion) ? null : m.RequiredVersion.Trim()
+                MinimumVersion = string.IsNullOrWhiteSpace(minVersion) ? null : minVersion!.Trim(),
+                RequiredVersion = string.IsNullOrWhiteSpace(reqVersion) ? null : reqVersion!.Trim()
             });
         }
 

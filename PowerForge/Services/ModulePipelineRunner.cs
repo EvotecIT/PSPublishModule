@@ -260,16 +260,16 @@ public sealed class ModulePipelineRunner
                 case ConfigurationCommandSegment commandSeg:
                 {
                     var cfg = commandSeg.Configuration ?? new CommandConfiguration();
-                    var moduleName = cfg.ModuleName;
+                    var commandModuleName = cfg.ModuleName?.Trim();
                     var commandNames = cfg.CommandName ?? Array.Empty<string>();
-                    if (string.IsNullOrWhiteSpace(moduleName) || commandNames.Length == 0)
+                    if (string.IsNullOrWhiteSpace(commandModuleName) || commandNames.Length == 0)
                         break;
 
-                    moduleName = moduleName.Trim();
-                    if (!commandDependencies.TryGetValue(moduleName, out var list))
+                    var commandKey = commandModuleName!;
+                    if (!commandDependencies.TryGetValue(commandKey, out var list))
                     {
                         list = new List<string>();
-                        commandDependencies[moduleName] = list;
+                        commandDependencies[commandKey] = list;
                     }
 
                     foreach (var name in commandNames)
