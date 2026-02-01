@@ -51,7 +51,7 @@ meta.extra_scripts_file: index.scripts.html
 
             <div class="docs-nav-section">
                 <div class="docs-nav-title">Reference</div>
-                <a href="/api/">API Reference &rarr;</a>
+                <a href="/docs/api/">API Reference &rarr;</a>
             </div>
         </nav>
     </aside>
