@@ -197,6 +197,7 @@ public static class WebSiteBuilder
 
         LoadDataFromFolder(basePath, data);
         LoadProjectData(plan, projects, data);
+        NormalizeKnownData(data);
 
         return data;
     }
@@ -349,6 +350,263 @@ public static class WebSiteBuilder
             default:
                 return null;
         }
+    }
+
+    private static void NormalizeKnownData(Dictionary<string, object?> data)
+    {
+        if (data is null) return;
+
+        NormalizeNamedData(data, "faq", NormalizeFaqData);
+        NormalizeNamedData(data, "showcase", NormalizeShowcaseData);
+        NormalizeNamedData(data, "benchmarks", NormalizeBenchmarksData);
+        NormalizeNamedData(data, "pricing", NormalizePricingData);
+
+        if (data.TryGetValue("projects", out var projectsObj) &&
+            projectsObj is Dictionary<string, object?> projects)
+        {
+            foreach (var project in projects.Values)
+            {
+                if (project is Dictionary<string, object?> projectData)
+                    NormalizeKnownData(projectData);
+            }
+        }
+    }
+
+    private static void NormalizeNamedData(
+        Dictionary<string, object?> data,
+        string key,
+        Action<Dictionary<string, object?>> normalizer)
+    {
+        if (data.TryGetValue(key, out var value) && value is Dictionary<string, object?> map)
+            normalizer(map);
+    }
+
+    private static void NormalizeFaqData(Dictionary<string, object?> faq)
+    {
+        if (!TryGetList(faq, "sections", out var sections))
+            return;
+
+        foreach (var sectionObj in sections)
+        {
+            if (sectionObj is not Dictionary<string, object?> section)
+                continue;
+
+            if (!TryGetList(section, "items", out var items))
+                continue;
+
+            foreach (var itemObj in items)
+            {
+                if (itemObj is not Dictionary<string, object?> item)
+                    continue;
+
+                CopyIfMissing(item, "question", item, "q", "title");
+                CopyIfMissing(item, "answer", item, "a", "text", "summary");
+
+                if (item.TryGetValue("answer", out var answer))
+                    item["answer"] = NormalizeStringList(answer);
+            }
+        }
+    }
+
+    private static void NormalizeShowcaseData(Dictionary<string, object?> showcase)
+    {
+        if (!TryGetList(showcase, "cards", out var cards))
+            return;
+
+        foreach (var cardObj in cards)
+        {
+            if (cardObj is not Dictionary<string, object?> card)
+                continue;
+
+            CopyIfMissing(card, "icon_svg", card, "iconSvg", "iconHtml");
+
+            if (TryGetList(card, "meta", out var metaItems))
+            {
+                foreach (var metaObj in metaItems)
+                {
+                    if (metaObj is not Dictionary<string, object?> meta)
+                        continue;
+                    CopyIfMissing(meta, "icon_svg", meta, "iconSvg", "iconHtml");
+                }
+            }
+
+            if (card.TryGetValue("details", out var detailsObj) && detailsObj is Dictionary<string, object?> details)
+            {
+                if (details.TryGetValue("items", out var items))
+                    details["items"] = NormalizeStringList(items);
+            }
+
+            if (card.TryGetValue("features", out var features))
+                card["features"] = NormalizeStringList(features);
+
+            if (card.TryGetValue("gallery", out var galleryObj) && galleryObj is Dictionary<string, object?> gallery)
+            {
+                if (TryGetList(gallery, "themes", out var themes))
+                {
+                    foreach (var themeObj in themes)
+                    {
+                        if (themeObj is not Dictionary<string, object?> theme)
+                            continue;
+                        if (!TryGetList(theme, "slides", out var slides))
+                            continue;
+                        foreach (var slideObj in slides)
+                        {
+                            if (slideObj is not Dictionary<string, object?> slide)
+                                continue;
+                            CopyIfMissing(slide, "thumb_label", slide, "thumbLabel");
+                            CopyIfMissing(slide, "thumb_src", slide, "thumbSrc");
+                        }
+                    }
+                }
+            }
+
+            if (TryGetList(card, "actions", out var actions))
+            {
+                foreach (var actionObj in actions)
+                {
+                    if (actionObj is not Dictionary<string, object?> action)
+                        continue;
+                    CopyIfMissing(action, "icon_svg", action, "iconSvg", "iconHtml");
+                }
+            }
+
+            if (card.TryGetValue("status", out var statusObj) && statusObj is Dictionary<string, object?> status)
+            {
+                CopyIfMissing(status, "dot_style", status, "dotStyle");
+            }
+        }
+    }
+
+    private static void NormalizeBenchmarksData(Dictionary<string, object?> benchmarks)
+    {
+        if (benchmarks.TryGetValue("about", out var aboutObj) && aboutObj is Dictionary<string, object?> about)
+        {
+            if (TryGetList(about, "cards", out var cards))
+            {
+                foreach (var cardObj in cards)
+                {
+                    if (cardObj is not Dictionary<string, object?> card)
+                        continue;
+
+                    if (card.TryGetValue("paragraphs", out var paragraphs))
+                        card["paragraphs"] = NormalizeStringList(paragraphs);
+                    if (card.TryGetValue("list", out var list))
+                        card["list"] = NormalizeStringList(list);
+                }
+            }
+        }
+
+        if (benchmarks.TryGetValue("notes", out var notesObj) && notesObj is Dictionary<string, object?> notes)
+        {
+            if (notes.TryGetValue("items", out var items))
+                notes["items"] = NormalizeStringList(items);
+        }
+    }
+
+    private static void NormalizePricingData(Dictionary<string, object?> pricing)
+    {
+        if (TryGetList(pricing, "cards", out var cards))
+        {
+            foreach (var cardObj in cards)
+            {
+                if (cardObj is not Dictionary<string, object?> card)
+                    continue;
+
+                CopyIfMissing(card, "icon_svg", card, "iconSvg", "iconHtml");
+                CopyIfMissing(card, "icon_class", card, "iconClass");
+                CopyIfMissing(card, "amount_class", card, "amountClass");
+
+                if (card.TryGetValue("features", out var features))
+                    card["features"] = NormalizeStringList(features);
+
+                if (card.TryGetValue("cta", out var ctaObj) && ctaObj is Dictionary<string, object?> cta)
+                {
+                    CopyIfMissing(cta, "icon_svg", cta, "iconSvg", "iconHtml");
+                }
+                else
+                {
+                    var ctaLabel = ReadString(card, "cta_label", "ctaLabel");
+                    var ctaHref = ReadString(card, "cta_href", "ctaHref");
+                    if (!string.IsNullOrWhiteSpace(ctaLabel) || !string.IsNullOrWhiteSpace(ctaHref))
+                    {
+                        card["cta"] = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["label"] = ctaLabel ?? string.Empty,
+                            ["href"] = ctaHref ?? string.Empty
+                        };
+                    }
+                }
+            }
+        }
+
+        if (pricing.TryGetValue("note", out var noteObj) && noteObj is Dictionary<string, object?> note)
+        {
+            if (note.TryGetValue("paragraphs", out var paragraphs))
+                note["paragraphs"] = NormalizeStringList(paragraphs);
+        }
+    }
+
+    private static void CopyIfMissing(
+        Dictionary<string, object?> target,
+        string targetKey,
+        Dictionary<string, object?> source,
+        params string[] sourceKeys)
+    {
+        if (target.ContainsKey(targetKey))
+            return;
+
+        foreach (var sourceKey in sourceKeys)
+        {
+            if (source.TryGetValue(sourceKey, out var value) && value is not null)
+            {
+                target[targetKey] = value;
+                return;
+            }
+        }
+    }
+
+    private static bool TryGetList(Dictionary<string, object?> map, string key, out List<object?> list)
+    {
+        list = new List<object?>();
+        if (!map.TryGetValue(key, out var value) || value is null)
+            return false;
+
+        if (value is List<object?> listValue)
+        {
+            list = listValue;
+            return true;
+        }
+
+        if (value is IEnumerable<object?> enumerable && value is not string)
+        {
+            list = enumerable.ToList();
+            map[key] = list;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static object? NormalizeStringList(object? value)
+    {
+        if (value is null) return null;
+        if (value is List<object?> list)
+            return list;
+        if (value is IEnumerable<object?> enumerable && value is not string)
+            return enumerable.ToList();
+        if (value is string text)
+            return new List<object?> { text };
+        return value;
+    }
+
+    private static string? ReadString(Dictionary<string, object?> map, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (map.TryGetValue(key, out var value) && value is not null)
+                return value.ToString();
+        }
+        return null;
     }
 
     private static object? NormalizeMarkdownData(object? value)

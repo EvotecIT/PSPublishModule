@@ -172,6 +172,77 @@ answer: "<p>This <strong>supports Markdown</strong>.</p>"
 paragraphs: ["<p>First paragraph.</p>", "<p>Second paragraph.</p>"]
 ```
 
+### Normalized data shapes (FAQ/Showcase/Pricing/Benchmarks)
+PowerForge.Web normalizes common content data so JSON stays portable and forgiving:
+- `faq.sections[*].items[*].answer` is always treated as a **list** of blocks (strings), even if provided as a single string.
+- `pricing.note.paragraphs`, `pricing.cards[*].features`, `benchmarks.about.cards[*].paragraphs`, and `benchmarks.notes.items`
+  are normalized to **lists**.
+- Common camelCase keys are aliased to snake_case for compatibility with existing templates:
+  - `iconSvg` → `icon_svg`
+  - `iconClass` → `icon_class`
+  - `amountClass` → `amount_class`
+  - `thumbLabel` → `thumb_label`
+  - `thumbSrc` → `thumb_src`
+  - `dotStyle` → `dot_style`
+
+Recommended shapes:
+
+FAQ (`data/faq.json`):
+```
+{
+  "hero": { "label": "Support", "title": "FAQ", "description": "..." },
+  "sections": [
+    {
+      "title": "General",
+      "items": [
+        { "id": "what-is", "question": "What is X?", "answer": ["<p>...</p>"] }
+      ]
+    }
+  ]
+}
+```
+
+Showcase (`data/showcase.json`):
+```
+{
+  "hero": { "label": "Built with X", "title": "Showcase", "description": "..." },
+  "cards": [
+    {
+      "id": "app1",
+      "title": "App One",
+      "icon_svg": "<svg>...</svg>",
+      "meta": [{ "label": ".NET 8" }],
+      "features": ["Fast", "Portable"]
+    }
+  ]
+}
+```
+
+Pricing (`data/pricing.json`):
+```
+{
+  "hero": { "label": "Pricing", "title": "Simple pricing", "description": "..." },
+  "cards": [
+    {
+      "title": "Free",
+      "amount": "Free",
+      "features": ["All features"],
+      "cta": { "label": "Install", "href": "https://..." }
+    }
+  ],
+  "note": { "title": "Why support?", "paragraphs": ["<p>...</p>"] }
+}
+```
+
+Benchmarks (`data/benchmarks.json`):
+```
+{
+  "hero": { "title": "Benchmarks", "intro": "..." },
+  "about": { "cards": [{ "title": "Quick vs Full", "paragraphs": ["<p>...</p>"] }] },
+  "notes": { "items": ["Note 1", "Note 2"] }
+}
+```
+
 ## Dual input model (JSON or Markdown)
 Some pages can be rendered from JSON when present, while still supporting normal Markdown.
 Enable this via front matter:
