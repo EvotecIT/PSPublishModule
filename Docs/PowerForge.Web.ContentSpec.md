@@ -156,6 +156,10 @@ data/
 
 Use data for repeated UI blocks and long lists.
 
+### Data validation
+`powerforge web verify` validates known data files when present (`faq.json`, `showcase.json`,
+`pricing.json`, `benchmarks.json`). It emits warnings for missing required keys and malformed shapes.
+
 ### Markdown-friendly data fields
 Data keys ending with `_md` or `_markdown` are automatically rendered as HTML.
 The rendered value is exposed under the base key (suffix removed) if the base key is missing.

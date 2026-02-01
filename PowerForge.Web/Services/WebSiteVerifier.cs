@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace PowerForge.Web;
 
@@ -77,6 +78,8 @@ public static class WebSiteVerifier
                 }
             }
         }
+
+        ValidateDataFiles(spec, plan, warnings);
 
         return new WebVerifyResult
         {
@@ -218,6 +221,196 @@ public static class WebSiteVerifier
         if (string.IsNullOrWhiteSpace(collectionRoot))
             return Path.GetFileName(filePath);
         return Path.GetRelativePath(collectionRoot, filePath).Replace('\\', '/');
+    }
+
+    private static void ValidateDataFiles(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null) return;
+
+        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+        var basePath = Path.IsPathRooted(dataRoot) ? dataRoot : Path.Combine(plan.RootPath, dataRoot);
+
+        ValidateKnownDataFile(basePath, "faq.json", "data/faq.json", ValidateFaqJson, warnings);
+        ValidateKnownDataFile(basePath, "showcase.json", "data/showcase.json", ValidateShowcaseJson, warnings);
+        ValidateKnownDataFile(basePath, "pricing.json", "data/pricing.json", ValidatePricingJson, warnings);
+        ValidateKnownDataFile(basePath, "benchmarks.json", "data/benchmarks.json", ValidateBenchmarksJson, warnings);
+
+        foreach (var project in plan.Projects ?? Array.Empty<WebProjectPlan>())
+        {
+            if (string.IsNullOrWhiteSpace(project.RootPath))
+                continue;
+
+            var projectDataRoot = Path.Combine(project.RootPath, "data");
+            ValidateKnownDataFile(projectDataRoot, "faq.json", $"projects/{project.Slug}/data/faq.json", ValidateFaqJson, warnings);
+            ValidateKnownDataFile(projectDataRoot, "showcase.json", $"projects/{project.Slug}/data/showcase.json", ValidateShowcaseJson, warnings);
+            ValidateKnownDataFile(projectDataRoot, "pricing.json", $"projects/{project.Slug}/data/pricing.json", ValidatePricingJson, warnings);
+            ValidateKnownDataFile(projectDataRoot, "benchmarks.json", $"projects/{project.Slug}/data/benchmarks.json", ValidateBenchmarksJson, warnings);
+        }
+    }
+
+    private static void ValidateKnownDataFile(
+        string basePath,
+        string fileName,
+        string label,
+        Action<JsonElement, string, List<string>> validator,
+        List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(basePath))
+            return;
+
+        var path = Path.Combine(basePath, fileName);
+        if (!File.Exists(path))
+            return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            validator(doc.RootElement, label, warnings);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Data file '{label}' could not be read: {ex.Message}");
+        }
+    }
+
+    private static void ValidateFaqJson(JsonElement root, string label, List<string> warnings)
+    {
+        if (!TryGetArray(root, "sections", out var sections))
+        {
+            warnings.Add($"Data file '{label}' missing required array 'sections'.");
+            return;
+        }
+
+        var sectionIndex = 0;
+        foreach (var section in sections)
+        {
+            if (!TryGetArray(section, "items", out var items))
+            {
+                warnings.Add($"Data file '{label}' section[{sectionIndex}] missing required array 'items'.");
+                sectionIndex++;
+                continue;
+            }
+
+            var itemIndex = 0;
+            foreach (var item in items)
+            {
+                if (!HasAnyProperty(item, "question", "q", "title"))
+                    warnings.Add($"Data file '{label}' section[{sectionIndex}].items[{itemIndex}] missing 'question'.");
+                if (!HasAnyProperty(item, "answer", "a", "text", "summary"))
+                    warnings.Add($"Data file '{label}' section[{sectionIndex}].items[{itemIndex}] missing 'answer'.");
+                itemIndex++;
+            }
+            sectionIndex++;
+        }
+    }
+
+    private static void ValidateShowcaseJson(JsonElement root, string label, List<string> warnings)
+    {
+        if (!TryGetArray(root, "cards", out var cards))
+        {
+            warnings.Add($"Data file '{label}' missing required array 'cards'.");
+            return;
+        }
+
+        var cardIndex = 0;
+        foreach (var card in cards)
+        {
+            if (!HasAnyProperty(card, "title", "name"))
+                warnings.Add($"Data file '{label}' cards[{cardIndex}] missing 'title'.");
+
+            if (TryGetObject(card, "gallery", out var gallery))
+            {
+                if (!TryGetArray(gallery, "themes", out var themes))
+                {
+                    warnings.Add($"Data file '{label}' cards[{cardIndex}].gallery missing array 'themes'.");
+                }
+                else
+                {
+                    var themeIndex = 0;
+                    foreach (var theme in themes)
+                    {
+                        if (!TryGetArray(theme, "slides", out _))
+                            warnings.Add($"Data file '{label}' cards[{cardIndex}].gallery.themes[{themeIndex}] missing array 'slides'.");
+                        themeIndex++;
+                    }
+                }
+            }
+
+            cardIndex++;
+        }
+    }
+
+    private static void ValidatePricingJson(JsonElement root, string label, List<string> warnings)
+    {
+        if (!TryGetArray(root, "cards", out var cards))
+        {
+            warnings.Add($"Data file '{label}' missing required array 'cards'.");
+            return;
+        }
+
+        var cardIndex = 0;
+        foreach (var card in cards)
+        {
+            if (!HasAnyProperty(card, "title", "name"))
+                warnings.Add($"Data file '{label}' cards[{cardIndex}] missing 'title'.");
+            cardIndex++;
+        }
+    }
+
+    private static void ValidateBenchmarksJson(JsonElement root, string label, List<string> warnings)
+    {
+        if (TryGetObject(root, "hero", out var hero))
+        {
+            if (!HasAnyProperty(hero, "title"))
+                warnings.Add($"Data file '{label}' hero missing 'title'.");
+        }
+
+        if (TryGetObject(root, "about", out var about) && TryGetArray(about, "cards", out var cards))
+        {
+            var cardIndex = 0;
+            foreach (var card in cards)
+            {
+                if (!HasAnyProperty(card, "title", "name"))
+                    warnings.Add($"Data file '{label}' about.cards[{cardIndex}] missing 'title'.");
+                cardIndex++;
+            }
+        }
+    }
+
+    private static bool TryGetArray(JsonElement element, string property, out JsonElement.ArrayEnumerator items)
+    {
+        items = default;
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+        if (!element.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Array)
+            return false;
+        items = value.EnumerateArray();
+        return true;
+    }
+
+    private static bool TryGetObject(JsonElement element, string property, out JsonElement value)
+    {
+        value = default;
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+        if (!element.TryGetProperty(property, out var found) || found.ValueKind != JsonValueKind.Object)
+            return false;
+        value = found;
+        return true;
+    }
+
+    private static bool HasAnyProperty(JsonElement element, params string[] properties)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+
+        foreach (var prop in properties)
+        {
+            if (element.TryGetProperty(prop, out _))
+                return true;
+        }
+
+        return false;
     }
 
     private static string ResolveSlugPath(string relativePath, string relativeDir, string? slugOverride)
