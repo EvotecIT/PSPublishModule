@@ -1,0 +1,141 @@
+{
+  "title": "Frequently Asked Questions",
+  "description": "Common questions about CodeGlyphX and QR/barcode generation in .NET.",
+  "sections": [
+    {
+      "title": "General",
+      "items": [
+        {
+          "id": "what-is-codeglyphx",
+          "question": "What is CodeGlyphX?",
+          "answer": "<p>CodeGlyphX is a zero-dependency .NET library for generating and decoding QR codes, barcodes, and 2D matrix codes. It's written entirely in C# with no native dependencies, making it fully portable across Windows, Linux, macOS, and WebAssembly.</p>"
+        },
+        {
+          "id": "which-dotnet-versions",
+          "question": "Which .NET versions are supported?",
+          "answer": "<p>CodeGlyphX targets multiple frameworks for maximum compatibility:</p><ul><li><strong>.NET 8.0 and .NET 10.0</strong> - Full support with AOT and trimming</li><li><strong>.NET Framework 4.7.2</strong> - For legacy Windows applications</li><li><strong>.NET Standard 2.0</strong> - For cross-platform compatibility with older runtimes</li></ul>"
+        },
+        {
+          "id": "is-it-free",
+          "question": "Is CodeGlyphX free to use?",
+          "answer": "<p>Yes. CodeGlyphX is open source and licensed under the <strong>Apache License 2.0</strong>. You can use it freely in both commercial and non-commercial projects.</p>"
+        },
+        {
+          "id": "zero-dependencies",
+          "question": "What does \"zero dependencies\" mean?",
+          "answer": "<p>On .NET 8.0+, CodeGlyphX has no external NuGet package dependencies beyond the runtime itself. It includes its own PNG encoder, image processing, and all encoding algorithms. This means smaller deployment size, no version conflicts, and no transitive dependency chains.</p><p><em>Note: .NET Standard 2.0 and .NET Framework 4.7.2 targets include System.Memory for Span&lt;T&gt; support.</em></p>"
+        }
+      ]
+    },
+    {
+      "title": "AOT & Trimming",
+      "items": [
+        {
+          "id": "aot-compatible",
+          "question": "Does CodeGlyphX work with Native AOT?",
+          "answer": "<p>Yes. On .NET 8.0 and .NET 10.0, CodeGlyphX is fully compatible with Native AOT compilation. It uses no reflection, no dynamic code generation, and no runtime IL emission. You can publish AOT-compiled applications that use CodeGlyphX without any warnings or runtime issues.</p>"
+        },
+        {
+          "id": "trimming-safe",
+          "question": "Is it trimming-safe?",
+          "answer": "<p>Yes. On .NET 8.0+, CodeGlyphX is annotated for full trimming compatibility. When you publish with <code>PublishTrimmed=true</code>, the linker can safely remove unused code paths without breaking functionality. No <code>TrimmerRootAssembly</code> workarounds needed.</p>"
+        },
+        {
+          "id": "single-file",
+          "question": "Can I use it in single-file deployments?",
+          "answer": "<p>Yes. On .NET 8.0+, CodeGlyphX works perfectly with <code>PublishSingleFile=true</code>. Since it has no native dependencies or satellite assemblies, your entire application including QR generation can be a single executable file.</p>"
+        }
+      ]
+    },
+    {
+      "title": "Features & Capabilities",
+      "items": [
+        {
+          "id": "supported-formats",
+          "question": "What code formats are supported?",
+          "answer": "<p>CodeGlyphX supports a wide range of 1D and 2D codes:</p><ul><li><strong>QR Codes:</strong> All versions (1-40), all error correction levels (L/M/Q/H)</li><li><strong>1D Barcodes:</strong> Code 128, GS1-128, Code 39, Code 93, Code 11, Codabar, MSI, Plessey, Telepen, EAN-13, EAN-8, UPC-A, UPC-E, ITF-14, ITF</li><li><strong>2D Matrix:</strong> Data Matrix, PDF417, Aztec Code</li></ul>"
+        },
+        {
+          "id": "special-payloads",
+          "question": "Can I generate WiFi, vCard, or OTP QR codes?",
+          "answer": "<p>Yes. CodeGlyphX includes built-in payload generators for common QR code use cases: WiFi network credentials, vCard contacts, email links, phone numbers, SMS messages, OTP/TOTP authenticator setup, SEPA/Girocode payments, and more.</p>"
+        },
+        {
+          "id": "customization",
+          "question": "Can I customize colors and shapes?",
+          "answer": "<p>Yes. QR codes can be customized with custom foreground/background colors, different module shapes (square, circle, rounded), custom eye styles, and embedded logos. Barcodes support custom colors and sizing options.</p>"
+        },
+        {
+          "id": "decoding",
+          "question": "Can CodeGlyphX decode/read barcodes?",
+          "answer": "<p>Yes. CodeGlyphX can decode QR + 1D/2D barcodes from images. Supported image formats include PNG, JPEG, BMP, GIF, TIFF, PPM/PGM/PBM/PAM, TGA, ICO/CUR, XBM, and XPM. It can detect multiple codes in a single image.</p><p><em>Note:</em> animated GIF is first-frame only; TIFF is baseline/strip-based.</p>"
+        },
+        {
+          "id": "output-formats",
+          "question": "What output formats are supported?",
+          "answer": "<p>CodeGlyphX can output to PNG, JPEG, BMP, TGA, ICO, PPM/PGM/PBM/PAM, XBM/XPM, SVG/SVGZ, HTML, PDF, EPS, ASCII, and raw RGBA (API). The PNG encoder requires no external libraries.</p>"
+        }
+      ]
+    },
+    {
+      "title": "Platform Support",
+      "items": [
+        {
+          "id": "blazor-webassembly",
+          "question": "Does it work with Blazor WebAssembly?",
+          "answer": "<p>Yes. CodeGlyphX runs entirely in the browser via WebAssembly. The playground on this website demonstrates this - it generates codes in real-time using the actual CodeGlyphX library compiled to WASM. No server round-trips needed.</p>"
+        },
+        {
+          "id": "maui",
+          "question": "Does it work with .NET MAUI?",
+          "answer": "<p>Yes. CodeGlyphX works on all MAUI platforms: Android, iOS, macOS, and Windows. Since it has no platform-specific dependencies, the same code works identically across all targets.</p>"
+        },
+        {
+          "id": "aspnet",
+          "question": "Can I use it in ASP.NET Core?",
+          "answer": "<p>Yes. CodeGlyphX is commonly used in ASP.NET Core applications to generate QR codes dynamically. You can return PNG images directly from controllers or minimal API endpoints, generate codes in Razor Pages, or use it in background services.</p>"
+        },
+        {
+          "id": "azure-functions",
+          "question": "Does it work in Azure Functions / AWS Lambda?",
+          "answer": "<p>Yes. CodeGlyphX's zero-dependency design makes it ideal for serverless environments. No native libraries to configure, no special deployment steps. It works out of the box in both consumption and premium plans.</p>"
+        }
+      ]
+    },
+    {
+      "title": "Performance",
+      "items": [
+        {
+          "id": "performance",
+          "question": "How fast is CodeGlyphX?",
+          "answer": "<p>CodeGlyphX is optimized for performance. QR code and barcode generation is fast enough for real-time use cases including API endpoints and interactive applications. The library is suitable for high-throughput scenarios like batch generation.</p>"
+        },
+        {
+          "id": "memory",
+          "question": "What about memory usage?",
+          "answer": "<p>On .NET 8.0+, CodeGlyphX uses <code>Span&lt;T&gt;</code> and <code>Memory&lt;T&gt;</code> to minimize allocations where possible. The library is designed to be efficient for both single-use and batch processing scenarios.</p>"
+        }
+      ]
+    },
+    {
+      "title": "Troubleshooting",
+      "items": [
+        {
+          "id": "qr-not-scanning",
+          "question": "My QR code won't scan. What's wrong?",
+          "answer": "<p>Common reasons QR codes fail to scan:</p><ul><li><strong>Low contrast:</strong> Ensure sufficient contrast between foreground and background colors</li><li><strong>Too small:</strong> QR codes need adequate size relative to scanning distance</li><li><strong>Error correction too low:</strong> Use higher error correction (Q or H) for printed/damaged codes</li><li><strong>Quiet zone missing:</strong> Leave white space around the code (CodeGlyphX adds this automatically)</li></ul>"
+        },
+        {
+          "id": "barcode-invalid",
+          "question": "I'm getting \"invalid data\" errors for barcodes",
+          "answer": "<p>Each barcode type has specific character set and length requirements. For example, EAN-13 must be exactly 12 or 13 digits, UPC-A must be 11 or 12 digits, and Code 39 only supports uppercase letters and certain symbols. Check the documentation for the specific requirements of your barcode type.</p>"
+        },
+        {
+          "id": "help",
+          "question": "Where can I get help?",
+          "answer": "<p>For questions, bug reports, or feature requests, please open an issue on the <a href=\"https://github.com/EvotecIT/CodeGlyphX/issues\" target=\"_blank\" rel=\"noopener\">GitHub repository</a>. For documentation and examples, see the <a href=\"/docs/\">Documentation</a> section.</p>"
+        }
+      ]
+    }
+  ]
+}
