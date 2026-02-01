@@ -971,6 +971,8 @@ public static class WebSiteBuilder
                     }
                 }
 
+                processedBody = ApplyContentTemplate(processedBody, matter?.Meta, shortcodeContext);
+
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(processedBody) ?? Path.GetFileNameWithoutExtension(file);
                 var description = matter?.Description ?? string.Empty;
                 var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
@@ -1494,6 +1496,72 @@ public static class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(mode))
             mode = GetMetaString(meta, "data.mode");
         return true;
+    }
+
+    private static string ApplyContentTemplate(
+        string content,
+        Dictionary<string, object?>? meta,
+        ShortcodeRenderContext context)
+    {
+        if (string.IsNullOrWhiteSpace(content) || meta is null || context is null)
+            return content;
+
+        var engineName = ResolveContentEngineName(meta);
+        if (string.IsNullOrWhiteSpace(engineName))
+            return content;
+
+        var engine = ResolveContentEngine(engineName, context);
+        if (engine is null)
+            return content;
+
+        var page = new ContentItem
+        {
+            Title = context.FrontMatter?.Title ?? string.Empty,
+            Description = context.FrontMatter?.Description ?? string.Empty,
+            Meta = context.FrontMatter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+            EditUrl = context.FrontMatter?.EditUrl ?? context.EditUrl
+        };
+
+        var renderContext = new ThemeRenderContext
+        {
+            Site = context.Site,
+            Page = page,
+            Data = context.Data,
+            Project = context.Project
+        };
+
+        var resolver = context.PartialResolver ?? (_ => null);
+        return engine.Render(content, renderContext, resolver);
+    }
+
+    private static string? ResolveContentEngineName(Dictionary<string, object?>? meta)
+    {
+        if (meta is null) return null;
+        if (TryGetMetaString(meta, "content_engine", out var engine))
+            return engine;
+        if (TryGetMetaString(meta, "content.engine", out engine))
+            return engine;
+        if (TryGetMetaString(meta, "content.template_engine", out engine))
+            return engine;
+        return null;
+    }
+
+    private static ITemplateEngine? ResolveContentEngine(string engineName, ShortcodeRenderContext context)
+    {
+        if (string.IsNullOrWhiteSpace(engineName))
+            return null;
+
+        if (engineName.Equals("theme", StringComparison.OrdinalIgnoreCase) ||
+            engineName.Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            if (context.Engine is not null)
+                return context.Engine;
+
+            var themeEngine = context.Site.ThemeEngine ?? context.ThemeManifest?.Engine;
+            return ThemeEngineRegistry.Resolve(themeEngine);
+        }
+
+        return ThemeEngineRegistry.Resolve(engineName);
     }
 
     private static bool TryResolveDataPath(IReadOnlyDictionary<string, object?> data, string path, out object? value)

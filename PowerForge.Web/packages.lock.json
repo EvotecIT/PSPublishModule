@@ -2,12 +2,6 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
-      "OfficeIMO.Markdown": {
-        "type": "Direct",
-        "requested": "[0.5.0, )",
-        "resolved": "0.5.0",
-        "contentHash": "oIJJotGTO9G74XKKxQCtg7h5cTDmq0l8d//Imzm7REB3DUI1AdWqkms/LVWn2/u5ExITK+GbTcquv5OlOJJeog=="
-      },
       "Scriban": {
         "type": "Direct",
         "requested": "[5.11.0, )",
@@ -721,6 +715,9 @@
           "SixLabors.ImageSharp.Drawing": "[1.0.0, )"
         }
       },
+      "officeimo.markdown": {
+        "type": "Project"
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
@@ -731,12 +728,6 @@
       }
     },
     "net8.0": {
-      "OfficeIMO.Markdown": {
-        "type": "Direct",
-        "requested": "[0.5.0, )",
-        "resolved": "0.5.0",
-        "contentHash": "oIJJotGTO9G74XKKxQCtg7h5cTDmq0l8d//Imzm7REB3DUI1AdWqkms/LVWn2/u5ExITK+GbTcquv5OlOJJeog=="
-      },
       "Scriban": {
         "type": "Direct",
         "requested": "[5.11.0, )",
@@ -1450,6 +1441,9 @@
           "SixLabors.ImageSharp": "[2.1.12, )",
           "SixLabors.ImageSharp.Drawing": "[1.0.0, )"
         }
+      },
+      "officeimo.markdown": {
+        "type": "Project"
       },
       "powerforge": {
         "type": "Project",

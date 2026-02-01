@@ -14,10 +14,10 @@
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
     <ProjectReference Include="..\..\PSParseHTML\Sources\HtmlTinkerX\HtmlTinkerX.csproj" />
+    <ProjectReference Include="..\..\OfficeIMO\OfficeIMO.Markdown\OfficeIMO.Markdown.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="OfficeIMO.Markdown" Version="0.5.0" />
     <PackageReference Include="Scriban" Version="5.11.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>

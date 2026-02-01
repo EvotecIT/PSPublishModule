@@ -383,11 +383,6 @@
         "resolved": "1.21.17",
         "contentHash": "K2ywYpoPEvU3+Ooq6wxz+FJOkmbDeoE41q/sJZWv9tI7qbTmH2A5R0E4hWzruvl/9pnUhqwbu1mxT06C45D0ZQ=="
       },
-      "OfficeIMO.Markdown": {
-        "type": "Transitive",
-        "resolved": "0.5.0",
-        "contentHash": "oIJJotGTO9G74XKKxQCtg7h5cTDmq0l8d//Imzm7REB3DUI1AdWqkms/LVWn2/u5ExITK+GbTcquv5OlOJJeog=="
-      },
       "PreMailer.Net": {
         "type": "Transitive",
         "resolved": "2.7.2",
@@ -809,6 +804,9 @@
           "SixLabors.ImageSharp": "[2.1.12, )",
           "SixLabors.ImageSharp.Drawing": "[1.0.0, )"
         }
+      },
+      "officeimo.markdown": {
+        "type": "Project"
       },
       "powerforge": {
         "type": "Project",

@@ -73,6 +73,7 @@ Supported fields:
   - `meta.extra_css` (raw CSS link tags appended into `<head>`)
   - `meta.extra_scripts` (raw script tags appended before `</body>`)
   - `meta.extra_scripts_file` (path to a file appended before `</body>`)
+  - `meta.content_engine` (render the page body as a template before Markdown)
 
 ### Front matter resolution rules
 PowerForge.Web resolves missing values using simple defaults:
@@ -80,6 +81,33 @@ PowerForge.Web resolves missing values using simple defaults:
 - `slug`: `front matter slug` → filename
 - `description`: `front matter description` (no automatic fallback)
 - `date`: `front matter date` (no git/mtime fallback yet)
+
+### Content templating
+Use `meta.content_engine` when you need template logic inside page content.
+The content is rendered **before** Markdown, so you can generate Markdown or HTML.
+
+Supported engines:
+- `scriban` (full template language, loops/conditionals)
+- `simple` (token replacement: `{{TITLE}}`, `{{DESCRIPTION}}`, `{{CONTENT}}`, etc.)
+- `theme` (use the current theme engine)
+
+Example:
+```
+---
+title: Home
+meta.content_engine: scriban
+meta.raw_html: true
+---
+
+<section class="faq">
+  {{ for item in data.faq }}
+    <details>
+      <summary>{{ item.question }}</summary>
+      <div>{{ item.answer }}</div>
+    </details>
+  {{ end }}
+</section>
+```
 
 ### Route + slug rules
 Routes are built from `Collection.Output` + `slug`:
