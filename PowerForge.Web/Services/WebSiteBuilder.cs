@@ -608,6 +608,28 @@ public static class WebSiteBuilder
                     PartialResolver = partialResolver
                 };
                 var processedBody = ShortcodeProcessor.Apply(effectiveBody, shortcodeContext);
+                var skipMarkdown = false;
+                if (TryRenderDataOverride(matter?.Meta, shortcodeContext, out var dataOverride, out var dataMode))
+                {
+                    var mode = NormalizeDataRenderMode(dataMode);
+                    if (mode == DataRenderMode.Append)
+                    {
+                        processedBody = string.IsNullOrWhiteSpace(processedBody)
+                            ? dataOverride
+                            : $"{processedBody}{Environment.NewLine}{dataOverride}";
+                    }
+                    else if (mode == DataRenderMode.Prepend)
+                    {
+                        processedBody = string.IsNullOrWhiteSpace(processedBody)
+                            ? dataOverride
+                            : $"{dataOverride}{Environment.NewLine}{processedBody}";
+                    }
+                    else
+                    {
+                        processedBody = dataOverride;
+                        skipMarkdown = true;
+                    }
+                }
 
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(processedBody) ?? Path.GetFileNameWithoutExtension(file);
                 var description = matter?.Description ?? string.Empty;
@@ -646,7 +668,10 @@ public static class WebSiteBuilder
                     }
                 }
 
-                var htmlContent = ShouldRenderMarkdown(matter?.Meta)
+                var renderMarkdown = ShouldRenderMarkdown(matter?.Meta);
+                if (skipMarkdown)
+                    renderMarkdown = false;
+                var htmlContent = renderMarkdown
                     ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
                     : processedBody;
                 var toc = BuildTableOfContents(htmlContent);
@@ -1080,6 +1105,93 @@ public static class WebSiteBuilder
         if (!TryGetMetaValue(meta, key, out var obj) || obj is null) return false;
         value = obj.ToString() ?? string.Empty;
         return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryRenderDataOverride(
+        Dictionary<string, object?>? meta,
+        ShortcodeRenderContext context,
+        out string html,
+        out string mode)
+    {
+        html = string.Empty;
+        mode = string.Empty;
+        if (meta is null || context is null)
+            return false;
+
+        if (!TryGetMetaString(meta, "data_shortcode", out var shortcode) &&
+            !TryGetMetaString(meta, "data.shortcode", out shortcode))
+            return false;
+
+        var dataPath = GetMetaString(meta, "data_path");
+        if (string.IsNullOrWhiteSpace(dataPath))
+            dataPath = GetMetaString(meta, "data.path");
+        if (string.IsNullOrWhiteSpace(dataPath))
+            dataPath = GetMetaString(meta, "data_key");
+        if (string.IsNullOrWhiteSpace(dataPath))
+            dataPath = GetMetaString(meta, "data.key");
+        if (string.IsNullOrWhiteSpace(dataPath))
+            dataPath = GetMetaString(meta, "data");
+        if (string.IsNullOrWhiteSpace(dataPath))
+            dataPath = shortcode;
+
+        if (!TryResolveDataPath(context.Data, dataPath, out _))
+            return false;
+
+        var attrs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["data"] = dataPath
+        };
+
+        html = context.TryRenderThemeShortcode(shortcode, attrs) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(html) && ShortcodeRegistry.TryGet(shortcode, out var handler))
+            html = handler(context, attrs);
+
+        if (string.IsNullOrWhiteSpace(html))
+            return false;
+
+        mode = GetMetaString(meta, "data_mode");
+        if (string.IsNullOrWhiteSpace(mode))
+            mode = GetMetaString(meta, "data.mode");
+        return true;
+    }
+
+    private static bool TryResolveDataPath(IReadOnlyDictionary<string, object?> data, string path, out object? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        object? current = data;
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (current is IReadOnlyDictionary<string, object?> map)
+            {
+                if (!map.TryGetValue(part, out current))
+                    return false;
+                continue;
+            }
+            return false;
+        }
+
+        value = current;
+        return true;
+    }
+
+    private enum DataRenderMode
+    {
+        Override,
+        Append,
+        Prepend
+    }
+
+    private static DataRenderMode NormalizeDataRenderMode(string mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode)) return DataRenderMode.Override;
+        if (mode.Equals("append", StringComparison.OrdinalIgnoreCase))
+            return DataRenderMode.Append;
+        if (mode.Equals("prepend", StringComparison.OrdinalIgnoreCase))
+            return DataRenderMode.Prepend;
+        return DataRenderMode.Override;
     }
 
     private static bool TryGetMetaValue(Dictionary<string, object?> meta, string key, out object? value)
@@ -1774,8 +1886,13 @@ public static class WebSiteBuilder
         return items.Select(i => new MenuItemSpec
         {
             Title = i.Title,
+            Text = i.Text,
             Url = i.Url,
             Icon = i.Icon,
+            IconHtml = i.IconHtml,
+            Kind = i.Kind,
+            CssClass = i.CssClass,
+            AriaLabel = i.AriaLabel,
             Badge = i.Badge,
             Description = i.Description,
             Target = i.Target,
@@ -1790,17 +1907,18 @@ public static class WebSiteBuilder
     private static NavigationRuntime BuildNavigation(SiteSpec spec, string currentPath, MenuSpec[] menuSpecs)
     {
         var nav = new NavigationRuntime();
-        if (menuSpecs.Length == 0)
-            return nav;
-
-        nav.Menus = menuSpecs
-            .Select(m => new NavigationMenu
-            {
-                Name = m.Name,
-                Label = m.Label,
-                Items = BuildMenuItems(m.Items, currentPath, spec.LinkRules)
-            })
-            .ToArray();
+        if (menuSpecs.Length > 0)
+        {
+            nav.Menus = menuSpecs
+                .Select(m => new NavigationMenu
+                {
+                    Name = m.Name,
+                    Label = m.Label,
+                    Items = BuildMenuItems(m.Items, currentPath, spec.LinkRules)
+                })
+                .ToArray();
+        }
+        nav.Actions = BuildMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>(), currentPath, spec.LinkRules);
         return nav;
     }
 
@@ -1858,8 +1976,13 @@ public static class WebSiteBuilder
             result.Add(new NavigationItem
             {
                 Title = item.Title,
+                Text = item.Text,
                 Url = item.Url,
                 Icon = item.Icon,
+                IconHtml = item.IconHtml,
+                Kind = item.Kind,
+                CssClass = item.CssClass,
+                AriaLabel = item.AriaLabel,
                 Badge = item.Badge,
                 Description = item.Description,
                 Target = target,

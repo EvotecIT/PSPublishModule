@@ -6,6 +6,9 @@ public sealed class NavigationSpec
     /// <summary>Named menus to expose in templates.</summary>
     public MenuSpec[] Menus { get; set; } = Array.Empty<MenuSpec>();
 
+    /// <summary>Optional navigation action items (buttons/links) for headers.</summary>
+    public MenuItemSpec[] Actions { get; set; } = Array.Empty<MenuItemSpec>();
+
     /// <summary>Auto-generated menus derived from content structure.</summary>
     public NavigationAutoSpec[] Auto { get; set; } = Array.Empty<NavigationAutoSpec>();
 }
@@ -29,11 +32,26 @@ public sealed class MenuItemSpec
     /// <summary>Display title.</summary>
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>Optional display text (defaults to Title when used by a theme).</summary>
+    public string? Text { get; set; }
+
     /// <summary>Destination URL.</summary>
     public string? Url { get; set; }
 
     /// <summary>Optional icon identifier.</summary>
     public string? Icon { get; set; }
+
+    /// <summary>Optional icon HTML.</summary>
+    public string? IconHtml { get; set; }
+
+    /// <summary>Optional item kind (e.g. link, button).</summary>
+    public string? Kind { get; set; }
+
+    /// <summary>Optional CSS class.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Optional aria-label override.</summary>
+    public string? AriaLabel { get; set; }
 
     /// <summary>Optional badge label.</summary>
     public string? Badge { get; set; }

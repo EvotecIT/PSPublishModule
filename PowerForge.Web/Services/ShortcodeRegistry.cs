@@ -19,6 +19,9 @@ public static class ShortcodeRegistry
         Register("cards", ShortcodeDefaults.RenderCards);
         Register("metrics", ShortcodeDefaults.RenderMetrics);
         Register("showcase", ShortcodeDefaults.RenderShowcase);
+        Register("faq", ShortcodeDefaults.RenderFaq);
+        Register("benchmarks", ShortcodeDefaults.RenderBenchmarks);
+        Register("pricing", ShortcodeDefaults.RenderPricing);
     }
 
     /// <summary>Registers a shortcode handler.</summary>
@@ -39,6 +42,17 @@ public static class ShortcodeRegistry
 
 internal static class ShortcodeDefaults
 {
+    private static string HtmlAny(IReadOnlyDictionary<string, object?> map, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = ShortcodeProcessor.Html(map, key);
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+        return string.Empty;
+    }
+
     internal static string RenderCards(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
         var list = ShortcodeProcessor.ResolveList(context.Data, attrs);
@@ -129,6 +143,136 @@ internal static class ShortcodeDefaults
             }
 
             sb.AppendLine("  </a>");
+        }
+        sb.AppendLine("</div>");
+        return sb.ToString();
+    }
+
+    internal static string RenderFaq(ShortcodeRenderContext context, Dictionary<string, string> attrs)
+    {
+        var list = ShortcodeProcessor.ResolveList(context.Data, attrs);
+        if (list is null) return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<div class=\"pf-faq\">");
+        foreach (var sectionObj in list)
+        {
+            if (sectionObj is not IReadOnlyDictionary<string, object?> section)
+                continue;
+
+            var sectionTitle = HtmlAny(section, "title", "label", "name");
+            sb.AppendLine("  <section class=\"pf-faq-section\">");
+            if (!string.IsNullOrWhiteSpace(sectionTitle))
+                sb.AppendLine($"    <h2>{sectionTitle}</h2>");
+
+            if (section.TryGetValue("items", out var itemsObj) && itemsObj is IEnumerable<object?> items)
+            {
+                foreach (var itemObj in items)
+                {
+                    if (itemObj is not IReadOnlyDictionary<string, object?> item)
+                        continue;
+
+                    var id = HtmlAny(item, "id");
+                    var question = HtmlAny(item, "question", "q", "title");
+                    var answer = HtmlAny(item, "answer", "a", "text", "summary");
+
+                    sb.Append($"    <div class=\"pf-faq-item\"");
+                    if (!string.IsNullOrWhiteSpace(id))
+                        sb.Append($" id=\"{id}\"");
+                    sb.AppendLine(">");
+                    if (!string.IsNullOrWhiteSpace(question))
+                        sb.AppendLine($"      <h3>{question}</h3>");
+                    if (!string.IsNullOrWhiteSpace(answer))
+                        sb.AppendLine($"      <p>{answer}</p>");
+                    sb.AppendLine("    </div>");
+                }
+            }
+
+            sb.AppendLine("  </section>");
+        }
+        sb.AppendLine("</div>");
+        return sb.ToString();
+    }
+
+    internal static string RenderBenchmarks(ShortcodeRenderContext context, Dictionary<string, string> attrs)
+    {
+        var list = ShortcodeProcessor.ResolveList(context.Data, attrs);
+        if (list is null) return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<div class=\"pf-benchmarks\">");
+        sb.AppendLine("  <table class=\"pf-benchmarks-table\">");
+        sb.AppendLine("    <thead><tr><th>Scenario</th><th>Result</th><th>Notes</th></tr></thead>");
+        sb.AppendLine("    <tbody>");
+        foreach (var itemObj in list)
+        {
+            if (itemObj is not IReadOnlyDictionary<string, object?> item)
+                continue;
+
+            var label = HtmlAny(item, "title", "name", "scenario");
+            var value = HtmlAny(item, "value", "score", "result");
+            var unit = HtmlAny(item, "unit");
+            var notes = HtmlAny(item, "note", "notes", "summary");
+            var result = string.IsNullOrWhiteSpace(unit) ? value : $"{value} {unit}".Trim();
+
+            sb.AppendLine("      <tr>");
+            sb.AppendLine($"        <td>{label}</td>");
+            sb.AppendLine($"        <td>{result}</td>");
+            sb.AppendLine($"        <td>{notes}</td>");
+            sb.AppendLine("      </tr>");
+        }
+        sb.AppendLine("    </tbody>");
+        sb.AppendLine("  </table>");
+        sb.AppendLine("</div>");
+        return sb.ToString();
+    }
+
+    internal static string RenderPricing(ShortcodeRenderContext context, Dictionary<string, string> attrs)
+    {
+        var list = ShortcodeProcessor.ResolveList(context.Data, attrs);
+        if (list is null) return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<div class=\"pf-pricing\">");
+        foreach (var itemObj in list)
+        {
+            if (itemObj is not IReadOnlyDictionary<string, object?> item)
+                continue;
+
+            var name = HtmlAny(item, "name", "title");
+            var price = HtmlAny(item, "price");
+            var period = HtmlAny(item, "period");
+            var description = HtmlAny(item, "description", "summary");
+            var ctaLabel = HtmlAny(item, "cta_label", "ctaLabel", "cta");
+            var ctaHref = HtmlAny(item, "cta_href", "ctaHref", "href", "url");
+
+            sb.AppendLine("  <div class=\"pf-pricing-tier\">");
+            if (!string.IsNullOrWhiteSpace(name))
+                sb.AppendLine($"    <h3>{name}</h3>");
+            if (!string.IsNullOrWhiteSpace(price))
+            {
+                var suffix = string.IsNullOrWhiteSpace(period) ? string.Empty : $" <span class=\"pf-pricing-period\">{period}</span>";
+                sb.AppendLine($"    <div class=\"pf-pricing-price\">{price}{suffix}</div>");
+            }
+            if (!string.IsNullOrWhiteSpace(description))
+                sb.AppendLine($"    <p>{description}</p>");
+
+            if (item.TryGetValue("features", out var featuresObj) && featuresObj is IEnumerable<object?> features)
+            {
+                sb.AppendLine("    <ul class=\"pf-pricing-features\">");
+                foreach (var feature in features)
+                {
+                    var label = ShortcodeProcessor.HtmlValue(feature);
+                    if (string.IsNullOrWhiteSpace(label)) continue;
+                    sb.AppendLine($"      <li>{label}</li>");
+                }
+                sb.AppendLine("    </ul>");
+            }
+
+            if (!string.IsNullOrWhiteSpace(ctaLabel) && !string.IsNullOrWhiteSpace(ctaHref))
+                sb.AppendLine($"    <a class=\"pf-pricing-cta\" href=\"{ctaHref}\">{ctaLabel}</a>");
+
+            sb.AppendLine("  </div>");
         }
         sb.AppendLine("</div>");
         return sb.ToString();

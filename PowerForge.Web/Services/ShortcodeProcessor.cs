@@ -30,11 +30,14 @@ internal static class ShortcodeProcessor
     {
         var name = match.Groups["name"].Value.Trim().ToLowerInvariant();
         var attrs = ParseAttrs(match.Groups["attrs"].Value);
+        var themed = context.TryRenderThemeShortcode(name, attrs);
+        if (!string.IsNullOrWhiteSpace(themed))
+            return themed;
+
         if (ShortcodeRegistry.TryGet(name, out var handler))
             return handler(context, attrs);
 
-        var themed = context.TryRenderThemeShortcode(name, attrs);
-        return themed ?? match.Value;
+        return match.Value;
     }
 
     private static Dictionary<string, string> ParseAttrs(string raw)

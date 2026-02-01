@@ -156,6 +156,23 @@ data/
 
 Use data for repeated UI blocks and long lists.
 
+## Dual input model (JSON or Markdown)
+Some pages can be rendered from JSON when present, while still supporting normal Markdown.
+Enable this via front matter:
+```
+meta.data_shortcode: faq
+meta.data_path: faq
+meta.data_mode: override
+```
+
+Behavior:
+- If `data_path` exists in `data/`, the shortcode renders and overrides the body.
+- If the data does not exist, the markdown body is used.
+- `meta.data_mode` supports: `override` (default), `prepend`, `append`.
+
+This is intended for FAQ/Showcase/Benchmarks/Pricing pages where JSON may be preferred.
+Shortcodes available by default: `faq`, `showcase`, `benchmarks`, `pricing`, `cards`, `metrics`.
+
 ## Static assets
 Use `StaticAssets` in `site.json` to copy folders/files to the output root.
 This is intended for images, data feeds, vendor files, or other assets
@@ -188,8 +205,11 @@ Shortcodes can be implemented as:
 - theme partials `partials/shortcodes/<name>.html`
 
 ## Navigation
-Navigation lives in `site.json` under `Navigation.Menus`.
+Navigation lives in `site.json` under `Navigation.Menus` with optional `Navigation.Actions`.
 Templates receive a computed `navigation` object with active states.
+
+`Navigation.Actions` is for header buttons/icons (theme toggles, GitHub, CTA).
+These items can be links or buttons and are exposed as `navigation.actions`.
 
 ### Auto navigation (folder‑driven)
 You can also generate navigation from folder structure:
@@ -209,6 +229,19 @@ Use `meta.nav.*` to override auto‑nav labels:
 meta.nav.title: Install
 meta.nav.weight: 20
 meta.nav.hidden: true
+```
+
+### Actions (header buttons/icons)
+Example actions (link + button):
+```json
+{
+  "Navigation": {
+    "Actions": [
+      { "Title": "Theme", "Kind": "button", "CssClass": "nav-icon theme-cycle-btn" },
+      { "Title": "GitHub", "Url": "https://github.com/org/repo", "External": true, "CssClass": "nav-icon" }
+    ]
+  }
+}
 ```
 
 ## Redirects + aliases

@@ -78,6 +78,7 @@ try
             var outPath = TryGetOptionValue(subArgs, "--out") ??
                           TryGetOptionValue(subArgs, "--out-path") ??
                           TryGetOptionValue(subArgs, "--output-path");
+            var cleanOutput = HasOption(subArgs, "--clean") || HasOption(subArgs, "--clean-out");
 
             if (string.IsNullOrWhiteSpace(configPath))
                 return Fail("Missing required --config.", outputJson, logger, "web.build");
@@ -87,6 +88,8 @@ try
             var fullConfigPath = ResolveExistingFilePath(configPath);
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
             var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+            if (cleanOutput)
+                WebCliFileSystem.CleanOutputDirectory(outPath);
             var res = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
 
             if (outputJson)
@@ -135,6 +138,8 @@ try
 
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(buildConfig, WebCliJson.Options);
             var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+            if (publishSpec.Build.Clean)
+                WebCliFileSystem.CleanOutputDirectory(buildOut);
             var build = WebSiteBuilder.Build(spec, plan, buildOut, WebCliJson.Options);
 
             int? overlayCopied = null;
@@ -164,7 +169,8 @@ try
                 Runtime = publishSpec.Publish.Runtime,
                 SelfContained = publishSpec.Publish.SelfContained,
                 NoBuild = publishSpec.Publish.NoBuild,
-                NoRestore = publishSpec.Publish.NoRestore
+                NoRestore = publishSpec.Publish.NoRestore,
+                DefineConstants = publishSpec.Publish.DefineConstants
             });
 
             if (!publishResult.Success)
@@ -279,6 +285,146 @@ try
                 logger.Success("Web verify passed.");
 
             return verify.Success ? 0 : 1;
+        }
+        case "audit":
+        {
+            var siteRoot = TryGetOptionValue(subArgs, "--site-root") ??
+                           TryGetOptionValue(subArgs, "--root") ??
+                           TryGetOptionValue(subArgs, "--path") ??
+                           TryGetOptionValue(subArgs, "--out");
+            var configPath = TryGetOptionValue(subArgs, "--config");
+
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                var fullConfigPath = ResolveExistingFilePath(configPath);
+                var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+                var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                var outPath = TryGetOptionValue(subArgs, "--out") ??
+                              TryGetOptionValue(subArgs, "--out-path") ??
+                              TryGetOptionValue(subArgs, "--output-path");
+                if (string.IsNullOrWhiteSpace(outPath))
+                    outPath = Path.Combine(Path.GetDirectoryName(fullConfigPath) ?? ".", "_site");
+                WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
+                siteRoot = outPath;
+            }
+
+            if (string.IsNullOrWhiteSpace(siteRoot))
+                return Fail("Missing required --site-root.", outputJson, logger, "web.audit");
+
+            var include = ReadOptionList(subArgs, "--include");
+            var exclude = ReadOptionList(subArgs, "--exclude");
+            var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
+            var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
+            var navSelector = TryGetOptionValue(subArgs, "--nav-selector") ?? "nav";
+            var rendered = HasOption(subArgs, "--rendered");
+            var renderedHeadless = !HasOption(subArgs, "--rendered-headful");
+            var renderedEngine = TryGetOptionValue(subArgs, "--rendered-engine");
+            var renderedEnsureInstalled = !HasOption(subArgs, "--rendered-no-install");
+            var renderedMaxText = TryGetOptionValue(subArgs, "--rendered-max");
+            var renderedTimeoutText = TryGetOptionValue(subArgs, "--rendered-timeout");
+            var renderedBaseUrl = TryGetOptionValue(subArgs, "--rendered-base-url");
+            var renderedHost = TryGetOptionValue(subArgs, "--rendered-host");
+            var renderedPortText = TryGetOptionValue(subArgs, "--rendered-port");
+            var renderedNoServe = HasOption(subArgs, "--rendered-no-serve");
+            var renderedNoConsoleErrors = HasOption(subArgs, "--rendered-no-console-errors");
+            var renderedNoConsoleWarnings = HasOption(subArgs, "--rendered-no-console-warnings");
+            var renderedNoFailures = HasOption(subArgs, "--rendered-no-failures");
+            var renderedInclude = ReadOptionList(subArgs, "--rendered-include");
+            var renderedExclude = ReadOptionList(subArgs, "--rendered-exclude");
+            var summaryEnabled = HasOption(subArgs, "--summary");
+            var summaryPath = TryGetOptionValue(subArgs, "--summary-path");
+            var summaryMaxText = TryGetOptionValue(subArgs, "--summary-max");
+            var useDefaultExclude = !HasOption(subArgs, "--no-default-exclude");
+
+            var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
+            var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
+            var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
+            var renderedPort = ParseIntOption(renderedPortText, 0);
+            var summaryMax = ParseIntOption(summaryMaxText, 10);
+            var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = siteRoot,
+                Include = include.ToArray(),
+                Exclude = exclude.ToArray(),
+                UseDefaultExcludes = useDefaultExclude,
+                IgnoreNavFor = ignoreNavPatterns,
+                NavSelector = navSelector,
+                CheckLinks = !HasOption(subArgs, "--no-links"),
+                CheckAssets = !HasOption(subArgs, "--no-assets"),
+                CheckNavConsistency = !HasOption(subArgs, "--no-nav"),
+                CheckTitles = !(HasOption(subArgs, "--no-titles") || HasOption(subArgs, "--no-title")),
+                CheckDuplicateIds = !HasOption(subArgs, "--no-ids"),
+                CheckHtmlStructure = !HasOption(subArgs, "--no-structure"),
+                CheckRendered = rendered,
+                RenderedHeadless = renderedHeadless,
+                RenderedEngine = renderedEngine ?? "Chromium",
+                RenderedEnsureInstalled = renderedEnsureInstalled,
+                RenderedBaseUrl = renderedBaseUrl,
+                RenderedServe = !renderedNoServe,
+                RenderedServeHost = string.IsNullOrWhiteSpace(renderedHost) ? "localhost" : renderedHost,
+                RenderedServePort = renderedPort,
+                RenderedMaxPages = renderedMaxPages,
+                RenderedTimeoutMs = renderedTimeoutMs,
+                RenderedCheckConsoleErrors = !renderedNoConsoleErrors,
+                RenderedCheckConsoleWarnings = !renderedNoConsoleWarnings,
+                RenderedCheckFailedRequests = !renderedNoFailures,
+                RenderedInclude = renderedInclude.ToArray(),
+                RenderedExclude = renderedExclude.ToArray(),
+                SummaryPath = resolvedSummaryPath,
+                SummaryMaxIssues = summaryMax
+            });
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.audit",
+                    Success = result.Success,
+                    ExitCode = result.Success ? 0 : 1,
+                    Config = "web",
+                    Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebAuditResult)
+                });
+                return result.Success ? 0 : 1;
+            }
+
+            if (result.Warnings.Length > 0)
+            {
+                foreach (var w in result.Warnings)
+                    logger.Warn(w);
+            }
+            if (result.Errors.Length > 0)
+            {
+                foreach (var e in result.Errors)
+                    logger.Error(e);
+            }
+
+            if (result.Success)
+                logger.Success("Web audit passed.");
+
+            logger.Info($"Pages: {result.PageCount}");
+            logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
+            logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");
+            if (result.NavMismatchCount > 0)
+                logger.Info($"Nav mismatches: {result.NavMismatchCount}");
+            if (result.DuplicateIdCount > 0)
+                logger.Info($"Duplicate IDs: {result.DuplicateIdCount}");
+            if (result.RenderedPageCount > 0)
+            {
+                logger.Info($"Rendered pages: {result.RenderedPageCount}");
+                if (result.RenderedConsoleErrorCount > 0)
+                    logger.Info($"Rendered console errors: {result.RenderedConsoleErrorCount}");
+                if (result.RenderedConsoleWarningCount > 0)
+                    logger.Info($"Rendered console warnings: {result.RenderedConsoleWarningCount}");
+                if (result.RenderedFailedRequestCount > 0)
+                    logger.Info($"Rendered failed requests: {result.RenderedFailedRequestCount}");
+            }
+            if (!string.IsNullOrWhiteSpace(result.SummaryPath))
+                logger.Info($"Audit summary: {result.SummaryPath}");
+
+            return result.Success ? 0 : 1;
         }
         case "scaffold":
         {
@@ -449,8 +595,12 @@ try
             var cssHref = TryGetOptionValue(subArgs, "--css");
             var headerHtml = TryGetOptionValue(subArgs, "--header-html");
             var footerHtml = TryGetOptionValue(subArgs, "--footer-html");
+            var template = TryGetOptionValue(subArgs, "--template");
+            var navJson = TryGetOptionValue(subArgs, "--nav") ?? TryGetOptionValue(subArgs, "--nav-json");
             var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
             var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
+            var includeTypes = ReadOptionList(subArgs, "--include-type");
+            var excludeTypes = ReadOptionList(subArgs, "--exclude-type");
 
             if (string.IsNullOrWhiteSpace(xmlPath))
                 return Fail("Missing required --xml.", outputJson, logger, "web.apidocs");
@@ -467,12 +617,18 @@ try
                 Format = format,
                 CssHref = cssHref,
                 HeaderHtmlPath = headerHtml,
-                FooterHtmlPath = footerHtml
+                FooterHtmlPath = footerHtml,
+                Template = template,
+                NavJsonPath = navJson
             };
             if (includeNamespaces.Count > 0)
                 options.IncludeNamespacePrefixes.AddRange(includeNamespaces);
             if (excludeNamespaces.Count > 0)
                 options.ExcludeNamespacePrefixes.AddRange(excludeNamespaces);
+            if (includeTypes.Count > 0)
+                options.IncludeTypeNames.AddRange(includeTypes);
+            if (excludeTypes.Count > 0)
+                options.ExcludeTypeNames.AddRange(excludeTypes);
 
             var result = WebApiDocsGenerator.Generate(options);
 
@@ -627,6 +783,8 @@ try
             var noBuild = subArgs.Any(a => a.Equals("--no-build", StringComparison.OrdinalIgnoreCase));
             var noRestore = subArgs.Any(a => a.Equals("--no-restore", StringComparison.OrdinalIgnoreCase));
             var baseHref = TryGetOptionValue(subArgs, "--base-href");
+            var defineConstants = TryGetOptionValue(subArgs, "--define-constants") ??
+                                  TryGetOptionValue(subArgs, "--defineConstants");
             var blazorFixes = !subArgs.Any(a => a.Equals("--no-blazor-fixes", StringComparison.OrdinalIgnoreCase));
 
             if (string.IsNullOrWhiteSpace(project))
@@ -643,7 +801,8 @@ try
                 Runtime = runtime,
                 SelfContained = selfContained,
                 NoBuild = noBuild,
-                NoRestore = noRestore
+                NoRestore = noRestore,
+                DefineConstants = defineConstants
             });
 
             if (result.Success && blazorFixes)
@@ -689,6 +848,7 @@ try
                               TryGetOptionValue(subArgs, "--dest");
             var include = TryGetOptionValue(subArgs, "--include");
             var exclude = TryGetOptionValue(subArgs, "--exclude");
+            var clean = subArgs.Any(a => a.Equals("--clean", StringComparison.OrdinalIgnoreCase));
 
             if (string.IsNullOrWhiteSpace(source))
                 return Fail("Missing required --source.", outputJson, logger, "web.overlay");
@@ -699,6 +859,7 @@ try
             {
                 SourceRoot = source,
                 DestinationRoot = destination,
+                Clean = clean,
                 Include = CliPatternHelper.SplitPatterns(include),
                 Exclude = CliPatternHelper.SplitPatterns(exclude)
             });
@@ -867,19 +1028,30 @@ static void PrintUsage()
     Console.WriteLine("PowerForge.Web CLI");
     Console.WriteLine("Usage:");
     Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
-    Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--output json]");
+    Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
     Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
     Console.WriteLine("  powerforge-web verify --config <site.json> [--output json]");
+    Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
+    Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
+    Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
+    Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
+    Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
+    Console.WriteLine("                     [--rendered-no-install]");
+    Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
+    Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
+    Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav]");
+    Console.WriteLine("                     [--no-default-exclude]");
+    Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
     Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
     Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
-    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
+    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--template <name>] [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
-    Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>]");
+    Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--define-constants <list>]");
     Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
     Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
     Console.WriteLine("  powerforge-web pipeline --config <pipeline.json>");
@@ -966,6 +1138,35 @@ static bool HasOption(string[] argv, string optionName)
     return false;
 }
 
+static int ParseIntOption(string? value, int fallback)
+{
+    if (string.IsNullOrWhiteSpace(value)) return fallback;
+    return int.TryParse(value, out var parsed) ? parsed : fallback;
+}
+
+static string? ResolveSummaryPath(bool summaryEnabled, string? summaryPath)
+{
+    if (!summaryEnabled && string.IsNullOrWhiteSpace(summaryPath))
+        return null;
+
+    return string.IsNullOrWhiteSpace(summaryPath) ? "audit-summary.json" : summaryPath;
+}
+
+static string[] BuildIgnoreNavPatterns(List<string> userPatterns, bool useDefaults)
+{
+    if (!useDefaults)
+        return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+    var defaults = new WebAuditOptions().IgnoreNavFor;
+    if (userPatterns.Count == 0)
+        return defaults;
+
+    return defaults.Concat(userPatterns)
+        .Where(p => !string.IsNullOrWhiteSpace(p))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}
+
 static string ResolveExistingFilePath(string path)
 {
     var full = Path.GetFullPath(path.Trim().Trim('"'));
@@ -980,6 +1181,7 @@ static string ResolvePathRelative(string baseDir, string? value)
         return Path.GetFullPath(value);
     return Path.GetFullPath(Path.Combine(baseDir, value));
 }
+
 
 static string ApplyArchetypeTemplate(string template, string title, string slug, string collection)
 {
@@ -1035,6 +1237,29 @@ internal sealed class WebConsoleLogger
     public void Error(string message) => Console.WriteLine($"❌ {message}");
 }
 
+internal static class WebCliFileSystem
+{
+    internal static void CleanOutputDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        var fullPath = Path.GetFullPath(path.Trim().Trim('"'));
+        var root = Path.GetPathRoot(fullPath) ?? string.Empty;
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!string.IsNullOrWhiteSpace(normalizedRoot) &&
+            string.Equals(normalizedRoot, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Refusing to clean root path: {fullPath}");
+
+        if (!Directory.Exists(fullPath))
+            return;
+
+        foreach (var dir in Directory.GetDirectories(fullPath))
+            Directory.Delete(dir, true);
+        foreach (var file in Directory.GetFiles(fullPath))
+            File.Delete(file);
+    }
+}
+
 internal static class CliPatternHelper
 {
     internal static string[] SplitPatterns(string? value)
@@ -1077,11 +1302,14 @@ internal static class WebPipelineRunner
                     {
                         var config = ResolvePath(baseDir, GetString(step, "config"));
                         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                        var cleanOutput = GetBool(step, "clean") ?? false;
                         if (string.IsNullOrWhiteSpace(config) || string.IsNullOrWhiteSpace(outPath))
                             throw new InvalidOperationException("build requires config and out.");
 
                         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
                         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        if (cleanOutput)
+                            WebCliFileSystem.CleanOutputDirectory(outPath);
                         var build = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
                         stepResult.Success = true;
                         stepResult.Message = $"Built {build.OutputPath}";
@@ -1098,10 +1326,16 @@ internal static class WebPipelineRunner
                         var css = GetString(step, "css");
                         var header = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
                         var footer = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
+                        var template = GetString(step, "template");
+                        var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
+                        var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
+                        var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
+                        var includeTypes = GetString(step, "includeType") ?? GetString(step, "include-type");
+                        var excludeTypes = GetString(step, "excludeType") ?? GetString(step, "exclude-type");
                         if (string.IsNullOrWhiteSpace(xml) || string.IsNullOrWhiteSpace(outPath))
                             throw new InvalidOperationException("apidocs requires xml and out.");
 
-                        var res = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+                        var options = new WebApiDocsOptions
                         {
                             XmlPath = xml,
                             AssemblyPath = assembly,
@@ -1111,8 +1345,24 @@ internal static class WebPipelineRunner
                             Format = format,
                             CssHref = css,
                             HeaderHtmlPath = header,
-                            FooterHtmlPath = footer
-                        });
+                            FooterHtmlPath = footer,
+                            Template = template,
+                            NavJsonPath = nav
+                        };
+                        var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);
+                        var excludeList = CliPatternHelper.SplitPatterns(excludeNamespaces);
+                        var includeTypeList = CliPatternHelper.SplitPatterns(includeTypes);
+                        var excludeTypeList = CliPatternHelper.SplitPatterns(excludeTypes);
+                        if (includeList.Length > 0)
+                            options.IncludeNamespacePrefixes.AddRange(includeList);
+                        if (excludeList.Length > 0)
+                            options.ExcludeNamespacePrefixes.AddRange(excludeList);
+                        if (includeTypeList.Length > 0)
+                            options.IncludeTypeNames.AddRange(includeTypeList);
+                        if (excludeTypeList.Length > 0)
+                            options.ExcludeTypeNames.AddRange(excludeTypeList);
+
+                        var res = WebApiDocsGenerator.Generate(options);
                         stepResult.Success = true;
                         stepResult.Message = $"API docs {res.TypeCount} types";
                         break;
@@ -1206,6 +1456,87 @@ internal static class WebPipelineRunner
                         stepResult.Message = $"Optimized {updated} files";
                         break;
                     }
+                    case "audit":
+                    {
+                        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                        if (string.IsNullOrWhiteSpace(siteRoot))
+                            throw new InvalidOperationException("audit requires siteRoot.");
+
+                        var include = GetString(step, "include");
+                        var exclude = GetString(step, "exclude");
+                        var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
+                        var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
+                        var checkLinks = GetBool(step, "checkLinks") ?? true;
+                        var checkAssets = GetBool(step, "checkAssets") ?? true;
+                        var checkNav = GetBool(step, "checkNav") ?? true;
+                        var checkTitles = GetBool(step, "checkTitles") ?? true;
+                        var checkIds = GetBool(step, "checkDuplicateIds") ?? true;
+                        var checkStructure = GetBool(step, "checkHtmlStructure") ?? true;
+                        var rendered = GetBool(step, "rendered") ?? false;
+                        var renderedEngine = GetString(step, "renderedEngine");
+                        var renderedEnsureInstalled = GetBool(step, "renderedEnsureInstalled");
+                        var renderedHeadless = GetBool(step, "renderedHeadless") ?? true;
+                        var renderedBaseUrl = GetString(step, "renderedBaseUrl");
+                        var renderedHost = GetString(step, "renderedHost");
+                        var renderedPort = GetInt(step, "renderedPort") ?? 0;
+                        var renderedServe = GetBool(step, "renderedServe") ?? true;
+                        var renderedMaxPages = GetInt(step, "renderedMaxPages") ?? 20;
+                        var renderedTimeoutMs = GetInt(step, "renderedTimeoutMs") ?? 30000;
+                        var renderedCheckErrors = GetBool(step, "renderedCheckConsoleErrors") ?? true;
+                        var renderedCheckWarnings = GetBool(step, "renderedCheckConsoleWarnings") ?? true;
+                        var renderedCheckFailures = GetBool(step, "renderedCheckFailedRequests") ?? true;
+                        var renderedInclude = GetString(step, "renderedInclude");
+                        var renderedExclude = GetString(step, "renderedExclude");
+                        var summary = GetBool(step, "summary") ?? false;
+                        var summaryPath = GetString(step, "summaryPath");
+                        var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                        var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
+                        var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
+                        var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
+                        var ignoreNavPatterns = BuildIgnoreNavPatternsForPipeline(ignoreNavList, useDefaultIgnoreNav);
+
+                        var ensureInstall = rendered && (renderedEnsureInstalled ?? true);
+                        var audit = WebSiteAuditor.Audit(new WebAuditOptions
+                        {
+                            SiteRoot = siteRoot,
+                            Include = CliPatternHelper.SplitPatterns(include),
+                            Exclude = CliPatternHelper.SplitPatterns(exclude),
+                            UseDefaultExcludes = useDefaultExclude,
+                            IgnoreNavFor = ignoreNavPatterns,
+                            NavSelector = navSelector,
+                            CheckLinks = checkLinks,
+                            CheckAssets = checkAssets,
+                            CheckNavConsistency = checkNav,
+                            CheckTitles = checkTitles,
+                            CheckDuplicateIds = checkIds,
+                            CheckHtmlStructure = checkStructure,
+                            CheckRendered = rendered,
+                            RenderedEngine = renderedEngine ?? "Chromium",
+                            RenderedEnsureInstalled = ensureInstall,
+                            RenderedHeadless = renderedHeadless,
+                            RenderedBaseUrl = renderedBaseUrl,
+                            RenderedServe = renderedServe,
+                            RenderedServeHost = string.IsNullOrWhiteSpace(renderedHost) ? "localhost" : renderedHost,
+                            RenderedServePort = renderedPort,
+                            RenderedMaxPages = renderedMaxPages,
+                            RenderedTimeoutMs = renderedTimeoutMs,
+                            RenderedCheckConsoleErrors = renderedCheckErrors,
+                            RenderedCheckConsoleWarnings = renderedCheckWarnings,
+                            RenderedCheckFailedRequests = renderedCheckFailures,
+                            RenderedInclude = CliPatternHelper.SplitPatterns(renderedInclude),
+                            RenderedExclude = CliPatternHelper.SplitPatterns(renderedExclude),
+                            SummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath),
+                            SummaryMaxIssues = summaryMax
+                        });
+
+                        stepResult.Success = audit.Success;
+                        stepResult.Message = audit.Success
+                            ? "Audit ok"
+                            : $"Audit failed ({audit.Errors.Length} errors)";
+                        if (!audit.Success)
+                            throw new InvalidOperationException(stepResult.Message);
+                        break;
+                    }
                     case "dotnet-build":
                     {
                         var project = ResolvePath(baseDir, GetString(step, "project") ?? GetString(step, "solution") ?? GetString(step, "path"));
@@ -1224,9 +1555,10 @@ internal static class WebPipelineRunner
                             Runtime = runtime,
                             Restore = !noRestore
                         });
+                        var buildError = string.IsNullOrWhiteSpace(res.Error) ? res.Output : res.Error;
                         stepResult.Success = res.Success;
-                        stepResult.Message = res.Success ? "dotnet build ok" : res.Error;
-                        if (!res.Success) throw new InvalidOperationException(res.Error);
+                        stepResult.Message = res.Success ? "dotnet build ok" : buildError;
+                        if (!res.Success) throw new InvalidOperationException(buildError);
                         break;
                     }
                     case "dotnet-publish":
@@ -1240,6 +1572,7 @@ internal static class WebPipelineRunner
                         var noBuild = GetBool(step, "noBuild") ?? false;
                         var noRestore = GetBool(step, "noRestore") ?? false;
                         var baseHref = GetString(step, "baseHref");
+                        var defineConstants = GetString(step, "defineConstants") ?? GetString(step, "define-constants");
                         var blazorFixes = GetBool(step, "blazorFixes") ?? true;
 
                         if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(outPath))
@@ -1254,10 +1587,12 @@ internal static class WebPipelineRunner
                             Runtime = runtime,
                             SelfContained = selfContained,
                             NoBuild = noBuild,
-                            NoRestore = noRestore
+                            NoRestore = noRestore,
+                            DefineConstants = defineConstants
                         });
 
-                        if (!res.Success) throw new InvalidOperationException(res.Error);
+                        var publishError = string.IsNullOrWhiteSpace(res.Error) ? res.Output : res.Error;
+                        if (!res.Success) throw new InvalidOperationException(publishError);
                         if (blazorFixes)
                         {
                             WebBlazorPublishFixer.Apply(new WebBlazorPublishFixOptions
@@ -1277,6 +1612,7 @@ internal static class WebPipelineRunner
                         var destination = ResolvePath(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
                         var include = GetString(step, "include");
                         var exclude = GetString(step, "exclude");
+                        var clean = GetBool(step, "clean") ?? false;
                         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(destination))
                             throw new InvalidOperationException("overlay requires source and destination.");
 
@@ -1284,6 +1620,7 @@ internal static class WebPipelineRunner
                         {
                             SourceRoot = source,
                             DestinationRoot = destination,
+                            Clean = clean,
                             Include = CliPatternHelper.SplitPatterns(include),
                             Exclude = CliPatternHelper.SplitPatterns(exclude)
                         });
@@ -1330,6 +1667,15 @@ internal static class WebPipelineRunner
                value.ValueKind == JsonValueKind.False ? false : null;
     }
 
+    private static int? GetInt(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var num)) return num;
+        if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed)) return parsed;
+        return null;
+    }
+
     private static string[]? GetArrayOfStrings(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object) return null;
@@ -1374,5 +1720,28 @@ internal static class WebPipelineRunner
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         return Path.IsPathRooted(value) ? value : Path.Combine(baseDir, value);
+    }
+
+    private static string[] BuildIgnoreNavPatternsForPipeline(List<string> userPatterns, bool useDefaults)
+    {
+        if (!useDefaults)
+            return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+        var defaults = new WebAuditOptions().IgnoreNavFor;
+        if (userPatterns.Count == 0)
+            return defaults;
+
+        return defaults.Concat(userPatterns)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? ResolveSummaryPathForPipeline(bool summaryEnabled, string? summaryPath)
+    {
+        if (!summaryEnabled && string.IsNullOrWhiteSpace(summaryPath))
+            return null;
+
+        return string.IsNullOrWhiteSpace(summaryPath) ? "audit-summary.json" : summaryPath;
     }
 }

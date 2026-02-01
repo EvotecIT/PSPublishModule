@@ -1,0 +1,10 @@
+# CodeGlyphX robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://codeglyphx.com/sitemap.xml
+
+# Disallow crawling of framework files
+Disallow: /_framework/
+Disallow: /_content/

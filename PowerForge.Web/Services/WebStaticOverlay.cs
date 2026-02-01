@@ -9,6 +9,8 @@ public sealed class WebStaticOverlayOptions
     public string SourceRoot { get; set; } = string.Empty;
     /// <summary>Destination root directory.</summary>
     public string DestinationRoot { get; set; } = string.Empty;
+    /// <summary>When true, delete destination root before copying.</summary>
+    public bool Clean { get; set; }
     /// <summary>Optional include glob patterns.</summary>
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Optional exclude glob patterns.</summary>
@@ -33,6 +35,8 @@ public static class WebStaticOverlay
         var destinationRoot = Path.GetFullPath(options.DestinationRoot);
         if (!Directory.Exists(sourceRoot))
             throw new DirectoryNotFoundException($"Source root not found: {sourceRoot}");
+        if (options.Clean && Directory.Exists(destinationRoot))
+            Directory.Delete(destinationRoot, recursive: true);
         Directory.CreateDirectory(destinationRoot);
 
         var includes = NormalizePatterns(options.Include);

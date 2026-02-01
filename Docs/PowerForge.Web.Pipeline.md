@@ -30,8 +30,10 @@ Minimal pipeline:
 #### build
 Builds markdown + theme into static HTML.
 ```json
-{ "task": "build", "config": "./site.json", "out": "./Artifacts/site" }
+{ "task": "build", "config": "./site.json", "out": "./Artifacts/site", "clean": true }
 ```
+Notes:
+- `clean: true` clears the output directory before building (avoids stale files).
 
 #### apidocs
 Generates API reference output from XML docs (optionally enriched by assembly).
@@ -43,12 +45,18 @@ Generates API reference output from XML docs (optionally enriched by assembly).
   "out": "./Artifacts/site/api",
   "title": "API Reference",
   "baseUrl": "/api",
-  "format": "json"
+  "format": "json",
+  "includeNamespace": "MyLib",
+  "excludeType": "MyLib.InternalHelper,MyLib.Internal*"
 }
 ```
 Notes:
-- `format`: `json` or `hybrid` (json + html)
+- `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
+- `template`: `simple` (default) or `docs` (sidebar layout)
+- `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
+- `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
+- `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
@@ -97,6 +105,34 @@ Applies critical CSS + minifies HTML/CSS/JS.
 }
 ```
 
+#### audit
+Runs static (and optional rendered) checks against generated HTML.
+```json
+{
+  "task": "audit",
+  "siteRoot": "./Artifacts/site",
+  "checkLinks": true,
+  "checkAssets": true,
+  "checkNav": true,
+  "rendered": true,
+  "renderedMaxPages": 10,
+  "renderedInclude": "index.html,docs/**,benchmarks/**",
+  "renderedExclude": "api/**,docs/api/**",
+  "summary": true
+}
+```
+Notes:
+- Static checks run by default; set `rendered: true` to enable Playwright checks.
+- `renderedInclude` / `renderedExclude` are comma-separated glob patterns (paths are relative to `siteRoot`).
+- `summary: true` writes `audit-summary.json` under `siteRoot` unless `summaryPath` is provided.
+- Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
+- Use `noDefaultExclude` to include partial HTML files like `*.scripts.html`.
+- `renderedBaseUrl` lets you run rendered checks against a running server (otherwise a local server is started).
+- `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.
+- `renderedEnsureInstalled` auto-installs Playwright browsers before rendered checks (defaults to `true` in CLI/pipeline when `rendered` is enabled).
+CLI note:
+- Use `--rendered-no-install` to skip auto-install (for CI environments with preinstalled browsers).
+
 #### dotnet-build
 Runs `dotnet build`.
 ```json
@@ -122,6 +158,7 @@ Runs `dotnet publish` and (optionally) applies Blazor fixes.
   "noBuild": true,
   "noRestore": true,
   "baseHref": "/",
+  "defineConstants": "DOCS_BUILD",
   "blazorFixes": true
 }
 ```
@@ -129,6 +166,7 @@ Runs `dotnet publish` and (optionally) applies Blazor fixes.
 Notes:
 - `blazorFixes` defaults to `true` in the CLI.
 - Schema uses `noBlazorFixes` today; CLI reads `blazorFixes`. We should align these later.
+- `defineConstants` maps to `-p:DefineConstants=...` for multi-variant Blazor publishes.
 
 #### overlay
 Copies a static overlay directory into another (useful for Blazor outputs).
@@ -137,6 +175,7 @@ Copies a static overlay directory into another (useful for Blazor outputs).
   "task": "overlay",
   "source": "./Artifacts/playground/wwwroot",
   "destination": "./Artifacts/site/playground",
+  "clean": true,
   "include": "**/*",
   "exclude": "**/*.map"
 }
@@ -145,6 +184,7 @@ Copies a static overlay directory into another (useful for Blazor outputs).
 Notes:
 - `include` and `exclude` are comma-separated patterns in pipeline JSON.
 - Example: `"include": "**/*.html,**/*.css"`
+- `clean: true` deletes the destination folder before copying (avoids stale files).
 
 ## Publish spec (`powerforge-web publish`)
 
@@ -161,7 +201,8 @@ Minimal publish:
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",
-    "Out": "./Artifacts/site"
+    "Out": "./Artifacts/site",
+    "Clean": true
   },
   "Publish": {
     "Project": "./src/MySite/MySite.csproj",
@@ -191,6 +232,7 @@ Full publish with overlay + optimize:
     "Out": "./Artifacts/publish",
     "Configuration": "Release",
     "Framework": "net9.0",
+    "DefineConstants": "TRACE;DOCS_BUILD",
     "BaseHref": "/",
     "ApplyBlazorFixes": true
   },

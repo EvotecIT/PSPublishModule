@@ -37,6 +37,8 @@ public sealed class WebDotNetPublishOptions
     public bool NoBuild { get; set; } = false;
     /// <summary>Skip restore step.</summary>
     public bool NoRestore { get; set; } = false;
+    /// <summary>Optional MSBuild DefineConstants override.</summary>
+    public string? DefineConstants { get; set; }
 }
 
 /// <summary>Result payload for dotnet build/publish commands.</summary>
@@ -101,6 +103,11 @@ public static class WebDotNetRunner
             args.Add("--no-build");
         if (options.NoRestore)
             args.Add("--no-restore");
+        if (!string.IsNullOrWhiteSpace(options.DefineConstants))
+        {
+            var defineConstants = options.DefineConstants.Replace(";", "%3B", StringComparison.Ordinal);
+            args.Add($"-p:DefineConstants={defineConstants}");
+        }
 
         return Run("dotnet", args);
     }

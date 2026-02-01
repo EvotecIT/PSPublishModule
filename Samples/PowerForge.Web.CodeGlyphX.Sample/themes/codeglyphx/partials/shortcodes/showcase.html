@@ -1,0 +1,130 @@
+<div class="showcase-page">
+    <div class="showcase-hero">
+        {{ if data.showcase && data.showcase.hero }}
+            {{ if data.showcase.hero.label }}<span class="section-label">{{ data.showcase.hero.label }}</span>{{ end }}
+            {{ if data.showcase.hero.title }}<h1>{{ data.showcase.hero.title }}</h1>{{ end }}
+            {{ if data.showcase.hero.description }}<p>{{ data.showcase.hero.description }}</p>{{ end }}
+        {{ end }}
+    </div>
+
+    <div class="showcase-grid">
+        {{ if shortcode.data }}
+            {{ for card in shortcode.data }}
+                <div class="{{ if card.class }}{{ card.class }}{{ else }}showcase-card{{ end }}">
+                    <div class="showcase-header">
+                        <div class="showcase-icon">{{ if card.icon_svg }}{{ card.icon_svg }}{{ end }}</div>
+                        <div class="showcase-title">
+                            {{ if card.title }}<h2>{{ card.title }}</h2>{{ end }}
+                            {{ if card.badge }}<span class="showcase-badge">{{ card.badge }}</span>{{ end }}
+                        </div>
+                    </div>
+
+                    {{ if card.meta }}
+                        <div class="showcase-meta">
+                            {{ for item in card.meta }}
+                                <span class="{{ item.class }}">
+                                    {{ if item.icon_svg }}{{ item.icon_svg }}{{ end }}
+                                    {{ item.label }}
+                                </span>
+                            {{ end }}
+                        </div>
+                    {{ end }}
+
+                    {{ if card.description }}<p class="showcase-description">{{ card.description }}</p>{{ end }}
+
+                    {{ if card.details }}
+                        <div class="showcase-details">
+                            {{ if card.details.title }}<h4>{{ card.details.title }}</h4>{{ end }}
+                            {{ if card.details.items }}
+                                <ul>
+                                    {{ for item in card.details.items }}
+                                        <li>{{ item }}</li>
+                                    {{ end }}
+                                </ul>
+                            {{ end }}
+                        </div>
+                    {{ end }}
+
+                    {{ if card.features }}
+                        <div class="showcase-features">
+                            {{ for feature in card.features }}
+                                <span class="showcase-feature">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 13l4 4L19 7"/></svg>{{ feature }}
+                                </span>
+                            {{ end }}
+                        </div>
+                    {{ end }}
+
+                    {{ if card.gallery }}
+                        <div class="showcase-gallery" data-carousel="{{ card.gallery.id }}">
+                            <div class="showcase-gallery-tabs">
+                                {{ for theme in card.gallery.themes }}
+                                    <button class="showcase-gallery-tab{{ if theme.active }} active{{ end }}" data-theme="{{ theme.name }}">{{ theme.label }}</button>
+                                {{ end }}
+                            </div>
+                            <div class="showcase-carousel">
+                                <div class="showcase-carousel-viewport">
+                                    {{ for theme in card.gallery.themes }}
+                                        {{ for slide in theme.slides }}
+                                            <div class="showcase-carousel-slide{{ if for.first }} active{{ end }}" data-theme="{{ theme.name }}" data-index="{{ for.index }}"{{ if theme.active == false }} style="display:none"{{ end }}>
+                                                <img src="{{ slide.src }}" alt="{{ slide.alt }}" loading="lazy" />
+                                            </div>
+                                        {{ end }}
+                                    {{ end }}
+                                    <button class="showcase-carousel-nav prev" aria-label="Previous image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg></button>
+                                    <button class="showcase-carousel-nav next" aria-label="Next image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></button>
+                                </div>
+                                <div class="showcase-carousel-footer">
+                                    <span class="showcase-carousel-caption">{{ card.gallery.themes[0].slides[0].caption }}</span>
+                                    <div class="showcase-carousel-dots">
+                                        {{ for slide in card.gallery.themes[0].slides }}
+                                            <button class="showcase-carousel-dot{{ if for.first }} active{{ end }}" data-index="{{ for.index }}" aria-label="Go to slide {{ for.index + 1 }}"></button>
+                                        {{ end }}
+                                    </div>
+                                    <span class="showcase-carousel-counter">1 / {{ card.gallery.themes[0].slides.size }}</span>
+                                </div>
+                                {{ for theme in card.gallery.themes }}
+                                    <div class="showcase-carousel-thumbs" data-theme-container="{{ theme.name }}"{{ if theme.active == false }} style="display:none"{{ end }}>
+                                        {{ for slide in theme.slides }}
+                                            <button class="showcase-carousel-thumb{{ if for.first }} active{{ end }}" data-index="{{ for.index }}" aria-label="{{ slide.thumb_label }}">
+                                                <img src="{{ if slide.thumb_src }}{{ slide.thumb_src }}{{ else }}{{ slide.src }}{{ end }}" alt="" loading="lazy" />
+                                            </button>
+                                        {{ end }}
+                                    </div>
+                                {{ end }}
+                            </div>
+                        </div>
+                        <script type="application/json" class="carousel-data" data-carousel="{{ card.gallery.id }}">
+                        { {{ for theme in card.gallery.themes }}"{{ theme.name }}":[{{ for slide in theme.slides }}"{{ slide.caption }}"{{ if !for.last }},{{ end }}{{ end }}]{{ if !for.last }},{{ end }}{{ end }} }
+                        </script>
+                    {{ end }}
+
+                    {{ if card.actions || card.status }}
+                        <div class="showcase-actions">
+                            {{ if card.actions }}
+                                {{ for action in card.actions }}
+                                    <a href="{{ action.href }}"{{ if action.target }} target="{{ action.target }}"{{ end }}{{ if action.rel }} rel="{{ action.rel }}"{{ end }} class="{{ action.class }}">{{ if action.icon_svg }}{{ action.icon_svg }}{{ end }}{{ action.label }}</a>
+                                {{ end }}
+                            {{ end }}
+                            {{ if card.status }}
+                                <span class="showcase-status"><span class="status-dot"{{ if card.status.dot_style }} style="{{ card.status.dot_style }}"{{ end }}></span>{{ card.status.label }}</span>
+                            {{ end }}
+                        </div>
+                    {{ end }}
+                </div>
+            {{ end }}
+        {{ end }}
+    </div>
+
+    {{ if data.showcase && data.showcase.submit }}
+        <div class="showcase-submit">
+            <div class="showcase-submit-content">
+                {{ if data.showcase.submit.title }}<h3>{{ data.showcase.submit.title }}</h3>{{ end }}
+                {{ if data.showcase.submit.description }}<p>{{ data.showcase.submit.description }}</p>{{ end }}
+                {{ if data.showcase.submit.cta }}
+                    <a href="{{ data.showcase.submit.cta.href }}"{{ if data.showcase.submit.cta.target }} target="{{ data.showcase.submit.cta.target }}"{{ end }}{{ if data.showcase.submit.cta.rel }} rel="{{ data.showcase.submit.cta.rel }}"{{ end }} class="{{ data.showcase.submit.cta.class }}">{{ if data.showcase.submit.cta.icon_svg }}{{ data.showcase.submit.cta.icon_svg }}{{ end }}{{ data.showcase.submit.cta.label }}</a>
+                {{ end }}
+            </div>
+        </div>
+    {{ end }}
+</div>

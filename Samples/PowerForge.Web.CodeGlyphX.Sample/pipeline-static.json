@@ -4,22 +4,23 @@
     {
       "task": "build",
       "config": "./site.json",
-      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site"
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "clean": true
     },
     {
       "task": "sitemap",
       "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
       "baseUrl": "https://codeglyphx.com",
       "html": true,
-      "htmlTemplate": "./themes/nova/templates/sitemap.html",
       "htmlTitle": "CodeGlyphX Sitemap",
       "entries": [
         { "path": "/", "priority": "1.0", "changefreq": "weekly" },
         { "path": "/playground/", "priority": "0.9", "changefreq": "weekly" },
         { "path": "/docs/", "priority": "0.9", "changefreq": "weekly" },
-        { "path": "/benchmarks/", "priority": "0.85", "changefreq": "monthly" },
+        { "path": "/benchmarks/", "priority": "0.8", "changefreq": "monthly" },
         { "path": "/faq/", "priority": "0.8", "changefreq": "monthly" },
-        { "path": "/showcase/", "priority": "0.7", "changefreq": "monthly" }
+        { "path": "/showcase/", "priority": "0.7", "changefreq": "monthly" },
+        { "path": "/pricing/", "priority": "0.7", "changefreq": "monthly" }
       ]
     },
     {
@@ -28,6 +29,19 @@
       "minifyHtml": false,
       "minifyCss": true,
       "minifyJs": true
+    },
+    {
+      "task": "audit",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "exclude": "**/*.scripts.html,**/*.head.html,**/api-fragments/**,api-fragments/**",
+      "ignoreNav": "playground/**,**/404.html,**/404/index.html,sitemap/**",
+      "navSelector": "header nav.nav",
+      "rendered": true,
+      "renderedEnsureInstalled": true,
+      "renderedMaxPages": 8,
+      "renderedInclude": "index.html,docs/**,benchmarks/**,faq/**,pricing/**,showcase/**",
+      "renderedExclude": "api/**,docs/api/**,api-docs/**",
+      "summary": true
     }
   ]
 }

@@ -1,0 +1,114 @@
+<div class="benchmark-page">
+    <section class="benchmark-hero">
+        {{ if data.benchmarks && data.benchmarks.hero }}
+            {{ if data.benchmarks.hero.title }}<h1>{{ data.benchmarks.hero.title }}</h1>{{ end }}
+            {{ if data.benchmarks.hero.intro }}<p class="benchmark-intro">{{ data.benchmarks.hero.intro }}</p>{{ end }}
+        {{ end }}
+        <div class="benchmark-meta" data-benchmark-meta></div>
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.about }}
+            {{ if data.benchmarks.about.title }}<h2>{{ data.benchmarks.about.title }}</h2>{{ end }}
+            <div class="benchmark-info-grid">
+                {{ for card in data.benchmarks.about.cards }}
+                    <div class="benchmark-info-card">
+                        {{ if card.title }}<h3>{{ card.title }}</h3>{{ end }}
+                        {{ if card.paragraphs }}
+                            {{ for paragraph in card.paragraphs }}{{ paragraph }}{{ end }}
+                        {{ end }}
+                        {{ if card.list }}
+                            <ul>
+                                {{ for item in card.list }}<li>{{ item }}</li>{{ end }}
+                            </ul>
+                        {{ end }}
+                    </div>
+                {{ end }}
+            </div>
+        {{ end }}
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.runMode }}
+            {{ if data.benchmarks.runMode.title }}<h2>{{ data.benchmarks.runMode.title }}</h2>{{ end }}
+            <div class="benchmark-mode-selector">
+                {{ for button in data.benchmarks.runMode.buttons }}
+                    <button class="benchmark-mode-btn{{ if button.active }} active{{ end }}" data-mode="{{ button.mode }}">{{ button.label }}</button>
+                {{ end }}
+            </div>
+        {{ end }}
+        <p class="benchmark-mode-note" data-mode-note></p>
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.sections && data.benchmarks.sections.summary }}
+            <h2>{{ data.benchmarks.sections.summary.title }}</h2>
+            <p class="section-description">{{ data.benchmarks.sections.summary.description }}</p>
+        {{ end }}
+        <div class="benchmark-table-container" data-benchmark-summary>
+            <p class="loading-text">Loading benchmark data...</p>
+        </div>
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.sections && data.benchmarks.sections.charts }}
+            <h2>{{ data.benchmarks.sections.charts.title }}</h2>
+            <p class="section-description">{{ data.benchmarks.sections.charts.description }}</p>
+        {{ end }}
+        <div class="benchmark-charts" data-benchmark-charts>
+            <p class="loading-text">Loading chart data...</p>
+        </div>
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.sections && data.benchmarks.sections.details }}
+            <h2>{{ data.benchmarks.sections.details.title }}</h2>
+            <p class="section-description">{{ data.benchmarks.sections.details.description }}</p>
+        {{ end }}
+        <div class="benchmark-details" data-benchmark-details>
+            <p class="loading-text">Loading detailed results...</p>
+        </div>
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.sections && data.benchmarks.sections.baseline }}
+            <h2>{{ data.benchmarks.sections.baseline.title }}</h2>
+            <p class="section-description">{{ data.benchmarks.sections.baseline.description }}</p>
+        {{ end }}
+        <div class="benchmark-baseline" data-benchmark-baseline>
+            <p class="loading-text">Loading baseline data...</p>
+        </div>
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.sections && data.benchmarks.sections.environment }}
+            <h2>{{ data.benchmarks.sections.environment.title }}</h2>
+        {{ end }}
+        <div class="benchmark-environment" data-benchmark-environment>
+            <p class="loading-text">Loading environment info...</p>
+        </div>
+    </section>
+
+    <section class="benchmark-section benchmark-notes">
+        {{ if data.benchmarks && data.benchmarks.notes }}
+            {{ if data.benchmarks.notes.title }}<h2>{{ data.benchmarks.notes.title }}</h2>{{ end }}
+            <div data-benchmark-notes>
+                <ul>
+                    {{ for item in data.benchmarks.notes.items }}
+                        <li>{{ item }}</li>
+                    {{ end }}
+                </ul>
+            </div>
+        {{ end }}
+    </section>
+
+    <section class="benchmark-section">
+        {{ if data.benchmarks && data.benchmarks.run }}
+            {{ if data.benchmarks.run.title }}<h2>{{ data.benchmarks.run.title }}</h2>{{ end }}
+            {{ if data.benchmarks.run.intro }}<p>{{ data.benchmarks.run.intro }}</p>{{ end }}
+            {{ if data.benchmarks.run.commands }}
+                <pre class="code-block"><code>{{ data.benchmarks.run.commands }}</code></pre>
+            {{ end }}
+        {{ end }}
+    </section>
+</div>

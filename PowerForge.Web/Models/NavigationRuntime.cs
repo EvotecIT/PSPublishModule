@@ -5,6 +5,9 @@ public sealed class NavigationRuntime
 {
     /// <summary>Resolved menus with active state.</summary>
     public NavigationMenu[] Menus { get; set; } = Array.Empty<NavigationMenu>();
+
+    /// <summary>Resolved navigation action items (buttons/links).</summary>
+    public NavigationItem[] Actions { get; set; } = Array.Empty<NavigationItem>();
 }
 
 /// <summary>Resolved menu with navigation items.</summary>
@@ -26,11 +29,26 @@ public sealed class NavigationItem
     /// <summary>Display title.</summary>
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>Optional display text.</summary>
+    public string? Text { get; set; }
+
     /// <summary>Destination URL.</summary>
     public string? Url { get; set; }
 
     /// <summary>Optional icon identifier.</summary>
     public string? Icon { get; set; }
+
+    /// <summary>Optional icon HTML.</summary>
+    public string? IconHtml { get; set; }
+
+    /// <summary>Optional item kind.</summary>
+    public string? Kind { get; set; }
+
+    /// <summary>Optional CSS class.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Optional aria-label override.</summary>
+    public string? AriaLabel { get; set; }
 
     /// <summary>Optional badge label.</summary>
     public string? Badge { get; set; }

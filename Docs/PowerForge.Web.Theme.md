@@ -194,6 +194,7 @@ Projects can provide:
 ## Navigation + breadcrumbs
 Navigation and breadcrumbs are computed at render time:
 - `navigation.menus` (active/ancestor flags included)
+- `navigation.actions` (header buttons/icons)
 - `breadcrumbs` (array of `{ title, url, is_current }`)
 
 Example:
@@ -203,6 +204,21 @@ Example:
     <a href="{{ item.url }}" class="{{ if item.is_active }}is-active{{ end }}">{{ item.title }}</a>
   {{ end }}
 </nav>
+```
+
+Header actions example:
+```html
+<div class="nav-actions">
+  {{ if navigation.actions && navigation.actions.size > 0 }}
+    {{ for action in navigation.actions }}
+      {{ if action.kind == "button" }}
+        <button type="button" class="{{ action.css_class }}">{{ action.title }}</button>
+      {{ else }}
+        <a href="{{ action.url }}" class="{{ action.css_class }}">{{ action.title }}</a>
+      {{ end }}
+    {{ end }}
+  {{ end }}
+</div>
 ```
 
 ## List pages + taxonomies

@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
 using PowerForge;
@@ -34,6 +36,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     [Alias("Version")]
     public string? ExpectedVersion { get; set; }
+
+    /// <summary>Per-project expected versions (hashtable: ProjectName = Version).</summary>
+    [Parameter]
+    public IDictionary? ExpectedVersionMap { get; set; }
 
     /// <summary>Project names to include (csproj file name without extension).</summary>
     [Parameter]
@@ -96,6 +102,14 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     [Parameter]
     public string? PublishApiKey { get; set; }
 
+    /// <summary>Path to a file containing the publish API key.</summary>
+    [Parameter]
+    public string? PublishApiKeyFilePath { get; set; }
+
+    /// <summary>Name of environment variable containing the publish API key.</summary>
+    [Parameter]
+    public string? PublishApiKeyEnvName { get; set; }
+
     /// <summary>Skip duplicates when pushing packages.</summary>
     [Parameter]
     public SwitchParameter SkipDuplicate { get; set; }
@@ -121,10 +135,15 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             }
             : null;
 
+        var publishApiKey = ResolveSecret(PublishApiKey, PublishApiKeyFilePath, PublishApiKeyEnvName);
+
+        var expectedByProject = ParseExpectedVersionMap(ExpectedVersionMap);
+
         var spec = new DotNetRepositoryReleaseSpec
         {
             RootPath = root,
             ExpectedVersion = ExpectedVersion,
+            ExpectedVersionsByProject = expectedByProject.Count == 0 ? null : expectedByProject,
             IncludeProjects = IncludeProject,
             ExcludeProjects = ExcludeProject,
             ExcludeDirectories = ExcludeDirectories,
@@ -136,7 +155,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             Pack = !SkipPack.IsPresent,
             Publish = Publish.IsPresent,
             PublishSource = PublishSource,
-            PublishApiKey = PublishApiKey,
+            PublishApiKey = publishApiKey,
             SkipDuplicate = SkipDuplicate.IsPresent
         };
 
@@ -152,6 +171,31 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         spec.WhatIf = false;
         var result = service.Execute(spec);
         WriteObject(result);
+    }
+
+    private Dictionary<string, string> ParseExpectedVersionMap(IDictionary? entries)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (entries is null || entries.Count == 0) return map;
+
+        foreach (DictionaryEntry entry in entries)
+        {
+            var key = entry.Key?.ToString()?.Trim();
+            var value = entry.Value?.ToString()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+            {
+                ThrowTerminatingError(new ErrorRecord(
+                    new ArgumentException("ExpectedVersionMap entries must include both project name and version."),
+                    "InvalidExpectedVersionMapEntry",
+                    ErrorCategory.InvalidArgument,
+                    entries));
+            }
+
+            map[key!] = value!;
+        }
+
+        return map;
     }
 
     private static string? ResolveSecret(string? inline, string? filePath, string? envName)

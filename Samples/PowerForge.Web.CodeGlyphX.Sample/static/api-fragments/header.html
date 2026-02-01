@@ -1,0 +1,27 @@
+<header class="header">
+    <div class="header-content">
+        <a href="{{BRAND_URL}}" class="brand">
+            <div class="brand-icon">
+                <img src="{{BRAND_ICON}}" alt="{{SITE_NAME}} logo" width="28" height="28" />
+            </div>
+            <span>{{SITE_NAME}}</span>
+        </a>
+
+        <!-- Mobile hamburger toggle -->
+        <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox" />
+        <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+            <span></span>
+            <span></span>
+            <span></span>
+        </label>
+
+        <nav class="nav" aria-label="Main navigation">
+            <div class="nav-links">
+                {{NAV_LINKS}}
+            </div>
+            <div class="nav-actions">
+                {{NAV_ACTIONS}}
+            </div>
+        </nav>
+    </div>
+</header>

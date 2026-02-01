@@ -76,24 +76,6 @@
         "resolved": "1.12.4",
         "contentHash": "ljqvBabvFwKoLniuoQKO8b5bJfJweKLs4fUNS/V5dsvpo0A8MlJqxxn9XVmP2DaskbUXty6IYaWAi1SArGIMeQ=="
       },
-      "HtmlTinkerX": {
-        "type": "Transitive",
-        "resolved": "2.0.6",
-        "contentHash": "k24lWOWBYcoqgPbb8I1s+ldp5pEjAGRu/ixrpFzrPHNKCpTVBwDqg6hfcCCqZK2Wn60/XCSdAzThjo3iVSD4XQ==",
-        "dependencies": {
-          "AngleSharp": "1.4.0",
-          "AngleSharp.Css": "1.0.0-beta.154",
-          "AngleSharp.Diffing": "1.1.0",
-          "AngleSharp.Js": "1.0.0-beta.45",
-          "HtmlAgilityPack": "1.12.4",
-          "Microsoft.Playwright": "1.56.0",
-          "NUglify": "1.21.17",
-          "PreMailer.Net": "2.7.2",
-          "SixLabors.Fonts": "1.0.1",
-          "SixLabors.ImageSharp": "2.1.12",
-          "SixLabors.ImageSharp.Drawing": "1.0.0"
-        }
-      },
       "JetBrains.Annotations": {
         "type": "Transitive",
         "resolved": "2021.2.0",
@@ -811,6 +793,22 @@
         "type": "Transitive",
         "resolved": "15.1.2",
         "contentHash": "qeX0XhzOIcQEvnI5JxnPaIwcINwyY4Qy/LXhSfsdHkFrl9F41AT52UFfy2nIE7kgrhMg+cP7xuS+GtPJhmHmTA=="
+      },
+      "htmltinkerx": {
+        "type": "Project",
+        "dependencies": {
+          "AngleSharp": "[1.4.0, )",
+          "AngleSharp.Css": "[1.0.0-beta.154, )",
+          "AngleSharp.Diffing": "[1.1.0, )",
+          "AngleSharp.Js": "[1.0.0-beta.45, )",
+          "HtmlAgilityPack": "[1.12.4, )",
+          "Microsoft.Playwright": "[1.56.0, )",
+          "NUglify": "[1.21.17, )",
+          "PreMailer.Net": "[2.7.2, )",
+          "SixLabors.Fonts": "[1.0.1, )",
+          "SixLabors.ImageSharp": "[2.1.12, )",
+          "SixLabors.ImageSharp.Drawing": "[1.0.0, )"
+        }
       },
       "powerforge": {
         "type": "Project",

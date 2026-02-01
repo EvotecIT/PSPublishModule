@@ -1,0 +1,33 @@
+<div class="faq-page">
+    <div class="faq-hero">
+        {{ if data.faq && data.faq.hero }}
+            {{ if data.faq.hero.label }}<span class="section-label">{{ data.faq.hero.label }}</span>{{ end }}
+            {{ if data.faq.hero.title }}<h1>{{ data.faq.hero.title }}</h1>{{ end }}
+            {{ if data.faq.hero.description }}<p>{{ data.faq.hero.description }}</p>{{ end }}
+        {{ end }}
+    </div>
+
+    <div class="faq-content">
+        {{ if shortcode.data }}
+            {{ for section in shortcode.data }}
+                <div class="faq-section">
+                    {{ if section.title }}<h2>{{ section.title }}</h2>{{ end }}
+                    {{ if section.items }}
+                        {{ for item in section.items }}
+                            <div class="faq-item"{{ if item.id }} id="{{ item.id }}"{{ end }}>
+                                {{ if item.question }}<h3>{{ item.question }}</h3>{{ end }}
+                                {{ if item.answer }}
+                                    {{ if item.answer.size && item.answer.size > 0 }}
+                                        {{ for block in item.answer }}{{ block }}{{ end }}
+                                    {{ else }}
+                                        {{ item.answer }}
+                                    {{ end }}
+                                {{ end }}
+                            </div>
+                        {{ end }}
+                    {{ end }}
+                </div>
+            {{ end }}
+        {{ end }}
+    </div>
+</div>

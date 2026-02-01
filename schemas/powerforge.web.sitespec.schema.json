@@ -336,20 +336,24 @@
         "Mode": { "type": "string", "enum": ["contenthash", "mtime"] }
       }
     },
-    "NavigationSpec": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "Menus": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/MenuSpec" }
-        },
-        "Auto": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/NavigationAutoSpec" }
+      "NavigationSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "Menus": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/MenuSpec" }
+          },
+          "Actions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/MenuItemSpec" }
+          },
+          "Auto": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/NavigationAutoSpec" }
+          }
         }
-      }
-    },
+      },
     "MenuSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -363,16 +367,21 @@
       },
       "required": ["Name"]
     },
-    "MenuItemSpec": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "Title": { "type": "string" },
-        "Url": { "type": "string" },
-        "Icon": { "type": "string" },
-        "Badge": { "type": "string" },
-        "Description": { "type": "string" },
-        "Target": { "type": "string" },
+      "MenuItemSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "Title": { "type": "string" },
+          "Text": { "type": "string" },
+          "Url": { "type": "string" },
+          "Icon": { "type": "string" },
+          "IconHtml": { "type": "string" },
+          "Kind": { "type": "string" },
+          "CssClass": { "type": "string" },
+          "AriaLabel": { "type": "string" },
+          "Badge": { "type": "string" },
+          "Description": { "type": "string" },
+          "Target": { "type": "string" },
         "Rel": { "type": "string" },
         "External": { "type": "boolean" },
         "Weight": { "type": "number" },

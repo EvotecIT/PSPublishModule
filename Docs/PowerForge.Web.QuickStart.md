@@ -109,6 +109,12 @@ powerforge-web pipeline --config ./pipeline.json
 powerforge-web publish --config ./publish.json
 ```
 
+Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:
+```
+powerforge-web audit --site-root ./Artifacts --summary
+powerforge-web audit --site-root ./Artifacts --rendered --rendered-max 8
+```
+
 See `Docs/PowerForge.Web.Workflow.md` for the full end-to-end pipeline flow.
 See `Docs/PowerForge.Web.Pipeline.md` for spec details and examples.
 
@@ -178,6 +184,9 @@ Define menus in `site.json`:
       { "Name": "main", "Items": [
         { "Title": "Docs", "Url": "/docs/" }
       ]}
+    ],
+    "Actions": [
+      { "Title": "GitHub", "Url": "https://github.com/org/repo", "External": true, "CssClass": "nav-icon" }
     ]
   }
 }
@@ -185,6 +194,7 @@ Define menus in `site.json`:
 
 Scriban context:
 - `navigation.menus` (active + ancestor flags)
+- `navigation.actions` (header buttons/icons)
 - `breadcrumbs` (computed per page)
 
 ## Multi-project folder conventions

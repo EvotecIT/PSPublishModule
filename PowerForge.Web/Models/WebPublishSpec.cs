@@ -22,6 +22,8 @@ public sealed class WebPublishBuildSpec
     public string Config { get; set; } = string.Empty;
     /// <summary>Output directory.</summary>
     public string Out { get; set; } = string.Empty;
+    /// <summary>When true, clean the output directory before building.</summary>
+    public bool Clean { get; set; }
 }
 
 /// <summary>Static overlay copy configuration.</summary>
@@ -56,6 +58,8 @@ public sealed class WebPublishDotNetSpec
     public bool NoBuild { get; set; }
     /// <summary>Skip restore step.</summary>
     public bool NoRestore { get; set; }
+    /// <summary>Optional MSBuild DefineConstants override.</summary>
+    public string? DefineConstants { get; set; }
     /// <summary>Optional base href override for SPA output.</summary>
     public string? BaseHref { get; set; }
     /// <summary>Apply Blazor-specific fixes after publish.</summary>

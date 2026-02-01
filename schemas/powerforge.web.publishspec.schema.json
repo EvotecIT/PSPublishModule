@@ -19,7 +19,8 @@
       "additionalProperties": false,
       "properties": {
         "Config": { "type": "string" },
-        "Out": { "type": "string" }
+        "Out": { "type": "string" },
+        "Clean": { "type": "boolean" }
       },
       "required": ["Config", "Out"]
     },
@@ -46,6 +47,7 @@
         "SelfContained": { "type": "boolean" },
         "NoBuild": { "type": "boolean" },
         "NoRestore": { "type": "boolean" },
+        "DefineConstants": { "type": "string" },
         "BaseHref": { "type": "string" },
         "ApplyBlazorFixes": { "type": "boolean" }
       },

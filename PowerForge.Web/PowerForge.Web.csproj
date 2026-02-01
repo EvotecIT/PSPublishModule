@@ -13,11 +13,11 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
+    <ProjectReference Include="..\..\PSParseHTML\Sources\HtmlTinkerX\HtmlTinkerX.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="OfficeIMO.Markdown" Version="0.5.0" />
-    <PackageReference Include="HtmlTinkerX" Version="2.0.6" />
     <PackageReference Include="Scriban" Version="5.11.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
@@ -27,6 +27,9 @@
     <EmbeddedResource Include="Assets\ApiDocs\search.js" />
     <EmbeddedResource Include="Assets\ApiDocs\index.html" />
     <EmbeddedResource Include="Assets\ApiDocs\type.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\docs-index.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\docs-type.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\docs.js" />
   </ItemGroup>
 
 </Project>

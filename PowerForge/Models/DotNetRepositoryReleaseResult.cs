@@ -16,6 +16,9 @@ public sealed class DotNetRepositoryReleaseResult
     /// <summary>Resolved version used for the release.</summary>
     public string? ResolvedVersion { get; set; }
 
+    /// <summary>Resolved versions per project (project name -> version).</summary>
+    public Dictionary<string, string> ResolvedVersionsByProject { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Project-level results.</summary>
     public List<DotNetRepositoryProjectResult> Projects { get; } = new();
 

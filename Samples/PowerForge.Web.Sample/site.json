@@ -112,6 +112,9 @@
         ]
       }
     ],
+    "Actions": [
+      { "Title": "Get Started", "Url": "/docs/", "CssClass": "pf-button" }
+    ],
     "Auto": [
       {
         "Collection": "docs",

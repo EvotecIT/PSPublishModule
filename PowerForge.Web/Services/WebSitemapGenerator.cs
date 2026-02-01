@@ -341,7 +341,10 @@ public static class WebSitemapGenerator
         globals.Add("generated", DateTime.UtcNow.ToString("O"));
         globals.Add("entries", items);
 
-        var context = new TemplateContext();
+        var context = new TemplateContext
+        {
+            LoopLimit = 0
+        };
         context.PushGlobal(globals);
 
         return parsed.Render(context);
@@ -354,7 +357,7 @@ public static class WebSitemapGenerator
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
   <meta name=""robots"" content=""noindex"" />
   <title>{{ title }}</title>
-  {{ if css_href != "" }}<link rel=""stylesheet"" href=""{{ css_href }}"" />{{ end }}
+  {{ if css_href != """" }}<link rel=""stylesheet"" href=""{{ css_href }}"" />{{ end }}
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: #0b0f14; color: #e2e8f0; }
     .pf-wrap { max-width: 960px; margin: 0 auto; padding: 48px 24px; }

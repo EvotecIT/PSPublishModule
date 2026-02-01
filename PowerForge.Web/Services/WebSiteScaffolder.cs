@@ -397,7 +397,7 @@ a { color: inherit; text-decoration: none; }
   {{ structured_data_html }}
   {{ head_html }}
 </head>
-<body{{ if body_class != "" }} class=""{{ body_class }}""{{ end }}>
+<body{{ if body_class != """" }} class=""{{ body_class }}""{{ end }}>
   {{ include ""header"" }}
   <main class=""pf-web-content"">
     <div class=""pf-container"">

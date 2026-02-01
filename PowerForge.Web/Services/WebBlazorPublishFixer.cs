@@ -34,10 +34,15 @@ public static class WebBlazorPublishFixer
         if (!Directory.Exists(root))
             throw new DirectoryNotFoundException($"Publish root not found: {root}");
 
-        if (!string.IsNullOrWhiteSpace(options.BaseHref))
-            UpdateBaseHref(Path.Combine(root, "index.html"), options.BaseHref);
+        var siteRoot = root;
+        var wwwroot = Path.Combine(root, "wwwroot");
+        if (Directory.Exists(wwwroot) && File.Exists(Path.Combine(wwwroot, "index.html")))
+            siteRoot = wwwroot;
 
-        var frameworkPath = Path.Combine(root, "_framework");
+        if (!string.IsNullOrWhiteSpace(options.BaseHref))
+            UpdateBaseHref(Path.Combine(siteRoot, "index.html"), options.BaseHref);
+
+        var frameworkPath = Path.Combine(siteRoot, "_framework");
         if (Directory.Exists(frameworkPath))
         {
             if (options.CopyFingerprintBlazorJs)
@@ -47,7 +52,7 @@ public static class WebBlazorPublishFixer
         }
 
         if (options.AddCacheBuster)
-            AddCacheBuster(Path.Combine(root, "index.html"));
+            AddCacheBuster(Path.Combine(siteRoot, "index.html"));
     }
 
     private static void UpdateBaseHref(string htmlPath, string baseHref)

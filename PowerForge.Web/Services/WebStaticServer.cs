@@ -75,6 +75,13 @@ public static class WebStaticServer
 
         if (filePath is null || !File.Exists(filePath))
         {
+            var spaFallback = ResolveSpaFallback(basePath, path);
+            if (!string.IsNullOrWhiteSpace(spaFallback) && File.Exists(spaFallback))
+            {
+                WriteFile(response, spaFallback, 200, request.HttpMethod == "HEAD");
+                return;
+            }
+
             var notFound = Path.Combine(basePath, "404.html");
             if (File.Exists(notFound))
             {
@@ -91,6 +98,17 @@ public static class WebStaticServer
         }
 
         WriteFile(response, filePath, 200, request.HttpMethod == "HEAD");
+    }
+
+    private static string? ResolveSpaFallback(string basePath, string urlPath)
+    {
+        if (string.IsNullOrWhiteSpace(urlPath)) return null;
+        var normalized = urlPath.TrimEnd('/');
+        if (normalized.StartsWith("/docs", StringComparison.OrdinalIgnoreCase))
+            return Path.Combine(basePath, "docs", "index.html");
+        if (normalized.StartsWith("/playground", StringComparison.OrdinalIgnoreCase))
+            return Path.Combine(basePath, "playground", "index.html");
+        return null;
     }
 
     private static string? ResolveFilePath(string basePath, string urlPath)
@@ -142,6 +160,7 @@ public static class WebStaticServer
             ".css" => "text/css; charset=utf-8",
             ".js" => "text/javascript; charset=utf-8",
             ".json" => "application/json; charset=utf-8",
+            ".wasm" => "application/wasm",
             ".svg" => "image/svg+xml",
             ".png" => "image/png",
             ".jpg" => "image/jpeg",

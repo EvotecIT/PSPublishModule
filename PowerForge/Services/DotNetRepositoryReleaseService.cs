@@ -52,6 +52,7 @@ public sealed class DotNetRepositoryReleaseService
 
             var include = BuildNameSet(spec.IncludeProjects);
             var exclude = BuildNameSet(spec.ExcludeProjects);
+            var expectedMap = BuildExpectedVersionMap(spec.ExpectedVersionsByProject);
 
             var enumeration = new ProjectEnumeration(
                 rootPath: root,
@@ -97,19 +98,19 @@ public sealed class DotNetRepositoryReleaseService
                 return result;
             }
 
-            var expected = string.IsNullOrWhiteSpace(spec.ExpectedVersion) ? null : spec.ExpectedVersion!.Trim();
-            var resolvedVersion = ResolveVersion(expected, packable, spec);
-            if (string.IsNullOrWhiteSpace(resolvedVersion))
-            {
-                result.Success = false;
-                result.ErrorMessage = "Unable to resolve a version for the release.";
-                return result;
-            }
-
-            result.ResolvedVersion = resolvedVersion;
-
+            var expectedGlobal = string.IsNullOrWhiteSpace(spec.ExpectedVersion) ? null : spec.ExpectedVersion!.Trim();
             foreach (var project in packable)
             {
+                var resolvedVersion = ResolveVersion(project, expectedGlobal, expectedMap, spec);
+                if (string.IsNullOrWhiteSpace(resolvedVersion))
+                {
+                    project.ErrorMessage = "Unable to resolve a version for the project.";
+                    result.Success = false;
+                    continue;
+                }
+
+                result.ResolvedVersionsByProject[project.ProjectName] = resolvedVersion;
+
                 if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var oldV))
                     project.OldVersion = oldV;
 
@@ -127,14 +128,24 @@ public sealed class DotNetRepositoryReleaseService
             {
                 foreach (var project in packable)
                 {
+                    if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
+                    {
+                        result.Success = false;
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(project.NewVersion))
+                    {
+                        project.ErrorMessage = "No resolved version for project.";
+                        result.Success = false;
+                        continue;
+                    }
+
                     if (spec.WhatIf)
                     {
-                        if (!string.IsNullOrWhiteSpace(resolvedVersion))
-                        {
-                            var planned = ResolvePackagePath(spec, project, resolvedVersion);
-                            if (!string.IsNullOrWhiteSpace(planned))
-                                project.Packages.Add(planned!);
-                        }
+                        var planned = ResolvePackagePath(spec, project, project.NewVersion!);
+                        if (!string.IsNullOrWhiteSpace(planned))
+                            project.Packages.Add(planned!);
                         continue;
                     }
 
@@ -153,6 +164,14 @@ public sealed class DotNetRepositoryReleaseService
 
             if (spec.Publish)
             {
+                var preflight = ValidatePublishPreflight(packable, spec);
+                if (!preflight.Success)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = preflight.ErrorMessage;
+                    return result;
+                }
+
                 if (string.IsNullOrWhiteSpace(spec.PublishApiKey))
                 {
                     result.Success = false;
@@ -164,7 +183,8 @@ public sealed class DotNetRepositoryReleaseService
                     ? "https://api.nuget.org/v3/index.json"
                     : spec.PublishSource!.Trim();
 
-                var packages = projects.SelectMany(p => p.Packages)
+                var orderedProjects = SortProjectsForPublish(packable);
+                var packages = orderedProjects.SelectMany(p => p.Packages)
                     .Where(p => !string.IsNullOrWhiteSpace(p))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
@@ -188,6 +208,13 @@ public sealed class DotNetRepositoryReleaseService
                 }
             }
 
+            if (result.ResolvedVersionsByProject.Count > 0)
+            {
+                var distinct = result.ResolvedVersionsByProject.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (distinct.Count == 1)
+                    result.ResolvedVersion = distinct[0];
+            }
+
             return result;
         }
         catch (Exception ex)
@@ -198,12 +225,19 @@ public sealed class DotNetRepositoryReleaseService
         }
     }
 
-    private string ResolveVersion(string? expectedVersion, DotNetRepositoryProjectResult[] projects, DotNetRepositoryReleaseSpec spec)
+    private string ResolveVersion(
+        DotNetRepositoryProjectResult project,
+        string? expectedGlobal,
+        Dictionary<string, string> expectedByProject,
+        DotNetRepositoryReleaseSpec spec)
     {
+        var expectedVersion = expectedGlobal;
+        if (expectedByProject.TryGetValue(project.ProjectName, out var overrideVersion) && !string.IsNullOrWhiteSpace(overrideVersion))
+            expectedVersion = overrideVersion;
+
         if (string.IsNullOrWhiteSpace(expectedVersion))
         {
-            var first = projects.FirstOrDefault();
-            if (first != null && CsprojVersionEditor.TryGetVersion(first.CsprojPath, out var v))
+            if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var v))
                 return v;
             return string.Empty;
         }
@@ -211,18 +245,11 @@ public sealed class DotNetRepositoryReleaseService
         if (Version.TryParse(expectedVersion, out var exact))
             return exact.ToString();
 
-        Version? current = null;
-        foreach (var p in projects)
-        {
-            var latest = _resolver.ResolveLatest(
-                packageId: p.ProjectName,
-                sources: spec.VersionSources,
-                credential: spec.VersionSourceCredential,
-                includePrerelease: spec.IncludePrerelease);
-
-            if (latest is null) continue;
-            if (current is null || latest > current) current = latest;
-        }
+        var current = _resolver.ResolveLatest(
+            packageId: project.ProjectName,
+            sources: spec.VersionSources,
+            credential: spec.VersionSourceCredential,
+            includePrerelease: spec.IncludePrerelease);
 
         return VersionPatternStepper.Step(expectedVersion!, current);
     }
@@ -373,6 +400,129 @@ public sealed class DotNetRepositoryReleaseService
             set.Add(item.Trim());
         }
         return set;
+    }
+
+    private (bool Success, string? ErrorMessage) ValidatePublishPreflight(
+        IReadOnlyList<DotNetRepositoryProjectResult> projects,
+        DotNetRepositoryReleaseSpec spec)
+    {
+        foreach (var project in projects)
+        {
+            if (!string.IsNullOrWhiteSpace(project.ErrorMessage))
+                return (false, $"Publish preflight failed: {project.ProjectName} has errors: {project.ErrorMessage}");
+
+            if (string.IsNullOrWhiteSpace(project.NewVersion))
+                return (false, $"Publish preflight failed: {project.ProjectName} has no resolved version.");
+
+            if (project.Packages.Count == 0)
+                return (false, $"Publish preflight failed: {project.ProjectName} has no packages to publish.");
+
+            foreach (var pkg in project.Packages)
+            {
+                if (!File.Exists(pkg))
+                    return (false, $"Publish preflight failed: package not found: {pkg}");
+            }
+
+            var latest = _resolver.ResolveLatest(
+                packageId: project.ProjectName,
+                sources: spec.VersionSources,
+                credential: spec.VersionSourceCredential,
+                includePrerelease: spec.IncludePrerelease);
+
+            if (latest is not null && Version.TryParse(project.NewVersion, out var target))
+            {
+                if (latest >= target && !spec.SkipDuplicate)
+                    return (false, $"Publish preflight failed: {project.ProjectName} version {target} already exists (latest {latest}). Use -SkipDuplicate to allow.");
+            }
+        }
+
+        return (true, null);
+    }
+
+    private IReadOnlyList<DotNetRepositoryProjectResult> SortProjectsForPublish(IReadOnlyList<DotNetRepositoryProjectResult> projects)
+    {
+        var byName = projects.ToDictionary(p => p.ProjectName, StringComparer.OrdinalIgnoreCase);
+        var deps = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in projects)
+        {
+            deps[project.ProjectName] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var doc = XDocument.Load(project.CsprojPath);
+                foreach (var pr in doc.Descendants().Where(e => e.Name.LocalName.Equals("ProjectReference", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var include = pr.Attribute("Include")?.Value;
+                    if (string.IsNullOrWhiteSpace(include)) continue;
+
+                    var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
+                    var depPath = Path.GetFullPath(Path.Combine(csprojDir, include));
+                    var depName = Path.GetFileNameWithoutExtension(depPath);
+                    if (string.IsNullOrWhiteSpace(depName)) continue;
+                    if (byName.ContainsKey(depName))
+                        deps[project.ProjectName].Add(depName);
+                }
+            }
+            catch
+            {
+                // Ignore dependency parsing errors; fall back to original order.
+            }
+        }
+
+        var inDegree = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in projects)
+            inDegree[p.ProjectName] = 0;
+
+        foreach (var kvp in deps)
+        {
+            foreach (var dep in kvp.Value)
+            {
+                if (inDegree.ContainsKey(dep))
+                    inDegree[dep]++;
+            }
+        }
+
+        var queue = new Queue<string>(inDegree.Where(k => k.Value == 0).Select(k => k.Key));
+        var ordered = new List<DotNetRepositoryProjectResult>();
+
+        while (queue.Count > 0)
+        {
+            var name = queue.Dequeue();
+            if (byName.TryGetValue(name, out var proj))
+                ordered.Add(proj);
+
+            if (!deps.TryGetValue(name, out var children)) continue;
+            foreach (var child in children)
+            {
+                if (!inDegree.ContainsKey(child)) continue;
+                inDegree[child]--;
+                if (inDegree[child] == 0)
+                    queue.Enqueue(child);
+            }
+        }
+
+        if (ordered.Count != projects.Count)
+        {
+            _logger.Warn("Publish order dependency analysis detected a cycle; falling back to name order.");
+            return projects.OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        return ordered;
+    }
+
+    private static Dictionary<string, string> BuildExpectedVersionMap(Dictionary<string, string>? map)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (map is null) return result;
+
+        foreach (var kvp in map)
+        {
+            if (string.IsNullOrWhiteSpace(kvp.Key)) continue;
+            if (string.IsNullOrWhiteSpace(kvp.Value)) continue;
+            result[kvp.Key.Trim()] = kvp.Value.Trim();
+        }
+
+        return result;
     }
 
     private static bool IsPackable(string csprojPath)

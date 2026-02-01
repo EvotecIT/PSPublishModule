@@ -40,6 +40,9 @@ Retrieves project version information from .csproj, .psd1, and build scripts.
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
 Builds a .NET project in Release configuration and prepares release artefacts.
 
+### [Invoke-DotNetRepositoryRelease](Invoke-DotNetRepositoryRelease.md)
+Repository-wide .NET package release workflow (discover, version, pack, publish).
+
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
 Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 
@@ -123,4 +126,3 @@ Updates version numbers across multiple project files.
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
-

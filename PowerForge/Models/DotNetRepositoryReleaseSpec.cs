@@ -22,6 +22,12 @@ public sealed class DotNetRepositoryReleaseSpec
     /// </summary>
     public string? ExpectedVersion { get; set; }
 
+    /// <summary>
+    /// Optional per-project expected versions (project name -> version or X-pattern).
+    /// When provided, overrides <see cref="ExpectedVersion"/> for matching projects.
+    /// </summary>
+    public Dictionary<string, string>? ExpectedVersionsByProject { get; set; }
+
     /// <summary>Sources used to resolve the current package version (v3 index or local path).</summary>
     public string[]? VersionSources { get; set; }
 
