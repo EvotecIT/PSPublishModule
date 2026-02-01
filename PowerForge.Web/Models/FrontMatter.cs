@@ -25,6 +25,8 @@ public sealed class FrontMatter
     public string? Canonical { get; set; }
     /// <summary>Edit link path.</summary>
     public string? EditPath { get; set; }
+    /// <summary>Resolved edit link URL.</summary>
+    public string? EditUrl { get; set; }
     /// <summary>Layout override.</summary>
     public string? Layout { get; set; }
     /// <summary>Template override.</summary>
@@ -62,6 +64,8 @@ public sealed class ContentItem
     public string? Canonical { get; set; }
     /// <summary>Edit link path.</summary>
     public string? EditPath { get; set; }
+    /// <summary>Resolved edit link URL.</summary>
+    public string? EditUrl { get; set; }
     /// <summary>Layout override.</summary>
     public string? Layout { get; set; }
     /// <summary>Template override.</summary>

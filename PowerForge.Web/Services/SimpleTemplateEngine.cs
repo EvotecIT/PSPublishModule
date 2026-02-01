@@ -21,6 +21,7 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(context.Page.Title),
             ["DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(context.Page.Description ?? string.Empty),
             ["CONTENT"] = context.Page.HtmlContent,
+            ["EDIT_URL"] = context.Page.EditUrl ?? string.Empty,
             ["ASSET_CSS"] = context.CssHtml,
             ["ASSET_JS"] = context.JsHtml,
             ["PRELOADS"] = context.PreloadsHtml,

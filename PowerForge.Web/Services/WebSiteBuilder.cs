@@ -262,6 +262,7 @@ public static class WebSiteBuilder
             {
                 using var doc = JsonDocument.Parse(File.ReadAllText(file));
                 value = ConvertJsonElement(doc.RootElement);
+                value = NormalizeMarkdownData(value);
             }
             catch
             {
@@ -348,6 +349,79 @@ public static class WebSiteBuilder
             default:
                 return null;
         }
+    }
+
+    private static object? NormalizeMarkdownData(object? value)
+    {
+        if (value is Dictionary<string, object?> map)
+        {
+            foreach (var key in map.Keys.ToList())
+            {
+                map[key] = NormalizeMarkdownData(map[key]);
+            }
+
+            foreach (var key in map.Keys.ToList())
+            {
+                if (!IsMarkdownKey(key))
+                    continue;
+
+                var baseKey = StripMarkdownSuffix(key);
+                if (string.IsNullOrWhiteSpace(baseKey))
+                    continue;
+
+                if (!map.ContainsKey(baseKey) || map[baseKey] is null)
+                    map[baseKey] = RenderMarkdownValue(map[key]);
+            }
+
+            return map;
+        }
+
+        if (value is List<object?> list)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                list[i] = NormalizeMarkdownData(list[i]);
+            }
+            return list;
+        }
+
+        return value;
+    }
+
+    private static bool IsMarkdownKey(string key)
+        => key.EndsWith("_md", StringComparison.OrdinalIgnoreCase) ||
+           key.EndsWith("_markdown", StringComparison.OrdinalIgnoreCase);
+
+    private static string StripMarkdownSuffix(string key)
+    {
+        if (key.EndsWith("_markdown", StringComparison.OrdinalIgnoreCase))
+            return key[..^9];
+        if (key.EndsWith("_md", StringComparison.OrdinalIgnoreCase))
+            return key[..^3];
+        return key;
+    }
+
+    private static object? RenderMarkdownValue(object? value)
+    {
+        if (value is null) return null;
+
+        if (value is string text)
+            return MarkdownRenderer.RenderToHtml(text);
+
+        if (value is IEnumerable<object?> list && value is not string)
+        {
+            var rendered = new List<object?>();
+            foreach (var item in list)
+            {
+                if (item is string itemText)
+                    rendered.Add(MarkdownRenderer.RenderToHtml(itemText));
+                else
+                    rendered.Add(item);
+            }
+            return rendered;
+        }
+
+        return value;
     }
 
     private static string BuildTableOfContents(string html)
@@ -596,11 +670,19 @@ public static class WebSiteBuilder
                 var (matter, body) = FrontMatterParser.Parse(markdown);
                 var effectiveBody = IncludePreprocessor.Apply(body, plan.RootPath);
                 var projectSlug = ResolveProjectSlug(plan, file);
+                projectMap.TryGetValue(projectSlug ?? string.Empty, out var projectSpec);
+                var editUrl = EditLinkResolver.Resolve(spec, projectSpec, plan.RootPath, file, matter?.EditPath);
+                if (matter is not null)
+                    matter.EditUrl = editUrl;
                 var dataForShortcodes = ResolveDataForProject(data, projectSlug);
                 var shortcodeContext = new ShortcodeRenderContext
                 {
                     Site = spec,
+                    RootPath = plan.RootPath,
                     FrontMatter = matter,
+                    EditUrl = editUrl,
+                    Project = projectSpec,
+                    SourcePath = file,
                     Data = dataForShortcodes,
                     ThemeManifest = manifest,
                     ThemeRoot = themeRoot,
@@ -699,6 +781,7 @@ public static class WebSiteBuilder
                     Draft = matter?.Draft ?? false,
                     Canonical = matter?.Canonical,
                     EditPath = matter?.EditPath,
+                    EditUrl = editUrl,
                     Layout = layout,
                     Template = matter?.Template,
                     Kind = kind,

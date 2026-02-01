@@ -156,6 +156,22 @@ data/
 
 Use data for repeated UI blocks and long lists.
 
+### Markdown-friendly data fields
+Data keys ending with `_md` or `_markdown` are automatically rendered as HTML.
+The rendered value is exposed under the base key (suffix removed) if the base key is missing.
+Examples:
+```
+{
+  "answer_md": "This **supports Markdown**.",
+  "paragraphs_md": ["First paragraph.", "Second paragraph."]
+}
+```
+Becomes:
+```
+answer: "<p>This <strong>supports Markdown</strong>.</p>"
+paragraphs: ["<p>First paragraph.</p>", "<p>Second paragraph.</p>"]
+```
+
 ## Dual input model (JSON or Markdown)
 Some pages can be rendered from JSON when present, while still supporting normal Markdown.
 Enable this via front matter:
@@ -171,7 +187,7 @@ Behavior:
 - `meta.data_mode` supports: `override` (default), `prepend`, `append`.
 
 This is intended for FAQ/Showcase/Benchmarks/Pricing pages where JSON may be preferred.
-Shortcodes available by default: `faq`, `showcase`, `benchmarks`, `pricing`, `cards`, `metrics`.
+Shortcodes available by default: `faq`, `showcase`, `benchmarks`, `pricing`, `cards`, `metrics`, `edit-link`.
 
 ## Static assets
 Use `StaticAssets` in `site.json` to copy folders/files to the output root.
@@ -198,6 +214,7 @@ Examples:
 {{< metrics data="stats" >}}
 {{< showcase data="showcase" >}}
 {{< app src="/playground/" label="Launch Playground" title="Playground" >}}
+{{< edit-link >}}
 ```
 
 Shortcodes can be implemented as:

@@ -5,8 +5,16 @@ public sealed class ShortcodeRenderContext
 {
     /// <summary>Resolved site configuration.</summary>
     public SiteSpec Site { get; init; } = new();
+    /// <summary>Root path for the site.</summary>
+    public string RootPath { get; init; } = string.Empty;
     /// <summary>Front matter for the current page, if any.</summary>
     public FrontMatter? FrontMatter { get; init; }
+    /// <summary>Resolved edit URL for the current page, if any.</summary>
+    public string? EditUrl { get; init; }
+    /// <summary>Associated project, if any.</summary>
+    public ProjectSpec? Project { get; init; }
+    /// <summary>Source file path for the current page.</summary>
+    public string SourcePath { get; init; } = string.Empty;
     /// <summary>Data dictionary available to shortcodes.</summary>
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     /// <summary>Resolved theme manifest.</summary>
@@ -44,7 +52,8 @@ public sealed class ShortcodeRenderContext
         {
             Title = FrontMatter?.Title ?? string.Empty,
             Description = FrontMatter?.Description ?? string.Empty,
-            Meta = FrontMatter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            Meta = FrontMatter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+            EditUrl = FrontMatter?.EditUrl ?? EditUrl
         };
 
         var renderContext = new ThemeRenderContext

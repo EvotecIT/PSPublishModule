@@ -45,6 +45,11 @@
     "Enabled": true,
     "Breadcrumbs": true
   },
+  "EditLinks": {
+    "Enabled": true,
+    "Template": "https://github.com/EvotecIT/PSPublishModule/edit/master/{path}",
+    "PathBase": "Samples/PowerForge.Web.CodeGlyphX.Sample"
+  },
   "AssetRegistry": {
     "CssStrategy": "async",
     "Bundles": [

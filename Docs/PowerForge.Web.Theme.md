@@ -151,6 +151,10 @@ Project data is available under:
 - `data.projects.<slug>` (all project data)
 - `data.project` (current project's data when rendering that project)
 
+Edit links:
+- When `site.json` defines `EditLinks`, pages expose `page.edit_url`.
+- Use `{{< edit-link >}}` in markdown to render a consistent "Edit on GitHub" block.
+
 ### Linking apps (Blazor or otherwise)
 Themes can expose `app` (generic) and `blazor` shortcodes that link to a published app (typically hosted under `/playground/`).
 Example markdown:
