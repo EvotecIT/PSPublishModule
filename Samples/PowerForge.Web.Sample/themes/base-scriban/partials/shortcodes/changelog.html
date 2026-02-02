@@ -1,0 +1,30 @@
+{{ entries = shortcode.data.items }}
+{{ if entries == null }}
+  {{ entries = shortcode.data }}
+{{ end }}
+
+{{ if entries != null }}
+<div class="pf-grid">
+  {{ for item in entries }}
+    <article class="pf-card">
+      {{ if item.tag && item.tag != "" }}
+        <div class="pf-card-tag">{{ item.tag }}</div>
+      {{ end }}
+      <h3>{{ item.title }}</h3>
+      {{ if item.publishedAt && item.publishedAt != "" }}
+        <p class="pf-changelog-meta">{{ item.publishedAt }}</p>
+      {{ end }}
+      {{ if item.body && item.body != "" }}
+        <div class="pf-changelog-body">{{ item.body }}</div>
+      {{ end }}
+      {{ if item.assets && item.assets.size > 0 }}
+        <ul class="pf-changelog-assets">
+          {{ for asset in item.assets }}
+            <li><a href="{{ asset.downloadUrl }}">{{ asset.name }}</a></li>
+          {{ end }}
+        </ul>
+      {{ end }}
+    </article>
+  {{ end }}
+</div>
+{{ end }}

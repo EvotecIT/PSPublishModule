@@ -108,6 +108,7 @@
           { "Title": "Home", "Url": "/" },
           { "Title": "Docs", "Url": "/docs/" },
           { "Title": "Blog", "Url": "/blog/" },
+          { "Title": "Changelog", "Url": "/changelog/" },
           { "Title": "Tags", "Url": "/tags/" }
         ]
       }

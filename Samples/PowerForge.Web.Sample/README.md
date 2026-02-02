@@ -116,6 +116,21 @@ Enable multi-format outputs (HTML + JSON/RSS):
 }
 ```
 
+## Changelog
+
+Generate `data/changelog.json` from a local `CHANGELOG.md` and render it with the
+`changelog` shortcode.
+
+Pipeline:
+```
+powerforge-web pipeline --config Samples/PowerForge.Web.Sample/pipeline-changelog.json
+```
+
+Shortcode:
+```
+{{< changelog data="changelog" >}}
+```
+
 ## Archetypes
 
 Scaffold markdown from templates:

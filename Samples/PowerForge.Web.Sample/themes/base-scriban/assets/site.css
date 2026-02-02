@@ -987,6 +987,27 @@ a:hover {
   color: var(--muted);
 }
 
+.pf-changelog-meta {
+  margin: 6px 0 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pf-changelog-body {
+  color: var(--muted);
+}
+
+.pf-changelog-body ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.pf-changelog-assets {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 0.9rem;
+}
+
 
 .pf-footer {
   padding: 40px 0 60px;
