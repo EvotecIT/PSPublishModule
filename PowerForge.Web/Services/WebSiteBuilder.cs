@@ -2283,6 +2283,9 @@ public static class WebSiteBuilder
 
     private static TocItem[] LoadTocItems(CollectionSpec collection, string rootPath)
     {
+        if (collection.UseToc == false)
+            return Array.Empty<TocItem>();
+
         var tocPath = collection.TocFile;
         if (!string.IsNullOrWhiteSpace(tocPath))
         {

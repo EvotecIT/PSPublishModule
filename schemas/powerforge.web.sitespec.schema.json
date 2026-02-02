@@ -66,6 +66,7 @@
         "DefaultLayout": { "type": "string" },
         "ListLayout": { "type": "string" },
         "TocFile": { "type": "string" },
+        "UseToc": { "type": "boolean", "default": true },
         "Include": { "type": "array", "items": { "type": "string" } },
         "Exclude": { "type": "array", "items": { "type": "string" } },
         "SortBy": { "type": "string" },

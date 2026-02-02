@@ -15,6 +15,8 @@ public sealed class CollectionSpec
     public string? ListLayout { get; set; }
     /// <summary>Optional TOC file path for navigation overrides.</summary>
     public string? TocFile { get; set; }
+    /// <summary>Whether to use TOC files for navigation (default: true).</summary>
+    public bool UseToc { get; set; } = true;
     /// <summary>Include glob patterns.</summary>
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Exclude glob patterns.</summary>

@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace PowerForge.Web;
 
@@ -27,6 +29,7 @@ public static class WebSiteVerifier
         }
 
         var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var collectionRoutes = new Dictionary<string, List<CollectionRoute>>(StringComparer.OrdinalIgnoreCase);
         foreach (var collection in spec.Collections)
         {
             if (collection is null) continue;
@@ -76,11 +79,19 @@ public static class WebSiteVerifier
                 {
                     routes[route] = file;
                 }
+
+                if (!collectionRoutes.TryGetValue(collection.Name, out var list))
+                {
+                    list = new List<CollectionRoute>();
+                    collectionRoutes[collection.Name] = list;
+                }
+                list.Add(new CollectionRoute(route, file, matter?.Draft ?? false));
             }
         }
 
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
+        ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
 
         return new WebVerifyResult
         {
@@ -304,6 +315,196 @@ public static class WebSiteVerifier
         ValidateAssetRegistryPaths(manifest.Assets, themeRoot, $"theme:{manifest.Name}", warnings);
         ValidateAssetRegistryPaths(spec.AssetRegistry, plan.RootPath, "site", warnings);
     }
+
+    private static void ValidateTocCoverage(
+        SiteSpec spec,
+        WebSitePlan plan,
+        Dictionary<string, List<CollectionRoute>> collectionRoutes,
+        List<string> warnings)
+    {
+        if (spec.Collections is null || spec.Collections.Length == 0)
+            return;
+
+        foreach (var collection in spec.Collections)
+        {
+            if (collection is null) continue;
+            if (collection.UseToc == false) continue;
+
+            if (!collectionRoutes.TryGetValue(collection.Name, out var routes) || routes.Count == 0)
+                continue;
+
+            var tocPath = ResolveTocPath(collection, plan.RootPath);
+            if (string.IsNullOrWhiteSpace(tocPath) || !File.Exists(tocPath))
+                continue;
+
+            var tocItems = LoadTocFromPath(tocPath);
+            if (tocItems.Length == 0)
+                continue;
+
+            var tocUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectTocUrls(tocItems, tocUrls, spec.TrailingSlash);
+
+            if (tocUrls.Count == 0)
+                continue;
+
+            var outputRoot = string.IsNullOrWhiteSpace(collection.Output) ? "/" : collection.Output;
+            var normalizedRoot = NormalizeRouteForCompare(outputRoot, spec.TrailingSlash);
+
+            var routeSet = routes
+                .Where(r => !r.Draft)
+                .Select(r => r.Route)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var missing = routeSet
+                .Where(r => !tocUrls.Contains(r))
+                .ToList();
+
+            if (missing.Count > 0)
+            {
+                var preview = string.Join(", ", missing.Take(5));
+                var suffix = missing.Count > 5 ? " ..." : string.Empty;
+                warnings.Add($"TOC for collection '{collection.Name}' is missing {missing.Count} page(s): {preview}{suffix}");
+            }
+
+            var extra = tocUrls
+                .Where(u => u.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                .Where(u => !routeSet.Contains(u))
+                .ToList();
+
+            if (extra.Count > 0)
+            {
+                var preview = string.Join(", ", extra.Take(5));
+                var suffix = extra.Count > 5 ? " ..." : string.Empty;
+                warnings.Add($"TOC for collection '{collection.Name}' contains {extra.Count} missing page(s): {preview}{suffix}");
+            }
+        }
+    }
+
+    private static string? ResolveTocPath(CollectionSpec collection, string rootPath)
+    {
+        if (collection.UseToc == false)
+            return null;
+
+        var tocPath = collection.TocFile;
+        if (!string.IsNullOrWhiteSpace(tocPath))
+        {
+            var resolved = Path.IsPathRooted(tocPath) ? tocPath : Path.Combine(rootPath, tocPath);
+            return resolved;
+        }
+
+        var inputRoot = Path.IsPathRooted(collection.Input)
+            ? collection.Input
+            : Path.Combine(rootPath, collection.Input);
+        if (inputRoot.Contains('*'))
+            return null;
+
+        var jsonPath = Path.Combine(inputRoot, "toc.json");
+        if (File.Exists(jsonPath))
+            return jsonPath;
+
+        var yamlPath = Path.Combine(inputRoot, "toc.yml");
+        if (File.Exists(yamlPath))
+            return yamlPath;
+
+        var yamlAltPath = Path.Combine(inputRoot, "toc.yaml");
+        if (File.Exists(yamlAltPath))
+            return yamlAltPath;
+
+        return null;
+    }
+
+    private static TocItem[] LoadTocFromPath(string path)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<TocItem>();
+
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        if (ext == ".json")
+        {
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<TocItem[]>(json, WebJson.Options) ?? Array.Empty<TocItem>();
+        }
+
+        if (ext is ".yml" or ".yaml")
+        {
+            var yaml = File.ReadAllText(path);
+            var deserializer = new DeserializerBuilder()
+                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .IgnoreUnmatchedProperties()
+                .Build();
+
+            var items = deserializer.Deserialize<List<TocItem>>(yaml);
+            return items?.ToArray() ?? Array.Empty<TocItem>();
+        }
+
+        return Array.Empty<TocItem>();
+    }
+
+    private static void CollectTocUrls(TocItem[] items, HashSet<string> urls, TrailingSlashMode slashMode)
+    {
+        foreach (var item in items ?? Array.Empty<TocItem>())
+        {
+            if (item is null || item.Hidden) continue;
+
+            var url = item.Url ?? item.Href;
+            var normalized = NormalizeTocUrl(url, slashMode);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                urls.Add(normalized);
+
+            if (item.Items is { Length: > 0 })
+                CollectTocUrls(item.Items, urls, slashMode);
+        }
+    }
+
+    private static string? NormalizeTocUrl(string? url, TrailingSlashMode slashMode)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+        if (IsExternalPath(url))
+            return null;
+        if (url.StartsWith("#", StringComparison.Ordinal))
+            return null;
+
+        var trimmed = url.Trim();
+        var baseUrl = trimmed.Split('?', '#')[0];
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return null;
+
+        if (!baseUrl.StartsWith("/", StringComparison.Ordinal))
+            baseUrl = "/" + baseUrl.TrimStart('/');
+
+        if (baseUrl.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            baseUrl = baseUrl.Substring(0, baseUrl.Length - 3);
+
+        return NormalizeRouteForCompare(baseUrl, slashMode);
+    }
+
+    private static string NormalizeRouteForCompare(string path, TrailingSlashMode mode)
+    {
+        var normalized = path.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "/";
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized.TrimStart('/');
+
+        if (mode == TrailingSlashMode.Never && normalized.EndsWith("/") && normalized.Length > 1)
+            return normalized.TrimEnd('/');
+        if (mode == TrailingSlashMode.Always && !normalized.EndsWith("/"))
+            return normalized + "/";
+        return normalized;
+    }
+
+    private sealed class TocItem
+    {
+        public string? Name { get; set; }
+        public string? Title { get; set; }
+        public string? Href { get; set; }
+        public string? Url { get; set; }
+        public bool Hidden { get; set; }
+        public TocItem[]? Items { get; set; }
+    }
+
+    private sealed record CollectionRoute(string Route, string File, bool Draft);
 
     private static void ValidateAssetRegistryPaths(
         AssetRegistrySpec? assets,

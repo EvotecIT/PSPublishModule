@@ -186,6 +186,15 @@ Collections can define a table of contents file (DocFX‑style):
 If present, this TOC drives navigation instead of folder structure.
 Supported formats: `toc.json`, `toc.yml`, `toc.yaml`.
 
+To force **auto navigation** from folders even when a TOC exists, disable it:
+```json
+{
+  "UseToc": false
+}
+```
+When `UseToc` is true, `powerforge web verify` warns about pages that are
+missing from the TOC.
+
 ## Data files
 JSON files under `data/` become `data.<fileName>` in Scriban.
 ```
