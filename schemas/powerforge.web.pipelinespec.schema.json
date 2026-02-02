@@ -19,6 +19,7 @@
       "type": "object",
       "oneOf": [
         { "$ref": "#/$defs/BuildStep" },
+        { "$ref": "#/$defs/VerifyStep" },
         { "$ref": "#/$defs/ApiDocsStep" },
         { "$ref": "#/$defs/ChangelogStep" },
         { "$ref": "#/$defs/LlmsStep" },
@@ -41,6 +42,15 @@
         "clean": { "type": "boolean" }
       },
       "required": ["task", "config", "out"]
+    },
+    "VerifyStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "verify" },
+        "config": { "type": "string" }
+      },
+      "required": ["task", "config"]
     },
     "ApiDocsStep": {
       "type": "object",

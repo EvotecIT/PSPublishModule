@@ -1500,6 +1500,28 @@ internal static class WebPipelineRunner
                         stepResult.Message = $"Built {build.OutputPath}";
                         break;
                     }
+                    case "verify":
+                    {
+                        var config = ResolvePath(baseDir, GetString(step, "config"));
+                        if (string.IsNullOrWhiteSpace(config))
+                            throw new InvalidOperationException("verify requires config.");
+
+                        var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+                        var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        var verify = WebSiteVerifier.Verify(spec, plan);
+                        if (!verify.Success)
+                        {
+                            var firstError = verify.Errors.Length > 0 ? verify.Errors[0] : "Web verify failed.";
+                            throw new InvalidOperationException(firstError);
+                        }
+
+                        var warnCount = verify.Warnings.Length;
+                        stepResult.Success = true;
+                        stepResult.Message = warnCount > 0
+                            ? $"Verify {warnCount} warnings"
+                            : "Verify ok";
+                        break;
+                    }
                     case "apidocs":
                     {
                         var typeText = GetString(step, "type");

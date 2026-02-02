@@ -606,38 +606,50 @@ public static class WebSiteVerifier
 
     private static void ValidateShowcaseJson(JsonElement root, string label, List<string> warnings)
     {
-        if (!TryGetArray(root, "cards", out var cards))
+        if (TryGetArray(root, "cards", out var cards))
         {
-            warnings.Add($"Data file '{label}' missing required array 'cards'.");
+            var cardIndex = 0;
+            foreach (var card in cards)
+            {
+                if (!HasAnyProperty(card, "title", "name"))
+                    warnings.Add($"Data file '{label}' cards[{cardIndex}] missing 'title'.");
+
+                if (TryGetObject(card, "gallery", out var gallery))
+                {
+                    if (!TryGetArray(gallery, "themes", out var themes))
+                    {
+                        warnings.Add($"Data file '{label}' cards[{cardIndex}].gallery missing array 'themes'.");
+                    }
+                    else
+                    {
+                        var themeIndex = 0;
+                        foreach (var theme in themes)
+                        {
+                            if (!TryGetArray(theme, "slides", out _))
+                                warnings.Add($"Data file '{label}' cards[{cardIndex}].gallery.themes[{themeIndex}] missing array 'slides'.");
+                            themeIndex++;
+                        }
+                    }
+                }
+
+                cardIndex++;
+            }
             return;
         }
 
-        var cardIndex = 0;
-        foreach (var card in cards)
+        if (TryGetArray(root, "items", out var items))
         {
-            if (!HasAnyProperty(card, "title", "name"))
-                warnings.Add($"Data file '{label}' cards[{cardIndex}] missing 'title'.");
-
-            if (TryGetObject(card, "gallery", out var gallery))
+            var itemIndex = 0;
+            foreach (var item in items)
             {
-                if (!TryGetArray(gallery, "themes", out var themes))
-                {
-                    warnings.Add($"Data file '{label}' cards[{cardIndex}].gallery missing array 'themes'.");
-                }
-                else
-                {
-                    var themeIndex = 0;
-                    foreach (var theme in themes)
-                    {
-                        if (!TryGetArray(theme, "slides", out _))
-                            warnings.Add($"Data file '{label}' cards[{cardIndex}].gallery.themes[{themeIndex}] missing array 'slides'.");
-                        themeIndex++;
-                    }
-                }
+                if (!HasAnyProperty(item, "title", "name"))
+                    warnings.Add($"Data file '{label}' items[{itemIndex}] missing 'name'.");
+                itemIndex++;
             }
-
-            cardIndex++;
+            return;
         }
+
+        warnings.Add($"Data file '{label}' missing required array 'cards' or 'items'.");
     }
 
     private static void ValidatePricingJson(JsonElement root, string label, List<string> warnings)

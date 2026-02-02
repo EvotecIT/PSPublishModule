@@ -35,6 +35,15 @@ Builds markdown + theme into static HTML.
 Notes:
 - `clean: true` clears the output directory before building (avoids stale files).
 
+#### verify
+Validates content + routing consistency from the site config.
+```json
+{ "task": "verify", "config": "./site.json" }
+```
+Notes:
+- Emits warnings for missing titles, duplicate routes, missing assets, and TOC coverage.
+- Fails the pipeline only when errors are found.
+
 #### apidocs
 Generates API reference output from XML docs (optionally enriched by assembly).
 ```json
@@ -232,6 +241,10 @@ Generates `sitemap.xml` and (optionally) `sitemap.html`.
   ]
 }
 ```
+Notes:
+- By default, **all HTML pages** under `siteRoot` are auto‑included.
+- `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
+- Set `includeHtmlFiles: false` for a strict/manual sitemap.
 
 #### optimize
 Applies critical CSS, minifies HTML/CSS/JS, and can hash assets + generate cache headers.
