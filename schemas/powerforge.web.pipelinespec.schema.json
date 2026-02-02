@@ -20,6 +20,7 @@
       "oneOf": [
         { "$ref": "#/$defs/BuildStep" },
         { "$ref": "#/$defs/ApiDocsStep" },
+        { "$ref": "#/$defs/ChangelogStep" },
         { "$ref": "#/$defs/LlmsStep" },
         { "$ref": "#/$defs/SitemapStep" },
         { "$ref": "#/$defs/OptimizeStep" },
@@ -46,7 +47,10 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "apidocs" },
+        "type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
         "xml": { "type": "string" },
+        "help": { "type": "string" },
+        "helpPath": { "type": "string" },
         "assembly": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
@@ -71,7 +75,25 @@
         "includeType": { "type": "string" },
         "excludeType": { "type": "string" }
       },
-      "required": ["task", "xml", "out"]
+      "required": ["task", "out"]
+    },
+    "ChangelogStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "changelog" },
+        "source": { "type": "string", "enum": ["Auto", "File", "GitHub"] },
+        "changelog": { "type": "string" },
+        "changelogPath": { "type": "string" },
+        "repo": { "type": "string" },
+        "repoUrl": { "type": "string" },
+        "token": { "type": "string" },
+        "max": { "type": ["string", "integer"] },
+        "title": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" }
+      },
+      "required": ["task", "out"]
     },
     "LlmsStep": {
       "type": "object",
