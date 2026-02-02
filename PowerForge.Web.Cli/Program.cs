@@ -1402,14 +1402,9 @@ internal static class WebPipelineRunner
                             options.ExcludeTypeNames.AddRange(excludeTypeList);
 
                         var res = WebApiDocsGenerator.Generate(options);
-                        if (!outputJson && res.Warnings.Length > 0)
-                        {
-                            foreach (var warning in res.Warnings)
-                                logger.Warn(warning);
-                        }
                         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
                         if (res.Warnings.Length > 0)
-                            note += " (see warnings)";
+                            note += $" ({res.Warnings.Length} warnings)";
                         stepResult.Success = true;
                         stepResult.Message = $"API docs {res.TypeCount} types{note}";
                         break;
