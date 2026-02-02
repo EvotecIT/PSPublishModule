@@ -75,12 +75,18 @@ Supported fields:
   - `meta.extra_scripts_file` (path to a file appended before `</body>`)
   - `meta.content_engine` (render the page body as a template before Markdown)
   - `meta.prism` (enable/disable Prism syntax highlighting for fenced code blocks; default: auto)
+  - `meta.prism_mode` (`auto`, `always`, `off`)
+  - `meta.prism_source` (`local`, `cdn`, `hybrid`)
   - `meta.prism_cdn` (override Prism CDN base URL; default: `https://cdn.jsdelivr.net/npm/prismjs@1.29.0`)
+  - `meta.prism_css_light` / `meta.prism_css_dark` (local Prism theme paths)
+  - `meta.prism_core` / `meta.prism_autoloader` (local Prism script paths)
+  - `meta.prism_lang_path` (local Prism language components base path)
 
 ### Syntax highlighting
 PowerForge.Web automatically injects Prism assets when a page contains fenced code blocks.
 To disable highlighting on a page, set `meta.prism: false`. To force it on a page
-without detected code blocks, set `meta.prism: true`.
+without detected code blocks, set `meta.prism: true`. Use `meta.prism_source` to
+force local vs CDN per page.
 
 ### Front matter resolution rules
 PowerForge.Web resolves missing values using simple defaults:

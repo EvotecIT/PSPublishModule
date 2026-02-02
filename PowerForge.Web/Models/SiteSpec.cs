@@ -54,6 +54,10 @@ public sealed class SiteSpec
 
     /// <summary>Asset registry configuration for bundling/preloading.</summary>
     public AssetRegistrySpec? AssetRegistry { get; set; }
+    /// <summary>Global asset policy (local vs CDN, hashing, headers).</summary>
+    public AssetPolicySpec? AssetPolicy { get; set; }
+    /// <summary>Prism syntax highlighting configuration.</summary>
+    public PrismSpec? Prism { get; set; }
     /// <summary>Accessibility strings.</summary>
     public A11ySpec? A11y { get; set; }
     /// <summary>Rules for external links.</summary>

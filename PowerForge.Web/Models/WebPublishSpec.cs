@@ -71,6 +71,8 @@ public sealed class WebPublishOptimizeSpec
 {
     /// <summary>Site root used for optimization.</summary>
     public string? SiteRoot { get; set; }
+    /// <summary>Optional site.json path to load AssetPolicy.</summary>
+    public string? Config { get; set; }
     /// <summary>Path to critical CSS file.</summary>
     public string? CriticalCss { get; set; }
     /// <summary>CSS file glob pattern.</summary>
@@ -81,4 +83,22 @@ public sealed class WebPublishOptimizeSpec
     public bool MinifyCss { get; set; }
     /// <summary>When true, minify JavaScript output.</summary>
     public bool MinifyJs { get; set; }
+    /// <summary>When true, hash static assets.</summary>
+    public bool HashAssets { get; set; }
+    /// <summary>File extensions to hash.</summary>
+    public string[] HashExtensions { get; set; } = Array.Empty<string>();
+    /// <summary>Exclude patterns for hashing.</summary>
+    public string[] HashExclude { get; set; } = Array.Empty<string>();
+    /// <summary>Optional manifest path for hashed assets.</summary>
+    public string? HashManifest { get; set; }
+    /// <summary>Enable cache headers output.</summary>
+    public bool CacheHeaders { get; set; }
+    /// <summary>Cache headers output file path.</summary>
+    public string? CacheHeadersOut { get; set; }
+    /// <summary>HTML Cache-Control value.</summary>
+    public string? CacheHeadersHtml { get; set; }
+    /// <summary>Immutable asset Cache-Control value.</summary>
+    public string? CacheHeadersAssets { get; set; }
+    /// <summary>Immutable path overrides.</summary>
+    public string[] CacheHeadersPaths { get; set; } = Array.Empty<string>();
 }

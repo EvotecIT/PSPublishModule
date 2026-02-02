@@ -2,6 +2,7 @@
 
 This document defines the theme system as a reusable, product-grade layer for PowerForge.Web.
 Goals are consistency, performance, and ease of reuse across many projects.
+See also: `Docs/PowerForge.Web.Assets.md` for asset policy, hashing, and cache headers.
 
 ## Goals
 - Themes are portable across projects and repos.

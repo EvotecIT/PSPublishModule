@@ -194,6 +194,28 @@ try
                     ? publishOut
                     : ResolvePathRelative(baseDir, publishSpec.Optimize.SiteRoot);
 
+                AssetPolicySpec? policy = null;
+                if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.Config))
+                {
+                    var optimizeConfigPath = ResolvePathRelative(baseDir, publishSpec.Optimize.Config);
+                    var (optimizeSpec, _) = WebSiteSpecLoader.LoadWithPath(optimizeConfigPath, WebCliJson.Options);
+                    policy = optimizeSpec.AssetPolicy;
+                }
+                if (publishSpec.Optimize.CacheHeaders)
+                {
+                    policy ??= new AssetPolicySpec();
+                    policy.CacheHeaders ??= new CacheHeadersSpec { Enabled = true };
+                    policy.CacheHeaders.Enabled = true;
+                    if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CacheHeadersOut))
+                        policy.CacheHeaders.OutputPath = publishSpec.Optimize.CacheHeadersOut;
+                    if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CacheHeadersHtml))
+                        policy.CacheHeaders.HtmlCacheControl = publishSpec.Optimize.CacheHeadersHtml;
+                    if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CacheHeadersAssets))
+                        policy.CacheHeaders.ImmutableCacheControl = publishSpec.Optimize.CacheHeadersAssets;
+                    if (publishSpec.Optimize.CacheHeadersPaths.Length > 0)
+                        policy.CacheHeaders.ImmutablePaths = publishSpec.Optimize.CacheHeadersPaths;
+                }
+
                 var optimizerOptions = new WebAssetOptimizerOptions
                 {
                     SiteRoot = optimizeRoot,
@@ -202,7 +224,12 @@ try
                         : ResolvePathRelative(baseDir, publishSpec.Optimize.CriticalCss),
                     MinifyHtml = publishSpec.Optimize.MinifyHtml,
                     MinifyCss = publishSpec.Optimize.MinifyCss,
-                    MinifyJs = publishSpec.Optimize.MinifyJs
+                    MinifyJs = publishSpec.Optimize.MinifyJs,
+                    HashAssets = publishSpec.Optimize.HashAssets,
+                    HashExtensions = publishSpec.Optimize.HashExtensions.Length > 0 ? publishSpec.Optimize.HashExtensions : new[] { ".css", ".js" },
+                    HashExclude = publishSpec.Optimize.HashExclude,
+                    HashManifestPath = publishSpec.Optimize.HashManifest,
+                    AssetPolicy = policy
                 };
                 if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CssPattern))
                     optimizerOptions.CssLinkPattern = publishSpec.Optimize.CssPattern;
@@ -755,14 +782,44 @@ try
             var siteRoot = TryGetOptionValue(subArgs, "--site-root") ??
                            TryGetOptionValue(subArgs, "--root") ??
                            TryGetOptionValue(subArgs, "--path");
+            var configPath = TryGetOptionValue(subArgs, "--config");
             var criticalCss = TryGetOptionValue(subArgs, "--critical-css");
             var cssPattern = TryGetOptionValue(subArgs, "--css-pattern");
             var minifyHtml = subArgs.Any(a => a.Equals("--minify-html", StringComparison.OrdinalIgnoreCase));
             var minifyCss = subArgs.Any(a => a.Equals("--minify-css", StringComparison.OrdinalIgnoreCase));
             var minifyJs = subArgs.Any(a => a.Equals("--minify-js", StringComparison.OrdinalIgnoreCase));
+            var hashAssets = HasOption(subArgs, "--hash-assets");
+            var hashExtensions = ReadOptionList(subArgs, "--hash-ext", "--hash-extensions");
+            var hashExclude = ReadOptionList(subArgs, "--hash-exclude");
+            var hashManifest = TryGetOptionValue(subArgs, "--hash-manifest");
+            var headersEnabled = HasOption(subArgs, "--headers");
+            var headersOut = TryGetOptionValue(subArgs, "--headers-out");
+            var headersHtml = TryGetOptionValue(subArgs, "--headers-html");
+            var headersAssets = TryGetOptionValue(subArgs, "--headers-assets");
 
             if (string.IsNullOrWhiteSpace(siteRoot))
                 return Fail("Missing required --site-root.", outputJson, logger, "web.optimize");
+
+            AssetPolicySpec? policy = null;
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                var resolved = ResolveExistingFilePath(configPath);
+                var (spec, _) = WebSiteSpecLoader.LoadWithPath(resolved, WebCliJson.Options);
+                policy = spec.AssetPolicy;
+            }
+
+            if (headersEnabled)
+            {
+                policy ??= new AssetPolicySpec();
+                policy.CacheHeaders ??= new CacheHeadersSpec { Enabled = true };
+                policy.CacheHeaders.Enabled = true;
+                if (!string.IsNullOrWhiteSpace(headersOut))
+                    policy.CacheHeaders.OutputPath = headersOut;
+                if (!string.IsNullOrWhiteSpace(headersHtml))
+                    policy.CacheHeaders.HtmlCacheControl = headersHtml;
+                if (!string.IsNullOrWhiteSpace(headersAssets))
+                    policy.CacheHeaders.ImmutableCacheControl = headersAssets;
+            }
 
             var updated = WebAssetOptimizer.Optimize(new WebAssetOptimizerOptions
             {
@@ -771,7 +828,12 @@ try
                 CssLinkPattern = string.IsNullOrWhiteSpace(cssPattern) ? "(app|api-docs)\\.css" : cssPattern,
                 MinifyHtml = minifyHtml,
                 MinifyCss = minifyCss,
-                MinifyJs = minifyJs
+                MinifyJs = minifyJs,
+                HashAssets = hashAssets,
+                HashExtensions = hashExtensions.Count > 0 ? hashExtensions.ToArray() : new[] { ".css", ".js" },
+                HashExclude = hashExclude.Count > 0 ? hashExclude.ToArray() : Array.Empty<string>(),
+                HashManifestPath = hashManifest,
+                AssetPolicy = policy
             });
 
             if (outputJson)
@@ -1168,8 +1230,10 @@ static void PrintUsage()
     Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
     Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
     Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
-    Console.WriteLine("  powerforge-web optimize --site-root <dir> [--critical-css <file>] [--css-pattern <regex>]");
+    Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
+    Console.WriteLine("                     [--hash-assets] [--hash-ext <.css,.js>] [--hash-exclude <glob[,glob]>] [--hash-manifest <file>]");
+    Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
     Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--define-constants <list>]");
     Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
@@ -1660,9 +1724,41 @@ internal static class WebPipelineRunner
                         if (string.IsNullOrWhiteSpace(siteRoot))
                             throw new InvalidOperationException("optimize requires siteRoot.");
 
+                        var configPath = ResolvePath(baseDir, GetString(step, "config"));
                         var minifyHtml = GetBool(step, "minifyHtml") ?? false;
                         var minifyCss = GetBool(step, "minifyCss") ?? false;
                         var minifyJs = GetBool(step, "minifyJs") ?? false;
+                        var hashAssets = GetBool(step, "hashAssets") ?? false;
+                        var hashExtensions = GetArrayOfStrings(step, "hashExtensions") ?? GetArrayOfStrings(step, "hash-ext");
+                        var hashExclude = GetArrayOfStrings(step, "hashExclude") ?? GetArrayOfStrings(step, "hash-exclude");
+                        var hashManifest = GetString(step, "hashManifest") ?? GetString(step, "hash-manifest");
+                        var cacheHeaders = GetBool(step, "cacheHeaders") ?? GetBool(step, "headers") ?? false;
+                        var cacheHeadersOut = GetString(step, "cacheHeadersOut") ?? GetString(step, "headersOut") ?? GetString(step, "headers-out");
+                        var cacheHeadersHtml = GetString(step, "cacheHeadersHtml") ?? GetString(step, "headersHtml");
+                        var cacheHeadersAssets = GetString(step, "cacheHeadersAssets") ?? GetString(step, "headersAssets");
+                        var cacheHeadersPaths = GetArrayOfStrings(step, "cacheHeadersPaths") ?? GetArrayOfStrings(step, "headersPaths");
+
+                        AssetPolicySpec? policy = null;
+                        if (!string.IsNullOrWhiteSpace(configPath))
+                        {
+                            var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                            policy = spec.AssetPolicy;
+                        }
+                        if (cacheHeaders)
+                        {
+                            policy ??= new AssetPolicySpec();
+                            policy.CacheHeaders ??= new CacheHeadersSpec { Enabled = true };
+                            policy.CacheHeaders.Enabled = true;
+                            if (!string.IsNullOrWhiteSpace(cacheHeadersOut))
+                                policy.CacheHeaders.OutputPath = cacheHeadersOut;
+                            if (!string.IsNullOrWhiteSpace(cacheHeadersHtml))
+                                policy.CacheHeaders.HtmlCacheControl = cacheHeadersHtml;
+                            if (!string.IsNullOrWhiteSpace(cacheHeadersAssets))
+                                policy.CacheHeaders.ImmutableCacheControl = cacheHeadersAssets;
+                            if (cacheHeadersPaths is { Length: > 0 })
+                                policy.CacheHeaders.ImmutablePaths = cacheHeadersPaths;
+                        }
+
                         var updated = WebAssetOptimizer.Optimize(new WebAssetOptimizerOptions
                         {
                             SiteRoot = siteRoot,
@@ -1670,7 +1766,12 @@ internal static class WebPipelineRunner
                             CssLinkPattern = GetString(step, "cssPattern") ?? "(app|api-docs)\\.css",
                             MinifyHtml = minifyHtml,
                             MinifyCss = minifyCss,
-                            MinifyJs = minifyJs
+                            MinifyJs = minifyJs,
+                            HashAssets = hashAssets,
+                            HashExtensions = hashExtensions ?? new[] { ".css", ".js" },
+                            HashExclude = hashExclude ?? Array.Empty<string>(),
+                            HashManifestPath = hashManifest,
+                            AssetPolicy = policy
                         });
                         stepResult.Success = true;
                         stepResult.Message = $"Optimized {updated} files";

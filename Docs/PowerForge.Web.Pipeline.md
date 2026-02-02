@@ -234,18 +234,27 @@ Generates `sitemap.xml` and (optionally) `sitemap.html`.
 ```
 
 #### optimize
-Applies critical CSS + minifies HTML/CSS/JS.
+Applies critical CSS, minifies HTML/CSS/JS, and can hash assets + generate cache headers.
 ```json
 {
   "task": "optimize",
   "siteRoot": "./Artifacts/site",
+  "config": "./site.json",
   "criticalCss": "./themes/codeglyphx/critical.css",
   "cssPattern": "(app|api-docs)\\.css",
   "minifyHtml": true,
   "minifyCss": true,
-  "minifyJs": true
+  "minifyJs": true,
+  "hashAssets": true,
+  "hashExtensions": [".css", ".js"],
+  "hashExclude": ["**/nohash/**"],
+  "cacheHeaders": true
 }
 ```
+Notes:
+- `config` loads `AssetPolicy` from `site.json` (rewrites, hashing defaults, cache headers).
+- `hashAssets` fingerprints files and rewrites references (HTML + CSS).
+- `cacheHeaders` writes `_headers` with cache-control rules (Netlify/Cloudflare Pages compatible).
 
 #### audit
 Runs static (and optional rendered) checks against generated HTML.

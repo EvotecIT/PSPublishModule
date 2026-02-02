@@ -151,11 +151,21 @@
       "properties": {
         "task": { "const": "optimize" },
         "siteRoot": { "type": "string" },
+        "config": { "type": "string" },
         "criticalCss": { "type": "string" },
         "cssPattern": { "type": "string" },
         "minifyHtml": { "type": "boolean" },
         "minifyCss": { "type": "boolean" },
-        "minifyJs": { "type": "boolean" }
+        "minifyJs": { "type": "boolean" },
+        "hashAssets": { "type": "boolean" },
+        "hashExtensions": { "type": "array", "items": { "type": "string" } },
+        "hashExclude": { "type": "array", "items": { "type": "string" } },
+        "hashManifest": { "type": "string" },
+        "cacheHeaders": { "type": "boolean" },
+        "cacheHeadersOut": { "type": "string" },
+        "cacheHeadersHtml": { "type": "string" },
+        "cacheHeadersAssets": { "type": "string" },
+        "cacheHeadersPaths": { "type": "array", "items": { "type": "string" } }
       },
       "required": ["task", "siteRoot"]
     },

@@ -1018,7 +1018,7 @@ public static class WebSiteBuilder
                     : processedBody;
                 var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 if (renderMarkdown)
-                    EnsurePrismAssets(meta, htmlContent);
+                    EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
                 var toc = BuildTableOfContents(htmlContent);
                 if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(projectSlug) &&
@@ -1399,39 +1399,113 @@ public static class WebSiteBuilder
         return html;
     }
 
-    private static void EnsurePrismAssets(Dictionary<string, object?> meta, string htmlContent)
+    private static void EnsurePrismAssets(Dictionary<string, object?> meta, string htmlContent, SiteSpec spec, string rootPath)
     {
         if (meta is null) return;
 
         if (TryGetMetaBool(meta, "prism", out var prismEnabled) && !prismEnabled)
             return;
 
+        var prismSpec = spec.Prism;
+        var mode = GetMetaString(meta, "prism_mode") ?? prismSpec?.Mode ?? "auto";
+        if (mode.Equals("off", StringComparison.OrdinalIgnoreCase))
+            return;
+
         var hasCode = ContainsMarkdownCode(htmlContent);
-        if (!hasCode && !(prismEnabled))
+        var always = mode.Equals("always", StringComparison.OrdinalIgnoreCase);
+        if (!hasCode && !always && !(prismEnabled))
             return;
 
-        if (MetaContains(meta, "extra_css", "prismjs") || MetaContains(meta, "extra_scripts", "prismjs"))
+        if (MetaContains(meta, "extra_css", "prism") || MetaContains(meta, "extra_scripts", "prism"))
             return;
 
-        var cdn = TryGetMetaString(meta, "prism_cdn", out var prismCdn) && !string.IsNullOrWhiteSpace(prismCdn)
-            ? prismCdn!.TrimEnd('/')
-            : "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+        var sourceOverride = GetMetaString(meta, "prism_source");
+        var source = sourceOverride
+            ?? prismSpec?.Source
+            ?? spec.AssetPolicy?.Mode
+            ?? "cdn";
 
-        var css = string.Join(Environment.NewLine, new[]
+        var localAssets = ResolvePrismLocalAssets(meta, prismSpec);
+        var localExists = LocalPrismAssetsExist(localAssets, rootPath);
+        var useLocal = source.Equals("local", StringComparison.OrdinalIgnoreCase)
+            || (source.Equals("hybrid", StringComparison.OrdinalIgnoreCase) && localExists);
+
+        var css = useLocal
+            ? string.Join(Environment.NewLine, new[]
+            {
+                $"<link rel=\"stylesheet\" href=\"{localAssets.light}\" media=\"(prefers-color-scheme: light)\" />",
+                $"<link rel=\"stylesheet\" href=\"{localAssets.dark}\" media=\"(prefers-color-scheme: dark)\" />"
+            })
+            : BuildPrismCdnCss(meta, prismSpec);
+
+        var scripts = useLocal
+            ? string.Join(Environment.NewLine, new[]
+            {
+                $"<script src=\"{localAssets.core}\"></script>",
+                $"<script src=\"{localAssets.autoloader}\"></script>",
+                $"<script>if(window.Prism&&Prism.plugins&&Prism.plugins.autoloader){{Prism.plugins.autoloader.languages_path='{localAssets.langPath}';}}</script>"
+            })
+            : BuildPrismCdnScripts(meta, prismSpec);
+
+        AppendMetaHtml(meta, "extra_css", css);
+        AppendMetaHtml(meta, "extra_scripts", scripts);
+    }
+
+    private static (string light, string dark, string core, string autoloader, string langPath) ResolvePrismLocalAssets(
+        Dictionary<string, object?> meta,
+        PrismSpec? prismSpec)
+    {
+        var local = prismSpec?.Local;
+        var light = GetMetaString(meta, "prism_css_light") ?? local?.ThemeLight ?? "/assets/prism/prism.css";
+        var dark = GetMetaString(meta, "prism_css_dark") ?? local?.ThemeDark ?? "/assets/prism/prism-okaidia.css";
+        var core = GetMetaString(meta, "prism_core") ?? local?.Core ?? "/assets/prism/prism-core.js";
+        var autoloader = GetMetaString(meta, "prism_autoloader") ?? local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
+        var langPath = GetMetaString(meta, "prism_lang_path") ?? local?.LanguagesPath ?? "/assets/prism/components/";
+        return (light, dark, core, autoloader, langPath);
+    }
+
+    private static bool LocalPrismAssetsExist((string light, string dark, string core, string autoloader, string langPath) assets, string rootPath)
+    {
+        var paths = new[] { assets.light, assets.dark, assets.core, assets.autoloader };
+        foreach (var path in paths)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            var full = ResolveLocalAssetPath(path, rootPath);
+            if (string.IsNullOrWhiteSpace(full) || !File.Exists(full))
+                return false;
+        }
+        return true;
+    }
+
+    private static string? ResolveLocalAssetPath(string href, string rootPath)
+    {
+        if (string.IsNullOrWhiteSpace(href)) return null;
+        if (href.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+        var trimmed = href.TrimStart('/');
+        return Path.Combine(rootPath, trimmed.Replace('/', Path.DirectorySeparatorChar));
+    }
+
+    private static string BuildPrismCdnCss(Dictionary<string, object?> meta, PrismSpec? prismSpec)
+    {
+        var cdn = GetMetaString(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+        cdn = cdn.TrimEnd('/');
+        return string.Join(Environment.NewLine, new[]
         {
             $"<link rel=\"stylesheet\" href=\"{cdn}/themes/prism.min.css\" media=\"(prefers-color-scheme: light)\" />",
             $"<link rel=\"stylesheet\" href=\"{cdn}/themes/prism-okaidia.min.css\" media=\"(prefers-color-scheme: dark)\" />"
         });
+    }
 
-        var scripts = string.Join(Environment.NewLine, new[]
+    private static string BuildPrismCdnScripts(Dictionary<string, object?> meta, PrismSpec? prismSpec)
+    {
+        var cdn = GetMetaString(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+        cdn = cdn.TrimEnd('/');
+        return string.Join(Environment.NewLine, new[]
         {
             $"<script src=\"{cdn}/components/prism-core.min.js\"></script>",
             $"<script src=\"{cdn}/plugins/autoloader/prism-autoloader.min.js\"></script>",
             $"<script>if(window.Prism&&Prism.plugins&&Prism.plugins.autoloader){{Prism.plugins.autoloader.languages_path='{cdn}/components/';}}</script>"
         });
-
-        AppendMetaHtml(meta, "extra_css", css);
-        AppendMetaHtml(meta, "extra_scripts", scripts);
     }
 
     private static bool ContainsMarkdownCode(string htmlContent)

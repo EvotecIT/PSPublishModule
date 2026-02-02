@@ -44,6 +44,8 @@
       "items": { "$ref": "#/$defs/RedirectSpec" }
     },
     "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
+    "AssetPolicy": { "$ref": "#/$defs/AssetPolicySpec" },
+    "Prism": { "$ref": "#/$defs/PrismSpec" },
     "A11y": { "$ref": "#/$defs/A11ySpec" },
     "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
     "Analytics": { "$ref": "#/$defs/AnalyticsSpec" },
@@ -114,6 +116,73 @@
           "items": { "$ref": "#/$defs/CriticalCssSpec" }
         },
         "CssStrategy": { "type": "string", "enum": ["standard", "async"] }
+      }
+    },
+    "AssetPolicySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
+        "Hashing": { "$ref": "#/$defs/AssetHashSpec" },
+        "CacheHeaders": { "$ref": "#/$defs/CacheHeadersSpec" },
+        "Rewrites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssetRewriteSpec" }
+        }
+      }
+    },
+    "AssetHashSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Extensions": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } },
+        "ManifestPath": { "type": "string" }
+      }
+    },
+    "CacheHeadersSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "HtmlCacheControl": { "type": "string" },
+        "ImmutableCacheControl": { "type": "string" },
+        "ImmutablePaths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AssetRewriteSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Match": { "type": "string" },
+        "Replace": { "type": "string" },
+        "MatchType": { "type": "string", "enum": ["contains", "prefix", "exact", "regex"] },
+        "Source": { "type": "string" },
+        "Destination": { "type": "string" }
+      },
+      "required": ["Match", "Replace"]
+    },
+    "PrismSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["auto", "always", "off"] },
+        "Source": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
+        "CdnBase": { "type": "string" },
+        "Local": { "$ref": "#/$defs/PrismLocalSpec" }
+      }
+    },
+    "PrismLocalSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ThemeLight": { "type": "string" },
+        "ThemeDark": { "type": "string" },
+        "Core": { "type": "string" },
+        "Autoloader": { "type": "string" },
+        "LanguagesPath": { "type": "string" }
       }
     },
     "AssetBundleSpec": {
