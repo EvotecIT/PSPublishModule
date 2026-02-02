@@ -64,6 +64,10 @@ Sidebar sections:
 - `.type-item.active` – active type link
 - `.sidebar-footer` – footer block (optional)
 
+URL behavior:
+- Docs template uses clean URLs ending with `/` (for example: `/api/my-type/`).
+- The generator writes `index.html` under `/api/<slug>/` so static servers render correctly.
+
 Overview chips:
 - `.api-overview` – overview wrapper
 - `.type-chips` – chips container

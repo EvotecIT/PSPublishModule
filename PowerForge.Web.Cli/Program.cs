@@ -1404,7 +1404,20 @@ internal static class WebPipelineRunner
                         var res = WebApiDocsGenerator.Generate(options);
                         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
                         if (res.Warnings.Length > 0)
-                            note += $" ({res.Warnings.Length} warnings)";
+                        {
+                            var firstWarning = res.Warnings[0];
+                            if (!string.IsNullOrWhiteSpace(firstWarning))
+                            {
+                                var trimmed = firstWarning.Length > 120
+                                    ? $"{firstWarning.Substring(0, 117)}..."
+                                    : firstWarning;
+                                note += $" (warn: {trimmed})";
+                            }
+                            else
+                            {
+                                note += $" ({res.Warnings.Length} warnings)";
+                            }
+                        }
                         stepResult.Success = true;
                         stepResult.Message = $"API docs {res.TypeCount} types{note}";
                         break;

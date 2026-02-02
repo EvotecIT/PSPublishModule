@@ -1024,8 +1024,9 @@ public static class WebApiDocsGenerator
             var htmlPath = Path.Combine(outputPath, $"{type.Slug}.html");
             File.WriteAllText(htmlPath, typeHtml, Encoding.UTF8);
 
-            var flatPath = Path.Combine(outputPath, type.Slug);
-            File.WriteAllText(flatPath, typeHtml, Encoding.UTF8);
+            var typeDir = Path.Combine(outputPath, type.Slug);
+            Directory.CreateDirectory(typeDir);
+            File.WriteAllText(Path.Combine(typeDir, "index.html"), typeHtml, Encoding.UTF8);
         }
 
         var sitemapPath = Path.Combine(outputPath, "sitemap.xml");
@@ -1082,10 +1083,11 @@ public static class WebApiDocsGenerator
 
     private static string BuildDocsSidebar(IReadOnlyList<ApiTypeModel> types, string baseUrl, string activeSlug)
     {
+        var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
         sb.AppendLine("    <div class=\"sidebar-header\">");
         var active = string.IsNullOrWhiteSpace(activeSlug) ? " active" : string.Empty;
-        sb.AppendLine($"      <a href=\"{baseUrl}\" class=\"sidebar-title{active}\">");
+        sb.AppendLine($"      <a href=\"{indexUrl}\" class=\"sidebar-title{active}\">");
         sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"18\" height=\"18\">");
         sb.AppendLine("          <path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"/>");
         sb.AppendLine("          <path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"/>");
@@ -1170,7 +1172,8 @@ public static class WebApiDocsGenerator
         var name = System.Web.HttpUtility.HtmlEncode(type.Name);
         var kind = NormalizeKind(type.Kind);
         var icon = GetTypeIcon(type.Kind);
-        return $"          <a href=\"{baseUrl}/{type.Slug}\" class=\"type-item{active}\" data-search=\"{searchAttr}\">" +
+        var href = BuildDocsTypeUrl(baseUrl, type.Slug);
+        return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\">" +
                $"<span class=\"type-icon {kind}\">{icon}</span><span class=\"type-name\">{name}</span></a>";
     }
 
@@ -1179,19 +1182,20 @@ public static class WebApiDocsGenerator
         var sb = new StringBuilder();
         sb.AppendLine("    <div class=\"api-overview\">");
         sb.AppendLine("      <h1>API Reference</h1>");
-        sb.AppendLine("      <p class=\"lead\">Complete API documentation for CodeGlyphX, auto-generated from XML documentation.</p>");
+        sb.AppendLine("      <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
 
         var mainTypes = GetMainTypes(types);
         if (mainTypes.Count > 0)
         {
             sb.AppendLine("      <section class=\"quick-start\">");
             sb.AppendLine("        <h2>Quick Start</h2>");
-            sb.AppendLine("        <p class=\"section-desc\">The most commonly used classes for generating QR codes and barcodes.</p>");
+            sb.AppendLine("        <p class=\"section-desc\">Frequently used types and entry points.</p>");
             sb.AppendLine("        <div class=\"quick-grid\">");
             foreach (var type in mainTypes.Take(6))
             {
                 var summary = Truncate(type.Summary, 100);
-                sb.AppendLine($"          <a href=\"{baseUrl}/{type.Slug}\" class=\"quick-card\">");
+                var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+                sb.AppendLine($"          <a href=\"{quickHref}\" class=\"quick-card\">");
                 sb.AppendLine("            <div class=\"quick-card-header\">");
                 sb.AppendLine($"              <span class=\"type-icon large {NormalizeKind(type.Kind)}\">{GetTypeIcon(type.Kind)}</span>");
                 sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(type.Name)}</strong>");
@@ -1220,7 +1224,8 @@ public static class WebApiDocsGenerator
             {
                 var search = $"{type.Name} {type.FullName} {type.Summary}".Trim();
                 var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
-                sb.AppendLine($"            <a href=\"{baseUrl}/{type.Slug}\" class=\"type-chip {NormalizeKind(type.Kind)}\" data-search=\"{searchAttr}\">");
+                var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+                sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {NormalizeKind(type.Kind)}\" data-search=\"{searchAttr}\">");
                 sb.AppendLine($"              <span class=\"chip-icon\">{GetTypeIcon(type.Kind)}</span>");
                 sb.AppendLine($"              {System.Web.HttpUtility.HtmlEncode(type.Name)}");
                 sb.AppendLine("            </a>");
@@ -1237,8 +1242,9 @@ public static class WebApiDocsGenerator
     {
         var sb = new StringBuilder();
         sb.AppendLine("    <article class=\"type-detail\">");
+        var indexUrl = EnsureTrailingSlash(baseUrl);
         sb.AppendLine("      <nav class=\"breadcrumb\">");
-        sb.AppendLine($"        <a href=\"{baseUrl}\">API Reference</a>");
+        sb.AppendLine($"        <a href=\"{indexUrl}\">API Reference</a>");
         sb.AppendLine("        <span class=\"sep\">/</span>");
         sb.AppendLine($"        <span class=\"current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</span>");
         sb.AppendLine("      </nav>");
@@ -1393,7 +1399,7 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             sb.AppendLine("  <url>");
-            sb.AppendLine($"    <loc>{baseTrim}/{type.Slug}</loc>");
+            sb.AppendLine($"    <loc>{baseTrim}/{type.Slug}/</loc>");
             sb.AppendLine($"    <lastmod>{today}</lastmod>");
             sb.AppendLine("    <changefreq>monthly</changefreq>");
             sb.AppendLine("    <priority>0.5</priority>");
@@ -1402,6 +1408,15 @@ public static class WebApiDocsGenerator
         sb.AppendLine("</urlset>");
         File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
     }
+
+    private static string BuildDocsTypeUrl(string baseUrl, string slug)
+    {
+        var baseTrim = baseUrl.TrimEnd('/');
+        return EnsureTrailingSlash($"{baseTrim}/{slug}");
+    }
+
+    private static string EnsureTrailingSlash(string url)
+        => url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";
 
     private static string LoadOptionalHtml(string? path)
     {
