@@ -62,6 +62,8 @@ public sealed class WebApiDocsOptions
     public string? SourceRootPath { get; set; }
     /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
     public string? SourceUrlPattern { get; set; }
+    /// <summary>Include undocumented public types when XML docs are partial.</summary>
+    public bool IncludeUndocumentedTypes { get; set; } = true;
     /// <summary>Optional list of namespace prefixes to include.</summary>
     public List<string> IncludeNamespacePrefixes { get; } = new();
     /// <summary>Optional list of namespace prefixes to exclude.</summary>
@@ -117,11 +119,12 @@ public static class WebApiDocsGenerator
             ? ParsePowerShellHelp(helpPath, warnings)
             : ParseXml(xmlPath, assembly, options);
         var usedReflectionFallback = false;
-        if (options.Type == ApiDocsType.CSharp && apiDoc.Types.Count == 0 && assembly is not null)
+        if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
         {
+            var beforeCount = apiDoc.Types.Count;
             PopulateFromAssembly(apiDoc, assembly);
-            usedReflectionFallback = apiDoc.Types.Count > 0;
-            if (!usedReflectionFallback)
+            usedReflectionFallback = apiDoc.Types.Count > beforeCount;
+            if (apiDoc.Types.Count == 0)
                 warnings.Add("Reflection fallback produced 0 public types.");
         }
         else if (options.Type == ApiDocsType.CSharp && apiDoc.Types.Count == 0 && assembly is null && !string.IsNullOrWhiteSpace(options.AssemblyPath))

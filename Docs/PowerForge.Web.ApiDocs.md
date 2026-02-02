@@ -176,6 +176,9 @@ reflection (public types only). This still produces the API reference pages,
 but summaries/remarks/parameter descriptions will be empty until `///` comments
 are added.
 
+To limit output to *only* documented types, set `includeUndocumented: false`
+in the pipeline or pass `--documented-only` to the CLI.
+
 `<see cref="...">` and `<seealso cref="...">` tags are converted into links when the
 referenced type exists in the generated API docs.
 

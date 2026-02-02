@@ -607,6 +607,9 @@ try
             var searchScript = TryGetOptionValue(subArgs, "--search-script");
             var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
             var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
+            var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
+            if (HasOption(subArgs, "--include-undocumented"))
+                includeUndocumented = true;
             var navJson = TryGetOptionValue(subArgs, "--nav") ?? TryGetOptionValue(subArgs, "--nav-json");
             var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
             var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
@@ -648,6 +651,7 @@ try
                 SearchScriptPath = searchScript,
                 SourceRootPath = sourceRoot,
                 SourceUrlPattern = sourceUrl,
+                IncludeUndocumentedTypes = includeUndocumented,
                 NavJsonPath = navJson
             };
             if (includeNamespaces.Count > 0)
@@ -1160,6 +1164,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
     Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
+    Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--documented-only]");
     Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
     Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
     Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
@@ -1454,6 +1459,7 @@ internal static class WebPipelineRunner
                         var searchScript = ResolvePath(baseDir, GetString(step, "searchScript") ?? GetString(step, "search-script"));
                         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
                         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ?? GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
+                        var includeUndocumented = GetBool(step, "includeUndocumented") ?? GetBool(step, "include-undocumented") ?? true;
                         var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
                         var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
                         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
@@ -1493,6 +1499,7 @@ internal static class WebPipelineRunner
                             SearchScriptPath = searchScript,
                             SourceRootPath = sourceRoot,
                             SourceUrlPattern = sourceUrl,
+                            IncludeUndocumentedTypes = includeUndocumented,
                             NavJsonPath = nav
                         };
                         var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);

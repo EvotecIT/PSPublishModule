@@ -70,6 +70,7 @@
         "searchScript": { "type": "string" },
         "sourceRoot": { "type": "string" },
         "sourceUrl": { "type": "string" },
+        "includeUndocumented": { "type": "boolean" },
         "nav": { "type": "string" },
         "navJson": { "type": "string" },
         "includeNamespace": { "type": "string" },
