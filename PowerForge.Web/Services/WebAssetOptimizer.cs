@@ -334,10 +334,13 @@ public static class WebAssetOptimizer
     private static bool IsExcluded(string relativePath, string[] patterns)
     {
         if (patterns is null || patterns.Length == 0) return false;
+        var normalized = relativePath.Replace('\\', '/');
+        var withLeadingSlash = "/" + normalized;
         foreach (var pattern in patterns)
         {
             if (string.IsNullOrWhiteSpace(pattern)) continue;
-            if (GlobMatch(pattern.Replace('\\', '/'), relativePath.Replace('\\', '/')))
+            var normalizedPattern = pattern.Replace('\\', '/');
+            if (GlobMatch(normalizedPattern, normalized) || GlobMatch(normalizedPattern, withLeadingSlash))
                 return true;
         }
         return false;
