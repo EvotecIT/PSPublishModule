@@ -89,6 +89,7 @@ Member layout:
 - `.member-kind-filter` – member kind filter buttons
 - `.member-kind` – member kind button
 - `.member-kind.active` – active member kind
+- `.member-kind[data-member-kind="extension"]` – extension methods filter
 - `.member-toggle` – toggle for inherited members
 - `.member-section` – section wrapper (methods/properties/fields/events)
 - `.member-section-header` – section header row
@@ -102,6 +103,11 @@ Member layout:
 - `.member-inherited` – inherited badge row
 - `.member-value` – enum value row
 - `.param-default` – parameter default value
+- `.member-attributes` – attribute list for members
+- `.type-meta-attributes` – attribute list for types
+- `.type-meta-interfaces` – implemented interfaces list
+- `.type-meta-inheritance` – base type row
+- `.type-meta-flags` – modifiers row
 
 ## JavaScript expectations
 
@@ -115,6 +121,14 @@ Member layout:
 - `#api-member-filter` input
 - `.member-kind` buttons with `data-member-kind`
 - `#api-show-inherited` checkbox
+
+## Type metadata
+
+When assembly reflection is available, the generator emits:
+- base type + implemented interfaces
+- static/abstract/sealed flags
+- attributes for types and members
+- extension methods (shown under “Extension Methods”)
 
 `search.js` (simple template) expects:
 - `#api-search` input
@@ -136,6 +150,9 @@ If the XML documentation file is missing or empty, the generator falls back to
 reflection (public types only). This still produces the API reference pages,
 but summaries/remarks/parameter descriptions will be empty until `///` comments
 are added.
+
+`<see cref="...">` and `<seealso cref="...">` tags are converted into links when the
+referenced type exists in the generated API docs.
 
 ## PowerShell help
 

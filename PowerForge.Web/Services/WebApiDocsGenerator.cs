@@ -199,6 +199,7 @@ public static class WebApiDocsGenerator
                 ["assembly"] = type.Assembly,
                 ["baseType"] = type.BaseType,
                 ["interfaces"] = type.Interfaces,
+                ["attributes"] = type.Attributes,
                 ["kind"] = type.Kind,
                 ["slug"] = type.Slug,
                 ["isStatic"] = type.IsStatic,
@@ -216,6 +217,8 @@ public static class WebApiDocsGenerator
                     ["declaringType"] = m.DeclaringType,
                     ["isInherited"] = m.IsInherited,
                     ["isStatic"] = m.IsStatic,
+                    ["isExtension"] = m.IsExtension,
+                    ["attributes"] = m.Attributes,
                     ["returns"] = m.Returns,
                     ["parameters"] = m.Parameters.Select(p => new Dictionary<string, object?>
                     {
@@ -259,6 +262,28 @@ public static class WebApiDocsGenerator
                     ["declaringType"] = e.DeclaringType,
                     ["isInherited"] = e.IsInherited,
                     ["isStatic"] = e.IsStatic
+                }).ToList(),
+                ["extensionMethods"] = type.ExtensionMethods.Select(m => new Dictionary<string, object?>
+                {
+                    ["name"] = m.Name,
+                    ["summary"] = m.Summary,
+                    ["kind"] = m.Kind,
+                    ["signature"] = m.Signature,
+                    ["returnType"] = m.ReturnType,
+                    ["declaringType"] = m.DeclaringType,
+                    ["isInherited"] = m.IsInherited,
+                    ["isStatic"] = m.IsStatic,
+                    ["isExtension"] = m.IsExtension,
+                    ["attributes"] = m.Attributes,
+                    ["returns"] = m.Returns,
+                    ["parameters"] = m.Parameters.Select(p => new Dictionary<string, object?>
+                    {
+                        ["name"] = p.Name,
+                        ["type"] = p.Type,
+                        ["summary"] = p.Summary,
+                        ["isOptional"] = p.IsOptional,
+                        ["defaultValue"] = p.DefaultValue
+                    }).ToList()
                 }).ToList()
             };
 
@@ -547,6 +572,7 @@ public static class WebApiDocsGenerator
 
     private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly)
     {
+        var extensionTargets = new Dictionary<string, List<ApiMemberModel>>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in GetExportedTypesSafe(assembly))
         {
             if (type is null) continue;
@@ -560,6 +586,8 @@ public static class WebApiDocsGenerator
             model.IsAbstract = type.IsAbstract;
             model.IsSealed = type.IsSealed;
             model.IsStatic = type.IsAbstract && type.IsSealed;
+            model.Attributes.Clear();
+            model.Attributes.AddRange(GetAttributeList(type));
             model.BaseType = type.BaseType != null && type.BaseType != typeof(object)
                 ? GetReadableTypeName(type.BaseType)
                 : null;
@@ -583,6 +611,24 @@ public static class WebApiDocsGenerator
                     model.Methods.Add(member);
                 }
                 FillMethodMember(member, method, type);
+                member.Attributes.Clear();
+                member.Attributes.AddRange(GetAttributeList(method));
+                member.IsExtension = IsExtensionMethod(method);
+
+                if (member.IsExtension)
+                {
+                    var targetType = method.GetParameters().FirstOrDefault()?.ParameterType;
+                    var targetName = targetType?.FullName?.Replace('+', '.');
+                    if (!string.IsNullOrWhiteSpace(targetName))
+                    {
+                        if (!extensionTargets.TryGetValue(targetName, out var list))
+                        {
+                            list = new List<ApiMemberModel>();
+                            extensionTargets[targetName] = list;
+                        }
+                        list.Add(CloneMember(member, isExtension: true));
+                    }
+                }
             }
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -598,6 +644,8 @@ public static class WebApiDocsGenerator
                     model.Properties.Add(member);
                 }
                 FillPropertyMember(member, property, type);
+                member.Attributes.Clear();
+                member.Attributes.AddRange(GetAttributeList(property));
             }
 
             foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -614,6 +662,8 @@ public static class WebApiDocsGenerator
                     model.Fields.Add(member);
                 }
                 FillFieldMember(member, field, type);
+                member.Attributes.Clear();
+                member.Attributes.AddRange(GetAttributeList(field));
             }
 
             foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -629,6 +679,18 @@ public static class WebApiDocsGenerator
                     model.Events.Add(member);
                 }
                 FillEventMember(member, evt, type);
+                member.Attributes.Clear();
+                member.Attributes.AddRange(GetAttributeList(evt));
+            }
+        }
+
+        foreach (var kvp in extensionTargets)
+        {
+            if (!doc.Types.TryGetValue(kvp.Key, out var targetModel)) continue;
+            foreach (var extension in kvp.Value)
+            {
+                if (!targetModel.ExtensionMethods.Any(m => string.Equals(m.Signature, extension.Signature, StringComparison.OrdinalIgnoreCase)))
+                    targetModel.ExtensionMethods.Add(extension);
             }
         }
     }
@@ -734,6 +796,103 @@ public static class WebApiDocsGenerator
         member.IsStatic = evt.AddMethod?.IsStatic == true;
         member.DeclaringType = evt.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = evt.DeclaringType != declaring;
+    }
+
+    private static bool IsExtensionMethod(MethodInfo method)
+        => method.IsDefined(typeof(System.Runtime.CompilerServices.ExtensionAttribute), false);
+
+    private static List<string> GetAttributeList(MemberInfo member)
+    {
+        var list = new List<string>();
+        foreach (var attr in CustomAttributeData.GetCustomAttributes(member))
+        {
+            if (!ShouldIncludeAttribute(attr)) continue;
+            var formatted = FormatAttribute(attr);
+            if (!string.IsNullOrWhiteSpace(formatted))
+                list.Add(formatted);
+        }
+        return list;
+    }
+
+    private static bool ShouldIncludeAttribute(CustomAttributeData attr)
+    {
+        var name = attr.AttributeType.FullName ?? attr.AttributeType.Name;
+        if (name.StartsWith("System.Runtime.CompilerServices", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (name.StartsWith("System.Diagnostics", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (name.EndsWith(".ExtensionAttribute", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return true;
+    }
+
+    private static string FormatAttribute(CustomAttributeData attr)
+    {
+        var name = attr.AttributeType.Name;
+        if (name.EndsWith("Attribute", StringComparison.OrdinalIgnoreCase))
+            name = name.Substring(0, name.Length - 9);
+
+        var args = new List<string>();
+        foreach (var arg in attr.ConstructorArguments)
+        {
+            args.Add(FormatAttributeArgument(arg));
+        }
+        foreach (var named in attr.NamedArguments)
+        {
+            var value = FormatAttributeArgument(named.TypedValue);
+            args.Add($"{named.MemberName} = {value}");
+        }
+
+        if (args.Count == 0)
+            return name;
+
+        return $"{name}({string.Join(", ", args)})";
+    }
+
+    private static string FormatAttributeArgument(CustomAttributeTypedArgument arg)
+    {
+        var value = arg.Value;
+        if (value is null) return "null";
+        if (value is string s) return $"\"{s}\"";
+        if (value is char c) return $"'{c}'";
+        if (value is bool b) return b ? "true" : "false";
+        if (value is Type t) return $"typeof({GetReadableTypeName(t)})";
+        if (value is IReadOnlyCollection<CustomAttributeTypedArgument> list)
+        {
+            var items = list.Select(FormatAttributeArgument);
+            return $"[{string.Join(", ", items)}]";
+        }
+        return value.ToString() ?? string.Empty;
+    }
+
+    private static ApiMemberModel CloneMember(ApiMemberModel source, bool isExtension)
+    {
+        var clone = new ApiMemberModel
+        {
+            Name = source.Name,
+            Summary = source.Summary,
+            Kind = source.Kind,
+            Signature = source.Signature,
+            ReturnType = source.ReturnType,
+            DeclaringType = source.DeclaringType,
+            IsInherited = source.IsInherited,
+            IsStatic = source.IsStatic,
+            IsExtension = isExtension,
+            Returns = source.Returns,
+            Value = source.Value
+        };
+        foreach (var attr in source.Attributes)
+            clone.Attributes.Add(attr);
+        clone.Parameters = source.Parameters
+            .Select(p => new ApiParameterModel
+            {
+                Name = p.Name,
+                Type = p.Type,
+                Summary = p.Summary,
+                IsOptional = p.IsOptional,
+                DefaultValue = p.DefaultValue
+            }).ToList();
+        return clone;
     }
 
     private static ApiParameterModel BuildParameterModel(ParameterInfo parameter)
@@ -1339,7 +1498,7 @@ public static class WebApiDocsGenerator
             var colonIdx = cleaned.IndexOf(':');
             if (colonIdx >= 0 && colonIdx + 1 < cleaned.Length)
                 cleaned = cleaned.Substring(colonIdx + 1);
-            return cleaned;
+            return $"[[cref:{cleaned}]]";
         }
 
         var langword = el.Attribute("langword")?.Value;
@@ -1464,6 +1623,7 @@ public static class WebApiDocsGenerator
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty);
         var overviewHtml = BuildDocsOverview(types, baseUrl);
+        var slugMap = BuildTypeSlugMap(types);
 
         var indexTemplate = LoadTemplate(options, "docs-index.html", options.DocsIndexTemplatePath);
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
@@ -1481,7 +1641,7 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
@@ -1515,11 +1675,15 @@ public static class WebApiDocsGenerator
         sb.AppendLine("      <ul>");
         foreach (var member in members)
         {
-            var summary = string.IsNullOrWhiteSpace(member.Summary)
+            var summaryText = StripCrefTokens(member.Summary);
+            var summary = string.IsNullOrWhiteSpace(summaryText)
                 ? string.Empty
-                : $" - {System.Web.HttpUtility.HtmlEncode(member.Summary)}";
+                : $" - {System.Web.HttpUtility.HtmlEncode(summaryText)}";
             sb.AppendLine("        <li>");
-            sb.AppendLine($"          <strong>{System.Web.HttpUtility.HtmlEncode(member.Name)}</strong>{summary}");
+            var signature = !string.IsNullOrWhiteSpace(member.Signature)
+                ? member.Signature
+                : BuildSignature(member, label);
+            sb.AppendLine($"          <strong>{System.Web.HttpUtility.HtmlEncode(signature)}</strong>{summary}");
             if (member.Parameters.Count > 0)
             {
                 sb.AppendLine("          <div class=\"pf-api-params\">");
@@ -1527,7 +1691,8 @@ public static class WebApiDocsGenerator
                 foreach (var param in member.Parameters)
                 {
                     var type = string.IsNullOrWhiteSpace(param.Type) ? string.Empty : $" ({System.Web.HttpUtility.HtmlEncode(param.Type)})";
-                    var psummary = string.IsNullOrWhiteSpace(param.Summary) ? string.Empty : $": {System.Web.HttpUtility.HtmlEncode(param.Summary)}";
+                    var psummaryText = StripCrefTokens(param.Summary);
+                    var psummary = string.IsNullOrWhiteSpace(psummaryText) ? string.Empty : $": {System.Web.HttpUtility.HtmlEncode(psummaryText)}";
                     sb.AppendLine($"              <li><code>{System.Web.HttpUtility.HtmlEncode(param.Name)}</code>{type}{psummary}</li>");
                 }
                 sb.AppendLine("            </ul>");
@@ -1535,7 +1700,8 @@ public static class WebApiDocsGenerator
             }
             if (!string.IsNullOrWhiteSpace(member.Returns))
             {
-                sb.AppendLine($"          <div class=\"pf-api-returns\">Returns: {System.Web.HttpUtility.HtmlEncode(member.Returns)}</div>");
+                var returnsText = StripCrefTokens(member.Returns);
+                sb.AppendLine($"          <div class=\"pf-api-returns\">Returns: {System.Web.HttpUtility.HtmlEncode(returnsText)}</div>");
             }
             sb.AppendLine("        </li>");
         }
@@ -1675,7 +1841,8 @@ public static class WebApiDocsGenerator
     private static string BuildSidebarTypeItem(ApiTypeModel type, string baseUrl, string activeSlug)
     {
         var active = string.Equals(activeSlug, type.Slug, StringComparison.OrdinalIgnoreCase) ? " active" : string.Empty;
-        var search = $"{type.Name} {type.FullName} {type.Summary}".Trim();
+        var summary = StripCrefTokens(type.Summary);
+        var search = $"{type.Name} {type.FullName} {summary}".Trim();
         var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
         var name = System.Web.HttpUtility.HtmlEncode(type.Name);
         var kind = NormalizeKind(type.Kind);
@@ -1702,7 +1869,7 @@ public static class WebApiDocsGenerator
             sb.AppendLine("        <div class=\"quick-grid\">");
             foreach (var type in mainTypes.Take(6))
             {
-                var summary = Truncate(type.Summary, 100);
+                var summary = Truncate(StripCrefTokens(type.Summary), 100);
                 var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
                 sb.AppendLine($"          <a href=\"{quickHref}\" class=\"quick-card\">");
                 sb.AppendLine("            <div class=\"quick-card-header\">");
@@ -1731,7 +1898,8 @@ public static class WebApiDocsGenerator
             sb.AppendLine("          <div class=\"type-chips\">");
             foreach (var type in group.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
             {
-                var search = $"{type.Name} {type.FullName} {type.Summary}".Trim();
+                var summary = StripCrefTokens(type.Summary);
+                var search = $"{type.Name} {type.FullName} {summary}".Trim();
                 var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
                 var kind = NormalizeKind(type.Kind);
                 var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
@@ -1749,7 +1917,7 @@ public static class WebApiDocsGenerator
         return sb.ToString().TrimEnd();
     }
 
-    private static string BuildDocsTypeDetail(ApiTypeModel type, string baseUrl)
+    private static string BuildDocsTypeDetail(ApiTypeModel type, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
     {
         var sb = new StringBuilder();
         sb.AppendLine("    <article class=\"type-detail\">");
@@ -1792,7 +1960,7 @@ public static class WebApiDocsGenerator
         {
             sb.AppendLine("        <div class=\"type-meta-row type-meta-inheritance\">");
             sb.AppendLine("          <span class=\"type-meta-label\">Base</span>");
-            sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.BaseType)}</code>");
+            sb.AppendLine($"          <code>{LinkifyType(type.BaseType, baseUrl, slugMap)}</code>");
             sb.AppendLine("        </div>");
         }
         if (type.Interfaces.Count > 0)
@@ -1802,7 +1970,7 @@ public static class WebApiDocsGenerator
             sb.AppendLine("          <div class=\"type-meta-list\">");
             foreach (var iface in type.Interfaces.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(iface)}</code>");
+                sb.AppendLine($"            <code>{LinkifyType(iface, baseUrl, slugMap)}</code>");
             }
             sb.AppendLine("          </div>");
             sb.AppendLine("        </div>");
@@ -1814,15 +1982,27 @@ public static class WebApiDocsGenerator
             sb.AppendLine($"          <span class=\"type-meta-flags-list\">{System.Web.HttpUtility.HtmlEncode(string.Join(", ", flags))}</span>");
             sb.AppendLine("        </div>");
         }
+        if (type.Attributes.Count > 0)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-attributes\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Attributes</span>");
+            sb.AppendLine("          <div class=\"type-meta-list\">");
+            foreach (var attr in type.Attributes)
+            {
+                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
+            }
+            sb.AppendLine("          </div>");
+            sb.AppendLine("        </div>");
+        }
         sb.AppendLine("      </div>");
 
         if (!string.IsNullOrWhiteSpace(type.Summary))
-            sb.AppendLine($"      <p class=\"type-summary\">{System.Web.HttpUtility.HtmlEncode(type.Summary)}</p>");
+            sb.AppendLine($"      <p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
         if (!string.IsNullOrWhiteSpace(type.Remarks))
         {
             sb.AppendLine("      <section class=\"remarks\">");
             sb.AppendLine("        <h2>Remarks</h2>");
-            sb.AppendLine($"        <p>{System.Web.HttpUtility.HtmlEncode(type.Remarks)}</p>");
+            sb.AppendLine($"        <p>{RenderLinkedText(type.Remarks, baseUrl, slugMap)}</p>");
             sb.AppendLine("      </section>");
         }
 
@@ -1837,6 +2017,8 @@ public static class WebApiDocsGenerator
         sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties</button>");
         sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">Fields</button>");
         sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events</button>");
+        if (type.ExtensionMethods.Count > 0)
+            sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions</button>");
         sb.AppendLine("        </div>");
         sb.AppendLine("        <label class=\"member-toggle\">");
         sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
@@ -1844,19 +2026,48 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        </label>");
         sb.AppendLine("      </div>");
 
-        AppendMemberCards(sb, "Methods", "method", type.Methods);
-        AppendMemberCards(sb, "Properties", "property", type.Properties);
-        AppendMemberCards(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields);
-        AppendMemberCards(sb, "Events", "event", type.Events);
+        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap);
+        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap);
+        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap);
+        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap);
+        if (type.ExtensionMethods.Count > 0)
+            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false);
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
     }
 
-    private static void AppendMemberCards(StringBuilder sb, string label, string memberKind, List<ApiMemberModel> members)
+    private static void AppendMemberSections(
+        StringBuilder sb,
+        string label,
+        string memberKind,
+        List<ApiMemberModel> members,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        bool treatAsInherited = true)
     {
         if (members.Count == 0) return;
-        sb.AppendLine($"      <section class=\"member-section\" data-kind=\"{memberKind}\">");
+        var direct = members.Where(m => !m.IsInherited).ToList();
+        var inherited = treatAsInherited ? members.Where(m => m.IsInherited).ToList() : new List<ApiMemberModel>();
+
+        if (direct.Count > 0)
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false);
+        if (inherited.Count > 0)
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true);
+    }
+
+    private static void AppendMemberCards(
+        StringBuilder sb,
+        string label,
+        string memberKind,
+        List<ApiMemberModel> members,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        bool inheritedSection)
+    {
+        if (members.Count == 0) return;
+        var collapsed = inheritedSection ? " collapsed" : string.Empty;
+        sb.AppendLine($"      <section class=\"member-section{collapsed}\" data-kind=\"{memberKind}\">");
         sb.AppendLine("        <div class=\"member-section-header\">");
         sb.AppendLine($"          <h2>{label}</h2>");
         sb.AppendLine("          <button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle section\">");
@@ -1865,7 +2076,8 @@ public static class WebApiDocsGenerator
         sb.AppendLine("            </svg>");
         sb.AppendLine("          </button>");
         sb.AppendLine("        </div>");
-        sb.AppendLine("        <div class=\"member-section-body\">");
+        var hidden = inheritedSection ? " hidden" : string.Empty;
+        sb.AppendLine($"        <div class=\"member-section-body\"{hidden}>");
         foreach (var member in members)
         {
             var memberId = BuildMemberId(memberKind, member);
@@ -1884,16 +2096,24 @@ public static class WebApiDocsGenerator
             sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
             sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
             sb.AppendLine("          </div>");
-            if (!string.IsNullOrWhiteSpace(member.ReturnType) && label == "Methods")
-            {
+            if (!string.IsNullOrWhiteSpace(member.ReturnType) && (label.Contains("Method") || memberKind == "extension"))
                 sb.AppendLine($"          <div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
-            }
             if (!string.IsNullOrWhiteSpace(inheritedNote))
             {
-                sb.AppendLine($"          <div class=\"member-inherited\">{System.Web.HttpUtility.HtmlEncode(inheritedNote)}</div>");
+                var declaring = LinkifyType(member.DeclaringType, baseUrl, slugMap);
+                sb.AppendLine($"          <div class=\"member-inherited\">Inherited from {declaring}</div>");
+            }
+            if (member.Attributes.Count > 0)
+            {
+                sb.AppendLine("          <div class=\"member-attributes\">");
+                foreach (var attr in member.Attributes)
+                {
+                    sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
+                }
+                sb.AppendLine("          </div>");
             }
             if (!string.IsNullOrWhiteSpace(member.Summary))
-                sb.AppendLine($"          <p class=\"member-summary\">{System.Web.HttpUtility.HtmlEncode(member.Summary)}</p>");
+                sb.AppendLine($"          <p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
             if (member.Parameters.Count > 0)
             {
                 sb.AppendLine("          <h4>Parameters</h4>");
@@ -1905,7 +2125,7 @@ public static class WebApiDocsGenerator
                     var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
                     sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(param.Name)} <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span></dt>");
                     if (!string.IsNullOrWhiteSpace(param.Summary))
-                        sb.AppendLine($"            <dd>{System.Web.HttpUtility.HtmlEncode(param.Summary)}</dd>");
+                        sb.AppendLine($"            <dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
                 }
                 sb.AppendLine("          </dl>");
             }
@@ -1917,7 +2137,7 @@ public static class WebApiDocsGenerator
             if (!string.IsNullOrWhiteSpace(member.Returns))
             {
                 sb.AppendLine("          <h4>Returns</h4>");
-                sb.AppendLine($"          <p>{System.Web.HttpUtility.HtmlEncode(member.Returns)}</p>");
+                sb.AppendLine($"          <p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
             }
             sb.AppendLine("        </div>");
         }
@@ -1951,6 +2171,78 @@ public static class WebApiDocsGenerator
                 baseName = $"{baseName}-{suffix}";
         }
         return Slugify(baseName);
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildTypeSlugMap(IReadOnlyList<ApiTypeModel> types)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var shortNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var type in types)
+        {
+            if (!string.IsNullOrWhiteSpace(type.FullName))
+                map[type.FullName] = type.Slug;
+            if (!string.IsNullOrWhiteSpace(type.Name))
+            {
+                shortNameCounts.TryGetValue(type.Name, out var count);
+                shortNameCounts[type.Name] = count + 1;
+            }
+        }
+        foreach (var type in types)
+        {
+            if (string.IsNullOrWhiteSpace(type.Name)) continue;
+            if (shortNameCounts.TryGetValue(type.Name, out var count) && count == 1)
+                map[type.Name] = type.Slug;
+        }
+        return map;
+    }
+
+    private static string RenderLinkedText(string text, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var encoded = System.Web.HttpUtility.HtmlEncode(text);
+        return Regex.Replace(encoded, "\\[\\[cref:(?<name>[^\\]]+)\\]\\]", match =>
+        {
+            var name = match.Groups["name"].Value;
+            return LinkifyType(name, baseUrl, slugMap);
+        });
+    }
+
+    private static string StripCrefTokens(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        return Regex.Replace(text, "\\[\\[cref:(?<name>[^\\]]+)\\]\\]", match =>
+        {
+            var name = match.Groups["name"].Value;
+            return GetDisplayTypeName(name);
+        });
+    }
+
+    private static string LinkifyType(string? name, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+        var cleaned = name.Replace("+", ".").Trim();
+        var display = GetDisplayTypeName(cleaned);
+        if (slugMap.TryGetValue(cleaned, out var slug))
+        {
+            var href = BuildDocsTypeUrl(baseUrl, slug);
+            return $"<a href=\"{href}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
+        }
+        if (slugMap.TryGetValue(display, out var shortSlug))
+        {
+            var href = BuildDocsTypeUrl(baseUrl, shortSlug);
+            return $"<a href=\"{href}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
+        }
+        return System.Web.HttpUtility.HtmlEncode(display);
+    }
+
+    private static string GetDisplayTypeName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return name;
+        var normalized = name.Replace("{", "<").Replace("}", ">");
+        normalized = Regex.Replace(normalized, "`{1,2}\\d+", string.Empty);
+        var lastDot = normalized.LastIndexOf('.');
+        return lastDot > 0 ? normalized.Substring(lastDot + 1) : normalized;
     }
 
     private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types)
@@ -2468,6 +2760,7 @@ public static class WebApiDocsGenerator
         public string? Assembly { get; set; }
         public string? BaseType { get; set; }
         public List<string> Interfaces { get; } = new();
+        public List<string> Attributes { get; } = new();
         public string? Summary { get; set; }
         public string? Remarks { get; set; }
         public string Kind { get; set; } = "Class";
@@ -2479,6 +2772,7 @@ public static class WebApiDocsGenerator
         public List<ApiMemberModel> Properties { get; } = new();
         public List<ApiMemberModel> Fields { get; } = new();
         public List<ApiMemberModel> Events { get; } = new();
+        public List<ApiMemberModel> ExtensionMethods { get; } = new();
     }
 
     private sealed class ApiMemberModel
@@ -2492,6 +2786,8 @@ public static class WebApiDocsGenerator
         public bool IsInherited { get; set; }
         public bool IsStatic { get; set; }
         public string? Value { get; set; }
+        public bool IsExtension { get; set; }
+        public List<string> Attributes { get; } = new();
         public List<ApiParameterModel> Parameters { get; set; } = new();
         public string? Returns { get; set; }
     }
