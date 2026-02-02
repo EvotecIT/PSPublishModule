@@ -68,6 +68,8 @@
         "templateDocsType": { "type": "string" },
         "docsScript": { "type": "string" },
         "searchScript": { "type": "string" },
+        "sourceRoot": { "type": "string" },
+        "sourceUrl": { "type": "string" },
         "nav": { "type": "string" },
         "navJson": { "type": "string" },
         "includeNamespace": { "type": "string" },
