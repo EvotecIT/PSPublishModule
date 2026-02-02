@@ -66,6 +66,7 @@ a:hover{color:#a78bfa}
 .member-kind{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.75rem;cursor:pointer}
 .member-kind.active{background:#1f2937;border-color:#a78bfa;color:#e6e9f3}
 .member-toggle{display:flex;align-items:center;gap:6px;font-size:.75rem;color:#94a3b8}
+.member-toggle input{accent-color:#a78bfa;width:14px;height:14px;cursor:pointer}
 .member-section{margin:14px 0}
 .member-section-header{display:flex;align-items:center;justify-content:space-between}
 .member-section-toggle{background:transparent;border:0;color:#94a3b8;cursor:pointer}
@@ -76,6 +77,17 @@ a:hover{color:#a78bfa}
 .member-anchor{color:#94a3b8;font-size:.85rem}
 .member-return,.member-inherited,.member-value{color:#94a3b8;font-size:.8rem}
 .member-summary{margin:0;color:#e2e8f0}
+.type-parameters,.type-examples,.type-see-also{margin:12px 0}
+.typeparam-list,.exception-list,.see-also-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.typeparam-list dt{font-weight:600}
+.typeparam-list dd{margin:0;color:#94a3b8}
+.exception-list li,.see-also-list li{color:#94a3b8}
+.member-group{border:1px solid rgba(148,163,184,.12);border-radius:12px;padding:10px 12px;margin-top:10px}
+.member-group-header{display:flex;align-items:center;justify-content:space-between;font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8}
+.member-group-name{color:#e2e8f0}
+.member-group-body{display:grid;gap:8px;margin-top:8px}
+.member-card pre{background:#0b1220;border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 12px;overflow:auto}
+.member-card pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e6e9f3}
 .member-attributes,.type-meta-attributes .type-meta-list{display:flex;flex-wrap:wrap;gap:6px}
 .member-attributes code,.type-meta-list code{background:#0b1220;border:1px solid rgba(148,163,184,.2);border-radius:999px;padding:2px 8px;font-size:.75rem;color:#cbd5f5}
 .param-list{margin:6px 0 0;padding:0;display:grid;gap:6px}

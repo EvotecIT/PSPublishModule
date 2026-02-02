@@ -91,12 +91,18 @@ Member layout:
 - `.member-kind` – member kind button
 - `.member-kind.active` – active member kind
 - `.member-kind[data-member-kind="extension"]` – extension methods filter
+- `.member-kind[data-member-kind="constructor"]` – constructors filter
 - `.member-toggle` – toggle for inherited members
 - `.member-section` – section wrapper (methods/properties/fields/events)
 - `.member-section-header` – section header row
 - `.member-section-toggle` – collapse/expand button
 - `.member-section-body` – section content container
 - `.member-section.collapsed` – collapsed section state
+- `.member-group` – overload group wrapper
+- `.member-group-header` – overload group header
+- `.member-group-name` – overload group name
+- `.member-group-count` – overload count
+- `.member-group-body` – overload group body
 - `.member-card` – member card block (data attributes: `data-kind`, `data-inherited`, `data-search`)
 - `.member-signature` – signature code line
 - `.member-anchor` – anchor link
@@ -105,10 +111,17 @@ Member layout:
 - `.member-value` – enum value row
 - `.param-default` – parameter default value
 - `.member-attributes` – attribute list for members
+- `.member-summary` – summary paragraph
+- `.typeparam-list` – type parameter list
+- `.exception-list` – exception list
+- `.see-also-list` – see-also list
 - `.type-meta-attributes` – attribute list for types
 - `.type-meta-interfaces` – implemented interfaces list
 - `.type-meta-inheritance` – base type row
 - `.type-meta-flags` – modifiers row
+- `.type-parameters` – type parameter section
+- `.type-examples` – example section
+- `.type-see-also` – see also section
 
 ## JavaScript expectations
 
@@ -130,6 +143,7 @@ When assembly reflection is available, the generator emits:
 - static/abstract/sealed flags
 - attributes for types and members
 - extension methods (shown under “Extension Methods”)
+- constructors are rendered in their own section and overloads are grouped by name
 
 `search.js` (simple template) expects:
 - `#api-search` input

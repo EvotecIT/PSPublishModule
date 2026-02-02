@@ -130,6 +130,7 @@
     var showInherited = inheritedToggle ? inheritedToggle.checked : true;
     var cards = Array.prototype.slice.call(document.querySelectorAll('.member-card'));
     var sections = Array.prototype.slice.call(document.querySelectorAll('.member-section'));
+    var groups = Array.prototype.slice.call(document.querySelectorAll('.member-group'));
 
     cards.forEach(function(card) {
       var hay = normalize(card.dataset.search || card.textContent);
@@ -138,6 +139,14 @@
       var matchInherited = showInherited || card.dataset.inherited !== 'true';
       var match = matchSearch && matchKind && matchInherited;
       card.style.display = match ? '' : 'none';
+    });
+
+    groups.forEach(function(group) {
+      var hasVisible = false;
+      group.querySelectorAll('.member-card').forEach(function(card) {
+        if (card.style.display !== 'none') hasVisible = true;
+      });
+      group.style.display = hasVisible ? '' : 'none';
     });
 
     sections.forEach(function(section) {

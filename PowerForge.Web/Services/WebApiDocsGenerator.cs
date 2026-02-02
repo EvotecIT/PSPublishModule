@@ -167,7 +167,12 @@ public static class WebApiDocsGenerator
                 ["namespace"] = t.Namespace,
                 ["kind"] = t.Kind,
                 ["slug"] = t.Slug,
-                ["summary"] = t.Summary
+                ["summary"] = t.Summary,
+                ["typeParameters"] = t.TypeParameters.Select(tp => new Dictionary<string, object?>
+                {
+                    ["name"] = tp.Name,
+                    ["summary"] = tp.Summary
+                }).ToList()
             }).ToList()
         };
 
@@ -207,9 +212,21 @@ public static class WebApiDocsGenerator
                 ["isSealed"] = type.IsSealed,
                 ["summary"] = type.Summary,
                 ["remarks"] = type.Remarks,
+                ["typeParameters"] = type.TypeParameters.Select(tp => new Dictionary<string, object?>
+                {
+                    ["name"] = tp.Name,
+                    ["summary"] = tp.Summary
+                }).ToList(),
+                ["examples"] = type.Examples.Select(ex => new Dictionary<string, object?>
+                {
+                    ["kind"] = ex.Kind,
+                    ["text"] = ex.Text
+                }).ToList(),
+                ["seeAlso"] = type.SeeAlso,
                 ["methods"] = type.Methods.Select(m => new Dictionary<string, object?>
                 {
                     ["name"] = m.Name,
+                    ["displayName"] = m.DisplayName,
                     ["summary"] = m.Summary,
                     ["kind"] = m.Kind,
                     ["signature"] = m.Signature,
@@ -217,9 +234,73 @@ public static class WebApiDocsGenerator
                     ["declaringType"] = m.DeclaringType,
                     ["isInherited"] = m.IsInherited,
                     ["isStatic"] = m.IsStatic,
+                    ["access"] = m.Access,
+                    ["modifiers"] = m.Modifiers,
+                    ["isConstructor"] = m.IsConstructor,
                     ["isExtension"] = m.IsExtension,
                     ["attributes"] = m.Attributes,
                     ["returns"] = m.Returns,
+                    ["value"] = m.Value,
+                    ["valueSummary"] = m.ValueSummary,
+                    ["typeParameters"] = m.TypeParameters.Select(tp => new Dictionary<string, object?>
+                    {
+                        ["name"] = tp.Name,
+                        ["summary"] = tp.Summary
+                    }).ToList(),
+                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["kind"] = ex.Kind,
+                        ["text"] = ex.Text
+                    }).ToList(),
+                    ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["type"] = ex.Type,
+                        ["summary"] = ex.Summary
+                    }).ToList(),
+                    ["seeAlso"] = m.SeeAlso,
+                    ["parameters"] = m.Parameters.Select(p => new Dictionary<string, object?>
+                    {
+                        ["name"] = p.Name,
+                        ["type"] = p.Type,
+                        ["summary"] = p.Summary,
+                        ["isOptional"] = p.IsOptional,
+                        ["defaultValue"] = p.DefaultValue
+                    }).ToList()
+                }).ToList(),
+                ["constructors"] = type.Constructors.Select(m => new Dictionary<string, object?>
+                {
+                    ["name"] = m.Name,
+                    ["displayName"] = m.DisplayName,
+                    ["summary"] = m.Summary,
+                    ["kind"] = m.Kind,
+                    ["signature"] = m.Signature,
+                    ["returnType"] = m.ReturnType,
+                    ["declaringType"] = m.DeclaringType,
+                    ["isInherited"] = m.IsInherited,
+                    ["isStatic"] = m.IsStatic,
+                    ["access"] = m.Access,
+                    ["modifiers"] = m.Modifiers,
+                    ["isConstructor"] = m.IsConstructor,
+                    ["attributes"] = m.Attributes,
+                    ["returns"] = m.Returns,
+                    ["value"] = m.Value,
+                    ["valueSummary"] = m.ValueSummary,
+                    ["typeParameters"] = m.TypeParameters.Select(tp => new Dictionary<string, object?>
+                    {
+                        ["name"] = tp.Name,
+                        ["summary"] = tp.Summary
+                    }).ToList(),
+                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["kind"] = ex.Kind,
+                        ["text"] = ex.Text
+                    }).ToList(),
+                    ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["type"] = ex.Type,
+                        ["summary"] = ex.Summary
+                    }).ToList(),
+                    ["seeAlso"] = m.SeeAlso,
                     ["parameters"] = m.Parameters.Select(p => new Dictionary<string, object?>
                     {
                         ["name"] = p.Name,
@@ -232,17 +313,33 @@ public static class WebApiDocsGenerator
                 ["properties"] = type.Properties.Select(p => new Dictionary<string, object?>
                 {
                     ["name"] = p.Name,
+                    ["displayName"] = p.DisplayName,
                     ["summary"] = p.Summary,
                     ["kind"] = p.Kind,
                     ["signature"] = p.Signature,
                     ["returnType"] = p.ReturnType,
                     ["declaringType"] = p.DeclaringType,
                     ["isInherited"] = p.IsInherited,
-                    ["isStatic"] = p.IsStatic
+                    ["isStatic"] = p.IsStatic,
+                    ["access"] = p.Access,
+                    ["modifiers"] = p.Modifiers,
+                    ["valueSummary"] = p.ValueSummary,
+                    ["examples"] = p.Examples.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["kind"] = ex.Kind,
+                        ["text"] = ex.Text
+                    }).ToList(),
+                    ["exceptions"] = p.Exceptions.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["type"] = ex.Type,
+                        ["summary"] = ex.Summary
+                    }).ToList(),
+                    ["seeAlso"] = p.SeeAlso
                 }).ToList(),
                 ["fields"] = type.Fields.Select(f => new Dictionary<string, object?>
                 {
                     ["name"] = f.Name,
+                    ["displayName"] = f.DisplayName,
                     ["summary"] = f.Summary,
                     ["kind"] = f.Kind,
                     ["signature"] = f.Signature,
@@ -250,22 +347,51 @@ public static class WebApiDocsGenerator
                     ["declaringType"] = f.DeclaringType,
                     ["isInherited"] = f.IsInherited,
                     ["isStatic"] = f.IsStatic,
-                    ["value"] = f.Value
+                    ["access"] = f.Access,
+                    ["modifiers"] = f.Modifiers,
+                    ["value"] = f.Value,
+                    ["valueSummary"] = f.ValueSummary,
+                    ["examples"] = f.Examples.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["kind"] = ex.Kind,
+                        ["text"] = ex.Text
+                    }).ToList(),
+                    ["exceptions"] = f.Exceptions.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["type"] = ex.Type,
+                        ["summary"] = ex.Summary
+                    }).ToList(),
+                    ["seeAlso"] = f.SeeAlso
                 }).ToList(),
                 ["events"] = type.Events.Select(e => new Dictionary<string, object?>
                 {
                     ["name"] = e.Name,
+                    ["displayName"] = e.DisplayName,
                     ["summary"] = e.Summary,
                     ["kind"] = e.Kind,
                     ["signature"] = e.Signature,
                     ["returnType"] = e.ReturnType,
                     ["declaringType"] = e.DeclaringType,
                     ["isInherited"] = e.IsInherited,
-                    ["isStatic"] = e.IsStatic
+                    ["isStatic"] = e.IsStatic,
+                    ["access"] = e.Access,
+                    ["modifiers"] = e.Modifiers,
+                    ["examples"] = e.Examples.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["kind"] = ex.Kind,
+                        ["text"] = ex.Text
+                    }).ToList(),
+                    ["exceptions"] = e.Exceptions.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["type"] = ex.Type,
+                        ["summary"] = ex.Summary
+                    }).ToList(),
+                    ["seeAlso"] = e.SeeAlso
                 }).ToList(),
                 ["extensionMethods"] = type.ExtensionMethods.Select(m => new Dictionary<string, object?>
                 {
                     ["name"] = m.Name,
+                    ["displayName"] = m.DisplayName,
                     ["summary"] = m.Summary,
                     ["kind"] = m.Kind,
                     ["signature"] = m.Signature,
@@ -273,9 +399,30 @@ public static class WebApiDocsGenerator
                     ["declaringType"] = m.DeclaringType,
                     ["isInherited"] = m.IsInherited,
                     ["isStatic"] = m.IsStatic,
+                    ["access"] = m.Access,
+                    ["modifiers"] = m.Modifiers,
+                    ["isConstructor"] = m.IsConstructor,
                     ["isExtension"] = m.IsExtension,
                     ["attributes"] = m.Attributes,
                     ["returns"] = m.Returns,
+                    ["value"] = m.Value,
+                    ["valueSummary"] = m.ValueSummary,
+                    ["typeParameters"] = m.TypeParameters.Select(tp => new Dictionary<string, object?>
+                    {
+                        ["name"] = tp.Name,
+                        ["summary"] = tp.Summary
+                    }).ToList(),
+                    ["examples"] = m.Examples.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["kind"] = ex.Kind,
+                        ["text"] = ex.Text
+                    }).ToList(),
+                    ["exceptions"] = m.Exceptions.Select(ex => new Dictionary<string, object?>
+                    {
+                        ["type"] = ex.Type,
+                        ["summary"] = ex.Summary
+                    }).ToList(),
+                    ["seeAlso"] = m.SeeAlso,
                     ["parameters"] = m.Parameters.Select(p => new Dictionary<string, object?>
                     {
                         ["name"] = p.Name,
@@ -526,6 +673,14 @@ public static class WebApiDocsGenerator
                 Kind = GetTypeKind(type),
                 Slug = Slugify(fullName)
             };
+            if (type.IsGenericTypeDefinition || type.ContainsGenericParameters)
+            {
+                foreach (var arg in type.GetGenericArguments())
+                {
+                    if (!string.IsNullOrWhiteSpace(arg.Name))
+                        model.TypeParameters.Add(new ApiTypeParameterModel { Name = arg.Name });
+                }
+            }
 
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
@@ -533,7 +688,24 @@ public static class WebApiDocsGenerator
                 model.Methods.Add(new ApiMemberModel
                 {
                     Name = method.Name,
+                    DisplayName = method.Name,
                     Parameters = method.GetParameters().Select(p => new ApiParameterModel
+                    {
+                        Name = p.Name ?? string.Empty,
+                        Type = GetReadableTypeName(p.ParameterType)
+                    }).ToList()
+                });
+            }
+
+            foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+            {
+                model.Constructors.Add(new ApiMemberModel
+                {
+                    Name = "#ctor",
+                    DisplayName = model.Name,
+                    Kind = "Constructor",
+                    IsConstructor = true,
+                    Parameters = ctor.GetParameters().Select(p => new ApiParameterModel
                     {
                         Name = p.Name ?? string.Empty,
                         Type = GetReadableTypeName(p.ParameterType)
@@ -545,7 +717,8 @@ public static class WebApiDocsGenerator
             {
                 model.Properties.Add(new ApiMemberModel
                 {
-                    Name = property.Name
+                    Name = property.Name,
+                    DisplayName = property.Name
                 });
             }
 
@@ -554,7 +727,8 @@ public static class WebApiDocsGenerator
                 if (field.IsSpecialName) continue;
                 model.Fields.Add(new ApiMemberModel
                 {
-                    Name = field.Name
+                    Name = field.Name,
+                    DisplayName = field.Name
                 });
             }
 
@@ -562,7 +736,8 @@ public static class WebApiDocsGenerator
             {
                 model.Events.Add(new ApiMemberModel
                 {
-                    Name = evt.Name
+                    Name = evt.Name,
+                    DisplayName = evt.Name
                 });
             }
 
@@ -596,6 +771,10 @@ public static class WebApiDocsGenerator
             {
                 model.Interfaces.Add(GetReadableTypeName(iface));
             }
+            if (type.IsGenericTypeDefinition || type.ContainsGenericParameters)
+            {
+                MergeTypeParameters(model.TypeParameters, type.GetGenericArguments().Select(a => a.Name));
+            }
 
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             {
@@ -614,6 +793,8 @@ public static class WebApiDocsGenerator
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(method));
                 member.IsExtension = IsExtensionMethod(method);
+                if (string.IsNullOrWhiteSpace(member.DisplayName))
+                    member.DisplayName = member.Name;
 
                 if (member.IsExtension)
                 {
@@ -629,6 +810,25 @@ public static class WebApiDocsGenerator
                         list.Add(CloneMember(member, isExtension: true));
                     }
                 }
+            }
+
+            foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var member = FindConstructorModel(model.Constructors, ctor);
+                if (member is null)
+                {
+                    member = new ApiMemberModel
+                    {
+                        Name = "#ctor",
+                        Kind = "Constructor",
+                        IsConstructor = true,
+                        DisplayName = model.Name
+                    };
+                    model.Constructors.Add(member);
+                }
+                FillConstructorMember(member, ctor, type);
+                member.Attributes.Clear();
+                member.Attributes.AddRange(GetAttributeList(ctor));
             }
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -717,6 +917,23 @@ public static class WebApiDocsGenerator
         return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
     }
 
+    private static ApiMemberModel? FindConstructorModel(List<ApiMemberModel> members, ConstructorInfo ctor)
+    {
+        var candidates = members
+            .Where(m => m.IsConstructor || string.Equals(m.Name, "#ctor", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0) return null;
+
+        var parameters = ctor.GetParameters();
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Parameters.Count != parameters.Length) continue;
+            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
+        }
+
+        return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
+    }
+
     private static bool ParamsMatch(List<ApiParameterModel> parameters, ParameterInfo[] infos)
     {
         if (parameters.Count != infos.Length) return false;
@@ -742,6 +959,102 @@ public static class WebApiDocsGenerator
         return name.Replace(" ", string.Empty);
     }
 
+    private static void MergeTypeParameters(List<ApiTypeParameterModel> target, IEnumerable<string> names)
+    {
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (target.Any(tp => string.Equals(tp.Name, name, StringComparison.OrdinalIgnoreCase))) continue;
+            target.Add(new ApiTypeParameterModel { Name = name });
+        }
+    }
+
+    private static string GetAccessModifier(MethodBase method)
+    {
+        if (method.IsPublic) return "public";
+        if (method.IsFamily && method.IsAssembly) return "private protected";
+        if (method.IsFamilyOrAssembly) return "protected internal";
+        if (method.IsFamily) return "protected";
+        if (method.IsAssembly) return "internal";
+        return "private";
+    }
+
+    private static string GetAccessModifier(FieldInfo field)
+    {
+        if (field.IsPublic) return "public";
+        if (field.IsFamily && field.IsAssembly) return "private protected";
+        if (field.IsFamilyOrAssembly) return "protected internal";
+        if (field.IsFamily) return "protected";
+        if (field.IsAssembly) return "internal";
+        return "private";
+    }
+
+    private static MethodInfo? GetMostVisibleAccessor(MethodInfo? first, MethodInfo? second)
+    {
+        if (first is null) return second;
+        if (second is null) return first;
+        return GetAccessRank(first) >= GetAccessRank(second) ? first : second;
+    }
+
+    private static int GetAccessRank(MethodBase method)
+    {
+        if (method.IsPublic) return 5;
+        if (method.IsFamilyOrAssembly) return 4;
+        if (method.IsFamily) return 3;
+        if (method.IsAssembly) return 2;
+        if (method.IsFamily && method.IsAssembly) return 1;
+        return 0;
+    }
+
+    private static List<string> GetMethodModifiers(MethodInfo method)
+    {
+        var modifiers = new List<string>();
+        if (method.IsStatic) modifiers.Add("static");
+        if (method.IsAbstract) modifiers.Add("abstract");
+        else if (method.IsVirtual && method.GetBaseDefinition() != method) modifiers.Add("override");
+        else if (method.IsVirtual) modifiers.Add("virtual");
+        if (method.IsFinal && method.IsVirtual && method.GetBaseDefinition() != method) modifiers.Add("sealed");
+        if (IsAsync(method)) modifiers.Add("async");
+        return modifiers;
+    }
+
+    private static List<string> GetConstructorModifiers(ConstructorInfo ctor)
+    {
+        var modifiers = new List<string>();
+        if (ctor.IsStatic) modifiers.Add("static");
+        return modifiers;
+    }
+
+    private static List<string> GetPropertyModifiers(PropertyInfo property)
+    {
+        var accessor = GetMostVisibleAccessor(property.GetMethod, property.SetMethod);
+        if (accessor is null) return new List<string>();
+        var modifiers = GetMethodModifiers(accessor);
+        modifiers.Remove("async");
+        return modifiers;
+    }
+
+    private static List<string> GetEventModifiers(EventInfo evt)
+    {
+        var accessor = evt.AddMethod ?? evt.RemoveMethod;
+        if (accessor is null) return new List<string>();
+        var modifiers = GetMethodModifiers(accessor);
+        modifiers.Remove("async");
+        return modifiers;
+    }
+
+    private static List<string> GetFieldModifiers(FieldInfo field)
+    {
+        var modifiers = new List<string>();
+        if (field.IsStatic && !field.IsLiteral) modifiers.Add("static");
+        if (field.IsLiteral) modifiers.Add("const");
+        else if (field.IsInitOnly) modifiers.Add("readonly");
+        return modifiers;
+    }
+
+    private static bool IsAsync(MethodInfo method)
+        => method.GetCustomAttributes(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute), false).Length > 0;
+
     private static void FillMethodMember(ApiMemberModel member, MethodInfo method, Type declaring)
     {
         member.Kind = "Method";
@@ -750,8 +1063,43 @@ public static class WebApiDocsGenerator
         member.IsStatic = method.IsStatic;
         member.DeclaringType = method.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = method.DeclaringType != declaring;
+        member.Access = GetAccessModifier(method);
+        member.Modifiers.Clear();
+        member.Modifiers.AddRange(GetMethodModifiers(method));
+        if (method.IsGenericMethodDefinition || method.IsGenericMethod)
+            MergeTypeParameters(member.TypeParameters, method.GetGenericArguments().Select(a => a.Name));
 
         var parameters = method.GetParameters();
+        if (member.Parameters.Count == 0)
+        {
+            member.Parameters = parameters.Select(BuildParameterModel).ToList();
+        }
+        else
+        {
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (i >= member.Parameters.Count) break;
+                ApplyParameterMetadata(member.Parameters[i], parameters[i]);
+            }
+        }
+    }
+
+    private static void FillConstructorMember(ApiMemberModel member, ConstructorInfo ctor, Type declaring)
+    {
+        member.Kind = "Constructor";
+        member.IsConstructor = true;
+        member.ReturnType = null;
+        member.Signature = BuildConstructorSignature(ctor, declaring);
+        member.IsStatic = ctor.IsStatic;
+        member.DeclaringType = ctor.DeclaringType?.FullName?.Replace('+', '.');
+        member.IsInherited = false;
+        member.Access = GetAccessModifier(ctor);
+        member.Modifiers.Clear();
+        member.Modifiers.AddRange(GetConstructorModifiers(ctor));
+        if (string.IsNullOrWhiteSpace(member.DisplayName))
+            member.DisplayName = StripGenericArity(declaring.Name);
+
+        var parameters = ctor.GetParameters();
         if (member.Parameters.Count == 0)
         {
             member.Parameters = parameters.Select(BuildParameterModel).ToList();
@@ -774,6 +1122,13 @@ public static class WebApiDocsGenerator
         member.IsStatic = (property.GetMethod ?? property.SetMethod)?.IsStatic == true;
         member.DeclaringType = property.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = property.DeclaringType != declaring;
+        var accessor = GetMostVisibleAccessor(property.GetMethod, property.SetMethod);
+        if (accessor is not null)
+            member.Access = GetAccessModifier(accessor);
+        member.Modifiers.Clear();
+        member.Modifiers.AddRange(GetPropertyModifiers(property));
+        if (string.IsNullOrWhiteSpace(member.DisplayName))
+            member.DisplayName = property.Name;
     }
 
     private static void FillFieldMember(ApiMemberModel member, FieldInfo field, Type declaring)
@@ -784,6 +1139,11 @@ public static class WebApiDocsGenerator
         member.IsStatic = field.IsStatic;
         member.DeclaringType = field.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = field.DeclaringType != declaring;
+        member.Access = GetAccessModifier(field);
+        member.Modifiers.Clear();
+        member.Modifiers.AddRange(GetFieldModifiers(field));
+        if (string.IsNullOrWhiteSpace(member.DisplayName))
+            member.DisplayName = field.Name;
         if (field.IsLiteral && field.GetRawConstantValue() is { } value)
             member.Value = value.ToString();
     }
@@ -796,6 +1156,13 @@ public static class WebApiDocsGenerator
         member.IsStatic = evt.AddMethod?.IsStatic == true;
         member.DeclaringType = evt.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = evt.DeclaringType != declaring;
+        var accessor = evt.AddMethod ?? evt.RemoveMethod;
+        if (accessor is not null)
+            member.Access = GetAccessModifier(accessor);
+        member.Modifiers.Clear();
+        member.Modifiers.AddRange(GetEventModifiers(evt));
+        if (string.IsNullOrWhiteSpace(member.DisplayName))
+            member.DisplayName = evt.Name;
     }
 
     private static bool IsExtensionMethod(MethodInfo method)
@@ -870,6 +1237,7 @@ public static class WebApiDocsGenerator
         var clone = new ApiMemberModel
         {
             Name = source.Name,
+            DisplayName = source.DisplayName,
             Summary = source.Summary,
             Kind = source.Kind,
             Signature = source.Signature,
@@ -877,12 +1245,25 @@ public static class WebApiDocsGenerator
             DeclaringType = source.DeclaringType,
             IsInherited = source.IsInherited,
             IsStatic = source.IsStatic,
+            Access = source.Access,
             IsExtension = isExtension,
+            IsConstructor = source.IsConstructor,
             Returns = source.Returns,
-            Value = source.Value
+            Value = source.Value,
+            ValueSummary = source.ValueSummary
         };
         foreach (var attr in source.Attributes)
             clone.Attributes.Add(attr);
+        foreach (var modifier in source.Modifiers)
+            clone.Modifiers.Add(modifier);
+        foreach (var tp in source.TypeParameters)
+            clone.TypeParameters.Add(new ApiTypeParameterModel { Name = tp.Name, Summary = tp.Summary });
+        foreach (var ex in source.Examples)
+            clone.Examples.Add(new ApiExampleModel { Kind = ex.Kind, Text = ex.Text });
+        foreach (var ex in source.Exceptions)
+            clone.Exceptions.Add(new ApiExceptionModel { Type = ex.Type, Summary = ex.Summary });
+        foreach (var see in source.SeeAlso)
+            clone.SeeAlso.Add(see);
         clone.Parameters = source.Parameters
             .Select(p => new ApiParameterModel
             {
@@ -915,6 +1296,7 @@ public static class WebApiDocsGenerator
 
     private static string BuildMethodSignature(MethodInfo method)
     {
+        var prefix = BuildMethodPrefix(method);
         var name = method.Name;
         if (method.IsGenericMethod)
         {
@@ -925,12 +1307,14 @@ public static class WebApiDocsGenerator
         var parameters = method.GetParameters()
             .Select(BuildParameterSignature)
             .ToList();
-        return $"{returnType} {name}({string.Join(", ", parameters)})";
+        return $"{prefix}{returnType} {name}({string.Join(", ", parameters)})".Trim();
     }
 
     private static string BuildParameterSignature(ParameterInfo parameter)
     {
         var prefix = parameter.IsOut ? "out " : parameter.ParameterType.IsByRef ? "ref " : string.Empty;
+        if (parameter.GetCustomAttributes(typeof(ParamArrayAttribute), false).Length > 0)
+            prefix = "params " + prefix;
         var typeName = GetReadableTypeName(parameter.ParameterType);
         var name = parameter.Name ?? "value";
         var value = $"{prefix}{typeName} {name}".Trim();
@@ -947,19 +1331,69 @@ public static class WebApiDocsGenerator
         var accessors = new List<string>();
         if (property.GetMethod is not null) accessors.Add("get;");
         if (property.SetMethod is not null) accessors.Add("set;");
-        return $"{GetReadableTypeName(property.PropertyType)} {property.Name} {{ {string.Join(" ", accessors)} }}";
+        var prefix = BuildPropertyPrefix(property);
+        return $"{prefix}{GetReadableTypeName(property.PropertyType)} {property.Name} {{ {string.Join(" ", accessors)} }}".Trim();
     }
 
     private static string BuildFieldSignature(FieldInfo field)
     {
-        var prefix = field.IsLiteral ? "const " : field.IsStatic ? "static " : string.Empty;
+        var prefix = BuildFieldPrefix(field);
         return $"{prefix}{GetReadableTypeName(field.FieldType)} {field.Name}".Trim();
     }
 
     private static string BuildEventSignature(EventInfo evt)
     {
-        var handler = evt.EventHandlerType is null ? "event" : GetReadableTypeName(evt.EventHandlerType);
-        return $"event {handler} {evt.Name}";
+        var prefix = BuildEventPrefix(evt);
+        var handler = evt.EventHandlerType is null ? "EventHandler" : GetReadableTypeName(evt.EventHandlerType);
+        return $"{prefix}event {handler} {evt.Name}".Trim();
+    }
+
+    private static string BuildConstructorSignature(ConstructorInfo ctor, Type declaringType)
+    {
+        var prefix = BuildMethodPrefix(ctor);
+        var name = GetReadableTypeName(declaringType);
+        var parameters = ctor.GetParameters()
+            .Select(BuildParameterSignature)
+            .ToList();
+        return $"{prefix}{name}({string.Join(", ", parameters)})".Trim();
+    }
+
+    private static string BuildMethodPrefix(MethodBase method)
+    {
+        var parts = new List<string>();
+        var access = GetAccessModifier(method);
+        if (!string.IsNullOrWhiteSpace(access))
+            parts.Add(access);
+        if (method is MethodInfo mi)
+            parts.AddRange(GetMethodModifiers(mi));
+        else if (method is ConstructorInfo ci)
+            parts.AddRange(GetConstructorModifiers(ci));
+        return parts.Count == 0 ? string.Empty : string.Join(" ", parts) + " ";
+    }
+
+    private static string BuildPropertyPrefix(PropertyInfo property)
+    {
+        var accessor = GetMostVisibleAccessor(property.GetMethod, property.SetMethod);
+        if (accessor is null) return string.Empty;
+        var parts = new List<string> { GetAccessModifier(accessor) };
+        parts.AddRange(GetPropertyModifiers(property));
+        return string.Join(" ", parts.Where(p => !string.IsNullOrWhiteSpace(p))) + " ";
+    }
+
+    private static string BuildFieldPrefix(FieldInfo field)
+    {
+        var parts = new List<string> { GetAccessModifier(field) };
+        parts.AddRange(GetFieldModifiers(field));
+        return string.Join(" ", parts.Where(p => !string.IsNullOrWhiteSpace(p))) + " ";
+    }
+
+    private static string BuildEventPrefix(EventInfo evt)
+    {
+        var accessor = evt.AddMethod ?? evt.RemoveMethod;
+        if (accessor is null) return string.Empty;
+        var parts = new List<string> { GetAccessModifier(accessor) };
+        parts.AddRange(GetEventModifiers(evt));
+        return string.Join(" ", parts.Where(p => !string.IsNullOrWhiteSpace(p))) + " ";
     }
 
     private static string FormatDefaultValue(object? value)
@@ -1045,7 +1479,7 @@ public static class WebApiDocsGenerator
         var ns = lastDot > 0 ? fullName.Substring(0, lastDot) : string.Empty;
         var name = lastDot > 0 ? fullName.Substring(lastDot + 1) : fullName;
 
-        return new ApiTypeModel
+        var model = new ApiTypeModel
         {
             Name = name,
             FullName = fullName,
@@ -1055,6 +1489,10 @@ public static class WebApiDocsGenerator
             Kind = InferTypeKind(name),
             Slug = Slugify(fullName)
         };
+        model.TypeParameters.AddRange(GetTypeParameters(member));
+        model.Examples.AddRange(GetExamples(member));
+        model.SeeAlso.AddRange(GetSeeAlso(member));
+        return model;
     }
 
     private static void AddMethod(ApiDocModel doc, XElement member, string fullName, Assembly? assembly)
@@ -1069,14 +1507,26 @@ public static class WebApiDocsGenerator
         var parameterNames = TryResolveParameterNames(assembly, typeName, name, parameterTypes);
         var parameters = ParseParameters(member, parameterTypes, parameterNames);
 
-        type.Methods.Add(new ApiMemberModel
+        var isCtor = IsConstructorName(name);
+        var displayName = isCtor ? GetShortTypeName(typeName) : name;
+        var model = new ApiMemberModel
         {
             Name = name,
+            DisplayName = displayName,
             Summary = GetSummary(member),
-            Kind = "Method",
+            Kind = isCtor ? "Constructor" : "Method",
             Parameters = parameters,
-            Returns = GetElement(member, "returns")
-        });
+            Returns = GetElement(member, "returns"),
+            IsConstructor = isCtor
+        };
+        model.TypeParameters.AddRange(GetTypeParameters(member));
+        model.Examples.AddRange(GetExamples(member));
+        model.Exceptions.AddRange(GetExceptions(member));
+        model.SeeAlso.AddRange(GetSeeAlso(member));
+        if (isCtor)
+            type.Constructors.Add(model);
+        else
+            type.Methods.Add(model);
     }
 
     private static void AddProperty(ApiDocModel doc, XElement member, string fullName)
@@ -1087,12 +1537,17 @@ public static class WebApiDocsGenerator
         var name = ExtractMemberName(fullName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        type.Properties.Add(new ApiMemberModel
+        var model = new ApiMemberModel
         {
             Name = name,
             Summary = GetSummary(member),
-            Kind = "Property"
-        });
+            Kind = "Property",
+            ValueSummary = GetElement(member, "value")
+        };
+        model.Examples.AddRange(GetExamples(member));
+        model.Exceptions.AddRange(GetExceptions(member));
+        model.SeeAlso.AddRange(GetSeeAlso(member));
+        type.Properties.Add(model);
     }
 
     private static void AddField(ApiDocModel doc, XElement member, string fullName)
@@ -1103,12 +1558,17 @@ public static class WebApiDocsGenerator
         var name = ExtractMemberName(fullName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        type.Fields.Add(new ApiMemberModel
+        var model = new ApiMemberModel
         {
             Name = name,
             Summary = GetSummary(member),
-            Kind = "Field"
-        });
+            Kind = "Field",
+            ValueSummary = GetElement(member, "value")
+        };
+        model.Examples.AddRange(GetExamples(member));
+        model.Exceptions.AddRange(GetExceptions(member));
+        model.SeeAlso.AddRange(GetSeeAlso(member));
+        type.Fields.Add(model);
     }
 
     private static void AddEvent(ApiDocModel doc, XElement member, string fullName)
@@ -1119,12 +1579,16 @@ public static class WebApiDocsGenerator
         var name = ExtractMemberName(fullName);
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        type.Events.Add(new ApiMemberModel
+        var model = new ApiMemberModel
         {
             Name = name,
             Summary = GetSummary(member),
             Kind = "Event"
-        });
+        };
+        model.Examples.AddRange(GetExamples(member));
+        model.Exceptions.AddRange(GetExceptions(member));
+        model.SeeAlso.AddRange(GetSeeAlso(member));
+        type.Events.Add(model);
     }
 
     private static string ExtractTypeName(string fullName)
@@ -1159,7 +1623,7 @@ public static class WebApiDocsGenerator
                 : (parameterNames != null && i < parameterNames.Count && !string.IsNullOrWhiteSpace(parameterNames[i])
                     ? parameterNames[i]
                     : $"arg{i + 1}");
-            var summary = i < paramElements.Count ? Normalize(paramElements[i].Value) : null;
+            var summary = i < paramElements.Count ? NormalizeXmlText(paramElements[i]) : null;
             var type = i < parameterTypes.Count ? parameterTypes[i] : string.Empty;
             results.Add(new ApiParameterModel
             {
@@ -1228,9 +1692,9 @@ public static class WebApiDocsGenerator
         if (type is null) return null;
 
         var lookupName = StripGenericArity(memberName);
-        if (lookupName == "#ctor")
+        if (IsConstructorName(lookupName))
         {
-            var ctors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+            var ctors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
             return ResolveParameterNamesFromCandidates(ctors, parameterTypes, assembly);
         }
 
@@ -1459,9 +1923,125 @@ public static class WebApiDocsGenerator
         return element is null ? null : NormalizeXmlText(element);
     }
 
+    private static List<ApiTypeParameterModel> GetTypeParameters(XElement member)
+    {
+        var results = new List<ApiTypeParameterModel>();
+        foreach (var tp in member.Elements("typeparam"))
+        {
+            var name = tp.Attribute("name")?.Value;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            results.Add(new ApiTypeParameterModel
+            {
+                Name = name,
+                Summary = NormalizeXmlText(tp)
+            });
+        }
+        return results;
+    }
+
+    private static List<ApiExceptionModel> GetExceptions(XElement member)
+    {
+        var results = new List<ApiExceptionModel>();
+        foreach (var ex in member.Elements("exception"))
+        {
+            var cref = ex.Attribute("cref")?.Value;
+            var typeName = CleanCref(cref);
+            if (string.IsNullOrWhiteSpace(typeName)) continue;
+            results.Add(new ApiExceptionModel
+            {
+                Type = typeName,
+                Summary = NormalizeXmlText(ex)
+            });
+        }
+        return results;
+    }
+
+    private static List<ApiExampleModel> GetExamples(XElement member)
+    {
+        var results = new List<ApiExampleModel>();
+        foreach (var example in member.Elements("example"))
+        {
+            results.AddRange(ParseExampleBlocks(example));
+        }
+        return results;
+    }
+
+    private static List<ApiExampleModel> ParseExampleBlocks(XElement example)
+    {
+        var results = new List<ApiExampleModel>();
+        foreach (var node in example.Nodes())
+        {
+            switch (node)
+            {
+                case XText text:
+                    var normalized = Normalize(text.Value);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                        results.Add(new ApiExampleModel { Kind = "text", Text = normalized });
+                    break;
+                case XElement el:
+                    var local = el.Name.LocalName;
+                    if (local.Equals("code", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var code = el.Value.Trim('\r', '\n');
+                        if (!string.IsNullOrWhiteSpace(code))
+                            results.Add(new ApiExampleModel { Kind = "code", Text = code });
+                    }
+                    else
+                    {
+                        var textBlock = NormalizeXmlText(el);
+                        if (!string.IsNullOrWhiteSpace(textBlock))
+                            results.Add(new ApiExampleModel { Kind = "text", Text = textBlock });
+                    }
+                    break;
+            }
+        }
+
+        if (results.Count == 0)
+        {
+            var fallback = NormalizeXmlText(example);
+            if (!string.IsNullOrWhiteSpace(fallback))
+                results.Add(new ApiExampleModel { Kind = "text", Text = fallback });
+        }
+
+        return results;
+    }
+
+    private static List<string> GetSeeAlso(XElement member)
+    {
+        var results = new List<string>();
+        foreach (var see in member.Elements("seealso"))
+        {
+            var text = NormalizeXmlText(see);
+            if (!string.IsNullOrWhiteSpace(text))
+                results.Add(text);
+        }
+        return results;
+    }
+
     private static string Normalize(string value)
     {
         return Regex.Replace(value, "\\s+", " ").Trim();
+    }
+
+    private static string CleanCref(string? cref)
+    {
+        if (string.IsNullOrWhiteSpace(cref)) return string.Empty;
+        var cleaned = cref;
+        var colonIdx = cleaned.IndexOf(':');
+        if (colonIdx >= 0 && colonIdx + 1 < cleaned.Length)
+            cleaned = cleaned.Substring(colonIdx + 1);
+        return cleaned.Trim();
+    }
+
+    private static bool IsConstructorName(string name)
+        => name == "#ctor" || name == ".ctor" || name == ".cctor";
+
+    private static string GetShortTypeName(string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return fullName;
+        var lastDot = fullName.LastIndexOf('.');
+        var name = lastDot > -1 ? fullName.Substring(lastDot + 1) : fullName;
+        return StripGenericArity(name);
     }
 
     private static string? NormalizeXmlText(XElement element)
@@ -2006,6 +2586,42 @@ public static class WebApiDocsGenerator
             sb.AppendLine("      </section>");
         }
 
+        if (type.TypeParameters.Count > 0)
+        {
+            sb.AppendLine("      <section class=\"type-parameters\">");
+            sb.AppendLine("        <h2>Type Parameters</h2>");
+            sb.AppendLine("        <dl class=\"typeparam-list\">");
+            foreach (var tp in type.TypeParameters)
+            {
+                sb.AppendLine($"          <dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
+                if (!string.IsNullOrWhiteSpace(tp.Summary))
+                    sb.AppendLine($"          <dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+            }
+            sb.AppendLine("        </dl>");
+            sb.AppendLine("      </section>");
+        }
+
+        if (type.Examples.Count > 0)
+        {
+            sb.AppendLine("      <section class=\"type-examples\">");
+            sb.AppendLine("        <h2>Examples</h2>");
+            AppendExamples(sb, type.Examples, baseUrl, slugMap);
+            sb.AppendLine("      </section>");
+        }
+
+        if (type.SeeAlso.Count > 0)
+        {
+            sb.AppendLine("      <section class=\"type-see-also\">");
+            sb.AppendLine("        <h2>See Also</h2>");
+            sb.AppendLine("        <ul class=\"see-also-list\">");
+            foreach (var item in type.SeeAlso)
+            {
+                sb.AppendLine($"          <li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+            }
+            sb.AppendLine("        </ul>");
+            sb.AppendLine("      </section>");
+        }
+
         sb.AppendLine("      <div class=\"member-toolbar\">");
         sb.AppendLine("        <div class=\"member-filter\">");
         sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
@@ -2013,6 +2629,8 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        </div>");
         sb.AppendLine("        <div class=\"member-kind-filter\">");
         sb.AppendLine("          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All</button>");
+        if (type.Constructors.Count > 0)
+            sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors</button>");
         sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods</button>");
         sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties</button>");
         sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">Fields</button>");
@@ -2026,12 +2644,13 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        </label>");
         sb.AppendLine("      </div>");
 
-        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap);
+        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true);
+        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, groupOverloads: true);
         AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap);
         AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap);
         AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap);
         if (type.ExtensionMethods.Count > 0)
-            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false);
+            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true);
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
@@ -2044,16 +2663,17 @@ public static class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
-        bool treatAsInherited = true)
+        bool treatAsInherited = true,
+        bool groupOverloads = false)
     {
         if (members.Count == 0) return;
         var direct = members.Where(m => !m.IsInherited).ToList();
         var inherited = treatAsInherited ? members.Where(m => m.IsInherited).ToList() : new List<ApiMemberModel>();
 
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false);
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false, groupOverloads);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true);
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true, groupOverloads);
     }
 
     private static void AppendMemberCards(
@@ -2063,7 +2683,8 @@ public static class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
-        bool inheritedSection)
+        bool inheritedSection,
+        bool groupOverloads)
     {
         if (members.Count == 0) return;
         var collapsed = inheritedSection ? " collapsed" : string.Empty;
@@ -2078,77 +2699,184 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        </div>");
         var hidden = inheritedSection ? " hidden" : string.Empty;
         sb.AppendLine($"        <div class=\"member-section-body\"{hidden}>");
-        foreach (var member in members)
+        if (groupOverloads)
         {
-            var memberId = BuildMemberId(memberKind, member);
-            var signature = !string.IsNullOrWhiteSpace(member.Signature)
-                ? member.Signature
-                : BuildSignature(member, label);
-            var search = $"{member.Name} {signature} {member.Summary}".Trim();
-            var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
-            var inherited = member.IsInherited ? "true" : "false";
-            var inheritedNote = member.IsInherited && !string.IsNullOrWhiteSpace(member.DeclaringType)
-                ? $"Inherited from {member.DeclaringType}"
-                : string.Empty;
-
-            sb.AppendLine($"        <div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
-            sb.AppendLine("          <div class=\"member-header\">");
-            sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
-            sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
-            sb.AppendLine("          </div>");
-            if (!string.IsNullOrWhiteSpace(member.ReturnType) && (label.Contains("Method") || memberKind == "extension"))
-                sb.AppendLine($"          <div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
-            if (!string.IsNullOrWhiteSpace(inheritedNote))
+            var grouped = members
+                .GroupBy(m => string.IsNullOrWhiteSpace(m.DisplayName) ? m.Name : m.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var group in grouped)
             {
-                var declaring = LinkifyType(member.DeclaringType, baseUrl, slugMap);
-                sb.AppendLine($"          <div class=\"member-inherited\">Inherited from {declaring}</div>");
-            }
-            if (member.Attributes.Count > 0)
-            {
-                sb.AppendLine("          <div class=\"member-attributes\">");
-                foreach (var attr in member.Attributes)
+                if (group.Count() == 1)
                 {
-                    sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
+                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, label);
+                    continue;
                 }
+                sb.AppendLine("          <div class=\"member-group\">");
+                sb.AppendLine("            <div class=\"member-group-header\">");
+                sb.AppendLine($"              <span class=\"member-group-name\">{System.Web.HttpUtility.HtmlEncode(group.Key)}</span>");
+                sb.AppendLine($"              <span class=\"member-group-count\">{group.Count()} overloads</span>");
+                sb.AppendLine("            </div>");
+                sb.AppendLine("            <div class=\"member-group-body\">");
+                foreach (var member in group)
+                {
+                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, label);
+                }
+                sb.AppendLine("            </div>");
                 sb.AppendLine("          </div>");
             }
-            if (!string.IsNullOrWhiteSpace(member.Summary))
-                sb.AppendLine($"          <p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
-            if (member.Parameters.Count > 0)
+        }
+        else
+        {
+            foreach (var member in members)
             {
-                sb.AppendLine("          <h4>Parameters</h4>");
-                sb.AppendLine("          <dl class=\"param-list\">");
-                foreach (var param in member.Parameters)
-                {
-                    var optional = param.IsOptional ? " optional" : string.Empty;
-                    var defaultValue = param.DefaultValue;
-                    var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
-                    sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(param.Name)} <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span></dt>");
-                    if (!string.IsNullOrWhiteSpace(param.Summary))
-                        sb.AppendLine($"            <dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
-                }
-                sb.AppendLine("          </dl>");
+                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, label);
             }
-            if (label == "Fields" || label == "Values")
-            {
-                if (!string.IsNullOrWhiteSpace(member.Value))
-                    sb.AppendLine($"          <div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
-            }
-            if (!string.IsNullOrWhiteSpace(member.Returns))
-            {
-                sb.AppendLine("          <h4>Returns</h4>");
-                sb.AppendLine($"          <p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
-            }
-            sb.AppendLine("        </div>");
         }
         sb.AppendLine("        </div>");
         sb.AppendLine("      </section>");
     }
 
+    private static void AppendMemberCard(
+        StringBuilder sb,
+        string memberKind,
+        ApiMemberModel member,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        string sectionLabel)
+    {
+        var memberId = BuildMemberId(memberKind, member);
+        var signature = !string.IsNullOrWhiteSpace(member.Signature)
+            ? member.Signature
+            : BuildSignature(member, sectionLabel);
+        var search = $"{member.Name} {signature} {member.Summary}".Trim();
+        var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
+        var inherited = member.IsInherited ? "true" : "false";
+        var inheritedNote = member.IsInherited && !string.IsNullOrWhiteSpace(member.DeclaringType)
+            ? $"Inherited from {member.DeclaringType}"
+            : string.Empty;
+
+        sb.AppendLine($"        <div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
+        sb.AppendLine("          <div class=\"member-header\">");
+        sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
+        sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
+        sb.AppendLine("          </div>");
+        if (!string.IsNullOrWhiteSpace(member.ReturnType) && (sectionLabel.Contains("Method") || memberKind == "extension"))
+            sb.AppendLine($"          <div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
+        if (!string.IsNullOrWhiteSpace(inheritedNote))
+        {
+            var declaring = LinkifyType(member.DeclaringType, baseUrl, slugMap);
+            sb.AppendLine($"          <div class=\"member-inherited\">Inherited from {declaring}</div>");
+        }
+        if (member.Attributes.Count > 0)
+        {
+            sb.AppendLine("          <div class=\"member-attributes\">");
+            foreach (var attr in member.Attributes)
+            {
+                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(attr)}</code>");
+            }
+            sb.AppendLine("          </div>");
+        }
+        if (!string.IsNullOrWhiteSpace(member.Summary))
+            sb.AppendLine($"          <p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
+        if (member.TypeParameters.Count > 0)
+        {
+            sb.AppendLine("          <h4>Type Parameters</h4>");
+            sb.AppendLine("          <dl class=\"typeparam-list\">");
+            foreach (var tp in member.TypeParameters)
+            {
+                sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(tp.Name)}</dt>");
+                if (!string.IsNullOrWhiteSpace(tp.Summary))
+                    sb.AppendLine($"            <dd>{RenderLinkedText(tp.Summary, baseUrl, slugMap)}</dd>");
+            }
+            sb.AppendLine("          </dl>");
+        }
+        if (member.Parameters.Count > 0)
+        {
+            sb.AppendLine("          <h4>Parameters</h4>");
+            sb.AppendLine("          <dl class=\"param-list\">");
+            foreach (var param in member.Parameters)
+            {
+                var optional = param.IsOptional ? " optional" : string.Empty;
+                var defaultValue = param.DefaultValue;
+                var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
+                sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(param.Name)} <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span></dt>");
+                if (!string.IsNullOrWhiteSpace(param.Summary))
+                    sb.AppendLine($"            <dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
+            }
+            sb.AppendLine("          </dl>");
+        }
+        if (!string.IsNullOrWhiteSpace(member.ValueSummary))
+        {
+            sb.AppendLine("          <h4>Value</h4>");
+            sb.AppendLine($"          <p>{RenderLinkedText(member.ValueSummary, baseUrl, slugMap)}</p>");
+        }
+        if (sectionLabel == "Fields" || sectionLabel == "Values")
+        {
+            if (!string.IsNullOrWhiteSpace(member.Value))
+                sb.AppendLine($"          <div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
+        }
+        if (!string.IsNullOrWhiteSpace(member.Returns))
+        {
+            sb.AppendLine("          <h4>Returns</h4>");
+            sb.AppendLine($"          <p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
+        }
+        if (member.Exceptions.Count > 0)
+        {
+            sb.AppendLine("          <h4>Exceptions</h4>");
+            sb.AppendLine("          <ul class=\"exception-list\">");
+            foreach (var ex in member.Exceptions)
+            {
+                var type = LinkifyType(ex.Type, baseUrl, slugMap);
+                var desc = string.IsNullOrWhiteSpace(ex.Summary) ? string.Empty : $" – {RenderLinkedText(ex.Summary, baseUrl, slugMap)}";
+                sb.AppendLine($"            <li><code>{type}</code>{desc}</li>");
+            }
+            sb.AppendLine("          </ul>");
+        }
+        if (member.Examples.Count > 0)
+        {
+            sb.AppendLine("          <h4>Examples</h4>");
+            AppendExamples(sb, member.Examples, baseUrl, slugMap);
+        }
+        if (member.SeeAlso.Count > 0)
+        {
+            sb.AppendLine("          <h4>See Also</h4>");
+            sb.AppendLine("          <ul class=\"see-also-list\">");
+            foreach (var item in member.SeeAlso)
+            {
+                sb.AppendLine($"            <li>{RenderLinkedText(item, baseUrl, slugMap)}</li>");
+            }
+            sb.AppendLine("          </ul>");
+        }
+        sb.AppendLine("        </div>");
+    }
+
+    private static void AppendExamples(
+        StringBuilder sb,
+        List<ApiExampleModel> examples,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap)
+    {
+        foreach (var example in examples)
+        {
+            if (string.IsNullOrWhiteSpace(example.Text)) continue;
+            if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
+            {
+                sb.AppendLine("        <pre><code>");
+                sb.AppendLine(System.Web.HttpUtility.HtmlEncode(example.Text));
+                sb.AppendLine("        </code></pre>");
+            }
+            else
+            {
+                sb.AppendLine($"        <p>{RenderLinkedText(example.Text, baseUrl, slugMap)}</p>");
+            }
+        }
+    }
+
     private static string BuildSignature(ApiMemberModel member, string section)
     {
-        if (section != "Methods")
-            return member.Name;
+        var displayName = string.IsNullOrWhiteSpace(member.DisplayName) ? member.Name : member.DisplayName;
+        var prefix = BuildMemberPrefix(member);
         var args = member.Parameters
             .Select(p =>
             {
@@ -2157,8 +2885,31 @@ public static class WebApiDocsGenerator
                 return string.IsNullOrWhiteSpace(type) ? name : $"{type} {name}".Trim();
             })
             .ToList();
-        var returnType = string.IsNullOrWhiteSpace(member.ReturnType) ? string.Empty : $"{member.ReturnType} ";
-        return $"{returnType}{member.Name}({string.Join(", ", args)})".Trim();
+        if (member.IsConstructor || section == "Constructors")
+            return $"{prefix}{displayName}({string.Join(", ", args)})".Trim();
+
+        if (section == "Methods" || section == "Extension Methods")
+        {
+            var returnType = string.IsNullOrWhiteSpace(member.ReturnType) ? string.Empty : $"{member.ReturnType} ";
+            return $"{prefix}{returnType}{displayName}({string.Join(", ", args)})".Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(member.ReturnType))
+        {
+            if (section == "Events")
+                return $"{prefix}event {member.ReturnType} {displayName}".Trim();
+            return $"{prefix}{member.ReturnType} {displayName}".Trim();
+        }
+
+        return $"{prefix}{displayName}".Trim();
+    }
+
+    private static string BuildMemberPrefix(ApiMemberModel member)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(member.Access)) parts.Add(member.Access);
+        parts.AddRange(member.Modifiers);
+        return parts.Count == 0 ? string.Empty : string.Join(" ", parts) + " ";
     }
 
     private static string BuildMemberId(string memberKind, ApiMemberModel member)
@@ -2763,12 +3514,16 @@ public static class WebApiDocsGenerator
         public List<string> Attributes { get; } = new();
         public string? Summary { get; set; }
         public string? Remarks { get; set; }
+        public List<ApiTypeParameterModel> TypeParameters { get; } = new();
+        public List<ApiExampleModel> Examples { get; } = new();
+        public List<string> SeeAlso { get; } = new();
         public string Kind { get; set; } = "Class";
         public string Slug { get; set; } = string.Empty;
         public bool IsStatic { get; set; }
         public bool IsAbstract { get; set; }
         public bool IsSealed { get; set; }
         public List<ApiMemberModel> Methods { get; } = new();
+        public List<ApiMemberModel> Constructors { get; } = new();
         public List<ApiMemberModel> Properties { get; } = new();
         public List<ApiMemberModel> Fields { get; } = new();
         public List<ApiMemberModel> Events { get; } = new();
@@ -2778,6 +3533,7 @@ public static class WebApiDocsGenerator
     private sealed class ApiMemberModel
     {
         public string Name { get; set; } = string.Empty;
+        public string? DisplayName { get; set; }
         public string? Summary { get; set; }
         public string? Kind { get; set; }
         public string? Signature { get; set; }
@@ -2785,9 +3541,17 @@ public static class WebApiDocsGenerator
         public string? DeclaringType { get; set; }
         public bool IsInherited { get; set; }
         public bool IsStatic { get; set; }
+        public string? Access { get; set; }
+        public List<string> Modifiers { get; } = new();
         public string? Value { get; set; }
+        public string? ValueSummary { get; set; }
+        public bool IsConstructor { get; set; }
         public bool IsExtension { get; set; }
         public List<string> Attributes { get; } = new();
+        public List<ApiTypeParameterModel> TypeParameters { get; } = new();
+        public List<ApiExampleModel> Examples { get; } = new();
+        public List<ApiExceptionModel> Exceptions { get; } = new();
+        public List<string> SeeAlso { get; } = new();
         public List<ApiParameterModel> Parameters { get; set; } = new();
         public string? Returns { get; set; }
     }
@@ -2799,6 +3563,24 @@ public static class WebApiDocsGenerator
         public string? Summary { get; set; }
         public bool IsOptional { get; set; }
         public string? DefaultValue { get; set; }
+    }
+
+    private sealed class ApiTypeParameterModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Summary { get; set; }
+    }
+
+    private sealed class ApiExampleModel
+    {
+        public string Kind { get; set; } = "text";
+        public string Text { get; set; } = string.Empty;
+    }
+
+    private sealed class ApiExceptionModel
+    {
+        public string Type { get; set; } = string.Empty;
+        public string? Summary { get; set; }
     }
 
     private sealed class NavConfig
