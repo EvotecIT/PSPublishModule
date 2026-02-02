@@ -149,6 +149,23 @@ Critical CSS paths are also relative to the theme root:
 - **Wrong theme path**: `site.json` has `ThemesRoot` and you hard-coded `/themes/...`.
   Fix: use the asset registry (recommended) so the engine resolves paths.
 
+## Required layout hooks
+To keep features reusable across projects, layouts should include:
+- `{{ extra_css_html }}` in `<head>` so the engine can inject per‑page CSS (syntax highlighting, experiments, analytics styles).
+- `{{ extra_scripts_html }}` before `</body>` so the engine can inject per‑page scripts (syntax highlighting, analytics, widgets).
+
+Recommended base ordering:
+```
+{{ assets.critical_css_html }}
+{{ include "theme-tokens" }}
+{{ extra_css_html }}
+{{ assets.css_html }}
+```
+```
+{{ assets.js_html }}
+{{ extra_scripts_html }}
+```
+
 ## Verification (catch broken asset paths)
 `powerforge-web verify` warns when asset files referenced in:
 - Theme asset registry (`theme.json` → `assets`)

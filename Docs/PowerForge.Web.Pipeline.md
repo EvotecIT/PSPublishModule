@@ -61,6 +61,7 @@ Notes:
 - `templateIndex`, `templateType`, `templateDocsIndex`, `templateDocsType` let you
   override a single template file without a template root
 - `docsScript` / `searchScript` let you override the embedded JS files
+- `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)

@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -56,6 +58,10 @@ public sealed class WebApiDocsOptions
     public string? DocsScriptPath { get; set; }
     /// <summary>Optional override for search script.</summary>
     public string? SearchScriptPath { get; set; }
+    /// <summary>Optional root path for source link generation.</summary>
+    public string? SourceRootPath { get; set; }
+    /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
+    public string? SourceUrlPattern { get; set; }
     /// <summary>Optional list of namespace prefixes to include.</summary>
     public List<string> IncludeNamespacePrefixes { get; } = new();
     /// <summary>Optional list of namespace prefixes to exclude.</summary>
@@ -125,7 +131,7 @@ public static class WebApiDocsGenerator
 
         if (options.Type == ApiDocsType.CSharp && assembly is not null)
         {
-            EnrichFromAssembly(apiDoc, assembly);
+            EnrichFromAssembly(apiDoc, assembly, options, warnings);
         }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
@@ -202,6 +208,7 @@ public static class WebApiDocsGenerator
                 ["fullName"] = type.FullName,
                 ["namespace"] = type.Namespace,
                 ["assembly"] = type.Assembly,
+                ["source"] = BuildSourceJson(type.Source),
                 ["baseType"] = type.BaseType,
                 ["interfaces"] = type.Interfaces,
                 ["attributes"] = type.Attributes,
@@ -232,6 +239,7 @@ public static class WebApiDocsGenerator
                     ["signature"] = m.Signature,
                     ["returnType"] = m.ReturnType,
                     ["declaringType"] = m.DeclaringType,
+                    ["source"] = BuildSourceJson(m.Source),
                     ["isInherited"] = m.IsInherited,
                     ["isStatic"] = m.IsStatic,
                     ["access"] = m.Access,
@@ -276,6 +284,7 @@ public static class WebApiDocsGenerator
                     ["signature"] = m.Signature,
                     ["returnType"] = m.ReturnType,
                     ["declaringType"] = m.DeclaringType,
+                    ["source"] = BuildSourceJson(m.Source),
                     ["isInherited"] = m.IsInherited,
                     ["isStatic"] = m.IsStatic,
                     ["access"] = m.Access,
@@ -319,6 +328,7 @@ public static class WebApiDocsGenerator
                     ["signature"] = p.Signature,
                     ["returnType"] = p.ReturnType,
                     ["declaringType"] = p.DeclaringType,
+                    ["source"] = BuildSourceJson(p.Source),
                     ["isInherited"] = p.IsInherited,
                     ["isStatic"] = p.IsStatic,
                     ["access"] = p.Access,
@@ -345,6 +355,7 @@ public static class WebApiDocsGenerator
                     ["signature"] = f.Signature,
                     ["returnType"] = f.ReturnType,
                     ["declaringType"] = f.DeclaringType,
+                    ["source"] = BuildSourceJson(f.Source),
                     ["isInherited"] = f.IsInherited,
                     ["isStatic"] = f.IsStatic,
                     ["access"] = f.Access,
@@ -372,6 +383,7 @@ public static class WebApiDocsGenerator
                     ["signature"] = e.Signature,
                     ["returnType"] = e.ReturnType,
                     ["declaringType"] = e.DeclaringType,
+                    ["source"] = BuildSourceJson(e.Source),
                     ["isInherited"] = e.IsInherited,
                     ["isStatic"] = e.IsStatic,
                     ["access"] = e.Access,
@@ -397,6 +409,7 @@ public static class WebApiDocsGenerator
                     ["signature"] = m.Signature,
                     ["returnType"] = m.ReturnType,
                     ["declaringType"] = m.DeclaringType,
+                    ["source"] = BuildSourceJson(m.Source),
                     ["isInherited"] = m.IsInherited,
                     ["isStatic"] = m.IsStatic,
                     ["access"] = m.Access,
@@ -745,8 +758,9 @@ public static class WebApiDocsGenerator
         }
     }
 
-    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly)
+    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly, WebApiDocsOptions options, List<string> warnings)
     {
+        using var sourceLinks = SourceLinkContext.Create(options, assembly, warnings);
         var extensionTargets = new Dictionary<string, List<ApiMemberModel>>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in GetExportedTypesSafe(assembly))
         {
@@ -763,6 +777,8 @@ public static class WebApiDocsGenerator
             model.IsStatic = type.IsAbstract && type.IsSealed;
             model.Attributes.Clear();
             model.Attributes.AddRange(GetAttributeList(type));
+            if (sourceLinks is not null)
+                model.Source = sourceLinks.TryGetSource(type);
             model.BaseType = type.BaseType != null && type.BaseType != typeof(object)
                 ? GetReadableTypeName(type.BaseType)
                 : null;
@@ -795,6 +811,8 @@ public static class WebApiDocsGenerator
                 member.IsExtension = IsExtensionMethod(method);
                 if (string.IsNullOrWhiteSpace(member.DisplayName))
                     member.DisplayName = member.Name;
+                if (sourceLinks is not null)
+                    member.Source = sourceLinks.TryGetSource(method);
 
                 if (member.IsExtension)
                 {
@@ -829,6 +847,8 @@ public static class WebApiDocsGenerator
                 FillConstructorMember(member, ctor, type);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(ctor));
+                if (sourceLinks is not null)
+                    member.Source = sourceLinks.TryGetSource(ctor);
             }
 
             foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -846,6 +866,8 @@ public static class WebApiDocsGenerator
                 FillPropertyMember(member, property, type);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(property));
+                if (sourceLinks is not null)
+                    member.Source = sourceLinks.TryGetSource(property);
             }
 
             foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -864,6 +886,8 @@ public static class WebApiDocsGenerator
                 FillFieldMember(member, field, type);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(field));
+                if (sourceLinks is not null)
+                    member.Source = sourceLinks.TryGetSource(field);
             }
 
             foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
@@ -881,6 +905,8 @@ public static class WebApiDocsGenerator
                 FillEventMember(member, evt, type);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(evt));
+                if (sourceLinks is not null)
+                    member.Source = sourceLinks.TryGetSource(evt);
             }
         }
 
@@ -1250,7 +1276,10 @@ public static class WebApiDocsGenerator
             IsConstructor = source.IsConstructor,
             Returns = source.Returns,
             Value = source.Value,
-            ValueSummary = source.ValueSummary
+            ValueSummary = source.ValueSummary,
+            Source = source.Source is null
+                ? null
+                : new ApiSourceLink { Path = source.Source.Path, Line = source.Source.Line, Url = source.Source.Url }
         };
         foreach (var attr in source.Attributes)
             clone.Attributes.Add(attr);
@@ -2204,6 +2233,8 @@ public static class WebApiDocsGenerator
         var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty);
         var overviewHtml = BuildDocsOverview(types, baseUrl);
         var slugMap = BuildTypeSlugMap(types);
+        var typeIndex = BuildTypeIndex(types);
+        var derivedMap = BuildDerivedTypeMap(types, typeIndex);
 
         var indexTemplate = LoadTemplate(options, "docs-index.html", options.DocsIndexTemplatePath);
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
@@ -2221,7 +2252,7 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
@@ -2497,9 +2528,17 @@ public static class WebApiDocsGenerator
         return sb.ToString().TrimEnd();
     }
 
-    private static string BuildDocsTypeDetail(ApiTypeModel type, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
+    private static string BuildDocsTypeDetail(
+        ApiTypeModel type,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> slugMap,
+        IReadOnlyDictionary<string, ApiTypeModel> typeIndex,
+        IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap)
     {
         var sb = new StringBuilder();
+        var inheritanceChain = BuildInheritanceChain(type, typeIndex);
+        var derivedTypes = GetDerivedTypes(type, derivedMap);
+        var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
         sb.AppendLine("    <article class=\"type-detail\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
         sb.AppendLine("      <nav class=\"breadcrumb\">");
@@ -2508,7 +2547,7 @@ public static class WebApiDocsGenerator
         sb.AppendLine($"        <span class=\"current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</span>");
         sb.AppendLine("      </nav>");
 
-        sb.AppendLine("      <header class=\"type-header\">");
+        sb.AppendLine("      <header class=\"type-header\" id=\"overview\">");
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
         sb.AppendLine("        <div class=\"type-title-row\">");
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
@@ -2534,6 +2573,13 @@ public static class WebApiDocsGenerator
             sb.AppendLine("        <div class=\"type-meta-row\">");
             sb.AppendLine("          <span class=\"type-meta-label\">Assembly</span>");
             sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.Assembly)}</code>");
+            sb.AppendLine("        </div>");
+        }
+        if (type.Source is not null)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-source\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Source</span>");
+            sb.AppendLine($"          {RenderSourceLink(type.Source)}");
             sb.AppendLine("        </div>");
         }
         if (!string.IsNullOrWhiteSpace(type.BaseType))
@@ -2576,11 +2622,51 @@ public static class WebApiDocsGenerator
         }
         sb.AppendLine("      </div>");
 
+        if (toc.Count > 1)
+        {
+            sb.AppendLine("      <nav class=\"type-toc\">");
+            sb.AppendLine("        <span class=\"type-toc-title\">On this page</span>");
+            sb.AppendLine("        <ul>");
+            foreach (var entry in toc)
+            {
+                sb.AppendLine($"          <li><a href=\"#{entry.id}\">{System.Web.HttpUtility.HtmlEncode(entry.label)}</a></li>");
+            }
+            sb.AppendLine("        </ul>");
+            sb.AppendLine("      </nav>");
+        }
+
         if (!string.IsNullOrWhiteSpace(type.Summary))
             sb.AppendLine($"      <p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
+        if (inheritanceChain.Count > 0)
+        {
+            sb.AppendLine("      <section class=\"type-inheritance\" id=\"inheritance\">");
+            sb.AppendLine("        <h2>Inheritance</h2>");
+            sb.AppendLine("        <ul class=\"inheritance-list\">");
+            foreach (var entry in inheritanceChain)
+            {
+                sb.AppendLine($"          <li>{LinkifyType(entry, baseUrl, slugMap)}</li>");
+            }
+            sb.AppendLine($"          <li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</li>");
+            sb.AppendLine("        </ul>");
+            sb.AppendLine("      </section>");
+        }
+
+        if (derivedTypes.Count > 0)
+        {
+            sb.AppendLine("      <section class=\"type-derived\" id=\"derived-types\">");
+            sb.AppendLine("        <h2>Derived Types</h2>");
+            sb.AppendLine("        <ul class=\"derived-list\">");
+            foreach (var derived in derivedTypes)
+            {
+                sb.AppendLine($"          <li>{LinkifyType(derived.FullName, baseUrl, slugMap)}</li>");
+            }
+            sb.AppendLine("        </ul>");
+            sb.AppendLine("      </section>");
+        }
+
         if (!string.IsNullOrWhiteSpace(type.Remarks))
         {
-            sb.AppendLine("      <section class=\"remarks\">");
+            sb.AppendLine("      <section class=\"remarks\" id=\"remarks\">");
             sb.AppendLine("        <h2>Remarks</h2>");
             sb.AppendLine($"        <p>{RenderLinkedText(type.Remarks, baseUrl, slugMap)}</p>");
             sb.AppendLine("      </section>");
@@ -2588,7 +2674,7 @@ public static class WebApiDocsGenerator
 
         if (type.TypeParameters.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-parameters\">");
+            sb.AppendLine("      <section class=\"type-parameters\" id=\"type-parameters\">");
             sb.AppendLine("        <h2>Type Parameters</h2>");
             sb.AppendLine("        <dl class=\"typeparam-list\">");
             foreach (var tp in type.TypeParameters)
@@ -2603,7 +2689,7 @@ public static class WebApiDocsGenerator
 
         if (type.Examples.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-examples\">");
+            sb.AppendLine("      <section class=\"type-examples\" id=\"examples\">");
             sb.AppendLine("        <h2>Examples</h2>");
             AppendExamples(sb, type.Examples, baseUrl, slugMap);
             sb.AppendLine("      </section>");
@@ -2611,7 +2697,7 @@ public static class WebApiDocsGenerator
 
         if (type.SeeAlso.Count > 0)
         {
-            sb.AppendLine("      <section class=\"type-see-also\">");
+            sb.AppendLine("      <section class=\"type-see-also\" id=\"see-also\">");
             sb.AppendLine("        <h2>See Also</h2>");
             sb.AppendLine("        <ul class=\"see-also-list\">");
             foreach (var item in type.SeeAlso)
@@ -2644,13 +2730,13 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        </label>");
         sb.AppendLine("      </div>");
 
-        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true);
-        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, groupOverloads: true);
-        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap);
-        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap);
-        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap);
+        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, groupOverloads: true, sectionId: "methods");
+        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, sectionId: "properties");
+        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, sectionId: type.Kind == "Enum" ? "values" : "fields");
+        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, sectionId: "events");
         if (type.ExtensionMethods.Count > 0)
-            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true);
+            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
@@ -2664,16 +2750,19 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         bool treatAsInherited = true,
-        bool groupOverloads = false)
+        bool groupOverloads = false,
+        string? sectionId = null)
     {
         if (members.Count == 0) return;
         var direct = members.Where(m => !m.IsInherited).ToList();
         var inherited = treatAsInherited ? members.Where(m => m.IsInherited).ToList() : new List<ApiMemberModel>();
 
+        var directId = direct.Count > 0 ? sectionId : null;
+        var inheritedId = direct.Count == 0 ? sectionId : null;
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false, groupOverloads);
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false, groupOverloads, directId);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true, groupOverloads);
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true, groupOverloads, inheritedId);
     }
 
     private static void AppendMemberCards(
@@ -2684,11 +2773,13 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         bool inheritedSection,
-        bool groupOverloads)
+        bool groupOverloads,
+        string? sectionId)
     {
         if (members.Count == 0) return;
         var collapsed = inheritedSection ? " collapsed" : string.Empty;
-        sb.AppendLine($"      <section class=\"member-section{collapsed}\" data-kind=\"{memberKind}\">");
+        var idAttribute = string.IsNullOrWhiteSpace(sectionId) ? string.Empty : $" id=\"{sectionId}\"";
+        sb.AppendLine($"      <section class=\"member-section{collapsed}\" data-kind=\"{memberKind}\"{idAttribute}>");
         sb.AppendLine("        <div class=\"member-section-header\">");
         sb.AppendLine($"          <h2>{label}</h2>");
         sb.AppendLine("          <button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle section\">");
@@ -2761,6 +2852,8 @@ public static class WebApiDocsGenerator
         sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
         sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
         sb.AppendLine("          </div>");
+        if (member.Source is not null)
+            sb.AppendLine($"          <div class=\"member-source\">{RenderSourceLink(member.Source)}</div>");
         if (!string.IsNullOrWhiteSpace(member.ReturnType) && (sectionLabel.Contains("Method") || memberKind == "extension"))
             sb.AppendLine($"          <div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
         if (!string.IsNullOrWhiteSpace(inheritedNote))
@@ -2947,6 +3040,108 @@ public static class WebApiDocsGenerator
         return map;
     }
 
+    private static IReadOnlyDictionary<string, ApiTypeModel> BuildTypeIndex(IReadOnlyList<ApiTypeModel> types)
+    {
+        var map = new Dictionary<string, ApiTypeModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var type in types)
+        {
+            var key = NormalizeTypeName(type.FullName);
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            map[key] = type;
+        }
+        return map;
+    }
+
+    private static IReadOnlyDictionary<string, List<ApiTypeModel>> BuildDerivedTypeMap(
+        IReadOnlyList<ApiTypeModel> types,
+        IReadOnlyDictionary<string, ApiTypeModel> typeIndex)
+    {
+        var map = new Dictionary<string, List<ApiTypeModel>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var type in types)
+        {
+            var baseKey = NormalizeTypeName(type.BaseType);
+            if (string.IsNullOrWhiteSpace(baseKey)) continue;
+            if (!typeIndex.ContainsKey(baseKey)) continue;
+            if (!map.TryGetValue(baseKey, out var list))
+            {
+                list = new List<ApiTypeModel>();
+                map[baseKey] = list;
+            }
+            list.Add(type);
+        }
+
+        foreach (var list in map.Values)
+        {
+            list.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.OrdinalIgnoreCase));
+        }
+        return map;
+    }
+
+    private static List<string> BuildInheritanceChain(ApiTypeModel type, IReadOnlyDictionary<string, ApiTypeModel> typeIndex)
+    {
+        var chain = new List<string>();
+        var current = type.BaseType;
+        var guard = 0;
+        while (!string.IsNullOrWhiteSpace(current) && guard++ < 32)
+        {
+            chain.Add(current);
+            var key = NormalizeTypeName(current);
+            if (!typeIndex.TryGetValue(key, out var baseType) || string.IsNullOrWhiteSpace(baseType.BaseType))
+                break;
+            if (string.Equals(baseType.BaseType, current, StringComparison.OrdinalIgnoreCase))
+                break;
+            current = baseType.BaseType;
+        }
+        if (chain.Count == 0 && string.Equals(type.Kind, "Class", StringComparison.OrdinalIgnoreCase))
+            chain.Add("System.Object");
+        chain.Reverse();
+        return chain;
+    }
+
+    private static List<ApiTypeModel> GetDerivedTypes(
+        ApiTypeModel type,
+        IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap)
+    {
+        var key = NormalizeTypeName(type.FullName);
+        if (string.IsNullOrWhiteSpace(key)) return new List<ApiTypeModel>();
+        return derivedMap.TryGetValue(key, out var list)
+            ? list
+            : new List<ApiTypeModel>();
+    }
+
+    private static List<(string id, string label)> BuildTypeToc(ApiTypeModel type, bool hasInheritance, bool hasDerived)
+    {
+        var list = new List<(string id, string label)>
+        {
+            ("overview", "Overview")
+        };
+        if (hasInheritance)
+            list.Add(("inheritance", "Inheritance"));
+        if (hasDerived)
+            list.Add(("derived-types", "Derived Types"));
+        if (!string.IsNullOrWhiteSpace(type.Remarks))
+            list.Add(("remarks", "Remarks"));
+        if (type.TypeParameters.Count > 0)
+            list.Add(("type-parameters", "Type Parameters"));
+        if (type.Examples.Count > 0)
+            list.Add(("examples", "Examples"));
+        if (type.SeeAlso.Count > 0)
+            list.Add(("see-also", "See Also"));
+        if (type.Constructors.Count > 0)
+            list.Add(("constructors", "Constructors"));
+        if (type.Methods.Count > 0)
+            list.Add(("methods", "Methods"));
+        if (type.Properties.Count > 0)
+            list.Add(("properties", "Properties"));
+        if (type.Fields.Count > 0)
+            list.Add((type.Kind == "Enum" ? "values" : "fields", type.Kind == "Enum" ? "Values" : "Fields"));
+        if (type.Events.Count > 0)
+            list.Add(("events", "Events"));
+        if (type.ExtensionMethods.Count > 0)
+            list.Add(("extensions", "Extension Methods"));
+        return list;
+    }
+
     private static string RenderLinkedText(string text, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
@@ -2985,6 +3180,29 @@ public static class WebApiDocsGenerator
             return $"<a href=\"{href}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
         }
         return System.Web.HttpUtility.HtmlEncode(display);
+    }
+
+    private static string RenderSourceLink(ApiSourceLink link)
+    {
+        var suffix = link.Line > 0 ? $":{link.Line}" : string.Empty;
+        var label = System.Web.HttpUtility.HtmlEncode($"{link.Path}{suffix}");
+        if (!string.IsNullOrWhiteSpace(link.Url))
+        {
+            var href = System.Web.HttpUtility.HtmlEncode(link.Url);
+            return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
+        }
+        return $"<code>{label}</code>";
+    }
+
+    private static Dictionary<string, object?>? BuildSourceJson(ApiSourceLink? source)
+    {
+        if (source is null) return null;
+        return new Dictionary<string, object?>
+        {
+            ["path"] = source.Path,
+            ["line"] = source.Line,
+            ["url"] = source.Url
+        };
     }
 
     private static string GetDisplayTypeName(string name)
@@ -3509,6 +3727,7 @@ public static class WebApiDocsGenerator
         public string FullName { get; set; } = string.Empty;
         public string Namespace { get; set; } = string.Empty;
         public string? Assembly { get; set; }
+        public ApiSourceLink? Source { get; set; }
         public string? BaseType { get; set; }
         public List<string> Interfaces { get; } = new();
         public List<string> Attributes { get; } = new();
@@ -3554,6 +3773,7 @@ public static class WebApiDocsGenerator
         public List<string> SeeAlso { get; } = new();
         public List<ApiParameterModel> Parameters { get; set; } = new();
         public string? Returns { get; set; }
+        public ApiSourceLink? Source { get; set; }
     }
 
     private sealed class ApiParameterModel
@@ -3575,6 +3795,164 @@ public static class WebApiDocsGenerator
     {
         public string Kind { get; set; } = "text";
         public string Text { get; set; } = string.Empty;
+    }
+
+    private sealed class ApiSourceLink
+    {
+        public string Path { get; set; } = string.Empty;
+        public int Line { get; set; }
+        public string? Url { get; set; }
+    }
+
+    private sealed class SourceLinkContext : IDisposable
+    {
+        private readonly MetadataReaderProvider _provider;
+        private readonly Stream _stream;
+        private readonly MetadataReader _reader;
+        private readonly string? _sourceRoot;
+        private readonly string? _pattern;
+
+        private SourceLinkContext(MetadataReaderProvider provider, Stream stream, string? sourceRoot, string? pattern)
+        {
+            _provider = provider;
+            _stream = stream;
+            _reader = provider.GetMetadataReader();
+            _sourceRoot = sourceRoot;
+            _pattern = pattern;
+        }
+
+        public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings)
+        {
+            if (string.IsNullOrWhiteSpace(options.SourceUrlPattern) && string.IsNullOrWhiteSpace(options.SourceRootPath))
+                return null;
+
+            var assemblyPath = options.AssemblyPath;
+            if (string.IsNullOrWhiteSpace(assemblyPath))
+                assemblyPath = assembly.Location;
+            if (string.IsNullOrWhiteSpace(assemblyPath))
+            {
+                warnings.Add("Source links disabled: assembly path not available.");
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(options.SourceRootPath) && !string.IsNullOrWhiteSpace(options.SourceUrlPattern))
+                warnings.Add("SourceUrlPattern set without SourceRootPath; URLs may contain absolute paths.");
+
+            var pdbPath = Path.ChangeExtension(assemblyPath, ".pdb");
+            if (!File.Exists(pdbPath))
+            {
+                warnings.Add($"Source links disabled: PDB not found at {pdbPath}.");
+                return null;
+            }
+
+            try
+            {
+                var stream = File.OpenRead(pdbPath);
+                var provider = MetadataReaderProvider.FromPortablePdbStream(stream);
+                var root = string.IsNullOrWhiteSpace(options.SourceRootPath)
+                    ? null
+                    : Path.GetFullPath(options.SourceRootPath);
+                return new SourceLinkContext(provider, stream, root, options.SourceUrlPattern);
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"Source links disabled: {ex.Message}");
+                return null;
+            }
+        }
+
+        public ApiSourceLink? TryGetSource(Type type)
+        {
+            foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                var link = TryGetSource(ctor);
+                if (link is not null) return link;
+            }
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                if (method.IsSpecialName) continue;
+                var link = TryGetSource(method);
+                if (link is not null) return link;
+            }
+            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                var link = TryGetSource(property);
+                if (link is not null) return link;
+            }
+            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                var link = TryGetSource(evt);
+                if (link is not null) return link;
+            }
+            return null;
+        }
+
+        public ApiSourceLink? TryGetSource(MethodBase method)
+        {
+            if (method is null || method.MetadataToken == 0) return null;
+            try
+            {
+                var handle = MetadataTokens.MethodDefinitionHandle(method.MetadataToken);
+                var debugInfo = _reader.GetMethodDebugInformation(handle);
+                foreach (var sp in debugInfo.GetSequencePoints())
+                {
+                    if (sp.IsHidden) continue;
+                    var document = _reader.GetDocument(sp.Document);
+                    var path = _reader.GetString(document.Name);
+                    return BuildSourceLink(path, sp.StartLine);
+                }
+            }
+            catch
+            {
+                // ignore source mapping failures
+            }
+            return null;
+        }
+
+        public ApiSourceLink? TryGetSource(PropertyInfo property)
+        {
+            var accessor = property.GetGetMethod(true) ?? property.GetSetMethod(true);
+            return accessor is null ? null : TryGetSource(accessor);
+        }
+
+        public ApiSourceLink? TryGetSource(EventInfo evt)
+        {
+            var accessor = evt.GetAddMethod(true) ?? evt.GetRemoveMethod(true);
+            return accessor is null ? null : TryGetSource(accessor);
+        }
+
+        public ApiSourceLink? TryGetSource(FieldInfo field)
+        {
+            return null;
+        }
+
+        private ApiSourceLink? BuildSourceLink(string path, int line)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            var resolved = path;
+            if (!string.IsNullOrWhiteSpace(_sourceRoot))
+            {
+                try
+                {
+                    resolved = Path.GetRelativePath(_sourceRoot, path);
+                }
+                catch
+                {
+                    resolved = path;
+                }
+            }
+            resolved = resolved.Replace('\\', '/');
+            var url = string.IsNullOrWhiteSpace(_pattern)
+                ? null
+                : _pattern.Replace("{path}", resolved).Replace("{line}", line.ToString());
+            return new ApiSourceLink { Path = resolved, Line = line, Url = url };
+        }
+
+        public void Dispose()
+        {
+            _provider.Dispose();
+            _stream.Dispose();
+        }
     }
 
     private sealed class ApiExceptionModel

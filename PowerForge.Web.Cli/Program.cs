@@ -605,6 +605,8 @@ try
             var docsTypeTemplate = TryGetOptionValue(subArgs, "--template-docs-type");
             var docsScript = TryGetOptionValue(subArgs, "--docs-script");
             var searchScript = TryGetOptionValue(subArgs, "--search-script");
+            var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
+            var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
             var navJson = TryGetOptionValue(subArgs, "--nav") ?? TryGetOptionValue(subArgs, "--nav-json");
             var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
             var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
@@ -644,6 +646,8 @@ try
                 DocsTypeTemplatePath = docsTypeTemplate,
                 DocsScriptPath = docsScript,
                 SearchScriptPath = searchScript,
+                SourceRootPath = sourceRoot,
+                SourceUrlPattern = sourceUrl,
                 NavJsonPath = navJson
             };
             if (includeNamespaces.Count > 0)
@@ -1448,6 +1452,8 @@ internal static class WebPipelineRunner
                         var docsTypeTemplate = ResolvePath(baseDir, GetString(step, "templateDocsType") ?? GetString(step, "template-docs-type"));
                         var docsScript = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script"));
                         var searchScript = ResolvePath(baseDir, GetString(step, "searchScript") ?? GetString(step, "search-script"));
+                        var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
+                        var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ?? GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
                         var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
                         var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
                         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
@@ -1485,6 +1491,8 @@ internal static class WebPipelineRunner
                             DocsTypeTemplatePath = docsTypeTemplate,
                             DocsScriptPath = docsScript,
                             SearchScriptPath = searchScript,
+                            SourceRootPath = sourceRoot,
+                            SourceUrlPattern = sourceUrl,
                             NavJsonPath = nav
                         };
                         var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);

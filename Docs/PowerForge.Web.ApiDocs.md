@@ -106,6 +106,7 @@ Member layout:
 - `.member-card` – member card block (data attributes: `data-kind`, `data-inherited`, `data-search`)
 - `.member-signature` – signature code line
 - `.member-anchor` – anchor link
+- `.member-source` – source link row (optional)
 - `.member-return` – return type row
 - `.member-inherited` – inherited badge row
 - `.member-value` – enum value row
@@ -119,6 +120,14 @@ Member layout:
 - `.type-meta-interfaces` – implemented interfaces list
 - `.type-meta-inheritance` – base type row
 - `.type-meta-flags` – modifiers row
+- `.type-meta-source` – source link row (optional)
+- `.type-toc` – per-type table of contents
+- `.type-toc-title` – TOC title label
+- `.type-inheritance` – inheritance chain section
+- `.inheritance-list` – inheritance list
+- `.inheritance-current` – current type within inheritance list
+- `.type-derived` – derived types section
+- `.derived-list` – derived types list
 - `.type-parameters` – type parameter section
 - `.type-examples` – example section
 - `.type-see-also` – see also section
@@ -144,6 +153,7 @@ When assembly reflection is available, the generator emits:
 - attributes for types and members
 - extension methods (shown under “Extension Methods”)
 - constructors are rendered in their own section and overloads are grouped by name
+- optional source links (when `sourceRoot` + `sourceUrl` are set and PDBs exist)
 
 `search.js` (simple template) expects:
 - `#api-search` input
@@ -189,13 +199,15 @@ Pipeline step:
   "out": "./_site/api",
   "format": "both",
   "template": "docs",
-  "css": "/css/api-docs.css"
+  "css": "/css/api-docs.css",
+  "sourceRoot": "..",
+  "sourceUrl": "https://github.com/YourOrg/YourRepo/blob/main/{path}#L{line}"
 }
 ```
 
 CLI:
 ```bash
-powerforge-web apidocs --type csharp --xml ./bin/Release/net10.0/MyLib.xml --assembly ./bin/Release/net10.0/MyLib.dll --out ./_site/api --format both --template docs --css /css/api-docs.css
+powerforge-web apidocs --type csharp --xml ./bin/Release/net10.0/MyLib.xml --assembly ./bin/Release/net10.0/MyLib.dll --out ./_site/api --format both --template docs --css /css/api-docs.css --source-root .. --source-url "https://github.com/YourOrg/YourRepo/blob/main/{path}#L{line}"
 ```
 
 ### PowerShell module help

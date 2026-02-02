@@ -59,6 +59,13 @@ a:hover{color:#a78bfa}
 .type-meta-list{display:flex;flex-wrap:wrap;gap:6px}
 .type-meta-flags-list{color:#e6e9f3}
 .type-summary{color:#e6e9f3;margin:8px 0}
+.type-toc{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:10px 12px;margin:12px 0}
+.type-toc-title{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8}
+.type-toc ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}
+.type-toc a{color:#cbd5f5}
+.type-inheritance,.type-derived{margin:12px 0}
+.inheritance-list,.derived-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+.inheritance-current{color:#e6e9f3;font-weight:600}
 .remarks{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:12px 14px;margin:12px 0}
 .member-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:16px 0}
 .member-filter label{display:block;font-size:.75rem;color:#94a3b8;margin-bottom:6px}
@@ -76,6 +83,8 @@ a:hover{color:#a78bfa}
 .member-signature{display:block;background:#111827;border-radius:8px;padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e2e8f0}
 .member-anchor{color:#94a3b8;font-size:.85rem}
 .member-return,.member-inherited,.member-value{color:#94a3b8;font-size:.8rem}
+.member-source{color:#94a3b8;font-size:.75rem}
+.member-source a,.type-meta-source a{color:#a78bfa}
 .member-summary{margin:0;color:#e2e8f0}
 .type-parameters,.type-examples,.type-see-also{margin:12px 0}
 .typeparam-list,.exception-list,.see-also-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
