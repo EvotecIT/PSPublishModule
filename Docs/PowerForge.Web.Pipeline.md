@@ -54,6 +54,7 @@ Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
 - `template`: `simple` (default) or `docs` (sidebar layout)
+- `type`: `CSharp` (default) or `PowerShell` (uses PowerShell help XML)
 - `templateRoot` lets you override built-in templates/assets by placing files like
   `index.html`, `type.html`, `docs-index.html`, `docs-type.html`, `docs.js`,
   `search.js`, or `fallback.css` in that folder
@@ -75,6 +76,7 @@ Recommended usage:
 ```json
 {
   "task": "apidocs",
+  "type": "CSharp",
   "xml": "./Artifacts/MyLib.xml",
   "assembly": "./Artifacts/MyLib.dll",
   "out": "./Artifacts/site/api",
@@ -85,6 +87,19 @@ Recommended usage:
   "headerHtml": "./themes/nova/partials/api-header.html",
   "footerHtml": "./themes/nova/partials/api-footer.html",
   "nav": "./site.json"
+}
+```
+
+PowerShell help usage:
+```json
+{
+  "task": "apidocs",
+  "type": "PowerShell",
+  "help": "./Module/en-US/MyModule-help.xml",
+  "out": "./Artifacts/site/api",
+  "format": "both",
+  "template": "docs",
+  "css": "/css/api-docs.css"
 }
 ```
 
@@ -121,6 +136,22 @@ Project.json example (metadata you can reuse across repos):
 Notes:
 - `ApiDocs` in `project.json` is **metadata**; today you still add the `apidocs` pipeline step.
 - See `Samples/PowerForge.Web.Sample/projects/ApiDocsDemo/project.json` for a full example.
+
+#### changelog
+Generates a `data/changelog.json` file from a local `CHANGELOG.md` or GitHub releases.
+```json
+{
+  "task": "changelog",
+  "source": "auto",
+  "changelog": "./CHANGELOG.md",
+  "repo": "EvotecIT/IntelligenceX",
+  "out": "./Artifacts/site/data/changelog.json"
+}
+```
+Notes:
+- `source`: `auto` (default), `file`, or `github`
+- Use `repo` (`owner/name`) or `repoUrl` for GitHub releases.
+- Use `max` to limit number of releases.
 
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.

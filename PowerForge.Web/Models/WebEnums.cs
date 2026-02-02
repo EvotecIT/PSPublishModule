@@ -51,6 +51,17 @@ public enum ApiDocsType
     PowerShell
 }
 
+/// <summary>Changelog source selection.</summary>
+public enum WebChangelogSource
+{
+    /// <summary>Use local changelog when available, otherwise fall back to repository releases.</summary>
+    Auto,
+    /// <summary>Parse a local changelog file.</summary>
+    File,
+    /// <summary>Pull releases from a repository API.</summary>
+    GitHub
+}
+
 /// <summary>Repository provider selection.</summary>
 public enum RepositoryProvider
 {

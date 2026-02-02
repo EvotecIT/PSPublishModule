@@ -584,7 +584,9 @@ try
         }
         case "apidocs":
         {
+            var typeText = TryGetOptionValue(subArgs, "--type");
             var xmlPath = TryGetOptionValue(subArgs, "--xml");
+            var helpPath = TryGetOptionValue(subArgs, "--help-path");
             var outPath = TryGetOptionValue(subArgs, "--out") ??
                           TryGetOptionValue(subArgs, "--out-path") ??
                           TryGetOptionValue(subArgs, "--output-path");
@@ -609,14 +611,23 @@ try
             var includeTypes = ReadOptionList(subArgs, "--include-type");
             var excludeTypes = ReadOptionList(subArgs, "--exclude-type");
 
-            if (string.IsNullOrWhiteSpace(xmlPath))
-                return Fail("Missing required --xml.", outputJson, logger, "web.apidocs");
+            var apiType = ApiDocsType.CSharp;
+            if (!string.IsNullOrWhiteSpace(typeText) &&
+                Enum.TryParse<ApiDocsType>(typeText, true, out var parsedType))
+                apiType = parsedType;
+
+            if (apiType == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(xmlPath))
+                return Fail("Missing required --xml (CSharp API docs).", outputJson, logger, "web.apidocs");
+            if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(helpPath))
+                return Fail("Missing required --help-path (PowerShell API docs).", outputJson, logger, "web.apidocs");
             if (string.IsNullOrWhiteSpace(outPath))
                 return Fail("Missing required --out.", outputJson, logger, "web.apidocs");
 
             var options = new WebApiDocsOptions
             {
-                XmlPath = xmlPath,
+                Type = apiType,
+                XmlPath = xmlPath ?? string.Empty,
+                HelpPath = helpPath,
                 AssemblyPath = assemblyPath,
                 OutputPath = outPath,
                 Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
@@ -670,6 +681,65 @@ try
             logger.Success($"API docs generated: {result.OutputPath}");
             logger.Info($"Types: {result.TypeCount}");
             logger.Info($"Index: {result.IndexPath}");
+            return 0;
+        }
+        case "changelog":
+        {
+            var sourceText = TryGetOptionValue(subArgs, "--source");
+            var changelogPath = TryGetOptionValue(subArgs, "--changelog") ?? TryGetOptionValue(subArgs, "--changelog-path");
+            var outPath = TryGetOptionValue(subArgs, "--out") ??
+                          TryGetOptionValue(subArgs, "--out-path") ??
+                          TryGetOptionValue(subArgs, "--output-path");
+            var repo = TryGetOptionValue(subArgs, "--repo");
+            var repoUrl = TryGetOptionValue(subArgs, "--repo-url");
+            var token = TryGetOptionValue(subArgs, "--token");
+            var maxText = TryGetOptionValue(subArgs, "--max");
+            var title = TryGetOptionValue(subArgs, "--title");
+
+            if (string.IsNullOrWhiteSpace(outPath))
+                return Fail("Missing required --out.", outputJson, logger, "web.changelog");
+
+            var source = WebChangelogSource.Auto;
+            if (!string.IsNullOrWhiteSpace(sourceText) &&
+                Enum.TryParse<WebChangelogSource>(sourceText, true, out var parsedSource))
+                source = parsedSource;
+
+            var max = ParseIntOption(maxText, 0);
+            var options = new WebChangelogOptions
+            {
+                Source = source,
+                ChangelogPath = changelogPath,
+                OutputPath = outPath,
+                Repo = repo,
+                RepoUrl = repoUrl,
+                Token = token,
+                Title = title,
+                MaxReleases = max <= 0 ? null : max
+            };
+
+            var result = WebChangelogGenerator.Generate(options);
+
+            if (!outputJson && result.Warnings.Length > 0)
+            {
+                foreach (var warning in result.Warnings)
+                    logger.Warn(warning);
+            }
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.changelog",
+                    Success = true,
+                    ExitCode = 0,
+                    Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebChangelogResult)
+                });
+                return 0;
+            }
+
+            logger.Success($"Changelog generated: {result.OutputPath}");
+            logger.Info($"Releases: {result.ReleaseCount}");
             return 0;
         }
         case "optimize":
@@ -1068,11 +1138,14 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
-    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>]");
+    Console.WriteLine("  powerforge-web apidocs --type csharp --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>]");
+    Console.WriteLine("  powerforge-web apidocs --type powershell --help-path <file|dir> --out <dir> [--title <text>] [--base-url <url>]");
     Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
     Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
     Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
+    Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
+    Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
@@ -1342,7 +1415,9 @@ internal static class WebPipelineRunner
                     }
                     case "apidocs":
                     {
+                        var typeText = GetString(step, "type");
                         var xml = ResolvePath(baseDir, GetString(step, "xml"));
+                        var help = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
                         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
                         var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
                         var title = GetString(step, "title");
@@ -1364,12 +1439,22 @@ internal static class WebPipelineRunner
                         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
                         var includeTypes = GetString(step, "includeType") ?? GetString(step, "include-type");
                         var excludeTypes = GetString(step, "excludeType") ?? GetString(step, "exclude-type");
-                        if (string.IsNullOrWhiteSpace(xml) || string.IsNullOrWhiteSpace(outPath))
-                            throw new InvalidOperationException("apidocs requires xml and out.");
+                        var apiType = ApiDocsType.CSharp;
+                        if (!string.IsNullOrWhiteSpace(typeText) &&
+                            Enum.TryParse<ApiDocsType>(typeText, true, out var parsedType))
+                            apiType = parsedType;
+                        if (string.IsNullOrWhiteSpace(outPath))
+                            throw new InvalidOperationException("apidocs requires out.");
+                        if (apiType == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(xml))
+                            throw new InvalidOperationException("apidocs requires xml for CSharp.");
+                        if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
+                            throw new InvalidOperationException("apidocs requires help for PowerShell.");
 
                         var options = new WebApiDocsOptions
                         {
-                            XmlPath = xml,
+                            Type = apiType,
+                            XmlPath = xml ?? string.Empty,
+                            HelpPath = help,
                             AssemblyPath = assembly,
                             OutputPath = outPath,
                             Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
@@ -1420,6 +1505,53 @@ internal static class WebPipelineRunner
                         }
                         stepResult.Success = true;
                         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+                        break;
+                    }
+                    case "changelog":
+                    {
+                        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                        var sourceText = GetString(step, "source");
+                        var changelog = ResolvePath(baseDir, GetString(step, "changelog") ?? GetString(step, "changelogPath") ?? GetString(step, "changelog-path"));
+                        var repo = GetString(step, "repo");
+                        var repoUrl = GetString(step, "repoUrl") ?? GetString(step, "repo-url");
+                        var token = GetString(step, "token");
+                        var maxValue = GetInt(step, "max") ?? 0;
+                        var title = GetString(step, "title");
+                        if (string.IsNullOrWhiteSpace(outPath))
+                            throw new InvalidOperationException("changelog requires out.");
+
+                        var source = WebChangelogSource.Auto;
+                        if (!string.IsNullOrWhiteSpace(sourceText) &&
+                            Enum.TryParse<WebChangelogSource>(sourceText, true, out var parsedSource))
+                            source = parsedSource;
+
+                        var options = new WebChangelogOptions
+                        {
+                            Source = source,
+                            ChangelogPath = changelog,
+                            OutputPath = outPath,
+                            Repo = repo,
+                            RepoUrl = repoUrl,
+                            Token = token,
+                            Title = title,
+                            MaxReleases = maxValue <= 0 ? null : maxValue
+                        };
+
+                        var res = WebChangelogGenerator.Generate(options);
+                        var note = res.Source != WebChangelogSource.Auto ? $" ({res.Source.ToString().ToLowerInvariant()})" : string.Empty;
+                        if (res.Warnings.Length > 0)
+                        {
+                            var firstWarning = res.Warnings[0];
+                            if (!string.IsNullOrWhiteSpace(firstWarning))
+                            {
+                                var trimmed = firstWarning.Length > 120
+                                    ? $"{firstWarning.Substring(0, 117)}..."
+                                    : firstWarning;
+                                note += $" (warn: {trimmed})";
+                            }
+                        }
+                        stepResult.Success = true;
+                        stepResult.Message = $"Changelog {res.ReleaseCount} releases{note}";
                         break;
                     }
                     case "llms":

@@ -10,8 +10,12 @@ namespace PowerForge.Web;
 /// <summary>Options for API documentation generation.</summary>
 public sealed class WebApiDocsOptions
 {
+    /// <summary>Documentation source type.</summary>
+    public ApiDocsType Type { get; set; } = ApiDocsType.CSharp;
     /// <summary>Path to the XML documentation file.</summary>
     public string XmlPath { get; set; } = string.Empty;
+    /// <summary>Path to PowerShell help XML or folder.</summary>
+    public string? HelpPath { get; set; }
     /// <summary>Optional assembly path for version metadata.</summary>
     public string? AssemblyPath { get; set; }
     /// <summary>Output directory for generated docs.</summary>
@@ -71,46 +75,57 @@ public static class WebApiDocsGenerator
     public static WebApiDocsResult Generate(WebApiDocsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
-        if (string.IsNullOrWhiteSpace(options.XmlPath))
-            throw new ArgumentException("XmlPath is required.", nameof(options));
+        if (options.Type == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(options.XmlPath))
+            throw new ArgumentException("XmlPath is required for CSharp API docs.", nameof(options));
+        if (options.Type == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(options.HelpPath))
+            throw new ArgumentException("HelpPath is required for PowerShell API docs.", nameof(options));
         if (string.IsNullOrWhiteSpace(options.OutputPath))
             throw new ArgumentException("OutputPath is required.", nameof(options));
 
-        var xmlPath = Path.GetFullPath(options.XmlPath);
+        var xmlPath = options.Type == ApiDocsType.CSharp
+            ? Path.GetFullPath(options.XmlPath)
+            : string.Empty;
+        var helpPath = options.Type == ApiDocsType.PowerShell && !string.IsNullOrWhiteSpace(options.HelpPath)
+            ? Path.GetFullPath(options.HelpPath)
+            : string.Empty;
         var outputPath = Path.GetFullPath(options.OutputPath);
         Directory.CreateDirectory(outputPath);
 
         var warnings = new List<string>();
-        if (!File.Exists(xmlPath))
+        if (options.Type == ApiDocsType.CSharp && !File.Exists(xmlPath))
             warnings.Add($"XML docs not found: {xmlPath}");
+        if (options.Type == ApiDocsType.PowerShell && !File.Exists(helpPath) && !Directory.Exists(helpPath))
+            warnings.Add($"PowerShell help not found: {helpPath}");
 
         Assembly? assembly = null;
-        if (!string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
+        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
         {
             assembly = TryLoadAssembly(Path.GetFullPath(options.AssemblyPath), warnings);
         }
-        else if (!string.IsNullOrWhiteSpace(options.AssemblyPath))
+        else if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
         {
             warnings.Add($"Assembly not found: {options.AssemblyPath}");
         }
 
-        var apiDoc = ParseXml(xmlPath, assembly, options);
+        var apiDoc = options.Type == ApiDocsType.PowerShell
+            ? ParsePowerShellHelp(helpPath, warnings)
+            : ParseXml(xmlPath, assembly, options);
         var usedReflectionFallback = false;
-        if (apiDoc.Types.Count == 0 && assembly is not null)
+        if (options.Type == ApiDocsType.CSharp && apiDoc.Types.Count == 0 && assembly is not null)
         {
             PopulateFromAssembly(apiDoc, assembly);
             usedReflectionFallback = apiDoc.Types.Count > 0;
             if (!usedReflectionFallback)
                 warnings.Add("Reflection fallback produced 0 public types.");
         }
-        else if (apiDoc.Types.Count == 0 && assembly is null && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+        else if (options.Type == ApiDocsType.CSharp && apiDoc.Types.Count == 0 && assembly is null && !string.IsNullOrWhiteSpace(options.AssemblyPath))
         {
             warnings.Add("Reflection fallback unavailable (assembly could not be loaded).");
         }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
 
-        if (!string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
+        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
         {
             try
             {
@@ -281,6 +296,152 @@ public static class WebApiDocsGenerator
         }
 
         return apiDoc;
+    }
+
+    private static ApiDocModel ParsePowerShellHelp(string helpPath, List<string> warnings)
+    {
+        var apiDoc = new ApiDocModel();
+        if (string.IsNullOrWhiteSpace(helpPath))
+            return apiDoc;
+
+        var resolved = ResolvePowerShellHelpFile(helpPath, warnings);
+        if (string.IsNullOrWhiteSpace(resolved) || !File.Exists(resolved))
+            return apiDoc;
+
+        var moduleName = Path.GetFileNameWithoutExtension(resolved) ?? string.Empty;
+        if (moduleName.EndsWith("-help", StringComparison.OrdinalIgnoreCase))
+            moduleName = moduleName[..^5];
+        apiDoc.AssemblyName = moduleName;
+
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Load(resolved);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Failed to parse PowerShell help: {Path.GetFileName(resolved)} ({ex.GetType().Name}: {ex.Message})");
+            return apiDoc;
+        }
+
+        var commandNs = XNamespace.Get("http://schemas.microsoft.com/maml/dev/command/2004/10");
+        var mamlNs = XNamespace.Get("http://schemas.microsoft.com/maml/2004/10");
+        var devNs = XNamespace.Get("http://schemas.microsoft.com/maml/dev/2004/10");
+
+        foreach (var command in doc.Descendants(commandNs + "command"))
+        {
+            var details = command.Element(commandNs + "details");
+            var name = details?.Element(commandNs + "name")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                name = command.Element(mamlNs + "name")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var summary = GetFirstParagraph(details?.Element(mamlNs + "description"), mamlNs);
+            var remarks = JoinParagraphs(command.Element(mamlNs + "description"), mamlNs);
+            var returns = JoinReturnValues(command, commandNs, mamlNs);
+
+            var type = new ApiTypeModel
+            {
+                Name = name!,
+                FullName = name!,
+                Namespace = moduleName ?? string.Empty,
+                Kind = "Cmdlet",
+                Slug = Slugify(name!),
+                Summary = summary,
+                Remarks = remarks
+            };
+
+            var syntax = command.Element(commandNs + "syntax");
+            if (syntax is not null)
+            {
+                foreach (var syntaxItem in syntax.Elements(commandNs + "syntaxItem"))
+                {
+                    var member = new ApiMemberModel
+                    {
+                        Name = name!,
+                        Returns = returns
+                    };
+                    foreach (var parameter in syntaxItem.Elements(commandNs + "parameter"))
+                    {
+                        var paramName = parameter.Element(mamlNs + "name")?.Value?.Trim() ?? string.Empty;
+                        var paramSummary = JoinParagraphs(parameter.Element(mamlNs + "description"), mamlNs);
+                        var paramType = parameter.Element(commandNs + "parameterValue")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(paramType))
+                            paramType = parameter.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+
+                        member.Parameters.Add(new ApiParameterModel
+                        {
+                            Name = paramName,
+                            Type = paramType,
+                            Summary = paramSummary
+                        });
+                    }
+                    type.Methods.Add(member);
+                }
+            }
+
+            apiDoc.Types[type.FullName] = type;
+        }
+
+        return apiDoc;
+    }
+
+    private static string? ResolvePowerShellHelpFile(string helpPath, List<string> warnings)
+    {
+        if (File.Exists(helpPath))
+            return helpPath;
+
+        if (!Directory.Exists(helpPath))
+            return null;
+
+        var primary = Directory.GetFiles(helpPath, "*-help.xml", SearchOption.AllDirectories)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var secondary = primary.Count == 0
+            ? Directory.GetFiles(helpPath, "*help.xml", SearchOption.AllDirectories)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            : new List<string>();
+
+        var candidates = primary.Count > 0 ? primary : secondary;
+        if (candidates.Count == 0)
+            return null;
+
+        if (candidates.Count > 1)
+            warnings.Add($"Multiple PowerShell help files found, using {Path.GetFileName(candidates[0])}");
+
+        return candidates[0];
+    }
+
+    private static string? GetFirstParagraph(XElement? parent, XNamespace mamlNs)
+    {
+        if (parent is null) return null;
+        return parent.Elements(mamlNs + "para")
+            .Select(p => p.Value.Trim())
+            .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p));
+    }
+
+    private static string? JoinParagraphs(XElement? parent, XNamespace mamlNs)
+    {
+        if (parent is null) return null;
+        var parts = parent.Elements(mamlNs + "para")
+            .Select(p => p.Value.Trim())
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
+    }
+
+    private static string? JoinReturnValues(XElement command, XNamespace commandNs, XNamespace mamlNs)
+    {
+        var values = command.Element(commandNs + "returnValues");
+        if (values is null) return null;
+        var parts = values.Elements(commandNs + "returnValue")
+            .Select(rv => JoinParagraphs(rv.Element(mamlNs + "description"), mamlNs))
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .Select(text => text!)
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
     }
 
     private static void PopulateFromAssembly(ApiDocModel doc, Assembly assembly)

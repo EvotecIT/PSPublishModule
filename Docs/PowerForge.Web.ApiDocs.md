@@ -102,3 +102,9 @@ If the XML documentation file is missing or empty, the generator falls back to
 reflection (public types only). This still produces the API reference pages,
 but summaries/remarks/parameter descriptions will be empty until `///` comments
 are added.
+
+## PowerShell help
+
+Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
+(for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
+Each command is treated as a “type” with parameter sets rendered as methods.
