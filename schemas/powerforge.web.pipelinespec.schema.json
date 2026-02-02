@@ -112,7 +112,10 @@
         "overview": { "type": "string" },
         "license": { "type": "string" },
         "targets": { "type": "string" },
-        "extra": { "type": "string" }
+        "extra": { "type": "string" },
+        "apiLevel": { "type": "string", "enum": ["None", "Summary", "Full"] },
+        "apiMaxTypes": { "type": "integer", "minimum": 0 },
+        "apiMaxMembers": { "type": "integer", "minimum": 0 }
       },
       "required": ["task", "siteRoot"]
     },
