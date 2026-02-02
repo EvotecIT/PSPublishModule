@@ -10,9 +10,10 @@ Two template modes are available:
 - `simple` (minimal, single-column)
 - `docs` (sidebar layout)
 
-Starter copies:
-- `Assets/ApiDocs/Templates/default`
-- `Assets/ApiDocs/Templates/sidebar-right` (docs layout with right sidebar)
+To customize templates, copy the embedded defaults from:
+`PowerForge.Web/Assets/ApiDocs` into your own folder and pass it as
+`templateRoot`. Use `index.html`/`type.html` for the simple layout and
+`docs-index.html`/`docs-type.html` for the docs layout.
 
 ## Common tokens (all templates)
 
