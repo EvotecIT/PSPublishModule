@@ -1016,6 +1016,9 @@ public static class WebSiteBuilder
                 var htmlContent = renderMarkdown
                     ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
                     : processedBody;
+                var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                if (renderMarkdown)
+                    EnsurePrismAssets(meta, htmlContent);
                 var toc = BuildTableOfContents(htmlContent);
                 if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(projectSlug) &&
@@ -1051,7 +1054,7 @@ public static class WebSiteBuilder
                         ? BuildBundleResources(Path.GetDirectoryName(file) ?? string.Empty)
                         : Array.Empty<PageResource>(),
                     ProjectSlug = projectSlug,
-                    Meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase),
+                    Meta = meta,
                     Outputs = ResolveOutputs(matter?.Meta, collection)
                 });
             }
@@ -1394,6 +1397,64 @@ public static class WebSiteBuilder
         var html = MarkdownRenderer.RenderToHtml(content);
         File.WriteAllText(cacheFile, html);
         return html;
+    }
+
+    private static void EnsurePrismAssets(Dictionary<string, object?> meta, string htmlContent)
+    {
+        if (meta is null) return;
+
+        if (TryGetMetaBool(meta, "prism", out var prismEnabled) && !prismEnabled)
+            return;
+
+        var hasCode = ContainsMarkdownCode(htmlContent);
+        if (!hasCode && !(prismEnabled))
+            return;
+
+        if (MetaContains(meta, "extra_css", "prismjs") || MetaContains(meta, "extra_scripts", "prismjs"))
+            return;
+
+        var cdn = TryGetMetaString(meta, "prism_cdn", out var prismCdn) && !string.IsNullOrWhiteSpace(prismCdn)
+            ? prismCdn!.TrimEnd('/')
+            : "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+
+        var css = string.Join(Environment.NewLine, new[]
+        {
+            $"<link rel=\"stylesheet\" href=\"{cdn}/themes/prism.min.css\" media=\"(prefers-color-scheme: light)\" />",
+            $"<link rel=\"stylesheet\" href=\"{cdn}/themes/prism-okaidia.min.css\" media=\"(prefers-color-scheme: dark)\" />"
+        });
+
+        var scripts = string.Join(Environment.NewLine, new[]
+        {
+            $"<script src=\"{cdn}/components/prism-core.min.js\"></script>",
+            $"<script src=\"{cdn}/plugins/autoloader/prism-autoloader.min.js\"></script>",
+            $"<script>if(window.Prism&&Prism.plugins&&Prism.plugins.autoloader){{Prism.plugins.autoloader.languages_path='{cdn}/components/';}}</script>"
+        });
+
+        AppendMetaHtml(meta, "extra_css", css);
+        AppendMetaHtml(meta, "extra_scripts", scripts);
+    }
+
+    private static bool ContainsMarkdownCode(string htmlContent)
+    {
+        if (string.IsNullOrWhiteSpace(htmlContent)) return false;
+        return htmlContent.IndexOf("class=\"language-", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               htmlContent.IndexOf("class=language-", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               htmlContent.IndexOf("<pre><code", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static void AppendMetaHtml(Dictionary<string, object?> meta, string key, string html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return;
+        if (meta.TryGetValue(key, out var existing) && existing is string existingText && !string.IsNullOrWhiteSpace(existingText))
+            meta[key] = existingText + Environment.NewLine + html;
+        else
+            meta[key] = html;
+    }
+
+    private static bool MetaContains(Dictionary<string, object?> meta, string key, string needle)
+    {
+        if (!meta.TryGetValue(key, out var existing) || existing is not string text) return false;
+        return text.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static string ComputeCacheKey(string content, string sourcePath, BuildCacheSpec? cache)
