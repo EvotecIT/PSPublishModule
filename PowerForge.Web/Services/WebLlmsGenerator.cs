@@ -31,6 +31,12 @@ public sealed class WebLlmsOptions
     public string? Targets { get; set; }
     /// <summary>Optional path to extra content for llms-full.</summary>
     public string? ExtraContentPath { get; set; }
+    /// <summary>Optional API detail level for llms-full (none, summary, full).</summary>
+    public WebApiDetailLevel ApiDetailLevel { get; set; } = WebApiDetailLevel.None;
+    /// <summary>Maximum number of API types to include.</summary>
+    public int ApiMaxTypes { get; set; } = 200;
+    /// <summary>Maximum number of API members to include when ApiDetailLevel is full.</summary>
+    public int ApiMaxMembers { get; set; } = 2000;
 }
 
 /// <summary>Generates llms.txt files for documentation consumers.</summary>
@@ -253,6 +259,8 @@ public static class WebLlmsGenerator
         lines.Add($"- {apiBase.TrimEnd('/')}/search.json");
         lines.Add($"- {apiBase.TrimEnd('/')}/types/{{slug}}.json");
 
+        AppendApiDetails(lines, options, apiBase);
+
         if (!string.IsNullOrWhiteSpace(options.ExtraContentPath))
         {
             var extraPath = Path.GetFullPath(options.ExtraContentPath);
@@ -264,6 +272,175 @@ public static class WebLlmsGenerator
         }
 
         File.WriteAllText(path, string.Join(Environment.NewLine, lines), Encoding.UTF8);
+    }
+
+    private static void AppendApiDetails(List<string> lines, WebLlmsOptions options, string apiBase)
+    {
+        if (options.ApiDetailLevel == WebApiDetailLevel.None)
+            return;
+
+        var indexPath = options.ApiIndexPath;
+        if (string.IsNullOrWhiteSpace(indexPath))
+            indexPath = Path.Combine(options.SiteRoot, "api", "index.json");
+        var fullIndexPath = Path.GetFullPath(indexPath);
+        if (!File.Exists(fullIndexPath))
+            return;
+
+        var entries = ReadApiIndex(fullIndexPath);
+        if (entries.Count == 0)
+            return;
+
+        var maxTypes = options.ApiMaxTypes <= 0 ? entries.Count : Math.Min(options.ApiMaxTypes, entries.Count);
+        var maxMembers = options.ApiMaxMembers <= 0 ? int.MaxValue : options.ApiMaxMembers;
+        var typesDir = Path.Combine(Path.GetDirectoryName(fullIndexPath) ?? ".", "types");
+
+        lines.Add(string.Empty);
+        lines.Add("## API Summary");
+
+        for (var i = 0; i < maxTypes; i++)
+        {
+            var entry = entries[i];
+            var summary = string.IsNullOrWhiteSpace(entry.Summary) ? string.Empty : $" — {entry.Summary}";
+            lines.Add($"- {entry.FullName}{summary}");
+        }
+
+        if (options.ApiDetailLevel != WebApiDetailLevel.Full)
+            return;
+
+        lines.Add(string.Empty);
+        lines.Add("## API Members");
+        foreach (var entry in entries.Take(maxTypes))
+        {
+            if (maxMembers <= 0) break;
+            var typePath = Path.Combine(typesDir, $"{entry.Slug}.json");
+            if (!File.Exists(typePath)) continue;
+
+            var detail = ReadApiTypeDetail(typePath);
+            lines.Add(string.Empty);
+            lines.Add($"### {entry.FullName}");
+            if (!string.IsNullOrWhiteSpace(entry.Summary))
+                lines.Add(entry.Summary);
+
+            maxMembers = AppendMemberLines(lines, "Methods", detail.Methods, maxMembers);
+            maxMembers = AppendMemberLines(lines, "Properties", detail.Properties, maxMembers);
+            maxMembers = AppendMemberLines(lines, "Fields", detail.Fields, maxMembers);
+            maxMembers = AppendMemberLines(lines, "Events", detail.Events, maxMembers);
+        }
+    }
+
+    private static int AppendMemberLines(List<string> lines, string title, List<ApiMemberEntry> members, int remaining)
+    {
+        if (remaining <= 0 || members.Count == 0)
+            return remaining;
+
+        lines.Add(string.Empty);
+        lines.Add($"#### {title}");
+        foreach (var member in members)
+        {
+            if (remaining <= 0) break;
+            var summary = string.IsNullOrWhiteSpace(member.Summary) ? string.Empty : $" — {member.Summary}";
+            var signature = string.IsNullOrWhiteSpace(member.Signature) ? member.Name : member.Signature;
+            lines.Add($"- {signature}{summary}");
+            remaining--;
+        }
+        return remaining;
+    }
+
+    private static List<ApiIndexEntry> ReadApiIndex(string indexPath)
+    {
+        var results = new List<ApiIndexEntry>();
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(indexPath));
+            if (!doc.RootElement.TryGetProperty("types", out var types) || types.ValueKind != JsonValueKind.Array)
+                return results;
+            foreach (var item in types.EnumerateArray())
+            {
+                var entry = new ApiIndexEntry
+                {
+                    Name = ReadString(item, "name"),
+                    FullName = ReadString(item, "fullName"),
+                    Summary = ReadString(item, "summary"),
+                    Kind = ReadString(item, "kind"),
+                    Slug = ReadString(item, "slug")
+                };
+                if (!string.IsNullOrWhiteSpace(entry.FullName))
+                    results.Add(entry);
+            }
+        }
+        catch
+        {
+            return results;
+        }
+        return results;
+    }
+
+    private static ApiTypeDetail ReadApiTypeDetail(string typePath)
+    {
+        var detail = new ApiTypeDetail();
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(typePath));
+            detail.Methods = ReadMemberArray(doc.RootElement, "methods");
+            detail.Properties = ReadMemberArray(doc.RootElement, "properties");
+            detail.Fields = ReadMemberArray(doc.RootElement, "fields");
+            detail.Events = ReadMemberArray(doc.RootElement, "events");
+        }
+        catch
+        {
+            return detail;
+        }
+        return detail;
+    }
+
+    private static List<ApiMemberEntry> ReadMemberArray(JsonElement root, string name)
+    {
+        var list = new List<ApiMemberEntry>();
+        if (!root.TryGetProperty(name, out var members) || members.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var item in members.EnumerateArray())
+        {
+            var entry = new ApiMemberEntry
+            {
+                Name = ReadString(item, "name"),
+                Summary = ReadString(item, "summary"),
+                Signature = ReadString(item, "signature")
+            };
+            if (!string.IsNullOrWhiteSpace(entry.Name))
+                list.Add(entry);
+        }
+        return list;
+    }
+
+    private static string ReadString(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
+    }
+
+    private sealed class ApiIndexEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Summary { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public string Slug { get; set; } = string.Empty;
+    }
+
+    private sealed class ApiTypeDetail
+    {
+        public List<ApiMemberEntry> Methods { get; set; } = new();
+        public List<ApiMemberEntry> Properties { get; set; } = new();
+        public List<ApiMemberEntry> Fields { get; set; } = new();
+        public List<ApiMemberEntry> Events { get; set; } = new();
+    }
+
+    private sealed class ApiMemberEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Summary { get; set; } = string.Empty;
+        public string Signature { get; set; } = string.Empty;
     }
 
     private sealed class ProjectInfo

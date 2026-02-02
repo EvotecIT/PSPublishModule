@@ -203,9 +203,15 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
   "apiBase": "/api",
   "name": "MyLib",
   "packageId": "MyLib",
-  "version": "1.2.3"
+  "version": "1.2.3",
+  "apiLevel": "Summary",
+  "apiMaxTypes": 200,
+  "apiMaxMembers": 1500
 }
 ```
+Notes:
+- `apiLevel`: `None` (default), `Summary`, or `Full`
+- `apiMaxTypes` / `apiMaxMembers` cap the size of API detail sections in `llms-full.txt`
 
 #### sitemap
 Generates `sitemap.xml` and (optionally) `sitemap.html`.

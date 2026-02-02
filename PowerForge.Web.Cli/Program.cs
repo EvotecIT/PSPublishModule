@@ -991,9 +991,19 @@ try
             var license = TryGetOptionValue(subArgs, "--license");
             var targets = TryGetOptionValue(subArgs, "--targets");
             var extra = TryGetOptionValue(subArgs, "--extra");
+            var apiLevelText = TryGetOptionValue(subArgs, "--api-level");
+            var apiMaxTypesText = TryGetOptionValue(subArgs, "--api-max-types");
+            var apiMaxMembersText = TryGetOptionValue(subArgs, "--api-max-members");
 
             if (string.IsNullOrWhiteSpace(siteRoot))
                 return Fail("Missing required --site-root.", outputJson, logger, "web.llms");
+
+            var apiLevel = WebApiDetailLevel.None;
+            if (!string.IsNullOrWhiteSpace(apiLevelText) &&
+                Enum.TryParse<WebApiDetailLevel>(apiLevelText, true, out var parsedLevel))
+                apiLevel = parsedLevel;
+            var apiMaxTypes = ParseIntOption(apiMaxTypesText, 200);
+            var apiMaxMembers = ParseIntOption(apiMaxMembersText, 2000);
 
             var result = WebLlmsGenerator.Generate(new WebLlmsOptions
             {
@@ -1008,7 +1018,10 @@ try
                 Overview = overview,
                 License = license,
                 Targets = targets,
-                ExtraContentPath = extra
+                ExtraContentPath = extra,
+                ApiDetailLevel = apiLevel,
+                ApiMaxTypes = apiMaxTypes,
+                ApiMaxMembers = apiMaxMembers
             });
 
             if (outputJson)
@@ -1156,6 +1169,7 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
     Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
     Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
+    Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
     Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
     Console.WriteLine("                     [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
 }
@@ -1560,6 +1574,7 @@ internal static class WebPipelineRunner
                         if (string.IsNullOrWhiteSpace(siteRoot))
                             throw new InvalidOperationException("llms requires siteRoot.");
 
+                        var apiLevelText = GetString(step, "apiLevel") ?? GetString(step, "api-level");
                         var res = WebLlmsGenerator.Generate(new WebLlmsOptions
                         {
                             SiteRoot = siteRoot,
@@ -1573,7 +1588,10 @@ internal static class WebPipelineRunner
                             Overview = GetString(step, "overview"),
                             License = GetString(step, "license"),
                             Targets = GetString(step, "targets"),
-                            ExtraContentPath = ResolvePath(baseDir, GetString(step, "extra"))
+                            ExtraContentPath = ResolvePath(baseDir, GetString(step, "extra")),
+                            ApiDetailLevel = ParseApiDetailLevel(apiLevelText),
+                            ApiMaxTypes = GetInt(step, "apiMaxTypes") ?? 200,
+                            ApiMaxMembers = GetInt(step, "apiMaxMembers") ?? 2000
                         });
                         stepResult.Success = true;
                         stepResult.Message = $"LLMS generated ({res.Version})";
@@ -1861,6 +1879,12 @@ internal static class WebPipelineRunner
         if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var num)) return num;
         if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed)) return parsed;
         return null;
+    }
+
+    private static WebApiDetailLevel ParseApiDetailLevel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return WebApiDetailLevel.None;
+        return Enum.TryParse<WebApiDetailLevel>(value, true, out var parsed) ? parsed : WebApiDetailLevel.None;
     }
 
     private static string[]? GetArrayOfStrings(JsonElement element, string name)

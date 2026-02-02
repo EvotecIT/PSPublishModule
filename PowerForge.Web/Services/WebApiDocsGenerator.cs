@@ -122,6 +122,11 @@ public static class WebApiDocsGenerator
         {
             warnings.Add("Reflection fallback unavailable (assembly could not be loaded).");
         }
+
+        if (options.Type == ApiDocsType.CSharp && assembly is not null)
+        {
+            EnrichFromAssembly(apiDoc, assembly);
+        }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
 
@@ -191,36 +196,69 @@ public static class WebApiDocsGenerator
                 ["name"] = type.Name,
                 ["fullName"] = type.FullName,
                 ["namespace"] = type.Namespace,
+                ["assembly"] = type.Assembly,
+                ["baseType"] = type.BaseType,
+                ["interfaces"] = type.Interfaces,
                 ["kind"] = type.Kind,
                 ["slug"] = type.Slug,
+                ["isStatic"] = type.IsStatic,
+                ["isAbstract"] = type.IsAbstract,
+                ["isSealed"] = type.IsSealed,
                 ["summary"] = type.Summary,
                 ["remarks"] = type.Remarks,
                 ["methods"] = type.Methods.Select(m => new Dictionary<string, object?>
                 {
                     ["name"] = m.Name,
                     ["summary"] = m.Summary,
+                    ["kind"] = m.Kind,
+                    ["signature"] = m.Signature,
+                    ["returnType"] = m.ReturnType,
+                    ["declaringType"] = m.DeclaringType,
+                    ["isInherited"] = m.IsInherited,
+                    ["isStatic"] = m.IsStatic,
                     ["returns"] = m.Returns,
                     ["parameters"] = m.Parameters.Select(p => new Dictionary<string, object?>
                     {
                         ["name"] = p.Name,
                         ["type"] = p.Type,
-                        ["summary"] = p.Summary
+                        ["summary"] = p.Summary,
+                        ["isOptional"] = p.IsOptional,
+                        ["defaultValue"] = p.DefaultValue
                     }).ToList()
                 }).ToList(),
                 ["properties"] = type.Properties.Select(p => new Dictionary<string, object?>
                 {
                     ["name"] = p.Name,
-                    ["summary"] = p.Summary
+                    ["summary"] = p.Summary,
+                    ["kind"] = p.Kind,
+                    ["signature"] = p.Signature,
+                    ["returnType"] = p.ReturnType,
+                    ["declaringType"] = p.DeclaringType,
+                    ["isInherited"] = p.IsInherited,
+                    ["isStatic"] = p.IsStatic
                 }).ToList(),
                 ["fields"] = type.Fields.Select(f => new Dictionary<string, object?>
                 {
                     ["name"] = f.Name,
-                    ["summary"] = f.Summary
+                    ["summary"] = f.Summary,
+                    ["kind"] = f.Kind,
+                    ["signature"] = f.Signature,
+                    ["returnType"] = f.ReturnType,
+                    ["declaringType"] = f.DeclaringType,
+                    ["isInherited"] = f.IsInherited,
+                    ["isStatic"] = f.IsStatic,
+                    ["value"] = f.Value
                 }).ToList(),
                 ["events"] = type.Events.Select(e => new Dictionary<string, object?>
                 {
                     ["name"] = e.Name,
-                    ["summary"] = e.Summary
+                    ["summary"] = e.Summary,
+                    ["kind"] = e.Kind,
+                    ["signature"] = e.Signature,
+                    ["returnType"] = e.ReturnType,
+                    ["declaringType"] = e.DeclaringType,
+                    ["isInherited"] = e.IsInherited,
+                    ["isStatic"] = e.IsStatic
                 }).ToList()
             };
 
@@ -360,7 +398,8 @@ public static class WebApiDocsGenerator
                     var member = new ApiMemberModel
                     {
                         Name = name!,
-                        Returns = returns
+                        Returns = returns,
+                        Kind = "Method"
                     };
                     foreach (var parameter in syntaxItem.Elements(commandNs + "parameter"))
                     {
@@ -506,6 +545,276 @@ public static class WebApiDocsGenerator
         }
     }
 
+    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly)
+    {
+        foreach (var type in GetExportedTypesSafe(assembly))
+        {
+            if (type is null) continue;
+            var rawFullName = type.FullName ?? type.Name;
+            if (string.IsNullOrWhiteSpace(rawFullName)) continue;
+            var fullName = rawFullName.Replace('+', '.');
+            if (!doc.Types.TryGetValue(fullName, out var model)) continue;
+
+            model.Kind = GetTypeKind(type);
+            model.Assembly = type.Assembly.GetName().Name;
+            model.IsAbstract = type.IsAbstract;
+            model.IsSealed = type.IsSealed;
+            model.IsStatic = type.IsAbstract && type.IsSealed;
+            model.BaseType = type.BaseType != null && type.BaseType != typeof(object)
+                ? GetReadableTypeName(type.BaseType)
+                : null;
+            model.Interfaces.Clear();
+            foreach (var iface in type.GetInterfaces())
+            {
+                model.Interfaces.Add(GetReadableTypeName(iface));
+            }
+
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                if (method.IsSpecialName) continue;
+                var member = FindMethodModel(model.Methods, method);
+                if (member is null)
+                {
+                    member = new ApiMemberModel
+                    {
+                        Name = method.Name,
+                        Kind = "Method"
+                    };
+                    model.Methods.Add(member);
+                }
+                FillMethodMember(member, method, type);
+            }
+
+            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                var member = FindNamedMember(model.Properties, property.Name);
+                if (member is null)
+                {
+                    member = new ApiMemberModel
+                    {
+                        Name = property.Name,
+                        Kind = "Property"
+                    };
+                    model.Properties.Add(member);
+                }
+                FillPropertyMember(member, property, type);
+            }
+
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                if (field.IsSpecialName || field.Name == "value__") continue;
+                var member = FindNamedMember(model.Fields, field.Name);
+                if (member is null)
+                {
+                    member = new ApiMemberModel
+                    {
+                        Name = field.Name,
+                        Kind = "Field"
+                    };
+                    model.Fields.Add(member);
+                }
+                FillFieldMember(member, field, type);
+            }
+
+            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                var member = FindNamedMember(model.Events, evt.Name);
+                if (member is null)
+                {
+                    member = new ApiMemberModel
+                    {
+                        Name = evt.Name,
+                        Kind = "Event"
+                    };
+                    model.Events.Add(member);
+                }
+                FillEventMember(member, evt, type);
+            }
+        }
+    }
+
+    private static ApiMemberModel? FindNamedMember(List<ApiMemberModel> members, string name)
+    {
+        return members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ApiMemberModel? FindMethodModel(List<ApiMemberModel> members, MethodInfo method)
+    {
+        var candidates = members
+            .Where(m => string.Equals(m.Name, method.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0) return null;
+
+        var parameters = method.GetParameters();
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Parameters.Count != parameters.Length) continue;
+            if (ParamsMatch(candidate.Parameters, parameters)) return candidate;
+        }
+
+        return candidates.FirstOrDefault(c => c.Parameters.Count == parameters.Length) ?? candidates.First();
+    }
+
+    private static bool ParamsMatch(List<ApiParameterModel> parameters, ParameterInfo[] infos)
+    {
+        if (parameters.Count != infos.Length) return false;
+        for (var i = 0; i < parameters.Count; i++)
+        {
+            var left = NormalizeTypeName(parameters[i].Type);
+            var right = NormalizeTypeName(GetReadableTypeName(infos[i].ParameterType));
+            if (!string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    }
+
+    private static string NormalizeTypeName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var name = value.Trim();
+        if (name.StartsWith("System.", StringComparison.OrdinalIgnoreCase))
+            name = name.Substring(7);
+        name = name.Replace("+", ".");
+        name = name.Replace("{", "<").Replace("}", ">");
+        name = Regex.Replace(name, "`{1,2}\\d+", string.Empty);
+        return name.Replace(" ", string.Empty);
+    }
+
+    private static void FillMethodMember(ApiMemberModel member, MethodInfo method, Type declaring)
+    {
+        member.Kind = "Method";
+        member.ReturnType = GetReadableTypeName(method.ReturnType);
+        member.Signature = BuildMethodSignature(method);
+        member.IsStatic = method.IsStatic;
+        member.DeclaringType = method.DeclaringType?.FullName?.Replace('+', '.');
+        member.IsInherited = method.DeclaringType != declaring;
+
+        var parameters = method.GetParameters();
+        if (member.Parameters.Count == 0)
+        {
+            member.Parameters = parameters.Select(BuildParameterModel).ToList();
+        }
+        else
+        {
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (i >= member.Parameters.Count) break;
+                ApplyParameterMetadata(member.Parameters[i], parameters[i]);
+            }
+        }
+    }
+
+    private static void FillPropertyMember(ApiMemberModel member, PropertyInfo property, Type declaring)
+    {
+        member.Kind = "Property";
+        member.ReturnType = GetReadableTypeName(property.PropertyType);
+        member.Signature = BuildPropertySignature(property);
+        member.IsStatic = (property.GetMethod ?? property.SetMethod)?.IsStatic == true;
+        member.DeclaringType = property.DeclaringType?.FullName?.Replace('+', '.');
+        member.IsInherited = property.DeclaringType != declaring;
+    }
+
+    private static void FillFieldMember(ApiMemberModel member, FieldInfo field, Type declaring)
+    {
+        member.Kind = "Field";
+        member.ReturnType = GetReadableTypeName(field.FieldType);
+        member.Signature = BuildFieldSignature(field);
+        member.IsStatic = field.IsStatic;
+        member.DeclaringType = field.DeclaringType?.FullName?.Replace('+', '.');
+        member.IsInherited = field.DeclaringType != declaring;
+        if (field.IsLiteral && field.GetRawConstantValue() is { } value)
+            member.Value = value.ToString();
+    }
+
+    private static void FillEventMember(ApiMemberModel member, EventInfo evt, Type declaring)
+    {
+        member.Kind = "Event";
+        member.ReturnType = evt.EventHandlerType is null ? null : GetReadableTypeName(evt.EventHandlerType);
+        member.Signature = BuildEventSignature(evt);
+        member.IsStatic = evt.AddMethod?.IsStatic == true;
+        member.DeclaringType = evt.DeclaringType?.FullName?.Replace('+', '.');
+        member.IsInherited = evt.DeclaringType != declaring;
+    }
+
+    private static ApiParameterModel BuildParameterModel(ParameterInfo parameter)
+    {
+        var model = new ApiParameterModel
+        {
+            Name = parameter.Name ?? string.Empty,
+            Type = GetReadableTypeName(parameter.ParameterType)
+        };
+        ApplyParameterMetadata(model, parameter);
+        return model;
+    }
+
+    private static void ApplyParameterMetadata(ApiParameterModel model, ParameterInfo parameter)
+    {
+        model.IsOptional = parameter.IsOptional;
+        if (parameter.HasDefaultValue)
+            model.DefaultValue = FormatDefaultValue(parameter.DefaultValue);
+    }
+
+    private static string BuildMethodSignature(MethodInfo method)
+    {
+        var name = method.Name;
+        if (method.IsGenericMethod)
+        {
+            var args = method.GetGenericArguments().Select(GetReadableTypeName);
+            name += $"<{string.Join(", ", args)}>";
+        }
+        var returnType = GetReadableTypeName(method.ReturnType);
+        var parameters = method.GetParameters()
+            .Select(BuildParameterSignature)
+            .ToList();
+        return $"{returnType} {name}({string.Join(", ", parameters)})";
+    }
+
+    private static string BuildParameterSignature(ParameterInfo parameter)
+    {
+        var prefix = parameter.IsOut ? "out " : parameter.ParameterType.IsByRef ? "ref " : string.Empty;
+        var typeName = GetReadableTypeName(parameter.ParameterType);
+        var name = parameter.Name ?? "value";
+        var value = $"{prefix}{typeName} {name}".Trim();
+        if (parameter.IsOptional)
+        {
+            var def = parameter.HasDefaultValue ? FormatDefaultValue(parameter.DefaultValue) : "null";
+            value += $" = {def}";
+        }
+        return value;
+    }
+
+    private static string BuildPropertySignature(PropertyInfo property)
+    {
+        var accessors = new List<string>();
+        if (property.GetMethod is not null) accessors.Add("get;");
+        if (property.SetMethod is not null) accessors.Add("set;");
+        return $"{GetReadableTypeName(property.PropertyType)} {property.Name} {{ {string.Join(" ", accessors)} }}";
+    }
+
+    private static string BuildFieldSignature(FieldInfo field)
+    {
+        var prefix = field.IsLiteral ? "const " : field.IsStatic ? "static " : string.Empty;
+        return $"{prefix}{GetReadableTypeName(field.FieldType)} {field.Name}".Trim();
+    }
+
+    private static string BuildEventSignature(EventInfo evt)
+    {
+        var handler = evt.EventHandlerType is null ? "event" : GetReadableTypeName(evt.EventHandlerType);
+        return $"event {handler} {evt.Name}";
+    }
+
+    private static string FormatDefaultValue(object? value)
+    {
+        if (value is null) return "null";
+        return value switch
+        {
+            string s => $"\"{s}\"",
+            char c => $"'{c}'",
+            bool b => b ? "true" : "false",
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
     private static Assembly? TryLoadAssembly(string assemblyPath, List<string> warnings)
     {
         try
@@ -605,6 +914,7 @@ public static class WebApiDocsGenerator
         {
             Name = name,
             Summary = GetSummary(member),
+            Kind = "Method",
             Parameters = parameters,
             Returns = GetElement(member, "returns")
         });
@@ -621,7 +931,8 @@ public static class WebApiDocsGenerator
         type.Properties.Add(new ApiMemberModel
         {
             Name = name,
-            Summary = GetSummary(member)
+            Summary = GetSummary(member),
+            Kind = "Property"
         });
     }
 
@@ -636,7 +947,8 @@ public static class WebApiDocsGenerator
         type.Fields.Add(new ApiMemberModel
         {
             Name = name,
-            Summary = GetSummary(member)
+            Summary = GetSummary(member),
+            Kind = "Field"
         });
     }
 
@@ -651,7 +963,8 @@ public static class WebApiDocsGenerator
         type.Events.Add(new ApiMemberModel
         {
             Name = name,
-            Summary = GetSummary(member)
+            Summary = GetSummary(member),
+            Kind = "Event"
         });
     }
 
@@ -1268,6 +1581,40 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        </svg>");
         sb.AppendLine("      </button>");
         sb.AppendLine("    </div>");
+
+        var kindFilters = BuildKindFilters(types);
+        if (kindFilters.Count > 0)
+        {
+            sb.AppendLine("    <div class=\"sidebar-filters\">");
+            sb.AppendLine("      <div class=\"filter-label\">Type filters</div>");
+            sb.AppendLine("      <div class=\"filter-buttons\">");
+            sb.AppendLine("        <button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
+            foreach (var kind in kindFilters)
+            {
+                sb.AppendLine($"        <button class=\"filter-button\" type=\"button\" data-kind=\"{kind}\">{GetKindLabel(kind)}</button>");
+            }
+            sb.AppendLine("      </div>");
+            var namespaces = types
+                .Select(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (namespaces.Count > 0)
+            {
+                sb.AppendLine("      <div class=\"filter-row\">");
+                sb.AppendLine("        <label for=\"api-namespace\" class=\"filter-label\">Namespace</label>");
+                sb.AppendLine("        <select id=\"api-namespace\" class=\"namespace-select\">");
+                sb.AppendLine("          <option value=\"\">All namespaces</option>");
+                foreach (var ns in namespaces)
+                {
+                    var encoded = System.Web.HttpUtility.HtmlEncode(ns);
+                    sb.AppendLine($"          <option value=\"{encoded}\">{encoded}</option>");
+                }
+                sb.AppendLine("        </select>");
+                sb.AppendLine("      </div>");
+            }
+            sb.AppendLine("    </div>");
+        }
         sb.AppendLine("    <nav class=\"sidebar-nav\">");
 
         var mainTypes = GetMainTypes(types);
@@ -1333,8 +1680,9 @@ public static class WebApiDocsGenerator
         var name = System.Web.HttpUtility.HtmlEncode(type.Name);
         var kind = NormalizeKind(type.Kind);
         var icon = GetTypeIcon(type.Kind);
+        var ns = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
         var href = BuildDocsTypeUrl(baseUrl, type.Slug);
-        return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\">" +
+        return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\">" +
                $"<span class=\"type-icon {kind}\">{icon}</span><span class=\"type-name\">{name}</span></a>";
     }
 
@@ -1385,8 +1733,10 @@ public static class WebApiDocsGenerator
             {
                 var search = $"{type.Name} {type.FullName} {type.Summary}".Trim();
                 var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
+                var kind = NormalizeKind(type.Kind);
+                var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
                 var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
-                sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {NormalizeKind(type.Kind)}\" data-search=\"{searchAttr}\">");
+                sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\">");
                 sb.AppendLine($"              <span class=\"chip-icon\">{GetTypeIcon(type.Kind)}</span>");
                 sb.AppendLine($"              {System.Web.HttpUtility.HtmlEncode(type.Name)}");
                 sb.AppendLine("            </a>");
@@ -1416,8 +1766,55 @@ public static class WebApiDocsGenerator
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
         sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(type.Name)}</h1>");
         sb.AppendLine("        </div>");
-        sb.AppendLine($"        <code class=\"namespace\">namespace {System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>");
         sb.AppendLine("      </header>");
+
+        var flags = new List<string>();
+        if (type.IsStatic) flags.Add("static");
+        else
+        {
+            if (type.IsAbstract) flags.Add("abstract");
+            if (type.IsSealed) flags.Add("sealed");
+        }
+
+        sb.AppendLine("      <div class=\"type-meta\">");
+        sb.AppendLine("        <div class=\"type-meta-row\">");
+        sb.AppendLine("          <span class=\"type-meta-label\">Namespace</span>");
+        sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>");
+        sb.AppendLine("        </div>");
+        if (!string.IsNullOrWhiteSpace(type.Assembly))
+        {
+            sb.AppendLine("        <div class=\"type-meta-row\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Assembly</span>");
+            sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.Assembly)}</code>");
+            sb.AppendLine("        </div>");
+        }
+        if (!string.IsNullOrWhiteSpace(type.BaseType))
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-inheritance\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Base</span>");
+            sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.BaseType)}</code>");
+            sb.AppendLine("        </div>");
+        }
+        if (type.Interfaces.Count > 0)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-interfaces\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Implements</span>");
+            sb.AppendLine("          <div class=\"type-meta-list\">");
+            foreach (var iface in type.Interfaces.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(iface)}</code>");
+            }
+            sb.AppendLine("          </div>");
+            sb.AppendLine("        </div>");
+        }
+        if (flags.Count > 0)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-flags\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Modifiers</span>");
+            sb.AppendLine($"          <span class=\"type-meta-flags-list\">{System.Web.HttpUtility.HtmlEncode(string.Join(", ", flags))}</span>");
+            sb.AppendLine("        </div>");
+        }
+        sb.AppendLine("      </div>");
 
         if (!string.IsNullOrWhiteSpace(type.Summary))
             sb.AppendLine($"      <p class=\"type-summary\">{System.Web.HttpUtility.HtmlEncode(type.Summary)}</p>");
@@ -1429,26 +1826,72 @@ public static class WebApiDocsGenerator
             sb.AppendLine("      </section>");
         }
 
-        AppendMemberCards(sb, "Methods", type.Methods);
-        AppendMemberCards(sb, "Properties", type.Properties);
-        AppendMemberCards(sb, "Fields", type.Fields);
-        AppendMemberCards(sb, "Events", type.Events);
+        sb.AppendLine("      <div class=\"member-toolbar\">");
+        sb.AppendLine("        <div class=\"member-filter\">");
+        sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
+        sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
+        sb.AppendLine("        </div>");
+        sb.AppendLine("        <div class=\"member-kind-filter\">");
+        sb.AppendLine("          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All</button>");
+        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods</button>");
+        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties</button>");
+        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">Fields</button>");
+        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events</button>");
+        sb.AppendLine("        </div>");
+        sb.AppendLine("        <label class=\"member-toggle\">");
+        sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
+        sb.AppendLine("          Show inherited");
+        sb.AppendLine("        </label>");
+        sb.AppendLine("      </div>");
+
+        AppendMemberCards(sb, "Methods", "method", type.Methods);
+        AppendMemberCards(sb, "Properties", "property", type.Properties);
+        AppendMemberCards(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields);
+        AppendMemberCards(sb, "Events", "event", type.Events);
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
     }
 
-    private static void AppendMemberCards(StringBuilder sb, string label, List<ApiMemberModel> members)
+    private static void AppendMemberCards(StringBuilder sb, string label, string memberKind, List<ApiMemberModel> members)
     {
         if (members.Count == 0) return;
-        sb.AppendLine("      <section class=\"member-section\">");
-        sb.AppendLine($"        <h2>{label}</h2>");
+        sb.AppendLine($"      <section class=\"member-section\" data-kind=\"{memberKind}\">");
+        sb.AppendLine("        <div class=\"member-section-header\">");
+        sb.AppendLine($"          <h2>{label}</h2>");
+        sb.AppendLine("          <button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle section\">");
+        sb.AppendLine("            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+        sb.AppendLine("              <path d=\"M9 18l6-6-6-6\"/>");
+        sb.AppendLine("            </svg>");
+        sb.AppendLine("          </button>");
+        sb.AppendLine("        </div>");
+        sb.AppendLine("        <div class=\"member-section-body\">");
         foreach (var member in members)
         {
-            sb.AppendLine("        <div class=\"member-card\">");
+            var memberId = BuildMemberId(memberKind, member);
+            var signature = !string.IsNullOrWhiteSpace(member.Signature)
+                ? member.Signature
+                : BuildSignature(member, label);
+            var search = $"{member.Name} {signature} {member.Summary}".Trim();
+            var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
+            var inherited = member.IsInherited ? "true" : "false";
+            var inheritedNote = member.IsInherited && !string.IsNullOrWhiteSpace(member.DeclaringType)
+                ? $"Inherited from {member.DeclaringType}"
+                : string.Empty;
+
+            sb.AppendLine($"        <div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
             sb.AppendLine("          <div class=\"member-header\">");
-            sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(BuildSignature(member, label))}</code>");
+            sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
+            sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
             sb.AppendLine("          </div>");
+            if (!string.IsNullOrWhiteSpace(member.ReturnType) && label == "Methods")
+            {
+                sb.AppendLine($"          <div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
+            }
+            if (!string.IsNullOrWhiteSpace(inheritedNote))
+            {
+                sb.AppendLine($"          <div class=\"member-inherited\">{System.Web.HttpUtility.HtmlEncode(inheritedNote)}</div>");
+            }
             if (!string.IsNullOrWhiteSpace(member.Summary))
                 sb.AppendLine($"          <p class=\"member-summary\">{System.Web.HttpUtility.HtmlEncode(member.Summary)}</p>");
             if (member.Parameters.Count > 0)
@@ -1457,11 +1900,19 @@ public static class WebApiDocsGenerator
                 sb.AppendLine("          <dl class=\"param-list\">");
                 foreach (var param in member.Parameters)
                 {
-                    sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(param.Name)} <span class=\"param-type\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span></dt>");
+                    var optional = param.IsOptional ? " optional" : string.Empty;
+                    var defaultValue = param.DefaultValue;
+                    var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
+                    sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(param.Name)} <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span></dt>");
                     if (!string.IsNullOrWhiteSpace(param.Summary))
                         sb.AppendLine($"            <dd>{System.Web.HttpUtility.HtmlEncode(param.Summary)}</dd>");
                 }
                 sb.AppendLine("          </dl>");
+            }
+            if (label == "Fields" || label == "Values")
+            {
+                if (!string.IsNullOrWhiteSpace(member.Value))
+                    sb.AppendLine($"          <div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
             }
             if (!string.IsNullOrWhiteSpace(member.Returns))
             {
@@ -1470,12 +1921,13 @@ public static class WebApiDocsGenerator
             }
             sb.AppendLine("        </div>");
         }
+        sb.AppendLine("        </div>");
         sb.AppendLine("      </section>");
     }
 
     private static string BuildSignature(ApiMemberModel member, string section)
     {
-        if (section != "Methods" || member.Parameters.Count == 0)
+        if (section != "Methods")
             return member.Name;
         var args = member.Parameters
             .Select(p =>
@@ -1485,7 +1937,20 @@ public static class WebApiDocsGenerator
                 return string.IsNullOrWhiteSpace(type) ? name : $"{type} {name}".Trim();
             })
             .ToList();
-        return $"{member.Name}({string.Join(", ", args)})";
+        var returnType = string.IsNullOrWhiteSpace(member.ReturnType) ? string.Empty : $"{member.ReturnType} ";
+        return $"{returnType}{member.Name}({string.Join(", ", args)})".Trim();
+    }
+
+    private static string BuildMemberId(string memberKind, ApiMemberModel member)
+    {
+        var baseName = $"{memberKind}-{member.Name}";
+        if (member.Parameters.Count > 0)
+        {
+            var suffix = string.Join("-", member.Parameters.Select(p => NormalizeTypeName(p.Type)));
+            if (!string.IsNullOrWhiteSpace(suffix))
+                baseName = $"{baseName}-{suffix}";
+        }
+        return Slugify(baseName);
     }
 
     private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types)
@@ -1519,6 +1984,27 @@ public static class WebApiDocsGenerator
             "Enum" => "E",
             "Delegate" => "D",
             _ => "T"
+        };
+
+    private static readonly string[] KindOrder = { "class", "struct", "interface", "enum", "delegate" };
+
+    private static List<string> BuildKindFilters(IReadOnlyList<ApiTypeModel> types)
+    {
+        var available = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var type in types)
+            available.Add(NormalizeKind(type.Kind));
+        return KindOrder.Where(k => available.Contains(k)).ToList();
+    }
+
+    private static string GetKindLabel(string kind)
+        => kind switch
+        {
+            "class" => "Classes",
+            "struct" => "Structs",
+            "interface" => "Interfaces",
+            "enum" => "Enums",
+            "delegate" => "Delegates",
+            _ => "Types"
         };
 
     private static string NormalizeKind(string? kind)
@@ -1979,10 +2465,16 @@ public static class WebApiDocsGenerator
         public string Name { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string Namespace { get; set; } = string.Empty;
+        public string? Assembly { get; set; }
+        public string? BaseType { get; set; }
+        public List<string> Interfaces { get; } = new();
         public string? Summary { get; set; }
         public string? Remarks { get; set; }
         public string Kind { get; set; } = "Class";
         public string Slug { get; set; } = string.Empty;
+        public bool IsStatic { get; set; }
+        public bool IsAbstract { get; set; }
+        public bool IsSealed { get; set; }
         public List<ApiMemberModel> Methods { get; } = new();
         public List<ApiMemberModel> Properties { get; } = new();
         public List<ApiMemberModel> Fields { get; } = new();
@@ -1993,6 +2485,13 @@ public static class WebApiDocsGenerator
     {
         public string Name { get; set; } = string.Empty;
         public string? Summary { get; set; }
+        public string? Kind { get; set; }
+        public string? Signature { get; set; }
+        public string? ReturnType { get; set; }
+        public string? DeclaringType { get; set; }
+        public bool IsInherited { get; set; }
+        public bool IsStatic { get; set; }
+        public string? Value { get; set; }
         public List<ApiParameterModel> Parameters { get; set; } = new();
         public string? Returns { get; set; }
     }
@@ -2002,6 +2501,8 @@ public static class WebApiDocsGenerator
         public string Name { get; set; } = string.Empty;
         public string? Type { get; set; }
         public string? Summary { get; set; }
+        public bool IsOptional { get; set; }
+        public string? DefaultValue { get; set; }
     }
 
     private sealed class NavConfig

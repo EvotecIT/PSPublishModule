@@ -62,6 +62,17 @@ public enum WebChangelogSource
     GitHub
 }
 
+/// <summary>LLMS API detail level.</summary>
+public enum WebApiDetailLevel
+{
+    /// <summary>No API details.</summary>
+    None,
+    /// <summary>Include type list and summaries.</summary>
+    Summary,
+    /// <summary>Include types and members.</summary>
+    Full
+}
+
 /// <summary>Repository provider selection.</summary>
 public enum RepositoryProvider
 {

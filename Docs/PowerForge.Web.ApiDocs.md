@@ -53,6 +53,12 @@ Sidebar sections:
 - `.sidebar-search` – search input wrapper
 - `#api-filter` – filter input (from `docs.js`)
 - `.clear-search` – clear button for filter
+- `.sidebar-filters` – filter wrapper (type + namespace)
+- `.filter-label` – label text
+- `.filter-buttons` – type filter button row
+- `.filter-button` – type filter button
+- `.filter-button.active` – active type filter
+- `.namespace-select` – namespace dropdown
 - `.sidebar-nav` – sidebar nav wrapper
 - `.nav-section` – nav section block
 - `.nav-section-header` – section header
@@ -62,6 +68,7 @@ Sidebar sections:
 - `.chevron` / `.chevron.expanded` – collapse indicator
 - `.type-item` – sidebar type link
 - `.type-item.active` – active type link
+- `.type-item` includes `data-kind` and `data-namespace` for filtering
 - `.sidebar-footer` – footer block (optional)
 
 URL behavior:
@@ -73,6 +80,28 @@ Overview chips:
 - `.type-chips` – chips container
 - `.type-chip` – type chip link
 - `.type-chip.<kind>` – kind class (`class`, `struct`, `enum`, `interface`, `delegate`)
+- `.type-chip` includes `data-kind` and `data-namespace` for filtering
+
+Member layout:
+- `.member-toolbar` – member filter toolbar
+- `.member-filter` – member search input wrapper
+- `#api-member-filter` – member search input
+- `.member-kind-filter` – member kind filter buttons
+- `.member-kind` – member kind button
+- `.member-kind.active` – active member kind
+- `.member-toggle` – toggle for inherited members
+- `.member-section` – section wrapper (methods/properties/fields/events)
+- `.member-section-header` – section header row
+- `.member-section-toggle` – collapse/expand button
+- `.member-section-body` – section content container
+- `.member-section.collapsed` – collapsed section state
+- `.member-card` – member card block (data attributes: `data-kind`, `data-inherited`, `data-search`)
+- `.member-signature` – signature code line
+- `.member-anchor` – anchor link
+- `.member-return` – return type row
+- `.member-inherited` – inherited badge row
+- `.member-value` – enum value row
+- `.param-default` – parameter default value
 
 ## JavaScript expectations
 
@@ -81,6 +110,11 @@ Overview chips:
 - `.type-item` and `.type-chip` elements with `data-search` attribute
 - `.nav-section-header` + `.nav-section-content` for collapse/expand
 - `.sidebar-toggle` + `.sidebar-overlay` for mobile drawer
+- `.filter-button` elements with `data-kind`
+- `#api-namespace` select for namespace filtering
+- `#api-member-filter` input
+- `.member-kind` buttons with `data-member-kind`
+- `#api-show-inherited` checkbox
 
 `search.js` (simple template) expects:
 - `#api-search` input
