@@ -80,6 +80,10 @@ public static class WebApiDocsGenerator
         }
 
         var apiDoc = ParseXml(xmlPath, assembly, options);
+        if (apiDoc.Types.Count == 0 && assembly is not null)
+        {
+            PopulateFromAssembly(apiDoc, assembly);
+        }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
 
@@ -252,6 +256,111 @@ public static class WebApiDocsGenerator
         }
 
         return apiDoc;
+    }
+
+    private static void PopulateFromAssembly(ApiDocModel doc, Assembly assembly)
+    {
+        foreach (var type in GetExportedTypesSafe(assembly))
+        {
+            if (type is null) continue;
+            var rawFullName = type.FullName ?? type.Name;
+            if (string.IsNullOrWhiteSpace(rawFullName)) continue;
+            var fullName = rawFullName.Replace('+', '.');
+            if (doc.Types.ContainsKey(fullName)) continue;
+
+            var model = new ApiTypeModel
+            {
+                Name = StripGenericArity(type.Name),
+                FullName = fullName,
+                Namespace = type.Namespace ?? string.Empty,
+                Kind = GetTypeKind(type),
+                Slug = Slugify(fullName)
+            };
+
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                if (method.IsSpecialName) continue;
+                model.Methods.Add(new ApiMemberModel
+                {
+                    Name = method.Name,
+                    Parameters = method.GetParameters().Select(p => new ApiParameterModel
+                    {
+                        Name = p.Name ?? string.Empty,
+                        Type = GetReadableTypeName(p.ParameterType)
+                    }).ToList()
+                });
+            }
+
+            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                model.Properties.Add(new ApiMemberModel
+                {
+                    Name = property.Name
+                });
+            }
+
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                if (field.IsSpecialName) continue;
+                model.Fields.Add(new ApiMemberModel
+                {
+                    Name = field.Name
+                });
+            }
+
+            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            {
+                model.Events.Add(new ApiMemberModel
+                {
+                    Name = evt.Name
+                });
+            }
+
+            doc.Types[fullName] = model;
+        }
+    }
+
+    private static IEnumerable<Type?> GetExportedTypesSafe(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetExportedTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            return ex.Types ?? Array.Empty<Type?>();
+        }
+        catch
+        {
+            return Array.Empty<Type?>();
+        }
+    }
+
+    private static string GetTypeKind(Type type)
+    {
+        if (type.IsInterface) return "Interface";
+        if (type.IsEnum) return "Enum";
+        if (type.IsValueType) return "Struct";
+        if (type.BaseType == typeof(MulticastDelegate)) return "Delegate";
+        return "Class";
+    }
+
+    private static string GetReadableTypeName(Type type)
+    {
+        if (type.IsByRef)
+            type = type.GetElementType() ?? type;
+
+        if (type.IsArray)
+            return $"{GetReadableTypeName(type.GetElementType() ?? typeof(object))}[]";
+
+        if (type.IsGenericType)
+        {
+            var name = StripGenericArity(type.Name);
+            var args = type.GetGenericArguments().Select(GetReadableTypeName);
+            return $"{name}<{string.Join(", ", args)}>";
+        }
+
+        return type.Name;
     }
 
     private static ApiTypeModel ParseType(XElement member, string fullName)
