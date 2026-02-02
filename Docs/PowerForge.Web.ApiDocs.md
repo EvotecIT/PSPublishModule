@@ -108,3 +108,50 @@ are added.
 Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 (for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
 Each command is treated as a “type” with parameter sets rendered as methods.
+
+## Usage scenarios
+
+### C# library with XML docs
+
+Pipeline step:
+```json
+{
+  "task": "apidocs",
+  "type": "CSharp",
+  "xml": "./bin/Release/net10.0/MyLib.xml",
+  "assembly": "./bin/Release/net10.0/MyLib.dll",
+  "out": "./_site/api",
+  "format": "both",
+  "template": "docs",
+  "css": "/css/api-docs.css"
+}
+```
+
+CLI:
+```bash
+powerforge-web apidocs --type csharp --xml ./bin/Release/net10.0/MyLib.xml --assembly ./bin/Release/net10.0/MyLib.dll --out ./_site/api --format both --template docs --css /css/api-docs.css
+```
+
+### PowerShell module help
+
+Pipeline step:
+```json
+{
+  "task": "apidocs",
+  "type": "PowerShell",
+  "help": "./Module/en-US/MyModule-help.xml",
+  "out": "./_site/api",
+  "format": "both",
+  "template": "docs",
+  "css": "/css/api-docs.css"
+}
+```
+
+CLI:
+```bash
+powerforge-web apidocs --type powershell --help-path ./Module/en-US/MyModule-help.xml --out ./_site/api --format both --template docs --css /css/api-docs.css
+```
+
+Notes:
+- If `helpPath` points to a directory with multiple `*-help.xml` files, the first one is used.
+- For deterministic output, point to a specific file.

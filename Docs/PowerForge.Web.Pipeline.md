@@ -102,6 +102,9 @@ PowerShell help usage:
   "css": "/css/api-docs.css"
 }
 ```
+Notes:
+- If `help` points to a folder, the first `*-help.xml` file is used.
+- For deterministic output, point to a specific help XML file.
 
 ##### Template tokens
 Common tokens (all templates):
@@ -152,6 +155,42 @@ Notes:
 - `source`: `auto` (default), `file`, or `github`
 - Use `repo` (`owner/name`) or `repoUrl` for GitHub releases.
 - Use `max` to limit number of releases.
+- The generator emits `body_md`; the build converts it to `body` HTML automatically.
+
+Usage scenarios:
+
+Local changelog only:
+```json
+{
+  "task": "changelog",
+  "source": "file",
+  "changelog": "./CHANGELOG.md",
+  "out": "./Artifacts/site/data/changelog.json"
+}
+```
+
+GitHub releases only:
+```json
+{
+  "task": "changelog",
+  "source": "github",
+  "repo": "EvotecIT/IntelligenceX",
+  "token": "%GITHUB_TOKEN%",
+  "max": 20,
+  "out": "./Artifacts/site/data/changelog.json"
+}
+```
+
+Template usage (Scriban):
+```scriban
+{{ for item in data.changelog.items }}
+<article class="release">
+  <h2>{{ item.title }}</h2>
+  {{ if item.publishedAt }}<div class="release-date">{{ item.publishedAt }}</div>{{ end }}
+  <div class="release-body">{{ item.body }}</div>
+</article>
+{{ end }}
+```
 
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
