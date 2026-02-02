@@ -69,6 +69,7 @@ You can fully control the API docs layout by providing a template root or per-fi
 Starter templates live in:
 - `Assets/ApiDocs/Templates/default` (matches the embedded defaults)
 - `Assets/ApiDocs/Templates/sidebar-right` (example that moves the sidebar)
+For CSS hooks and JS expectations, see `Docs/PowerForge.Web.ApiDocs.md`.
 
 Recommended usage:
 ```json
