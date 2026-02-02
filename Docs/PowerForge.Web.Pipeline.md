@@ -58,6 +58,21 @@ Notes:
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 
+Project.json example (metadata you can reuse across repos):
+```json
+{
+  "ApiDocs": {
+    "Type": "CSharp",
+    "AssemblyPath": "artifacts/MyLib.dll",
+    "XmlDocPath": "artifacts/MyLib.xml",
+    "OutputPath": "api"
+  }
+}
+```
+Notes:
+- `ApiDocs` in `project.json` is **metadata**; today you still add the `apidocs` pipeline step.
+- See `Samples/PowerForge.Web.Sample/projects/ApiDocsDemo/project.json` for a full example.
+
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```json

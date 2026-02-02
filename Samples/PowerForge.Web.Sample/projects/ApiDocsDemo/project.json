@@ -1,0 +1,39 @@
+{
+  "$schema": "../../../Schemas/powerforge.web.projectspec.schema.json",
+  "SchemaVersion": 1,
+  "Name": "ApiDocsDemo",
+  "Slug": "apidocsdemo",
+  "Theme": "base-scriban",
+  "Repository": {
+    "Provider": "GitHub",
+    "Owner": "EvotecIT",
+    "Name": "ApiDocsDemo",
+    "Branch": "main",
+    "PathBase": ""
+  },
+  "Packages": [
+    { "Type": "NuGet", "Id": "ApiDocsDemo", "Version": "0.1.0" }
+  ],
+  "Links": [
+    { "Title": "GitHub", "Url": "https://github.com/EvotecIT/ApiDocsDemo" },
+    { "Title": "NuGet", "Url": "https://www.nuget.org/packages/ApiDocsDemo" }
+  ],
+  "Content": {
+    "Include": [
+      "**/*.md"
+    ],
+    "Exclude": [
+      "drafts/**"
+    ]
+  },
+  "ApiDocs": {
+    "Type": "CSharp",
+    "AssemblyPath": "artifacts/ApiDocsDemo.dll",
+    "XmlDocPath": "artifacts/ApiDocsDemo.xml",
+    "OutputPath": "api"
+  },
+  "EditLinks": {
+    "Enabled": true,
+    "Template": "https://github.com/EvotecIT/ApiDocsDemo/edit/main/{path}"
+  }
+}
