@@ -1407,7 +1407,7 @@ public static class WebSiteBuilder
             return;
 
         var prismSpec = spec.Prism;
-        var mode = GetMetaString(meta, "prism_mode") ?? prismSpec?.Mode ?? "auto";
+        var mode = GetMetaStringOrNull(meta, "prism_mode") ?? prismSpec?.Mode ?? "auto";
         if (mode.Equals("off", StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -1419,7 +1419,7 @@ public static class WebSiteBuilder
         if (MetaContains(meta, "extra_css", "prism") || MetaContains(meta, "extra_scripts", "prism"))
             return;
 
-        var sourceOverride = GetMetaString(meta, "prism_source");
+        var sourceOverride = GetMetaStringOrNull(meta, "prism_source");
         var source = sourceOverride
             ?? prismSpec?.Source
             ?? spec.AssetPolicy?.Mode
@@ -1456,11 +1456,11 @@ public static class WebSiteBuilder
         PrismSpec? prismSpec)
     {
         var local = prismSpec?.Local;
-        var light = GetMetaString(meta, "prism_css_light") ?? local?.ThemeLight ?? "/assets/prism/prism.css";
-        var dark = GetMetaString(meta, "prism_css_dark") ?? local?.ThemeDark ?? "/assets/prism/prism-okaidia.css";
-        var core = GetMetaString(meta, "prism_core") ?? local?.Core ?? "/assets/prism/prism-core.js";
-        var autoloader = GetMetaString(meta, "prism_autoloader") ?? local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
-        var langPath = GetMetaString(meta, "prism_lang_path") ?? local?.LanguagesPath ?? "/assets/prism/components/";
+        var light = GetMetaStringOrNull(meta, "prism_css_light") ?? local?.ThemeLight ?? "/assets/prism/prism.css";
+        var dark = GetMetaStringOrNull(meta, "prism_css_dark") ?? local?.ThemeDark ?? "/assets/prism/prism-okaidia.css";
+        var core = GetMetaStringOrNull(meta, "prism_core") ?? local?.Core ?? "/assets/prism/prism-core.js";
+        var autoloader = GetMetaStringOrNull(meta, "prism_autoloader") ?? local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
+        var langPath = GetMetaStringOrNull(meta, "prism_lang_path") ?? local?.LanguagesPath ?? "/assets/prism/components/";
         return (light, dark, core, autoloader, langPath);
     }
 
@@ -1487,7 +1487,7 @@ public static class WebSiteBuilder
 
     private static string BuildPrismCdnCss(Dictionary<string, object?> meta, PrismSpec? prismSpec)
     {
-        var cdn = GetMetaString(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+        var cdn = GetMetaStringOrNull(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
         cdn = cdn.TrimEnd('/');
         return string.Join(Environment.NewLine, new[]
         {
@@ -1498,7 +1498,7 @@ public static class WebSiteBuilder
 
     private static string BuildPrismCdnScripts(Dictionary<string, object?> meta, PrismSpec? prismSpec)
     {
-        var cdn = GetMetaString(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+        var cdn = GetMetaStringOrNull(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
         cdn = cdn.TrimEnd('/');
         return string.Join(Environment.NewLine, new[]
         {
@@ -1779,6 +1779,16 @@ public static class WebSiteBuilder
             return string.Empty;
 
         return TryGetMetaString(meta, key, out var value) ? value : string.Empty;
+    }
+
+    private static string? GetMetaStringOrNull(Dictionary<string, object?>? meta, string key)
+    {
+        if (meta is null)
+            return null;
+
+        return TryGetMetaString(meta, key, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
     }
 
     private static string? ResolveProjectSlug(WebSitePlan plan, string filePath)
