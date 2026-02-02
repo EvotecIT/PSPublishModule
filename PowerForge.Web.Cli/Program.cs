@@ -1060,8 +1060,11 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
-    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--template <name>] [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
+    Console.WriteLine("  powerforge-web apidocs --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>]");
+    Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
+    Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
+    Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");

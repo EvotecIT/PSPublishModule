@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{TITLE}}</title>
+  {{CSS}}
+</head>
+<body>
+{{HEADER}}
+  <main class="pf-api">
+    <h1>{{TITLE}}</h1>
+    <p>Types: {{TYPE_COUNT}}</p>
+    <div class="pf-api-search">
+      <input id="api-search" type="search" placeholder="Search API" autocomplete="off" />
+      <div id="api-results" class="pf-api-results"></div>
+    </div>
+    <div class="pf-api-types">
+{{TYPE_LINKS}}
+    </div>
+  </main>
+{{FOOTER}}
+{{SEARCH_SCRIPT}}
+</body>
+</html>

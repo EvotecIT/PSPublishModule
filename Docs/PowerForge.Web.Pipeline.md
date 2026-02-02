@@ -64,6 +64,48 @@ Notes:
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 
+##### Template overrides
+You can fully control the API docs layout by providing a template root or per-file overrides.
+Starter templates live in:
+- `Assets/ApiDocs/Templates/default` (matches the embedded defaults)
+- `Assets/ApiDocs/Templates/sidebar-right` (example that moves the sidebar)
+
+Recommended usage:
+```json
+{
+  "task": "apidocs",
+  "xml": "./Artifacts/MyLib.xml",
+  "assembly": "./Artifacts/MyLib.dll",
+  "out": "./Artifacts/site/api",
+  "format": "both",
+  "template": "docs",
+  "templateRoot": "./Assets/ApiDocs/Templates/default",
+  "css": "/css/api-docs.css",
+  "headerHtml": "./themes/nova/partials/api-header.html",
+  "footerHtml": "./themes/nova/partials/api-footer.html",
+  "nav": "./site.json"
+}
+```
+
+##### Template tokens
+Common tokens (all templates):
+- `{{CSS}}` – stylesheet link or inline fallback CSS
+- `{{HEADER}}` / `{{FOOTER}}` – injected header/footer fragments (optional)
+
+Simple templates:
+- `index.html`: `{{TITLE}}`, `{{TYPE_COUNT}}`, `{{TYPE_LINKS}}`, `{{SEARCH_SCRIPT}}`
+- `type.html`: `{{TYPE_TITLE}}`, `{{TYPE_FULLNAME}}`, `{{TYPE_SUMMARY}}`, `{{TYPE_REMARKS}}`, `{{MEMBERS}}`
+
+Docs templates (`template: docs`):
+- `docs-index.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
+- `docs-type.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
+
+Header/footer fragments can use nav tokens when `nav` is provided:
+- `{{SITE_NAME}}`, `{{BRAND_NAME}}`, `{{BRAND_URL}}`, `{{BRAND_ICON}}`
+- `{{NAV_LINKS}}`, `{{NAV_ACTIONS}}`
+- `{{FOOTER_PRODUCT}}`, `{{FOOTER_RESOURCES}}`, `{{FOOTER_COMPANY}}`
+- `{{YEAR}}`
+
 Project.json example (metadata you can reuse across repos):
 ```json
 {
