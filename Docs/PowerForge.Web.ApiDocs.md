@@ -92,3 +92,9 @@ When `css` is not provided, the generator inlines `fallback.css`.
 To fully control the visuals, provide `css` or supply a custom `fallback.css`
 via `templateRoot`.
 
+## XML docs vs reflection
+
+If the XML documentation file is missing or empty, the generator falls back to
+reflection (public types only). This still produces the API reference pages,
+but summaries/remarks/parameter descriptions will be empty until `///` comments
+are added.

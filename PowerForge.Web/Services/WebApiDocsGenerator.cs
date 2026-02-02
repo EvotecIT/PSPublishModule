@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Runtime.Loader;
 using System.Xml.Linq;
 
 namespace PowerForge.Web;
@@ -79,24 +80,32 @@ public static class WebApiDocsGenerator
         var outputPath = Path.GetFullPath(options.OutputPath);
         Directory.CreateDirectory(outputPath);
 
+        var warnings = new List<string>();
+        if (!File.Exists(xmlPath))
+            warnings.Add($"XML docs not found: {xmlPath}");
+
         Assembly? assembly = null;
         if (!string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
         {
-            try
-            {
-                var bytes = File.ReadAllBytes(options.AssemblyPath);
-                assembly = Assembly.Load(bytes);
-            }
-            catch
-            {
-                assembly = null;
-            }
+            assembly = TryLoadAssembly(Path.GetFullPath(options.AssemblyPath), warnings);
+        }
+        else if (!string.IsNullOrWhiteSpace(options.AssemblyPath))
+        {
+            warnings.Add($"Assembly not found: {options.AssemblyPath}");
         }
 
         var apiDoc = ParseXml(xmlPath, assembly, options);
+        var usedReflectionFallback = false;
         if (apiDoc.Types.Count == 0 && assembly is not null)
         {
             PopulateFromAssembly(apiDoc, assembly);
+            usedReflectionFallback = apiDoc.Types.Count > 0;
+            if (!usedReflectionFallback)
+                warnings.Add("Reflection fallback produced 0 public types.");
+        }
+        else if (apiDoc.Types.Count == 0 && assembly is null && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+        {
+            warnings.Add("Reflection fallback unavailable (assembly could not be loaded).");
         }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
@@ -216,7 +225,9 @@ public static class WebApiDocsGenerator
             IndexPath = indexPath,
             SearchPath = searchPath,
             TypesPath = typesDir,
-            TypeCount = types.Count
+            TypeCount = types.Count,
+            UsedReflectionFallback = usedReflectionFallback,
+            Warnings = warnings.ToArray()
         };
     }
 
@@ -331,6 +342,28 @@ public static class WebApiDocsGenerator
             }
 
             doc.Types[fullName] = model;
+        }
+    }
+
+    private static Assembly? TryLoadAssembly(string assemblyPath, List<string> warnings)
+    {
+        try
+        {
+            return AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                var bytes = File.ReadAllBytes(assemblyPath);
+                return Assembly.Load(bytes);
+            }
+            catch (Exception ex2)
+            {
+                warnings.Add($"Assembly load failed: {Path.GetFileName(assemblyPath)} ({ex2.GetType().Name}: {ex2.Message})");
+                warnings.Add($"Primary load error: {ex.GetType().Name}: {ex.Message}");
+                return null;
+            }
         }
     }
 

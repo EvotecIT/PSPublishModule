@@ -43,6 +43,10 @@ public sealed class WebApiDocsResult
     public string TypesPath { get; set; } = string.Empty;
     /// <summary>Number of types documented.</summary>
     public int TypeCount { get; set; }
+    /// <summary>True when reflection was used to populate types.</summary>
+    public bool UsedReflectionFallback { get; set; }
+    /// <summary>Warnings emitted during generation.</summary>
+    public string[] Warnings { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Result payload for pipeline execution.</summary>
