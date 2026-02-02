@@ -118,6 +118,24 @@ powerforge-web audit --site-root ./Artifacts --rendered --rendered-max 8
 See `Docs/PowerForge.Web.Workflow.md` for the full end-to-end pipeline flow.
 See `Docs/PowerForge.Web.Pipeline.md` for spec details and examples.
 
+## 7b) API docs (optional)
+If your library emits XML docs, you can auto-generate an API reference:
+```json
+{
+  "task": "apidocs",
+  "xml": "./Artifacts/generated/MyLib.xml",
+  "assembly": "./Artifacts/generated/MyLib.dll",
+  "out": "./Artifacts/site/api",
+  "baseUrl": "/api",
+  "title": "MyLib API",
+  "template": "docs"
+}
+```
+Notes:
+- Add `<GenerateDocumentationFile>true</GenerateDocumentationFile>` in your `.csproj`.
+- `template: "docs"` renders the sidebar layout; `simple` is minimal.
+- Wire the output into navigation (`/api/`) or link from `/docs/`.
+
 ## Asset registry (bundles, preloads, critical CSS)
 Define shared CSS/JS once and map to routes. This keeps performance rules centralized.
 ```json
