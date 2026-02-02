@@ -596,6 +596,13 @@ try
             var headerHtml = TryGetOptionValue(subArgs, "--header-html");
             var footerHtml = TryGetOptionValue(subArgs, "--footer-html");
             var template = TryGetOptionValue(subArgs, "--template");
+            var templateRoot = TryGetOptionValue(subArgs, "--template-root");
+            var indexTemplate = TryGetOptionValue(subArgs, "--template-index");
+            var typeTemplate = TryGetOptionValue(subArgs, "--template-type");
+            var docsIndexTemplate = TryGetOptionValue(subArgs, "--template-docs-index");
+            var docsTypeTemplate = TryGetOptionValue(subArgs, "--template-docs-type");
+            var docsScript = TryGetOptionValue(subArgs, "--docs-script");
+            var searchScript = TryGetOptionValue(subArgs, "--search-script");
             var navJson = TryGetOptionValue(subArgs, "--nav") ?? TryGetOptionValue(subArgs, "--nav-json");
             var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
             var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
@@ -619,6 +626,13 @@ try
                 HeaderHtmlPath = headerHtml,
                 FooterHtmlPath = footerHtml,
                 Template = template,
+                TemplateRootPath = templateRoot,
+                IndexTemplatePath = indexTemplate,
+                TypeTemplatePath = typeTemplate,
+                DocsIndexTemplatePath = docsIndexTemplate,
+                DocsTypeTemplatePath = docsTypeTemplate,
+                DocsScriptPath = docsScript,
+                SearchScriptPath = searchScript,
                 NavJsonPath = navJson
             };
             if (includeNamespaces.Count > 0)
@@ -1327,6 +1341,13 @@ internal static class WebPipelineRunner
                         var header = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
                         var footer = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
                         var template = GetString(step, "template");
+                        var templateRoot = ResolvePath(baseDir, GetString(step, "templateRoot") ?? GetString(step, "template-root"));
+                        var indexTemplate = ResolvePath(baseDir, GetString(step, "templateIndex") ?? GetString(step, "template-index"));
+                        var typeTemplate = ResolvePath(baseDir, GetString(step, "templateType") ?? GetString(step, "template-type"));
+                        var docsIndexTemplate = ResolvePath(baseDir, GetString(step, "templateDocsIndex") ?? GetString(step, "template-docs-index"));
+                        var docsTypeTemplate = ResolvePath(baseDir, GetString(step, "templateDocsType") ?? GetString(step, "template-docs-type"));
+                        var docsScript = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script"));
+                        var searchScript = ResolvePath(baseDir, GetString(step, "searchScript") ?? GetString(step, "search-script"));
                         var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
                         var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
                         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
@@ -1347,6 +1368,13 @@ internal static class WebPipelineRunner
                             HeaderHtmlPath = header,
                             FooterHtmlPath = footer,
                             Template = template,
+                            TemplateRootPath = templateRoot,
+                            IndexTemplatePath = indexTemplate,
+                            TypeTemplatePath = typeTemplate,
+                            DocsIndexTemplatePath = docsIndexTemplate,
+                            DocsTypeTemplatePath = docsTypeTemplate,
+                            DocsScriptPath = docsScript,
+                            SearchScriptPath = searchScript,
                             NavJsonPath = nav
                         };
                         var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);

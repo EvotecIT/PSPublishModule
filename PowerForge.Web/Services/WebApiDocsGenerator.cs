@@ -37,6 +37,20 @@ public sealed class WebApiDocsOptions
     public string? BrandIcon { get; set; }
     /// <summary>Optional HTML template name (simple, docs).</summary>
     public string? Template { get; set; }
+    /// <summary>Optional root folder for API docs templates/assets overrides.</summary>
+    public string? TemplateRootPath { get; set; }
+    /// <summary>Optional override for index template.</summary>
+    public string? IndexTemplatePath { get; set; }
+    /// <summary>Optional override for type template.</summary>
+    public string? TypeTemplatePath { get; set; }
+    /// <summary>Optional override for docs index template.</summary>
+    public string? DocsIndexTemplatePath { get; set; }
+    /// <summary>Optional override for docs type template.</summary>
+    public string? DocsTypeTemplatePath { get; set; }
+    /// <summary>Optional override for docs script.</summary>
+    public string? DocsScriptPath { get; set; }
+    /// <summary>Optional override for search script.</summary>
+    public string? SearchScriptPath { get; set; }
     /// <summary>Optional list of namespace prefixes to include.</summary>
     public List<string> IncludeNamespacePrefixes { get; } = new();
     /// <summary>Optional list of namespace prefixes to exclude.</summary>
@@ -865,18 +879,18 @@ public static class WebApiDocsGenerator
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavTokens(options, ref header, ref footer);
         var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
-        var fallbackCss = LoadEmbeddedRaw("fallback.css");
+        var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = string.IsNullOrWhiteSpace(cssLink)
             ? WrapStyle(fallbackCss)
             : cssLink;
 
-        var indexTemplate = LoadEmbeddedRaw("index.html");
+        var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var typeLinks = new StringBuilder();
         foreach (var type in types)
         {
             typeLinks.AppendLine($"      <a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
         }
-        var searchScript = WrapScript(LoadEmbeddedRaw("search.js"));
+        var searchScript = WrapScript(LoadAsset(options, "search.js", options.SearchScriptPath));
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
@@ -908,7 +922,7 @@ public static class WebApiDocsGenerator
                 : $"    <div class=\"pf-api-remarks\">{System.Web.HttpUtility.HtmlEncode(type.Remarks)}</div>";
 
             var typeTitle = $"{type.FullName} - {options.Title}";
-            var typeTemplate = LoadEmbeddedRaw("type.html");
+            var typeTemplate = LoadTemplate(options, "type.html", options.TypeTemplatePath);
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
@@ -934,17 +948,17 @@ public static class WebApiDocsGenerator
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavTokens(options, ref header, ref footer);
         var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
-        var fallbackCss = LoadEmbeddedRaw("fallback.css");
+        var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = string.IsNullOrWhiteSpace(cssLink)
             ? WrapStyle(fallbackCss)
             : cssLink;
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
-        var docsScript = WrapScript(LoadEmbeddedRaw("docs.js"));
+        var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty);
         var overviewHtml = BuildDocsOverview(types, baseUrl);
 
-        var indexTemplate = LoadEmbeddedRaw("docs-index.html");
+        var indexTemplate = LoadTemplate(options, "docs-index.html", options.DocsIndexTemplatePath);
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
@@ -961,7 +975,7 @@ public static class WebApiDocsGenerator
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug);
             var typeMain = BuildDocsTypeDetail(type, baseUrl);
-            var typeTemplate = LoadEmbeddedRaw("docs-type.html");
+            var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
@@ -1499,6 +1513,38 @@ public static class WebApiDocsGenerator
         if (stream is null) return string.Empty;
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static string LoadTemplate(WebApiDocsOptions options, string fileName, string? explicitPath)
+    {
+        var content = LoadFileText(explicitPath);
+        if (!string.IsNullOrWhiteSpace(content)) return content;
+        if (!string.IsNullOrWhiteSpace(options.TemplateRootPath))
+        {
+            var candidate = Path.Combine(Path.GetFullPath(options.TemplateRootPath), fileName);
+            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+        }
+        return LoadEmbeddedRaw(fileName);
+    }
+
+    private static string LoadAsset(WebApiDocsOptions options, string fileName, string? explicitPath)
+    {
+        var content = LoadFileText(explicitPath);
+        if (!string.IsNullOrWhiteSpace(content)) return content;
+        if (!string.IsNullOrWhiteSpace(options.TemplateRootPath))
+        {
+            var candidate = Path.Combine(Path.GetFullPath(options.TemplateRootPath), fileName);
+            if (File.Exists(candidate)) return File.ReadAllText(candidate);
+        }
+        return LoadEmbeddedRaw(fileName);
+    }
+
+    private static string LoadFileText(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        var full = Path.GetFullPath(path);
+        if (!File.Exists(full)) return string.Empty;
+        return File.ReadAllText(full);
     }
 
     private static NavConfig? LoadNavConfig(WebApiDocsOptions options)

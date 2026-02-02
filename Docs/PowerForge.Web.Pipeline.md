@@ -54,6 +54,12 @@ Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
 - `template`: `simple` (default) or `docs` (sidebar layout)
+- `templateRoot` lets you override built-in templates/assets by placing files like
+  `index.html`, `type.html`, `docs-index.html`, `docs-type.html`, `docs.js`,
+  `search.js`, or `fallback.css` in that folder
+- `templateIndex`, `templateType`, `templateDocsIndex`, `templateDocsType` let you
+  override a single template file without a template root
+- `docsScript` / `searchScript` let you override the embedded JS files
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
