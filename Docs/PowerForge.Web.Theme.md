@@ -96,6 +96,65 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 - `tokens` are merged with child values winning.
 - `defaultLayout` applies when content has no layout.
 
+## Asset copying + output paths
+PowerForge.Web copies theme assets during `build`:
+- Source: `<themeRoot>/<assetsPath>/...` (defaults to `assets/`)
+- Output: `/<themesFolder>/<themeName>/<assetsPath>/...`
+  (default `themes/` folder unless `site.json` sets `ThemesRoot`)
+
+Example mapping (default settings):
+```
+themes/intelligencex/assets/site.css
+=> /themes/intelligencex/assets/site.css
+```
+
+If a theme extends another theme, **both** themes’ assets are copied:
+```
+/themes/base/assets/...
+/themes/intelligencex/assets/...
+```
+
+## How asset URLs are resolved
+Prefer the asset registry helpers instead of hard-coded `<link>` tags:
+- `{{ assets.css_html }}` injects the correct CSS for the current route.
+- `{{ assets.js_html }}` injects the correct JS for the current route.
+
+When you must hard-code an asset in a layout/partial, use absolute paths:
+```
+<link rel="stylesheet" href="/themes/intelligencex/assets/site.css" />
+```
+Avoid relative paths like `assets/site.css` because they resolve relative to the
+current page URL and will break on nested routes.
+
+### Asset registry rules (theme.json)
+Asset paths in theme bundles are **relative to the theme root**:
+```
+"bundles": [
+  { "name": "global", "css": ["assets/site.css"], "js": ["assets/site.js"] }
+]
+```
+During build, these resolve to:
+```
+/themes/<themeName>/assets/site.css
+```
+
+Critical CSS paths are also relative to the theme root:
+```
+"criticalCss": [{ "name": "base", "path": "critical.css" }]
+```
+
+## Common pitfalls (and how to avoid them)
+- **CSS not loading**: you used a relative URL in a layout.
+  Fix: use `{{ assets.css_html }}` or absolute `/themes/<theme>/...` links.
+- **Wrong theme path**: `site.json` has `ThemesRoot` and you hard-coded `/themes/...`.
+  Fix: use the asset registry (recommended) so the engine resolves paths.
+
+## Verification (catch broken asset paths)
+`powerforge-web verify` warns when asset files referenced in:
+- Theme asset registry (`theme.json` → `assets`)
+- Site asset registry (`site.json` → `AssetRegistry`)
+are missing on disk.
+
 ## Theme engines
 Two engines are supported:
 - **simple**: token replacement + partials (`{{TITLE}}`, `{{CONTENT}}`, `{{> header}}`).

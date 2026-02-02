@@ -80,6 +80,7 @@ public static class WebSiteVerifier
         }
 
         ValidateDataFiles(spec, plan, warnings);
+        ValidateThemeAssets(spec, plan, warnings);
 
         return new WebVerifyResult
         {
@@ -271,6 +272,104 @@ public static class WebSiteVerifier
         {
             warnings.Add($"Data file '{label}' could not be read: {ex.Message}");
         }
+    }
+
+    private static void ValidateThemeAssets(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme)) return;
+
+        var themeRoot = ResolveThemeRoot(spec, plan.RootPath, plan.ThemesRoot);
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return;
+
+        var loader = new ThemeLoader();
+        ThemeManifest? manifest = null;
+        try
+        {
+            manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, plan.RootPath, plan.ThemesRoot));
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Theme '{spec.DefaultTheme}' failed to load: {ex.Message}");
+            return;
+        }
+
+        if (manifest is null)
+        {
+            warnings.Add($"Theme '{spec.DefaultTheme}' was not found at '{themeRoot}'.");
+            return;
+        }
+
+        ValidateAssetRegistryPaths(manifest.Assets, themeRoot, $"theme:{manifest.Name}", warnings);
+        ValidateAssetRegistryPaths(spec.AssetRegistry, plan.RootPath, "site", warnings);
+    }
+
+    private static void ValidateAssetRegistryPaths(
+        AssetRegistrySpec? assets,
+        string rootPath,
+        string label,
+        List<string> warnings)
+    {
+        if (assets is null) return;
+
+        foreach (var bundle in assets.Bundles ?? Array.Empty<AssetBundleSpec>())
+        {
+            foreach (var css in bundle.Css ?? Array.Empty<string>())
+                ValidateAssetPath(css, rootPath, $"{label} bundle '{bundle.Name}' css", warnings);
+            foreach (var js in bundle.Js ?? Array.Empty<string>())
+                ValidateAssetPath(js, rootPath, $"{label} bundle '{bundle.Name}' js", warnings);
+        }
+
+        foreach (var preload in assets.Preloads ?? Array.Empty<PreloadSpec>())
+            ValidateAssetPath(preload.Href, rootPath, $"{label} preload", warnings);
+
+        foreach (var css in assets.CriticalCss ?? Array.Empty<CriticalCssSpec>())
+        {
+            if (string.IsNullOrWhiteSpace(css.Path)) continue;
+            if (IsExternalPath(css.Path)) continue;
+            var fullPath = Path.IsPathRooted(css.Path)
+                ? css.Path
+                : Path.Combine(rootPath, css.Path);
+            if (!File.Exists(fullPath))
+                warnings.Add($"Missing {label} critical CSS: {css.Path}");
+        }
+    }
+
+    private static void ValidateAssetPath(string? path, string rootPath, string label, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        if (IsExternalPath(path)) return;
+        if (path.StartsWith("/", StringComparison.Ordinal)) return;
+        var fullPath = Path.IsPathRooted(path) ? path : Path.Combine(rootPath, path);
+        if (!File.Exists(fullPath))
+            warnings.Add($"Missing {label} asset: {path}");
+    }
+
+    private static string? ResolveThemeRoot(SiteSpec spec, string rootPath, string? planThemesRoot)
+    {
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme))
+            return null;
+        var basePath = ResolveThemesRoot(spec, rootPath, planThemesRoot);
+        return string.IsNullOrWhiteSpace(basePath)
+            ? null
+            : Path.Combine(basePath, spec.DefaultTheme);
+    }
+
+    private static string ResolveThemesRoot(SiteSpec spec, string rootPath, string? planThemesRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(planThemesRoot))
+            return planThemesRoot;
+        var themesRoot = string.IsNullOrWhiteSpace(spec.ThemesRoot) ? "themes" : spec.ThemesRoot;
+        return Path.IsPathRooted(themesRoot) ? themesRoot : Path.Combine(rootPath, themesRoot);
+    }
+
+    private static bool IsExternalPath(string path)
+    {
+        return path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("//", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void ValidateFaqJson(JsonElement root, string label, List<string> warnings)
