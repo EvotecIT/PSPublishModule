@@ -105,6 +105,10 @@ Member layout:
 - `.member-kind[data-member-kind="extension"]` – extension methods filter
 - `.member-kind[data-member-kind="constructor"]` – constructors filter
 - `.member-toggle` – toggle for inherited members
+- `.member-actions` – member toolbar actions (expand/collapse/reset)
+- `.member-expand-all` – expand all member sections
+- `.member-collapse-all` – collapse all member sections
+- `.member-reset` – reset member filters
 - `.member-section` – section wrapper (methods/properties/fields/events)
 - `.member-section-header` – section header row
 - `.member-section-toggle` – collapse/expand button
@@ -135,6 +139,7 @@ Member layout:
 - `.type-meta-source` – source link row (optional)
 - `.type-toc` – per-type table of contents
 - `.type-toc-title` – TOC title label
+- `.type-toc-toggle` – collapse/expand button
 - `.type-inheritance` – inheritance chain section
 - `.inheritance-list` – inheritance list
 - `.inheritance-current` – current type within inheritance list

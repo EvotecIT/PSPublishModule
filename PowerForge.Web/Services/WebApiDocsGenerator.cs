@@ -2685,9 +2685,16 @@ public static class WebApiDocsGenerator
 
         if (toc.Count > 1)
         {
-            sb.AppendLine("      <nav class=\"type-toc\">");
-            sb.AppendLine("        <span class=\"type-toc-title\">On this page</span>");
-            sb.AppendLine("        <ul>");
+          sb.AppendLine("      <nav class=\"type-toc\">");
+          sb.AppendLine("        <div class=\"type-toc-header\">");
+          sb.AppendLine("          <span class=\"type-toc-title\">On this page</span>");
+          sb.AppendLine("          <button class=\"type-toc-toggle\" type=\"button\" aria-label=\"Toggle table of contents\">");
+          sb.AppendLine("            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+          sb.AppendLine("              <path d=\"M9 18l6-6-6-6\"/>");
+          sb.AppendLine("            </svg>");
+          sb.AppendLine("          </button>");
+          sb.AppendLine("        </div>");
+          sb.AppendLine("        <ul>");
             foreach (var entry in toc)
             {
                 sb.AppendLine($"          <li><a href=\"#{entry.id}\">{System.Web.HttpUtility.HtmlEncode(entry.label)}</a></li>");
@@ -2769,12 +2776,12 @@ public static class WebApiDocsGenerator
             sb.AppendLine("      </section>");
         }
 
-        sb.AppendLine("      <div class=\"member-toolbar\">");
-        sb.AppendLine("        <div class=\"member-filter\">");
-        sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
-        sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
-        sb.AppendLine("        </div>");
           var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
+          sb.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
+          sb.AppendLine("        <div class=\"member-filter\">");
+          sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
+          sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
+          sb.AppendLine("        </div>");
           sb.AppendLine("        <div class=\"member-kind-filter\">");
           sb.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
           if (type.Constructors.Count > 0)
@@ -2786,11 +2793,16 @@ public static class WebApiDocsGenerator
           if (type.ExtensionMethods.Count > 0)
               sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
         sb.AppendLine("        </div>");
-        sb.AppendLine("        <label class=\"member-toggle\">");
-        sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
-        sb.AppendLine("          Show inherited");
-        sb.AppendLine("        </label>");
-        sb.AppendLine("      </div>");
+          sb.AppendLine("        <label class=\"member-toggle\">");
+          sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
+          sb.AppendLine("          Show inherited");
+          sb.AppendLine("        </label>");
+          sb.AppendLine("        <div class=\"member-actions\">");
+          sb.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
+          sb.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
+          sb.AppendLine("          <button class=\"member-reset\" type=\"button\">Reset</button>");
+          sb.AppendLine("        </div>");
+          sb.AppendLine("      </div>");
 
         AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
         AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, groupOverloads: true, sectionId: "methods");

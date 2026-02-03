@@ -14,6 +14,10 @@
   var memberFilter = document.querySelector('#api-member-filter');
   var memberKindButtons = Array.prototype.slice.call(document.querySelectorAll('.member-kind'));
   var inheritedToggle = document.querySelector('#api-show-inherited');
+  var memberExpandAll = document.querySelector('.member-expand-all');
+  var memberCollapseAll = document.querySelector('.member-collapse-all');
+  var memberReset = document.querySelector('.member-reset');
+  var tocToggle = document.querySelector('.type-toc-toggle');
 
   function setSidebar(open) {
     if (!sidebar || !overlay) return;
@@ -255,6 +259,53 @@
       body.hidden = collapsed;
     });
   });
+
+  function setMemberSections(collapsed) {
+    document.querySelectorAll('.member-section').forEach(function(section) {
+      var body = section.querySelector('.member-section-body');
+      if (!body) return;
+      if (collapsed) {
+        section.classList.add('collapsed');
+        body.hidden = true;
+      } else {
+        section.classList.remove('collapsed');
+        body.hidden = false;
+      }
+    });
+  }
+
+  if (memberExpandAll) {
+    memberExpandAll.addEventListener('click', function() {
+      setMemberSections(false);
+    });
+  }
+
+  if (memberCollapseAll) {
+    memberCollapseAll.addEventListener('click', function() {
+      setMemberSections(true);
+    });
+  }
+
+  if (memberReset) {
+    memberReset.addEventListener('click', function() {
+      activeMemberKind = '';
+      if (memberFilter) memberFilter.value = '';
+      if (memberKindButtons.length) {
+        memberKindButtons.forEach(function(b) { b.classList.remove('active'); });
+        memberKindButtons[0].classList.add('active');
+      }
+      if (inheritedToggle) inheritedToggle.checked = false;
+      applyMemberFilter();
+    });
+  }
+
+  if (tocToggle) {
+    tocToggle.addEventListener('click', function() {
+      var toc = tocToggle.closest('.type-toc');
+      if (!toc) return;
+      toc.classList.toggle('collapsed');
+    });
+  }
 
   applyFilter(filterInput ? filterInput.value : '');
   applyMemberFilter();
