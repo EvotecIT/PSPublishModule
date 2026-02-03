@@ -2398,52 +2398,53 @@ public static class WebApiDocsGenerator
         sb.AppendLine("        <span>API Reference</span>");
         sb.AppendLine("      </a>");
         sb.AppendLine("    </div>");
-        sb.AppendLine("    <div class=\"sidebar-search\">");
-        sb.AppendLine("      <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-        sb.AppendLine("        <circle cx=\"11\" cy=\"11\" r=\"8\"/>");
-        sb.AppendLine("        <path d=\"M21 21l-4.35-4.35\"/>");
-        sb.AppendLine("      </svg>");
-        sb.AppendLine("      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter types...\" />");
-        sb.AppendLine("      <button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
-        sb.AppendLine("        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
-        sb.AppendLine("          <path d=\"M18 6L6 18M6 6l12 12\"/>");
-        sb.AppendLine("        </svg>");
-        sb.AppendLine("      </button>");
-        sb.AppendLine("    </div>");
+          var totalTypes = types.Count;
+          sb.AppendLine("    <div class=\"sidebar-search\">");
+          sb.AppendLine("      <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+          sb.AppendLine("        <circle cx=\"11\" cy=\"11\" r=\"8\"/>");
+          sb.AppendLine("        <path d=\"M21 21l-4.35-4.35\"/>");
+          sb.AppendLine("      </svg>");
+          sb.AppendLine($"      <input id=\"api-filter\" type=\"text\" placeholder=\"Filter types ({totalTypes})...\" />");
+          sb.AppendLine("      <button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
+          sb.AppendLine("        <svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
+          sb.AppendLine("          <path d=\"M18 6L6 18M6 6l12 12\"/>");
+          sb.AppendLine("        </svg>");
+          sb.AppendLine("      </button>");
+          sb.AppendLine("    </div>");
 
-        var kindFilters = BuildKindFilters(types);
-        if (kindFilters.Count > 0)
-        {
-            sb.AppendLine("    <div class=\"sidebar-filters\">");
-            sb.AppendLine("      <div class=\"filter-label\">Type filters</div>");
-            sb.AppendLine("      <div class=\"filter-buttons\">");
-            sb.AppendLine("        <button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
-            foreach (var kind in kindFilters)
-            {
-                sb.AppendLine($"        <button class=\"filter-button\" type=\"button\" data-kind=\"{kind}\">{GetKindLabel(kind)}</button>");
-            }
-            sb.AppendLine("      </div>");
-            var namespaces = types
-                .Select(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            if (namespaces.Count > 0)
-            {
-                sb.AppendLine("      <div class=\"filter-row\">");
-                sb.AppendLine("        <label for=\"api-namespace\" class=\"filter-label\">Namespace</label>");
-                sb.AppendLine("        <select id=\"api-namespace\" class=\"namespace-select\">");
-                sb.AppendLine("          <option value=\"\">All namespaces</option>");
-                foreach (var ns in namespaces)
-                {
-                    var encoded = System.Web.HttpUtility.HtmlEncode(ns);
-                    sb.AppendLine($"          <option value=\"{encoded}\">{encoded}</option>");
-                }
-                sb.AppendLine("        </select>");
-                sb.AppendLine("      </div>");
-            }
-            sb.AppendLine("    </div>");
-        }
+          var kindFilters = BuildKindFilters(types);
+          if (kindFilters.Count > 0)
+          {
+              sb.AppendLine("    <div class=\"sidebar-filters\">");
+              sb.AppendLine("      <div class=\"filter-label\">Type filters</div>");
+              sb.AppendLine("      <div class=\"filter-buttons\">");
+              sb.AppendLine("        <button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
+              foreach (var kind in kindFilters)
+              {
+                  sb.AppendLine($"        <button class=\"filter-button\" type=\"button\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
+              }
+              sb.AppendLine("      </div>");
+              var namespaceGroups = types
+                  .GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
+                  .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                  .ToList();
+              if (namespaceGroups.Count > 0)
+              {
+                  sb.AppendLine("      <div class=\"filter-row\">");
+                  sb.AppendLine("        <label for=\"api-namespace\" class=\"filter-label\">Namespace</label>");
+                  sb.AppendLine("        <select id=\"api-namespace\" class=\"namespace-select\">");
+                  sb.AppendLine("          <option value=\"\">All namespaces</option>");
+                  foreach (var group in namespaceGroups)
+                  {
+                      var encoded = System.Web.HttpUtility.HtmlEncode(group.Key);
+                      sb.AppendLine($"          <option value=\"{encoded}\">{encoded} ({group.Count()})</option>");
+                  }
+                  sb.AppendLine("        </select>");
+                  sb.AppendLine("      </div>");
+              }
+              sb.AppendLine("    </div>");
+          }
+          sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} types</div>");
           sb.AppendLine("    <nav class=\"sidebar-nav\">");
 
         var mainTypes = GetMainTypes(types);
@@ -2766,16 +2767,17 @@ public static class WebApiDocsGenerator
         sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
         sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
         sb.AppendLine("        </div>");
-        sb.AppendLine("        <div class=\"member-kind-filter\">");
-        sb.AppendLine("          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All</button>");
-        if (type.Constructors.Count > 0)
-            sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors</button>");
-        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods</button>");
-        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties</button>");
-        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">Fields</button>");
-        sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events</button>");
-        if (type.ExtensionMethods.Count > 0)
-            sb.AppendLine("          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions</button>");
+          var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
+          sb.AppendLine("        <div class=\"member-kind-filter\">");
+          sb.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
+          if (type.Constructors.Count > 0)
+              sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
+          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods ({type.Methods.Count})</button>");
+          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
+          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == \"Enum\" ? \"Values\" : \"Fields\")} ({type.Fields.Count})</button>");
+          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
+          if (type.ExtensionMethods.Count > 0)
+              sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
         sb.AppendLine("        </div>");
         sb.AppendLine("        <label class=\"member-toggle\">");
         sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
@@ -3302,27 +3304,45 @@ public static class WebApiDocsGenerator
 
     private static readonly string[] KindOrder = { "class", "struct", "interface", "enum", "delegate" };
 
-    private static List<string> BuildKindFilters(IReadOnlyList<ApiTypeModel> types)
-    {
-        var available = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var type in types)
-            available.Add(NormalizeKind(type.Kind));
-        return KindOrder.Where(k => available.Contains(k)).ToList();
-    }
+      private static List<KindFilter> BuildKindFilters(IReadOnlyList<ApiTypeModel> types)
+      {
+          var available = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+          foreach (var type in types)
+          {
+              var kind = NormalizeKind(type.Kind);
+              available.TryGetValue(kind, out var count);
+              available[kind] = count + 1;
+          }
+          return KindOrder
+              .Where(k => available.ContainsKey(k))
+              .Select(k => new KindFilter(k, available[k]))
+              .ToList();
+      }
 
-    private static string GetKindLabel(string kind)
-        => kind switch
-        {
-            "class" => "Classes",
-            "struct" => "Structs",
-            "interface" => "Interfaces",
-            "enum" => "Enums",
-            "delegate" => "Delegates",
-            _ => "Types"
-        };
+      private static string GetKindLabel(string kind, int count)
+          => kind switch
+          {
+              "class" => $"Classes ({count})",
+              "struct" => $"Structs ({count})",
+              "interface" => $"Interfaces ({count})",
+              "enum" => $"Enums ({count})",
+              "delegate" => $"Delegates ({count})",
+              _ => $"Types ({count})"
+          };
 
-    private static string NormalizeKind(string? kind)
-        => string.IsNullOrWhiteSpace(kind) ? "class" : kind.ToLowerInvariant();
+      private static string NormalizeKind(string? kind)
+          => string.IsNullOrWhiteSpace(kind) ? "class" : kind.ToLowerInvariant();
+
+      private sealed class KindFilter
+      {
+          public KindFilter(string kind, int count)
+          {
+              Kind = kind;
+              Count = count;
+          }
+          public string Kind { get; }
+          public int Count { get; }
+      }
 
     private static string Truncate(string? value, int length)
     {

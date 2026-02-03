@@ -65,6 +65,7 @@ Sidebar sections:
 - `.filter-button` – type filter button
 - `.filter-button.active` – active type filter
 - `.namespace-select` – namespace dropdown
+- `.sidebar-count` – “showing X of Y types” label
 - `.sidebar-nav` – sidebar nav wrapper
 - `.sidebar-empty` – “no matching types” placeholder
 - `.nav-section` – nav section block

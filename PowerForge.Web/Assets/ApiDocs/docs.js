@@ -7,6 +7,7 @@
   var emptyLabel = document.querySelector('.sidebar-empty');
   var kindButtons = Array.prototype.slice.call(document.querySelectorAll('.filter-button'));
   var namespaceSelect = document.querySelector('#api-namespace');
+  var countLabel = document.querySelector('.sidebar-count');
   var memberFilter = document.querySelector('#api-member-filter');
   var memberKindButtons = Array.prototype.slice.call(document.querySelectorAll('.member-kind'));
   var inheritedToggle = document.querySelector('#api-show-inherited');
@@ -36,6 +37,7 @@
 
   var activeKind = '';
   var activeNamespace = '';
+  var totalTypes = countLabel ? parseInt(countLabel.dataset.total || '0', 10) : 0;
 
   function applyFilter(query) {
     var q = normalize(query);
@@ -74,6 +76,12 @@
     if (emptyLabel) {
       var anyVisible = items.some(function(item) { return item.style.display !== 'none'; });
       emptyLabel.hidden = anyVisible;
+    }
+
+    if (countLabel) {
+      var visibleCount = items.filter(function(item) { return item.style.display !== 'none'; }).length;
+      var total = totalTypes || items.length;
+      countLabel.textContent = 'Showing ' + visibleCount + ' of ' + total + ' types';
     }
   }
 
