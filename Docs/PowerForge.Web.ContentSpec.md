@@ -32,6 +32,31 @@ shared/
   data/
 ```
 
+## Site spec layering (base + overrides)
+You can compose a site from a shared base spec and project‑specific overrides
+using `extends` in `site.json`.
+
+Example:
+```json
+{
+  "extends": ["../shared/site.base.json"],
+  "name": "IntelligenceX",
+  "baseUrl": "https://example.com",
+  "defaultTheme": "intelligencex",
+  "navigation": {
+    "menus": [
+      { "name": "main", "items": [{ "title": "Home", "url": "/" }] }
+    ]
+  }
+}
+```
+
+Rules:
+- `extends` accepts a string or array of strings.
+- Paths are resolved relative to the current `site.json`.
+- Multiple bases are merged in order; the current file wins.
+- Objects are merged **deeply**; arrays are **replaced** (not concatenated).
+
 ## Markdown + front matter
 All content files are Markdown with optional front matter:
 ```

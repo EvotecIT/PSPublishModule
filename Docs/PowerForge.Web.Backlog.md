@@ -11,7 +11,6 @@ Short, high-signal list to keep parity and stability work visible.
 - Prism local asset validation to prevent silent 404s.
 - Link consistency: nav parity across all pages + edit links resolve to correct sources.
 - Optional: API docs edit links per symbol (XML/CS source mapping) when available.
-- Site spec layering (base + overrides) for reuse across many projects.
 
 ## Assets & performance
 - Asset policy examples for local/CDN/hybrid with rewrites and hashing.
