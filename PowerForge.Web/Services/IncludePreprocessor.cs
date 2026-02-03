@@ -4,7 +4,8 @@ namespace PowerForge.Web;
 
 internal static class IncludePreprocessor
 {
-    private static readonly Regex IncludeRegex = new Regex(@"\{\{<\s*include\s+path=""(?<path>[^""]+)""\s*>\}\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex IncludeRegex = new Regex(@"\{\{<\s*include\s+path=""(?<path>[^""]+)""\s*>\}\}", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout);
 
     public static string Apply(string markdown, string rootPath, int maxDepth = 5)
     {

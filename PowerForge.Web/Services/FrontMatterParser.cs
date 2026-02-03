@@ -9,7 +9,8 @@ namespace PowerForge.Web;
 /// <summary>Parses YAML-like front matter from markdown content.</summary>
 public static class FrontMatterParser
 {
-    private static readonly Regex H1Regex = new Regex(@"^#\s+(.+)$", RegexOptions.Multiline | RegexOptions.Compiled);
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex H1Regex = new Regex(@"^#\s+(.+)$", RegexOptions.Multiline | RegexOptions.Compiled, RegexTimeout);
 
     /// <summary>Extracts front matter and body from markdown.</summary>
     /// <param name="markdown">Raw markdown content.</param>

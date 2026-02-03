@@ -5,8 +5,9 @@ namespace PowerForge.Web;
 
 internal sealed class SimpleTemplateEngine : ITemplateEngine
 {
-    private static readonly Regex TokenRegex = new Regex(@"\{\{\s*(?<key>[A-Za-z0-9_\-]+)\s*\}\}", RegexOptions.Compiled);
-    private static readonly Regex PartialRegex = new Regex(@"\{\{>\s*(?<name>[^\s}]+)\s*\}\}", RegexOptions.Compiled);
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex TokenRegex = new Regex(@"\{\{\s*(?<key>[A-Za-z0-9_\-]+)\s*\}\}", RegexOptions.Compiled, RegexTimeout);
+    private static readonly Regex PartialRegex = new Regex(@"\{\{>\s*(?<name>[^\s}]+)\s*\}\}", RegexOptions.Compiled, RegexTimeout);
 
     public string Render(string template, ThemeRenderContext context, Func<string, string?> partialResolver)
     {
