@@ -8,6 +8,8 @@
   var kindButtons = Array.prototype.slice.call(document.querySelectorAll('.filter-button'));
   var namespaceSelect = document.querySelector('#api-namespace');
   var countLabel = document.querySelector('.sidebar-count');
+  var expandAllBtn = document.querySelector('.sidebar-expand-all');
+  var collapseAllBtn = document.querySelector('.sidebar-collapse-all');
   var memberFilter = document.querySelector('#api-member-filter');
   var memberKindButtons = Array.prototype.slice.call(document.querySelectorAll('.member-kind'));
   var inheritedToggle = document.querySelector('#api-show-inherited');
@@ -136,6 +138,36 @@
       }
     });
   });
+
+  function setAllSections(collapsed) {
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.nav-section'));
+    sections.forEach(function(section) {
+      var content = section.querySelector('.nav-section-content');
+      if (!content) return;
+      var chevron = section.querySelector('.chevron');
+      if (collapsed) {
+        content.classList.add('collapsed');
+        content.hidden = true;
+        if (chevron) chevron.classList.remove('expanded');
+      } else {
+        content.classList.remove('collapsed');
+        content.hidden = false;
+        if (chevron) chevron.classList.add('expanded');
+      }
+    });
+  }
+
+  if (expandAllBtn) {
+    expandAllBtn.addEventListener('click', function() {
+      setAllSections(false);
+    });
+  }
+
+  if (collapseAllBtn) {
+    collapseAllBtn.addEventListener('click', function() {
+      setAllSections(true);
+    });
+  }
 
   var activeMemberKind = '';
 

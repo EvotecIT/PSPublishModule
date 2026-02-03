@@ -34,6 +34,9 @@ a:hover{color:#a78bfa}
 .filter-button.active{background:#1f2937;border-color:#a78bfa;color:#e6e9f3}
 .namespace-select{width:100%;padding:6px 8px;border-radius:10px;border:1px solid rgba(148,163,184,.3);background:#0f172a;color:#e6e9f3}
 .sidebar-count{font-size:.75rem;color:#94a3b8;margin:8px 0 12px}
+.sidebar-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.sidebar-tools button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.7rem;cursor:pointer}
+.sidebar-tools button:hover{border-color:#a78bfa;color:#e6e9f3}
 .sidebar-nav{display:grid;gap:10px}
 .nav-section-header{display:flex;align-items:center;justify-content:space-between;color:#94a3b8;cursor:pointer;font-size:.8rem;letter-spacing:.04em;text-transform:uppercase}
 .nav-section-header.main-api{color:#e6e9f3}

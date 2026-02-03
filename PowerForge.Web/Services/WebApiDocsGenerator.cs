@@ -2445,6 +2445,10 @@ public static class WebApiDocsGenerator
               sb.AppendLine("    </div>");
           }
           sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} types</div>");
+          sb.AppendLine("    <div class=\"sidebar-tools\">");
+          sb.AppendLine("      <button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
+          sb.AppendLine("      <button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
+          sb.AppendLine("    </div>");
           sb.AppendLine("    <nav class=\"sidebar-nav\">");
 
         var mainTypes = GetMainTypes(types);
