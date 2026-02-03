@@ -13,6 +13,9 @@ Two template modes are available:
 Sidebar position (`docs` template):
 - Use `sidebar: "right"` (pipeline) or `--sidebar right` (CLI) to move the sidebar.
 - Default is `left`.
+Body class:
+- `bodyClass` (pipeline) or `--body-class` (CLI) to set the `<body>` class.
+- Default: `pf-api-docs` (used by fallback CSS to align theme tokens).
 
 To customize templates, copy the embedded defaults from:
 `PowerForge.Web/Assets/ApiDocs` into your own folder and pass it as

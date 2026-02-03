@@ -32,6 +32,8 @@ public sealed class WebApiDocsOptions
       public string? DocsHomeUrl { get; set; }
       /// <summary>Sidebar position for docs template (left or right).</summary>
       public string? SidebarPosition { get; set; }
+      /// <summary>Optional CSS class applied to the &lt;body&gt; element.</summary>
+      public string? BodyClass { get; set; }
     /// <summary>Output format hint (json, html, hybrid, both).</summary>
     public string? Format { get; set; }
     /// <summary>Optional stylesheet href for HTML output.</summary>
@@ -2197,14 +2199,15 @@ public static class WebApiDocsGenerator
             return;
         }
 
-        var header = LoadOptionalHtml(options.HeaderHtmlPath);
-        var footer = LoadOptionalHtml(options.FooterHtmlPath);
-        ApplyNavTokens(options, ref header, ref footer);
-        var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
-        var fallbackCss = LoadAsset(options, "fallback.css", null);
-        var cssBlock = string.IsNullOrWhiteSpace(cssLink)
-            ? WrapStyle(fallbackCss)
-            : cssLink;
+          var header = LoadOptionalHtml(options.HeaderHtmlPath);
+          var footer = LoadOptionalHtml(options.FooterHtmlPath);
+          ApplyNavTokens(options, ref header, ref footer);
+          var bodyClass = ResolveBodyClass(options.BodyClass);
+          var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
+          var fallbackCss = LoadAsset(options, "fallback.css", null);
+          var cssBlock = string.IsNullOrWhiteSpace(cssLink)
+              ? WrapStyle(fallbackCss)
+              : cssLink;
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var typeLinks = new StringBuilder();
@@ -2213,16 +2216,17 @@ public static class WebApiDocsGenerator
             typeLinks.AppendLine($"      <a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
         }
         var searchScript = WrapScript(LoadAsset(options, "search.js", options.SearchScriptPath));
-        var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
-        {
-            ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
-            ["CSS"] = cssBlock,
-            ["HEADER"] = header,
-            ["FOOTER"] = footer,
-            ["TYPE_COUNT"] = types.Count.ToString(),
-            ["TYPE_LINKS"] = typeLinks.ToString().TrimEnd(),
-            ["SEARCH_SCRIPT"] = searchScript
-        });
+          var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
+          {
+              ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+              ["CSS"] = cssBlock,
+              ["HEADER"] = header,
+              ["FOOTER"] = footer,
+              ["BODY_CLASS"] = bodyClass,
+              ["TYPE_COUNT"] = types.Count.ToString(),
+              ["TYPE_LINKS"] = typeLinks.ToString().TrimEnd(),
+              ["SEARCH_SCRIPT"] = searchScript
+          });
 
         File.WriteAllText(Path.Combine(outputPath, "index.html"), indexHtml.ToString(), Encoding.UTF8);
 
@@ -2245,17 +2249,18 @@ public static class WebApiDocsGenerator
 
             var typeTitle = $"{type.FullName} - {options.Title}";
             var typeTemplate = LoadTemplate(options, "type.html", options.TypeTemplatePath);
-            var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
-            {
-                ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
-                ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
-                ["CSS"] = cssBlock,
-                ["HEADER"] = header,
-                ["FOOTER"] = footer,
-                ["TYPE_SUMMARY"] = summaryHtml,
-                ["TYPE_REMARKS"] = remarksHtml,
-                ["MEMBERS"] = memberHtml.ToString().TrimEnd()
-            });
+          var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
+          {
+              ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
+              ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
+              ["CSS"] = cssBlock,
+              ["HEADER"] = header,
+              ["FOOTER"] = footer,
+              ["BODY_CLASS"] = bodyClass,
+              ["TYPE_SUMMARY"] = summaryHtml,
+              ["TYPE_REMARKS"] = remarksHtml,
+              ["MEMBERS"] = memberHtml.ToString().TrimEnd()
+          });
 
             File.WriteAllText(Path.Combine(typesDir, $"{type.Slug}.html"), typeHtml, Encoding.UTF8);
         }
@@ -2266,10 +2271,11 @@ public static class WebApiDocsGenerator
 
     private static void GenerateDocsHtml(string outputPath, WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types)
     {
-        var header = LoadOptionalHtml(options.HeaderHtmlPath);
-        var footer = LoadOptionalHtml(options.FooterHtmlPath);
-        ApplyNavTokens(options, ref header, ref footer);
-        var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
+          var header = LoadOptionalHtml(options.HeaderHtmlPath);
+          var footer = LoadOptionalHtml(options.FooterHtmlPath);
+          ApplyNavTokens(options, ref header, ref footer);
+          var bodyClass = ResolveBodyClass(options.BodyClass);
+          var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = string.IsNullOrWhiteSpace(cssLink)
             ? WrapStyle(fallbackCss)
@@ -2286,17 +2292,18 @@ public static class WebApiDocsGenerator
         var derivedMap = BuildDerivedTypeMap(types, typeIndex);
 
         var indexTemplate = LoadTemplate(options, "docs-index.html", options.DocsIndexTemplatePath);
-        var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
-        {
-            ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
-            ["CSS"] = cssBlock,
-            ["HEADER"] = header,
-            ["FOOTER"] = footer,
-            ["SIDEBAR"] = sidebarHtml,
-            ["SIDEBAR_CLASS"] = sidebarClass,
-            ["MAIN"] = overviewHtml,
-            ["DOCS_SCRIPT"] = docsScript
-        });
+          var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
+          {
+              ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+              ["CSS"] = cssBlock,
+              ["HEADER"] = header,
+              ["FOOTER"] = footer,
+              ["BODY_CLASS"] = bodyClass,
+              ["SIDEBAR"] = sidebarHtml,
+              ["SIDEBAR_CLASS"] = sidebarClass,
+              ["MAIN"] = overviewHtml,
+              ["DOCS_SCRIPT"] = docsScript
+          });
         File.WriteAllText(Path.Combine(outputPath, "index.html"), indexHtml.ToString(), Encoding.UTF8);
 
         foreach (var type in types)
@@ -2306,17 +2313,18 @@ public static class WebApiDocsGenerator
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
-            var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
-            {
-                ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
-                ["CSS"] = cssBlock,
-                ["HEADER"] = header,
-                ["FOOTER"] = footer,
-                ["SIDEBAR"] = sidebar,
-                ["SIDEBAR_CLASS"] = sidebarClass,
-                ["MAIN"] = typeMain,
-                ["DOCS_SCRIPT"] = docsScript
-            });
+          var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
+          {
+              ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
+              ["CSS"] = cssBlock,
+              ["HEADER"] = header,
+              ["FOOTER"] = footer,
+              ["BODY_CLASS"] = bodyClass,
+              ["SIDEBAR"] = sidebar,
+              ["SIDEBAR_CLASS"] = sidebarClass,
+              ["MAIN"] = typeMain,
+              ["DOCS_SCRIPT"] = docsScript
+          });
 
             var htmlPath = Path.Combine(outputPath, $"{type.Slug}.html");
             File.WriteAllText(htmlPath, typeHtml, Encoding.UTF8);
@@ -3426,18 +3434,26 @@ public static class WebApiDocsGenerator
     private static string EnsureTrailingSlash(string url)
         => url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";
 
-    private static string NormalizeDocsHomeUrl(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return "/docs/";
+      private static string NormalizeDocsHomeUrl(string? url)
+      {
+          if (string.IsNullOrWhiteSpace(url))
+              return "/docs/";
         var trimmed = url.Trim();
         if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             return EnsureTrailingSlash(trimmed);
         if (!trimmed.StartsWith("/"))
             trimmed = "/" + trimmed;
-        return EnsureTrailingSlash(trimmed);
-    }
+          return EnsureTrailingSlash(trimmed);
+      }
+
+      private static string ResolveBodyClass(string? value)
+      {
+          var trimmed = value?.Trim();
+          if (string.IsNullOrWhiteSpace(trimmed))
+              return "pf-api-docs";
+          return trimmed;
+      }
 
     private static string LoadOptionalHtml(string? path)
     {

@@ -82,6 +82,8 @@
           "docsHomeUrl": { "type": "string" },
           "sidebar": { "type": "string", "enum": ["left", "right"] },
           "sidebarPosition": { "type": "string", "enum": ["left", "right"] },
+          "bodyClass": { "type": "string" },
+          "body-class": { "type": "string" },
           "sourceRoot": { "type": "string" },
         "sourceUrl": { "type": "string" },
         "includeUndocumented": { "type": "boolean" },
