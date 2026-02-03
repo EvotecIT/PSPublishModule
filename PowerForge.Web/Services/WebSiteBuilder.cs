@@ -19,7 +19,7 @@ public static class WebSiteBuilder
     private static readonly Regex StripTagsRegex = new("<.*?>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HrefRegex = new("href\\s*=\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
-    private static readonly Regex CodeBlockRegex = new("<pre[^>]*>\\s*<code(?<attrs>[^>]*)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CodeBlockRegex = new("<pre(?<preAttrs>[^>]*)>\\s*<code(?<codeAttrs>[^>]*)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ClassAttrRegex = new("class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     /// <summary>Builds the site output.</summary>
     /// <param name="spec">Site configuration.</param>
@@ -1665,22 +1665,48 @@ public static class WebSiteBuilder
             htmlContent,
             match =>
             {
-                var attrs = match.Groups["attrs"].Value;
-                if (string.IsNullOrWhiteSpace(attrs))
-                    return match.Value.Replace("<code", "<code class=\"language-plain\"", StringComparison.OrdinalIgnoreCase);
+                var preAttrs = match.Groups["preAttrs"].Value;
+                var codeAttrs = match.Groups["codeAttrs"].Value;
 
-                var classMatch = ClassAttrRegex.Match(attrs);
-                if (!classMatch.Success)
-                    return match.Value.Replace("<code", "<code class=\"language-plain\"", StringComparison.OrdinalIgnoreCase);
+                var updatedPre = EnsureClass(preAttrs, "code-block");
+                var updatedCode = EnsureLanguageClass(codeAttrs);
 
-                var classes = classMatch.Groups["value"].Value;
-                if (classes.IndexOf("language-", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return match.Value;
-
-                var replacement = classMatch.Value.Replace(classes, classes + " language-plain");
-                var newAttrs = attrs.Replace(classMatch.Value, replacement);
-                return match.Value.Replace(attrs, newAttrs, StringComparison.OrdinalIgnoreCase);
+                return $"<pre{updatedPre}><code{updatedCode}>";
             });
+    }
+
+    private static string EnsureLanguageClass(string attrs)
+    {
+        if (string.IsNullOrWhiteSpace(attrs))
+            return " class=\"language-plain\"";
+
+        var classMatch = ClassAttrRegex.Match(attrs);
+        if (!classMatch.Success)
+            return attrs + " class=\"language-plain\"";
+
+        var classes = classMatch.Groups["value"].Value;
+        if (classes.IndexOf("language-", StringComparison.OrdinalIgnoreCase) >= 0)
+            return attrs;
+
+        var replacement = classMatch.Value.Replace(classes, (classes + " language-plain").Trim());
+        return attrs.Replace(classMatch.Value, replacement);
+    }
+
+    private static string EnsureClass(string attrs, string className)
+    {
+        if (string.IsNullOrWhiteSpace(attrs))
+            return $" class=\"{className}\"";
+
+        var classMatch = ClassAttrRegex.Match(attrs);
+        if (!classMatch.Success)
+            return attrs + $" class=\"{className}\"";
+
+        var classes = classMatch.Groups["value"].Value;
+        if (classes.IndexOf(className, StringComparison.OrdinalIgnoreCase) >= 0)
+            return attrs;
+
+        var replacement = classMatch.Value.Replace(classes, (classes + " " + className).Trim());
+        return attrs.Replace(classMatch.Value, replacement);
     }
 
     private static void AppendMetaHtml(Dictionary<string, object?> meta, string key, string html)
