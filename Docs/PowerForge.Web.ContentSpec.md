@@ -425,6 +425,32 @@ Notes:
 - A full machine-readable list is written to:
   - `_powerforge/redirects.json`
 
+## Sitemap behavior
+The `sitemap` task generates entries automatically and can be augmented by
+explicit entries in the pipeline spec.
+
+Defaults:
+- All generated `.html` files under `_site/` are included.
+- `robots.txt`, `llms.txt`, `llms.json`, `llms-full.txt` are included when present.
+- Paths are normalized to trailing‑slash routes when they map to `index.html`.
+
+Explicit entries:
+- `entries` in the sitemap task override auto‑generated metadata for the same path.
+- If a path is not present in auto output, it is still added to the sitemap.
+
+Example task:
+```json
+{
+  "task": "sitemap",
+  "siteRoot": "./_site",
+  "baseUrl": "https://example.com",
+  "entries": [
+    { "path": "/docs/getting-started/", "priority": "0.9", "changefreq": "weekly" },
+    { "path": "/api/", "priority": "0.8", "changefreq": "weekly" }
+  ]
+}
+```
+
 ## Themes + tokens
 Themes provide layouts/partials/assets. Tokens map to CSS variables:
 ```
