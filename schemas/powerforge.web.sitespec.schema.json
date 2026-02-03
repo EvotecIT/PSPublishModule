@@ -9,6 +9,18 @@
     "SchemaVersion": { "type": "integer", "minimum": 1 },
     "Name": { "type": "string" },
     "BaseUrl": { "type": "string" },
+    "Extends": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "extends": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
     "DefaultTheme": { "type": "string" },
     "ThemeEngine": { "type": "string" },
     "TrailingSlash": { "type": "string", "enum": ["always", "never", "ignore"] },
