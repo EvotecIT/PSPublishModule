@@ -4,6 +4,7 @@
   var overlay = document.querySelector('.sidebar-overlay');
   var filterInput = document.querySelector('.sidebar-search input');
   var clearButton = document.querySelector('.clear-search');
+  var emptyLabel = document.querySelector('.sidebar-empty');
   var kindButtons = Array.prototype.slice.call(document.querySelectorAll('.filter-button'));
   var namespaceSelect = document.querySelector('#api-namespace');
   var memberFilter = document.querySelector('#api-member-filter');
@@ -69,6 +70,11 @@
       });
       section.style.display = hasVisible ? '' : 'none';
     });
+
+    if (emptyLabel) {
+      var anyVisible = items.some(function(item) { return item.style.display !== 'none'; });
+      emptyLabel.hidden = anyVisible;
+    }
   }
 
   if (filterInput) {

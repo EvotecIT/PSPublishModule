@@ -17,7 +17,7 @@ Short, high-signal list to keep parity and stability work visible.
 - Docs nav: auto-generate from `docs/` by default, allow manual ordering/overrides, warn on orphaned pages.
 - Sitemap: auto-generate from site output + allow manual overrides/priority; warn on duplicates/invalid paths.
 - Layout parity: ensure docs, home, and API share the same base background/spacing tokens by default.
-- Sidebar options: allow left/right placement (theme-level switch), without forking templates.
+- Sidebar options: allow left/right placement (theme-level switch), without forking templates. (done for API docs via `sidebar`)
 
 ## Assets & performance
 - Asset policy examples for local/CDN/hybrid with rewrites and hashing.

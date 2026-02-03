@@ -28,8 +28,10 @@ public sealed class WebApiDocsOptions
     public string Title { get; set; } = "API Reference";
     /// <summary>Base URL for API documentation routes.</summary>
     public string BaseUrl { get; set; } = "/api";
-    /// <summary>Optional docs home URL for the "Back to Docs" link.</summary>
-    public string? DocsHomeUrl { get; set; }
+      /// <summary>Optional docs home URL for the "Back to Docs" link.</summary>
+      public string? DocsHomeUrl { get; set; }
+      /// <summary>Sidebar position for docs template (left or right).</summary>
+      public string? SidebarPosition { get; set; }
     /// <summary>Output format hint (json, html, hybrid, both).</summary>
     public string? Format { get; set; }
     /// <summary>Optional stylesheet href for HTML output.</summary>
@@ -2277,6 +2279,7 @@ public static class WebApiDocsGenerator
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl);
         var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty, docsHomeUrl);
+        var sidebarClass = BuildSidebarClass(options.SidebarPosition);
         var overviewHtml = BuildDocsOverview(types, baseUrl);
         var slugMap = BuildTypeSlugMap(types);
         var typeIndex = BuildTypeIndex(types);
@@ -2290,6 +2293,7 @@ public static class WebApiDocsGenerator
             ["HEADER"] = header,
             ["FOOTER"] = footer,
             ["SIDEBAR"] = sidebarHtml,
+            ["SIDEBAR_CLASS"] = sidebarClass,
             ["MAIN"] = overviewHtml,
             ["DOCS_SCRIPT"] = docsScript
         });
@@ -2298,6 +2302,7 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug, docsHomeUrl);
+            var sidebarClass = BuildSidebarClass(options.SidebarPosition);
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
@@ -2308,6 +2313,7 @@ public static class WebApiDocsGenerator
                 ["HEADER"] = header,
                 ["FOOTER"] = footer,
                 ["SIDEBAR"] = sidebar,
+                ["SIDEBAR_CLASS"] = sidebarClass,
                 ["MAIN"] = typeMain,
                 ["DOCS_SCRIPT"] = docsScript
             });
@@ -2438,7 +2444,7 @@ public static class WebApiDocsGenerator
             }
             sb.AppendLine("    </div>");
         }
-        sb.AppendLine("    <nav class=\"sidebar-nav\">");
+          sb.AppendLine("    <nav class=\"sidebar-nav\">");
 
         var mainTypes = GetMainTypes(types);
         if (mainTypes.Count > 0)
@@ -2483,9 +2489,10 @@ public static class WebApiDocsGenerator
             sb.AppendLine("      </div>");
         }
 
-        sb.AppendLine("    </nav>");
-        sb.AppendLine("    <div class=\"sidebar-footer\">");
-        sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link\">");
+          sb.AppendLine("    </nav>");
+          sb.AppendLine("    <div class=\"sidebar-empty\" hidden>No matching types.</div>");
+          sb.AppendLine("    <div class=\"sidebar-footer\">");
+          sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link\">");
         sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
         sb.AppendLine("          <path d=\"M19 12H5M12 19l-7-7 7-7\"/>");
         sb.AppendLine("        </svg>");
@@ -3363,11 +3370,19 @@ public static class WebApiDocsGenerator
         File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
     }
 
-    private static string BuildDocsTypeUrl(string baseUrl, string slug)
-    {
-        var baseTrim = baseUrl.TrimEnd('/');
-        return EnsureTrailingSlash($"{baseTrim}/{slug}");
-    }
+      private static string BuildDocsTypeUrl(string baseUrl, string slug)
+      {
+          var baseTrim = baseUrl.TrimEnd('/');
+          return EnsureTrailingSlash($"{baseTrim}/{slug}");
+      }
+
+      private static string BuildSidebarClass(string? position)
+      {
+          if (string.IsNullOrWhiteSpace(position))
+              return string.Empty;
+          var normalized = position.Trim().ToLowerInvariant();
+          return normalized == "right" ? " sidebar-right" : string.Empty;
+      }
 
     private static string EnsureTrailingSlash(string url)
         => url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";

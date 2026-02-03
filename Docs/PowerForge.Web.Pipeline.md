@@ -69,9 +69,10 @@ Notes:
   `search.js`, or `fallback.css` in that folder
 - `templateIndex`, `templateType`, `templateDocsIndex`, `templateDocsType` let you
   override a single template file without a template root
-- `docsScript` / `searchScript` let you override the embedded JS files
-- `docsHome` / `docsHomeUrl` override the "Back to Docs" link in the sidebar (default `/docs/`)
-- `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
+  - `docsScript` / `searchScript` let you override the embedded JS files
+  - `docsHome` / `docsHomeUrl` override the "Back to Docs" link in the sidebar (default `/docs/`)
+  - `sidebar` (`left` or `right`) controls the docs sidebar position (`template: docs`)
+  - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
@@ -128,8 +129,8 @@ Simple templates:
 - `type.html`: `{{TYPE_TITLE}}`, `{{TYPE_FULLNAME}}`, `{{TYPE_SUMMARY}}`, `{{TYPE_REMARKS}}`, `{{MEMBERS}}`
 
 Docs templates (`template: docs`):
-- `docs-index.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
-- `docs-type.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
+  - `docs-index.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{SIDEBAR_CLASS}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
+  - `docs-type.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{SIDEBAR_CLASS}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
 
 Header/footer fragments can use nav tokens when `nav` is provided:
 - `{{SITE_NAME}}`, `{{BRAND_NAME}}`, `{{BRAND_URL}}`, `{{BRAND_ICON}}`

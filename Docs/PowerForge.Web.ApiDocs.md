@@ -10,6 +10,10 @@ Two template modes are available:
 - `simple` (minimal, single-column)
 - `docs` (sidebar layout)
 
+Sidebar position (`docs` template):
+- Use `sidebar: "right"` (pipeline) or `--sidebar right` (CLI) to move the sidebar.
+- Default is `left`.
+
 To customize templates, copy the embedded defaults from:
 `PowerForge.Web/Assets/ApiDocs` into your own folder and pass it as
 `templateRoot`. Use `index.html`/`type.html` for the simple layout and
@@ -40,6 +44,7 @@ Element + class / id:
 
 Layout + nav:
 - `.api-layout` – layout wrapper
+- `.api-layout.sidebar-right` – swaps sidebar to the right column
 - `.api-content` – main content column
 - `.api-sidebar` – sidebar container
 - `.sidebar-toggle` – mobile toggle button
@@ -61,6 +66,7 @@ Sidebar sections:
 - `.filter-button.active` – active type filter
 - `.namespace-select` – namespace dropdown
 - `.sidebar-nav` – sidebar nav wrapper
+- `.sidebar-empty` – “no matching types” placeholder
 - `.nav-section` – nav section block
 - `.nav-section-header` – section header
 - `.nav-section-header.main-api` – main API section header
@@ -145,6 +151,7 @@ Member layout:
 - `#api-member-filter` input
 - `.member-kind` buttons with `data-member-kind`
 - `#api-show-inherited` checkbox
+- `.sidebar-empty` placeholder (optional)
 
 ## Type metadata
 
@@ -204,6 +211,7 @@ Pipeline step:
   "format": "both",
   "template": "docs",
   "css": "/css/api-docs.css",
+  "sidebar": "right",
   "sourceRoot": "..",
   "sourceUrl": "https://github.com/YourOrg/YourRepo/blob/main/{path}#L{line}"
 }
@@ -211,7 +219,7 @@ Pipeline step:
 
 CLI:
 ```bash
-powerforge-web apidocs --type csharp --xml ./bin/Release/net10.0/MyLib.xml --assembly ./bin/Release/net10.0/MyLib.dll --out ./_site/api --format both --template docs --css /css/api-docs.css --source-root .. --source-url "https://github.com/YourOrg/YourRepo/blob/main/{path}#L{line}"
+powerforge-web apidocs --type csharp --xml ./bin/Release/net10.0/MyLib.xml --assembly ./bin/Release/net10.0/MyLib.dll --out ./_site/api --format both --template docs --css /css/api-docs.css --sidebar right --source-root .. --source-url "https://github.com/YourOrg/YourRepo/blob/main/{path}#L{line}"
 ```
 
 ### PowerShell module help
