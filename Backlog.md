@@ -15,5 +15,6 @@
 - Warn when Prism local assets are missing (prevent silent 404s).
 - Prism theme overrides (light/dark) for reusable site theming.
 - Pipeline defaults: include audit step (links/assets/nav/rendered).
+- See `Docs/PowerForge.Web.Backlog.md` for full engine parity + roadmap.
 
 ## Websites
