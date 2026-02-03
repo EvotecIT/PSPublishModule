@@ -114,7 +114,9 @@ assets/
 ```
 
 If the assets are missing, `powerforge-web verify` will emit warnings so you
-catch it before publishing. You can also point to theme assets instead by
+catch it before publishing. When `Source: "local"` is set but files are missing,
+the builder falls back to CDN and emits a warning (so the page still renders).
+You can also point to theme assets instead by
 setting `Prism.Local` paths to `/themes/<theme>/assets/prism/...`.
 
 ## Asset hashing

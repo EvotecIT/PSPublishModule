@@ -1435,8 +1435,11 @@ public static class WebSiteBuilder
 
         var localAssets = ResolvePrismLocalAssets(meta, prismSpec);
         var localExists = LocalPrismAssetsExist(localAssets, rootPath);
-        var useLocal = source.Equals("local", StringComparison.OrdinalIgnoreCase)
-            || (source.Equals("hybrid", StringComparison.OrdinalIgnoreCase) && localExists);
+        var sourceIsLocal = source.Equals("local", StringComparison.OrdinalIgnoreCase);
+        var sourceIsHybrid = source.Equals("hybrid", StringComparison.OrdinalIgnoreCase);
+        var useLocal = (sourceIsLocal && localExists) || (sourceIsHybrid && localExists);
+        if (sourceIsLocal && !localExists)
+            Trace.TraceWarning("Prism source is set to local, but local assets are missing. Falling back to CDN.");
 
         var css = useLocal
             ? string.Join(Environment.NewLine, new[]
