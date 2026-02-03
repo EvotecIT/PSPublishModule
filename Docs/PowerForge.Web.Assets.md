@@ -71,6 +71,8 @@ Configuration lives in `site.json`:
   "Prism": {
     "Mode": "auto",
     "Source": "local",
+    "ThemeLight": "intelligencex-light",
+    "ThemeDark": "intelligencex-dark",
     "Local": {
       "ThemeLight": "/assets/prism/prism.css",
       "ThemeDark": "/assets/prism/prism-okaidia.css",
@@ -89,6 +91,13 @@ prism_mode: always
 prism_source: cdn
 prism_cdn: https://cdn.jsdelivr.net/npm/prismjs@1.29.0
 ```
+
+### Theme selection shortcuts
+`ThemeLight` / `ThemeDark` accept:
+- A full URL (used as-is)
+- An absolute path (`/themes/intelligencex/assets/prism.css`)
+- A bare name (maps to `/assets/prism/prism-<name>.css` for local,
+  or `<cdn>/themes/<name>.min.css` for CDN)
 
 ### Local Prism assets (required when Source=local)
 PowerForge.Web does **not** bundle Prism assets. When using `Source: "local"` you

@@ -427,12 +427,37 @@ public static class WebSiteVerifier
     private static (string light, string dark, string core, string autoloader, string langPath) ResolvePrismLocalAssets(PrismSpec? prismSpec)
     {
         var local = prismSpec?.Local;
-        var light = local?.ThemeLight ?? "/assets/prism/prism.css";
-        var dark = local?.ThemeDark ?? "/assets/prism/prism-okaidia.css";
+        var lightOverride = local?.ThemeLight ?? prismSpec?.ThemeLight;
+        var darkOverride = local?.ThemeDark ?? prismSpec?.ThemeDark;
+        var light = ResolvePrismThemeHref(lightOverride, defaultLocalPath: "/assets/prism/prism.css");
+        var dark = ResolvePrismThemeHref(darkOverride, defaultLocalPath: "/assets/prism/prism-okaidia.css");
         var core = local?.Core ?? "/assets/prism/prism-core.js";
         var autoloader = local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
         var langPath = local?.LanguagesPath ?? "/assets/prism/components/";
         return (light, dark, core, autoloader, langPath);
+    }
+
+    private static string ResolvePrismThemeHref(string? value, string defaultLocalPath)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultLocalPath;
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        if (trimmed.StartsWith("/"))
+            return trimmed;
+
+        if (trimmed.Contains("/"))
+            return "/" + trimmed.TrimStart('/');
+
+        if (trimmed.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+            return "/" + trimmed.TrimStart('/');
+
+        return "/assets/prism/prism-" + trimmed + ".css";
     }
 
     private static void CheckPrismAsset(string rootPath, string? href, List<string> missing)

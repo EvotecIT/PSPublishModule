@@ -13,6 +13,7 @@
 ### Engine quality
 - Validate layout hooks (`extra_css_html` / `extra_scripts_html`) so per-page assets load.
 - Warn when Prism local assets are missing (prevent silent 404s).
+- Prism theme overrides (light/dark) for reusable site theming.
 - Pipeline defaults: include audit step (links/assets/nav/rendered).
 
 ## Websites

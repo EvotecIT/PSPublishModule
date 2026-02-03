@@ -1456,8 +1456,10 @@ public static class WebSiteBuilder
         PrismSpec? prismSpec)
     {
         var local = prismSpec?.Local;
-        var light = GetMetaStringOrNull(meta, "prism_css_light") ?? local?.ThemeLight ?? "/assets/prism/prism.css";
-        var dark = GetMetaStringOrNull(meta, "prism_css_dark") ?? local?.ThemeDark ?? "/assets/prism/prism-okaidia.css";
+        var lightOverride = GetMetaStringOrNull(meta, "prism_css_light") ?? local?.ThemeLight ?? prismSpec?.ThemeLight;
+        var darkOverride = GetMetaStringOrNull(meta, "prism_css_dark") ?? local?.ThemeDark ?? prismSpec?.ThemeDark;
+        var light = ResolvePrismThemeHref(lightOverride, isCdn: false, cdnBase: null, defaultCdnName: "prism", defaultLocalPath: "/assets/prism/prism.css");
+        var dark = ResolvePrismThemeHref(darkOverride, isCdn: false, cdnBase: null, defaultCdnName: "prism-okaidia", defaultLocalPath: "/assets/prism/prism-okaidia.css");
         var core = GetMetaStringOrNull(meta, "prism_core") ?? local?.Core ?? "/assets/prism/prism-core.js";
         var autoloader = GetMetaStringOrNull(meta, "prism_autoloader") ?? local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
         var langPath = GetMetaStringOrNull(meta, "prism_lang_path") ?? local?.LanguagesPath ?? "/assets/prism/components/";
@@ -1489,10 +1491,14 @@ public static class WebSiteBuilder
     {
         var cdn = GetMetaStringOrNull(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
         cdn = cdn.TrimEnd('/');
+        var lightOverride = GetMetaStringOrNull(meta, "prism_css_light") ?? prismSpec?.ThemeLight;
+        var darkOverride = GetMetaStringOrNull(meta, "prism_css_dark") ?? prismSpec?.ThemeDark;
+        var light = ResolvePrismThemeHref(lightOverride, isCdn: true, cdnBase: cdn, defaultCdnName: "prism", defaultLocalPath: "/assets/prism/prism.css");
+        var dark = ResolvePrismThemeHref(darkOverride, isCdn: true, cdnBase: cdn, defaultCdnName: "prism-okaidia", defaultLocalPath: "/assets/prism/prism-okaidia.css");
         return string.Join(Environment.NewLine, new[]
         {
-            $"<link rel=\"stylesheet\" href=\"{cdn}/themes/prism.min.css\" media=\"(prefers-color-scheme: light)\" />",
-            $"<link rel=\"stylesheet\" href=\"{cdn}/themes/prism-okaidia.min.css\" media=\"(prefers-color-scheme: dark)\" />"
+            $"<link rel=\"stylesheet\" href=\"{light}\" media=\"(prefers-color-scheme: light)\" />",
+            $"<link rel=\"stylesheet\" href=\"{dark}\" media=\"(prefers-color-scheme: dark)\" />"
         });
     }
 
@@ -1506,6 +1512,47 @@ public static class WebSiteBuilder
             $"<script src=\"{cdn}/plugins/autoloader/prism-autoloader.min.js\"></script>",
             $"<script>if(window.Prism&&Prism.plugins&&Prism.plugins.autoloader){{Prism.plugins.autoloader.languages_path='{cdn}/components/';}}</script>"
         });
+    }
+
+    private static string ResolvePrismThemeHref(
+        string? value,
+        bool isCdn,
+        string? cdnBase,
+        string defaultCdnName,
+        string defaultLocalPath)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (!isCdn)
+                return defaultLocalPath;
+            var cdn = (cdnBase ?? string.Empty).TrimEnd('/');
+            return $"{cdn}/themes/{defaultCdnName}.min.css";
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        if (trimmed.StartsWith("/"))
+            return trimmed;
+
+        if (trimmed.Contains("/"))
+            return "/" + trimmed.TrimStart('/');
+
+        if (!isCdn)
+        {
+            if (trimmed.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+                return "/" + trimmed.TrimStart('/');
+            return "/assets/prism/prism-" + trimmed + ".css";
+        }
+
+        var name = trimmed.EndsWith(".css", StringComparison.OrdinalIgnoreCase)
+            ? trimmed.Substring(0, trimmed.Length - 4)
+            : trimmed;
+        var cdnRoot = (cdnBase ?? string.Empty).TrimEnd('/');
+        return $"{cdnRoot}/themes/{name}.min.css";
     }
 
     private static bool ContainsMarkdownCode(string htmlContent)

@@ -7,6 +7,10 @@ public sealed class PrismSpec
     public string Mode { get; set; } = "auto";
     /// <summary>Source: local, cdn, or hybrid (prefer local).</summary>
     public string Source { get; set; } = "cdn";
+    /// <summary>Light theme name or CSS path override.</summary>
+    public string? ThemeLight { get; set; }
+    /// <summary>Dark theme name or CSS path override.</summary>
+    public string? ThemeDark { get; set; }
     /// <summary>CDN base URL (used when Source=cdn).</summary>
     public string? CdnBase { get; set; }
     /// <summary>Local asset paths (used when Source=local).</summary>

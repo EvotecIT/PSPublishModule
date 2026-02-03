@@ -9,6 +9,7 @@ Short, high-signal list to keep parity and stability work visible.
 - Syntax highlighting: verify Prism injection for all markdown code blocks and API pages.
 - Theme layout hook validation (`extra_css_html` / `extra_scripts_html`) so per-page assets are reliable.
 - Prism local asset validation to prevent silent 404s.
+- Prism theme overrides (light/dark) so sites can reuse custom palettes.
 - Link consistency: nav parity across all pages + edit links resolve to correct sources.
 - Optional: API docs edit links per symbol (XML/CS source mapping) when available.
 
