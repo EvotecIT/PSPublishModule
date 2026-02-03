@@ -126,3 +126,4 @@ Updates version numbers across multiple project files.
 
 ### [Step-Version](Step-Version.md)
 Steps a version based on an expected version pattern (supports the legacy X placeholder).
+

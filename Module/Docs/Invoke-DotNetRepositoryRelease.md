@@ -11,42 +11,62 @@ Repository-wide .NET package release workflow (discover, version, pack, publish)
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <hashtable>] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Discovers packable projects in a repository, resolves a repository-wide version (supports X-pattern stepping), updates csproj versions,
-runs dotnet pack, and optionally publishes packages via dotnet nuget push.
+Discovers packable projects, resolves a repository-wide version (supports X-pattern),
+updates csproj versions, packs, and optionally publishes packages.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '1.2.X'
+Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '1.2.X' -Publish -PublishApiKey $env:NUGET_API_KEY
 ```
 
 ### EXAMPLE 2
 ```powershell
-Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '2.0.X' -ExcludeProject 'OfficeIMO.Visio' -Publish -PublishApiKey $env:NUGET_API_KEY
-```
-
-### EXAMPLE 3
-```powershell
-Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '1.2.X' -NugetSource 'C:\NugetCache' -IncludePrerelease -Publish -PublishApiKeyFilePath 'C:\Support\Important\NugetOrgEvotec.txt'
-```
-
-### EXAMPLE 4
-```powershell
-Invoke-DotNetRepositoryRelease -Path . -ExpectedVersionMap @{ OfficeIMO.CSV = '0.1.X'; OfficeIMO.Excel = '0.6.X'; OfficeIMO.Markdown = '0.5.X'; OfficeIMO.Word = '1.0.X' } -Publish -PublishApiKey $env:NUGET_API_KEY
+Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '2.0.X' -ExcludeProject 'OfficeIMO.Visio' -NugetSource 'C:\Packages' -Publish -PublishApiKey $env:NUGET_API_KEY
 ```
 
 ## PARAMETERS
 
-### -Path
-Root repository path.
+### -Configuration
+Build configuration (Release/Debug).
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExcludeDirectories
+Directory names to exclude from discovery.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExcludeProject
+Project names to exclude (csproj file name without extension).
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -76,67 +96,7 @@ Accept wildcard characters: True
 Per-project expected versions (hashtable: ProjectName = Version).
 
 ```yaml
-Type: Hashtable
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -IncludeProject
-Project names to include (csproj file name without extension).
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ExcludeProject
-Project names to exclude (csproj file name without extension).
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -ExcludeDirectories
-Directory names to exclude from discovery.
-
-```yaml
-Type: String[]
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -NugetSource
-NuGet sources (v3 index or local path) used for version resolution.
-
-```yaml
-Type: String[]
+Type: IDictionary
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -162,11 +122,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -NugetCredentialUserName
-Credential username for private NuGet sources.
+### -IncludeProject
+Project names to include (csproj file name without extension).
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -179,21 +139,6 @@ Accept wildcard characters: True
 
 ### -NugetCredentialSecret
 Credential secret/token for private NuGet sources.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -NugetCredentialSecretFilePath
-Path to a file containing the credential secret/token.
 
 ```yaml
 Type: String
@@ -222,8 +167,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -Configuration
-Build configuration (Release/Debug).
+### -NugetCredentialSecretFilePath
+Path to a file containing the credential secret/token.
 
 ```yaml
 Type: String
@@ -232,7 +177,37 @@ Aliases: None
 
 Required: False
 Position: named
-Default value: Release
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NugetCredentialUserName
+Credential username for private NuGet sources.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -NugetSource
+NuGet sources (v3 index or local path) used for version resolution.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
 Accept pipeline input: False
 Accept wildcard characters: True
 ```
@@ -252,11 +227,11 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -SkipPack
-Skip dotnet pack step.
+### -Path
+Root repository path.
 
 ```yaml
-Type: SwitchParameter
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -282,38 +257,8 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
-### -PublishSource
-NuGet feed source for publishing.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
 ### -PublishApiKey
 API key used for publishing packages.
-
-```yaml
-Type: String
-Parameter Sets: __AllParameterSets
-Aliases: None
-
-Required: False
-Position: named
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: True
-```
-
-### -PublishApiKeyFilePath
-Path to a file containing the publish API key.
 
 ```yaml
 Type: String
@@ -342,8 +287,53 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -PublishApiKeyFilePath
+Path to a file containing the publish API key.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -PublishSource
+NuGet feed source for publishing.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -SkipDuplicate
 Skip duplicates when pushing packages.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -SkipPack
+Skip dotnet pack step.
 
 ```yaml
 Type: SwitchParameter
@@ -371,3 +361,4 @@ This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable
 ## RELATED LINKS
 
 - None
+
