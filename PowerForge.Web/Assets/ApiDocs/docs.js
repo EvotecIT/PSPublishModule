@@ -44,7 +44,42 @@
 
   var activeKind = '';
   var activeNamespace = '';
+  var activeMemberKind = '';
   var totalTypes = countLabel ? parseInt(countLabel.dataset.total || '0', 10) : 0;
+
+  function loadState() {
+    var hash = window.location.hash || '';
+    if (!hash) return;
+    var query = hash.indexOf('?') >= 0 ? hash.split('?')[1] : hash.slice(1);
+    if (!query) return;
+    query.split('&').forEach(function(pair) {
+      var parts = pair.split('=');
+      if (parts.length < 2) return;
+      var key = decodeURIComponent(parts[0]);
+      var value = decodeURIComponent(parts.slice(1).join('='));
+      if (key === 'k') activeKind = value;
+      if (key === 'ns') activeNamespace = value;
+      if (key === 'q' && filterInput) filterInput.value = value;
+      if (key === 'mk') activeMemberKind = value;
+      if (key === 'mq' && memberFilter) memberFilter.value = value;
+      if (key === 'mi' && inheritedToggle) inheritedToggle.checked = value === '1';
+    });
+  }
+
+  function saveState() {
+    var parts = [];
+    if (activeKind) parts.push('k=' + encodeURIComponent(activeKind));
+    if (activeNamespace) parts.push('ns=' + encodeURIComponent(activeNamespace));
+    if (filterInput && filterInput.value) parts.push('q=' + encodeURIComponent(filterInput.value));
+    if (activeMemberKind) parts.push('mk=' + encodeURIComponent(activeMemberKind));
+    if (memberFilter && memberFilter.value) parts.push('mq=' + encodeURIComponent(memberFilter.value));
+    if (inheritedToggle && inheritedToggle.checked) parts.push('mi=1');
+    if (!parts.length) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+      return;
+    }
+    history.replaceState(null, '', window.location.pathname + window.location.search + '#' + parts.join('&'));
+  }
 
   function applyFilter(query) {
     var q = normalize(query);
@@ -90,6 +125,7 @@
       var total = totalTypes || items.length;
       countLabel.textContent = 'Showing ' + visibleCount + ' of ' + total + ' types';
     }
+    saveState();
   }
 
   if (filterInput) {
@@ -195,8 +231,6 @@
     });
   }
 
-  var activeMemberKind = '';
-
   function applyMemberFilter() {
     var q = normalize(memberFilter ? memberFilter.value : '');
     var showInherited = inheritedToggle ? inheritedToggle.checked : true;
@@ -228,10 +262,14 @@
       });
       section.style.display = visible ? '' : 'none';
     });
+    saveState();
   }
 
   if (memberFilter) {
-    memberFilter.addEventListener('input', applyMemberFilter);
+    memberFilter.addEventListener('input', function() {
+      applyMemberFilter();
+      saveState();
+    });
   }
 
   if (memberKindButtons.length) {
@@ -241,12 +279,16 @@
         btn.classList.add('active');
         activeMemberKind = btn.dataset.memberKind || '';
         applyMemberFilter();
+        saveState();
       });
     });
   }
 
   if (inheritedToggle) {
-    inheritedToggle.addEventListener('change', applyMemberFilter);
+    inheritedToggle.addEventListener('change', function() {
+      applyMemberFilter();
+      saveState();
+    });
   }
 
   document.querySelectorAll('.member-section-toggle').forEach(function(btn) {
@@ -296,6 +338,7 @@
       }
       if (inheritedToggle) inheritedToggle.checked = false;
       applyMemberFilter();
+      saveState();
     });
   }
 
@@ -307,6 +350,18 @@
     });
   }
 
+  loadState();
+  if (kindButtons.length) {
+    kindButtons.forEach(function(b) { b.classList.remove('active'); });
+    var activeBtn = kindButtons.find(function(b) { return (b.dataset.kind || '') === activeKind; });
+    (activeBtn || kindButtons[0]).classList.add('active');
+  }
+  if (namespaceSelect) namespaceSelect.value = activeNamespace || '';
+  if (memberKindButtons.length) {
+    memberKindButtons.forEach(function(b) { b.classList.remove('active'); });
+    var activeMemberBtn = memberKindButtons.find(function(b) { return (b.dataset.memberKind || '') === activeMemberKind; });
+    (activeMemberBtn || memberKindButtons[0]).classList.add('active');
+  }
   applyFilter(filterInput ? filterInput.value : '');
   applyMemberFilter();
 })();
