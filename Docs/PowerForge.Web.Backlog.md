@@ -2,6 +2,12 @@
 
 Short, high-signal list to keep parity and stability work visible.
 
+## Recently completed
+- API docs: sidebar filters + counts + reset + URL state.
+- API docs: sidebar position option + body class hook.
+- Audit: navRequired / navIgnorePrefixes options (CLI + pipeline).
+- Prism: auto-init highlight + local asset warnings.
+
 ## Engine parity & quality
 - CodeGlyphX 1:1 coverage checklist (home, docs, benchmarks, pricing, showcase, playground, API docs).
 - Docs API parity: namespace/type filters, search UX, member grouping (methods/properties/fields/events).
