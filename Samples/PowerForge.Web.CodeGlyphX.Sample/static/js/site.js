@@ -111,16 +111,20 @@ globalThis.setTheme = setTheme;
 
         blocks.forEach((block) => {
             block.classList.add('initialized');
-            const needsHighlight = block.classList.contains('code-block') && !block.querySelector('.keyword, .string, .comment');
-            if (needsHighlight) {
-                blocksNeedingHighlight.push(block);
+            if (!block.classList.contains('code-block')) {
+                block.classList.add('code-block');
+            }
+            const codeEl = block.querySelector('code');
+            const hasHighlight = block.querySelector('.token, .keyword, .string, .comment');
+            if (codeEl && !hasHighlight) {
+                blocksNeedingHighlight.push({ block, codeEl });
             } else {
-                blocksReady.push(block);
+                blocksReady.push({ block, codeEl });
             }
         });
 
         // Add copy buttons to blocks that don't need highlighting
-        blocksReady.forEach(addCopyButton);
+        blocksReady.forEach(({ block }) => addCopyButton(block));
 
         signatures.forEach((sig) => {
             sig.classList.add('initialized', 'copyable');
@@ -134,12 +138,20 @@ globalThis.setTheme = setTheme;
         // Highlight blocks first, then add copy buttons
         if (blocksNeedingHighlight.length) {
             loadPrism(() => {
-                blocksNeedingHighlight.forEach((block) => {
-                    if (!block.classList.contains('prism-highlighted')) {
-                        const existingLanguage = Array.from(block.classList).find((cls) => cls.startsWith('language-'));
-                        const targetLanguage = existingLanguage || 'language-csharp';
-                        block.classList.add(targetLanguage, 'prism-highlighted');
-                        globalThis.Prism?.highlightElement?.(block);
+                blocksNeedingHighlight.forEach(({ block, codeEl }) => {
+                    if (!codeEl) {
+                        addCopyButton(block);
+                        return;
+                    }
+                    if (!codeEl.classList.contains('prism-highlighted')) {
+                        const codeLanguage = Array.from(codeEl.classList).find((cls) => cls.startsWith('language-'));
+                        const blockLanguage = Array.from(block.classList).find((cls) => cls.startsWith('language-'));
+                        const targetLanguage = codeLanguage || blockLanguage || 'language-plain';
+                        if (!codeLanguage) {
+                            codeEl.classList.add(targetLanguage);
+                        }
+                        codeEl.classList.add('prism-highlighted');
+                        globalThis.Prism?.highlightElement?.(codeEl);
                     }
                     // Add copy button AFTER highlighting
                     addCopyButton(block);
