@@ -236,6 +236,12 @@ Use data for repeated UI blocks and long lists.
 `powerforge web verify` validates known data files when present (`faq.json`, `showcase.json`,
 `pricing.json`, `benchmarks.json`). It emits warnings for missing required keys and malformed shapes.
 
+### Generated data outputs
+When no `data/site-nav.json` exists in the site output, PowerForge.Web will
+emit one based on `site.json` navigation (including auto‑generated menus).
+If you provide your own `data/site-nav.json` (for example via `static/data`),
+the generator will **not** overwrite it.
+
 ### Markdown-friendly data fields
 Data keys ending with `_md` or `_markdown` are automatically rendered as HTML.
 The rendered value is exposed under the base key (suffix removed) if the base key is missing.

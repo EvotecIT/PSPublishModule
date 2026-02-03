@@ -76,6 +76,7 @@ public static class WebSiteBuilder
 
         CopyThemeAssets(spec, plan.RootPath, outDir);
         CopyStaticAssets(spec, plan.RootPath, outDir);
+        WriteSiteNavData(spec, outDir, menuSpecs);
         WriteSearchIndex(outDir, items);
         WriteLinkCheckReport(spec, items, metaDir);
 
@@ -186,11 +187,74 @@ public static class WebSiteBuilder
                 continue;
             }
 
-            var targetRoot = string.IsNullOrWhiteSpace(destination)
-                ? outputRoot
-                : Path.Combine(outputRoot, destination);
-            CopyDirectory(sourcePath, targetRoot);
-        }
+        var targetRoot = string.IsNullOrWhiteSpace(destination)
+            ? outputRoot
+            : Path.Combine(outputRoot, destination);
+        CopyDirectory(sourcePath, targetRoot);
+    }
+
+    private static void WriteSiteNavData(SiteSpec spec, string outputRoot, MenuSpec[] menuSpecs)
+    {
+        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+        var relativeRoot = Path.IsPathRooted(dataRoot)
+            ? "data"
+            : dataRoot.TrimStart('/', '\\');
+        var dataDir = Path.Combine(outputRoot, relativeRoot);
+        if (string.IsNullOrWhiteSpace(dataDir))
+            return;
+
+        var outputPath = Path.Combine(dataDir, "site-nav.json");
+        if (File.Exists(outputPath))
+            return;
+
+        Directory.CreateDirectory(dataDir);
+
+        var menus = menuSpecs.ToDictionary(
+            m => m.Name,
+            m => MapMenuItems(m.Items),
+            StringComparer.OrdinalIgnoreCase);
+
+        var primary = menus.TryGetValue("main", out var main)
+            ? main
+            : Array.Empty<object>();
+
+        var footer = menus
+            .Where(kvp => kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+
+        var payload = new
+        {
+            generated = true,
+            primary,
+            menus,
+            footer = footer.Count > 0 ? footer : null,
+            actions = MapMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>())
+        };
+
+        File.WriteAllText(outputPath, JsonSerializer.Serialize(payload, WebJson.Options));
+    }
+
+    private static object[] MapMenuItems(MenuItemSpec[] items)
+    {
+        if (items is null || items.Length == 0) return Array.Empty<object>();
+        var ordered = OrderMenuItems(items);
+        return ordered.Select(item => new
+        {
+            href = item.Url,
+            text = item.Text ?? item.Title,
+            title = item.Title,
+            external = item.External,
+            target = item.Target,
+            rel = item.Rel,
+            kind = item.Kind,
+            @class = item.CssClass,
+            ariaLabel = item.AriaLabel,
+            iconHtml = item.IconHtml,
+            badge = item.Badge,
+            description = item.Description,
+            items = MapMenuItems(item.Items)
+        }).ToArray();
+    }
     }
 
     private static IReadOnlyDictionary<string, object?> LoadData(SiteSpec spec, WebSitePlan plan, IReadOnlyList<ProjectSpec> projects)
