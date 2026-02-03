@@ -70,6 +70,7 @@ Notes:
 - `templateIndex`, `templateType`, `templateDocsIndex`, `templateDocsType` let you
   override a single template file without a template root
 - `docsScript` / `searchScript` let you override the embedded JS files
+- `docsHome` / `docsHomeUrl` override the "Back to Docs" link in the sidebar (default `/docs/`)
 - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer

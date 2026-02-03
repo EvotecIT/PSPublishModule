@@ -632,6 +632,7 @@ try
             var docsTypeTemplate = TryGetOptionValue(subArgs, "--template-docs-type");
             var docsScript = TryGetOptionValue(subArgs, "--docs-script");
             var searchScript = TryGetOptionValue(subArgs, "--search-script");
+            var docsHome = TryGetOptionValue(subArgs, "--docs-home") ?? TryGetOptionValue(subArgs, "--docs-home-url");
             var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
             var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
             var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
@@ -676,6 +677,7 @@ try
                 DocsTypeTemplatePath = docsTypeTemplate,
                 DocsScriptPath = docsScript,
                 SearchScriptPath = searchScript,
+                DocsHomeUrl = docsHome,
                 SourceRootPath = sourceRoot,
                 SourceUrlPattern = sourceUrl,
                 IncludeUndocumentedTypes = includeUndocumented,
@@ -1222,8 +1224,8 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
     Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
-    Console.WriteLine("  powerforge-web apidocs --type csharp --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>]");
-    Console.WriteLine("  powerforge-web apidocs --type powershell --help-path <file|dir> --out <dir> [--title <text>] [--base-url <url>]");
+    Console.WriteLine("  powerforge-web apidocs --type csharp --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--docs-home <url>]");
+    Console.WriteLine("  powerforge-web apidocs --type powershell --help-path <file|dir> --out <dir> [--title <text>] [--base-url <url>] [--docs-home <url>]");
     Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
     Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
     Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
@@ -1544,6 +1546,8 @@ internal static class WebPipelineRunner
                         var docsTypeTemplate = ResolvePath(baseDir, GetString(step, "templateDocsType") ?? GetString(step, "template-docs-type"));
                         var docsScript = ResolvePath(baseDir, GetString(step, "docsScript") ?? GetString(step, "docs-script"));
                         var searchScript = ResolvePath(baseDir, GetString(step, "searchScript") ?? GetString(step, "search-script"));
+                        var docsHome = GetString(step, "docsHome") ?? GetString(step, "docsHomeUrl") ??
+                                       GetString(step, "docs-home") ?? GetString(step, "docs-home-url");
                         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
                         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ?? GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
                         var includeUndocumented = GetBool(step, "includeUndocumented") ?? GetBool(step, "include-undocumented") ?? true;
@@ -1584,6 +1588,7 @@ internal static class WebPipelineRunner
                             DocsTypeTemplatePath = docsTypeTemplate,
                             DocsScriptPath = docsScript,
                             SearchScriptPath = searchScript,
+                            DocsHomeUrl = docsHome,
                             SourceRootPath = sourceRoot,
                             SourceUrlPattern = sourceUrl,
                             IncludeUndocumentedTypes = includeUndocumented,

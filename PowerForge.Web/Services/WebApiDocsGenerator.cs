@@ -28,6 +28,8 @@ public sealed class WebApiDocsOptions
     public string Title { get; set; } = "API Reference";
     /// <summary>Base URL for API documentation routes.</summary>
     public string BaseUrl { get; set; } = "/api";
+    /// <summary>Optional docs home URL for the "Back to Docs" link.</summary>
+    public string? DocsHomeUrl { get; set; }
     /// <summary>Output format hint (json, html, hybrid, both).</summary>
     public string? Format { get; set; }
     /// <summary>Optional stylesheet href for HTML output.</summary>
@@ -2273,7 +2275,8 @@ public static class WebApiDocsGenerator
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
-        var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty);
+        var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl);
+        var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty, docsHomeUrl);
         var overviewHtml = BuildDocsOverview(types, baseUrl);
         var slugMap = BuildTypeSlugMap(types);
         var typeIndex = BuildTypeIndex(types);
@@ -2294,7 +2297,7 @@ public static class WebApiDocsGenerator
 
         foreach (var type in types)
         {
-            var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug);
+            var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug, docsHomeUrl);
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
@@ -2375,7 +2378,7 @@ public static class WebApiDocsGenerator
         "AztecCode"
     };
 
-    private static string BuildDocsSidebar(IReadOnlyList<ApiTypeModel> types, string baseUrl, string activeSlug)
+    private static string BuildDocsSidebar(IReadOnlyList<ApiTypeModel> types, string baseUrl, string activeSlug, string docsHomeUrl)
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
@@ -2482,7 +2485,7 @@ public static class WebApiDocsGenerator
 
         sb.AppendLine("    </nav>");
         sb.AppendLine("    <div class=\"sidebar-footer\">");
-        sb.AppendLine("      <a href=\"/docs\" class=\"back-link\">");
+        sb.AppendLine($"      <a href=\"{docsHomeUrl}\" class=\"back-link\">");
         sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"14\" height=\"14\">");
         sb.AppendLine("          <path d=\"M19 12H5M12 19l-7-7 7-7\"/>");
         sb.AppendLine("        </svg>");
@@ -3368,6 +3371,19 @@ public static class WebApiDocsGenerator
 
     private static string EnsureTrailingSlash(string url)
         => url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";
+
+    private static string NormalizeDocsHomeUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return "/docs/";
+        var trimmed = url.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return EnsureTrailingSlash(trimmed);
+        if (!trimmed.StartsWith("/"))
+            trimmed = "/" + trimmed;
+        return EnsureTrailingSlash(trimmed);
+    }
 
     private static string LoadOptionalHtml(string? path)
     {
