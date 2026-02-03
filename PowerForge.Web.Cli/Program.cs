@@ -341,8 +341,10 @@ try
             var include = ReadOptionList(subArgs, "--include");
             var exclude = ReadOptionList(subArgs, "--exclude");
             var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
+            var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
             var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
             var navSelector = TryGetOptionValue(subArgs, "--nav-selector") ?? "nav";
+            var navRequired = !HasOption(subArgs, "--nav-optional");
             var rendered = HasOption(subArgs, "--rendered");
             var renderedHeadless = !HasOption(subArgs, "--rendered-headful");
             var renderedEngine = TryGetOptionValue(subArgs, "--rendered-engine");
@@ -378,6 +380,8 @@ try
                 UseDefaultExcludes = useDefaultExclude,
                 IgnoreNavFor = ignoreNavPatterns,
                 NavSelector = navSelector,
+                NavRequired = navRequired,
+                NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
                 CheckLinks = !HasOption(subArgs, "--no-links"),
                 CheckAssets = !HasOption(subArgs, "--no-assets"),
                 CheckNavConsistency = !HasOption(subArgs, "--no-nav"),
@@ -1221,7 +1225,8 @@ static void PrintUsage()
     Console.WriteLine("                     [--rendered-no-install]");
     Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
     Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
-    Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav]");
+    Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
+    Console.WriteLine("                     [--nav-optional]");
     Console.WriteLine("                     [--no-default-exclude]");
     Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
     Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
@@ -1822,7 +1827,11 @@ internal static class WebPipelineRunner
                         var include = GetString(step, "include");
                         var exclude = GetString(step, "exclude");
                         var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
+                        var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
+                                                GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
                         var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
+                        var navRequired = GetBool(step, "navRequired");
+                        var navOptional = GetBool(step, "navOptional");
                         var checkLinks = GetBool(step, "checkLinks") ?? true;
                         var checkAssets = GetBool(step, "checkAssets") ?? true;
                         var checkNav = GetBool(step, "checkNav") ?? true;
@@ -1851,6 +1860,8 @@ internal static class WebPipelineRunner
                         var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
                         var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
                         var ignoreNavPatterns = BuildIgnoreNavPatternsForPipeline(ignoreNavList, useDefaultIgnoreNav);
+                        var navRequiredValue = navRequired ?? !(navOptional ?? false);
+                        var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
 
                         var ensureInstall = rendered && (renderedEnsureInstalled ?? true);
                         var audit = WebSiteAuditor.Audit(new WebAuditOptions
@@ -1861,6 +1872,8 @@ internal static class WebPipelineRunner
                             UseDefaultExcludes = useDefaultExclude,
                             IgnoreNavFor = ignoreNavPatterns,
                             NavSelector = navSelector,
+                            NavRequired = navRequiredValue,
+                            NavIgnorePrefixes = navIgnorePrefixList,
                             CheckLinks = checkLinks,
                             CheckAssets = checkAssets,
                             CheckNavConsistency = checkNav,

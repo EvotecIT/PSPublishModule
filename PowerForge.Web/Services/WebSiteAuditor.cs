@@ -35,6 +35,10 @@ public sealed class WebAuditOptions
         "docs/api/**",
         "api/**"
     };
+    /// <summary>Require all pages to contain a nav element.</summary>
+    public bool NavRequired { get; set; } = true;
+    /// <summary>Skip nav checks on pages that match a prefix list (path-based).</summary>
+    public string[] NavIgnorePrefixes { get; set; } = Array.Empty<string>();
     /// <summary>When true, run rendered (Playwright) checks.</summary>
     public bool CheckRendered { get; set; }
     /// <summary>Maximum number of pages to render (0 = all).</summary>
@@ -179,12 +183,16 @@ public static class WebSiteAuditor
 
             var navIgnored = options.IgnoreNavFor.Length > 0 &&
                              MatchesAny(options.IgnoreNavFor, relativePath);
-            if (options.CheckNavConsistency && !navIgnored)
+            var prefixIgnored = options.NavIgnorePrefixes.Length > 0 &&
+                                options.NavIgnorePrefixes.Any(prefix =>
+                                    relativePath.StartsWith(prefix.TrimStart('/'), StringComparison.OrdinalIgnoreCase));
+            if (options.CheckNavConsistency && !navIgnored && !prefixIgnored)
             {
                 var navElement = doc.QuerySelector(options.NavSelector);
                 if (navElement is null)
                 {
-                    warnings.Add($"{relativePath}: nav not found using selector '{options.NavSelector}'.");
+                    if (options.NavRequired)
+                        warnings.Add($"{relativePath}: nav not found using selector '{options.NavSelector}'.");
                 }
                 else
                 {
