@@ -3254,12 +3254,14 @@ public static class WebApiDocsGenerator
         if (slugMap.TryGetValue(cleaned, out var slug))
         {
             var href = BuildDocsTypeUrl(baseUrl, slug);
-            return $"<a href=\"{href}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
+            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
+            return $"<a href=\"{safeHref}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
         }
         if (slugMap.TryGetValue(display, out var shortSlug))
         {
             var href = BuildDocsTypeUrl(baseUrl, shortSlug);
-            return $"<a href=\"{href}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
+            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
+            return $"<a href=\"{safeHref}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
         }
         return System.Web.HttpUtility.HtmlEncode(display);
     }
@@ -3270,7 +3272,7 @@ public static class WebApiDocsGenerator
         var label = System.Web.HttpUtility.HtmlEncode($"{link.Path}{suffix}");
         if (!string.IsNullOrWhiteSpace(link.Url))
         {
-            var href = System.Web.HttpUtility.HtmlEncode(link.Url);
+            var href = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
             return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
         }
         return $"<code>{label}</code>";

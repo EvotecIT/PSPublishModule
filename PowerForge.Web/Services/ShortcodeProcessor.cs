@@ -4,8 +4,9 @@ namespace PowerForge.Web;
 
 internal static class ShortcodeProcessor
 {
-    private static readonly Regex ShortcodeRegex = new Regex(@"\{\{<\s*(?<name>[\w\-]+)\s*(?<attrs>[^>]*)>\}\}", RegexOptions.Compiled);
-    private static readonly Regex AttrRegex = new Regex("(?<key>[A-Za-z0-9_-]+)\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.Compiled);
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex ShortcodeRegex = new Regex(@"\{\{<\s*(?<name>[\w\-]+)\s*(?<attrs>[^>]*)>\}\}", RegexOptions.Compiled, RegexTimeout);
+    private static readonly Regex AttrRegex = new Regex("(?<key>[A-Za-z0-9_-]+)\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.Compiled, RegexTimeout);
 
     public static string Apply(string markdown, IReadOnlyDictionary<string, object?> data)
     {
