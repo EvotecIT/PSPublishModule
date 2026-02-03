@@ -1018,8 +1018,7 @@ public static class WebSiteBuilder
                     : processedBody;
                 htmlContent = NormalizeCodeBlockClasses(htmlContent);
                 var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                if (renderMarkdown)
-                    EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
+                EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
                 var toc = BuildTableOfContents(htmlContent);
                 if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(projectSlug) &&
