@@ -1016,6 +1016,7 @@ public static class WebSiteBuilder
                 var htmlContent = renderMarkdown
                     ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
                     : processedBody;
+                htmlContent = NormalizeCodeBlockClasses(htmlContent);
                 var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 if (renderMarkdown)
                     EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
@@ -1566,6 +1567,34 @@ public static class WebSiteBuilder
         return htmlContent.IndexOf("class=\"language-", StringComparison.OrdinalIgnoreCase) >= 0 ||
                htmlContent.IndexOf("class=language-", StringComparison.OrdinalIgnoreCase) >= 0 ||
                htmlContent.IndexOf("<pre><code", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string NormalizeCodeBlockClasses(string htmlContent)
+    {
+        if (string.IsNullOrWhiteSpace(htmlContent)) return htmlContent;
+
+        return Regex.Replace(
+            htmlContent,
+            "<pre[^>]*>\\s*<code(?<attrs>[^>]*)>",
+            match =>
+            {
+                var attrs = match.Groups["attrs"].Value;
+                if (string.IsNullOrWhiteSpace(attrs))
+                    return match.Value.Replace("<code", "<code class=\"language-plain\"", StringComparison.OrdinalIgnoreCase);
+
+                var classMatch = Regex.Match(attrs, "class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase);
+                if (!classMatch.Success)
+                    return match.Value.Replace("<code", "<code class=\"language-plain\"", StringComparison.OrdinalIgnoreCase);
+
+                var classes = classMatch.Groups["value"].Value;
+                if (classes.IndexOf("language-", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return match.Value;
+
+                var replacement = classMatch.Value.Replace(classes, classes + " language-plain");
+                var newAttrs = attrs.Replace(classMatch.Value, replacement);
+                return match.Value.Replace(attrs, newAttrs, StringComparison.OrdinalIgnoreCase);
+            },
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
     }
 
     private static void AppendMetaHtml(Dictionary<string, object?> meta, string key, string html)
