@@ -78,6 +78,8 @@
         "templateDocsType": { "type": "string" },
         "docsScript": { "type": "string" },
         "searchScript": { "type": "string" },
+        "docsHome": { "type": "string" },
+        "docsHomeUrl": { "type": "string" },
         "sourceRoot": { "type": "string" },
         "sourceUrl": { "type": "string" },
         "includeUndocumented": { "type": "boolean" },
