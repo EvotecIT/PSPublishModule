@@ -183,6 +183,8 @@
       "properties": {
         "Mode": { "type": "string", "enum": ["auto", "always", "off"] },
         "Source": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
+        "ThemeLight": { "type": "string" },
+        "ThemeDark": { "type": "string" },
         "CdnBase": { "type": "string" },
         "Local": { "$ref": "#/$defs/PrismLocalSpec" }
       }
