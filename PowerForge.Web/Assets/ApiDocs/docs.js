@@ -10,6 +10,7 @@
   var countLabel = document.querySelector('.sidebar-count');
   var expandAllBtn = document.querySelector('.sidebar-expand-all');
   var collapseAllBtn = document.querySelector('.sidebar-collapse-all');
+  var resetButton = document.querySelector('.sidebar-reset');
   var memberFilter = document.querySelector('#api-member-filter');
   var memberKindButtons = Array.prototype.slice.call(document.querySelectorAll('.member-kind'));
   var inheritedToggle = document.querySelector('#api-show-inherited');
@@ -121,6 +122,27 @@
     namespaceSelect.addEventListener('change', function() {
       activeNamespace = namespaceSelect.value || '';
       applyFilter(filterInput ? filterInput.value : '');
+    });
+  }
+
+  if (resetButton) {
+    resetButton.addEventListener('click', function() {
+      activeKind = '';
+      activeNamespace = '';
+      if (filterInput) {
+        filterInput.value = '';
+      }
+      if (namespaceSelect) {
+        namespaceSelect.value = '';
+      }
+      kindButtons.forEach(function(b) { b.classList.remove('active'); });
+      if (kindButtons.length) {
+        kindButtons[0].classList.add('active');
+      }
+      if (clearButton) {
+        clearButton.style.display = 'none';
+      }
+      applyFilter('');
     });
   }
 

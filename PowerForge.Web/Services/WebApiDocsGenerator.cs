@@ -2442,6 +2442,9 @@ public static class WebApiDocsGenerator
                   sb.AppendLine("        </select>");
                   sb.AppendLine("      </div>");
               }
+              sb.AppendLine("      <div class=\"filter-row\">");
+              sb.AppendLine("        <button class=\"sidebar-reset\" type=\"button\">Reset filters</button>");
+              sb.AppendLine("      </div>");
               sb.AppendLine("    </div>");
           }
           sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} types</div>");

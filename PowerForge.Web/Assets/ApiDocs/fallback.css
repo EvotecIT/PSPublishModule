@@ -37,6 +37,8 @@ a:hover{color:#a78bfa}
 .sidebar-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .sidebar-tools button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.7rem;cursor:pointer}
 .sidebar-tools button:hover{border-color:#a78bfa;color:#e6e9f3}
+.sidebar-reset{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:10px;padding:6px 10px;font-size:.7rem;cursor:pointer;width:100%;text-align:center}
+.sidebar-reset:hover{border-color:#a78bfa;color:#e6e9f3}
 .sidebar-nav{display:grid;gap:10px}
 .nav-section-header{display:flex;align-items:center;justify-content:space-between;color:#94a3b8;cursor:pointer;font-size:.8rem;letter-spacing:.04em;text-transform:uppercase}
 .nav-section-header.main-api{color:#e6e9f3}

@@ -69,6 +69,7 @@ Sidebar sections:
 - `.sidebar-tools` – wrapper for expand/collapse controls
 - `.sidebar-expand-all` – expand all namespaces button
 - `.sidebar-collapse-all` – collapse all namespaces button
+- `.sidebar-reset` – reset all filters button
 - `.sidebar-nav` – sidebar nav wrapper
 - `.sidebar-empty` – “no matching types” placeholder
 - `.nav-section` – nav section block
