@@ -96,6 +96,7 @@ public static class WebSiteVerifier
         ValidatePrismAssets(spec, plan, warnings);
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
+        ValidateSiteNavExport(spec, plan, warnings);
 
         return new WebVerifyResult
         {
@@ -437,6 +438,72 @@ public static class WebSiteVerifier
         if (!hasMenus && !hasAuto && !nav.AutoDefaults)
         {
             warnings.Add("Navigation.AutoDefaults is disabled and no menus/auto navigation are defined.");
+        }
+    }
+
+    private static void ValidateSiteNavExport(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+
+        var nav = spec.Navigation;
+        if (nav is null || nav.Menus is null || nav.Menus.Length == 0) return;
+        if (nav.Auto is not null && nav.Auto.Length > 0) return;
+
+        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+        var dataPath = Path.IsPathRooted(dataRoot)
+            ? Path.Combine(dataRoot, "site-nav.json")
+            : Path.Combine(plan.RootPath, dataRoot, "site-nav.json");
+        var staticPath = Path.Combine(plan.RootPath, "static", "data", "site-nav.json");
+
+        var navPath = File.Exists(dataPath) ? dataPath : (File.Exists(staticPath) ? staticPath : null);
+        if (string.IsNullOrWhiteSpace(navPath))
+            return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(navPath));
+            if (!doc.RootElement.TryGetProperty("primary", out var primary) ||
+                primary.ValueKind != JsonValueKind.Array)
+                return;
+
+            var menu = nav.Menus.FirstOrDefault(m => string.Equals(m.Name, "main", StringComparison.OrdinalIgnoreCase));
+            if (menu is null || menu.Items is null || menu.Items.Length == 0) return;
+
+            var expected = menu.Items
+                .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+                .Select(i => (Href: i.Url ?? string.Empty, Text: i.Text ?? i.Title))
+                .ToArray();
+
+            var actual = primary.EnumerateArray()
+                .Select(item =>
+                {
+                    var href = item.TryGetProperty("href", out var h) ? h.GetString() : null;
+                    var text = item.TryGetProperty("text", out var t) ? t.GetString() : null;
+                    return (Href: href ?? string.Empty, Text: text ?? string.Empty);
+                })
+                .Where(i => !string.IsNullOrWhiteSpace(i.Href))
+                .ToArray();
+
+            if (expected.Length != actual.Length)
+            {
+                warnings.Add($"site-nav.json primary count ({actual.Length}) differs from Navigation main menu ({expected.Length}).");
+                return;
+            }
+
+            for (var i = 0; i < expected.Length; i++)
+            {
+                if (!string.Equals(expected[i].Href, actual[i].Href, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(expected[i].Text, actual[i].Text, StringComparison.Ordinal))
+                {
+                    warnings.Add("site-nav.json primary entries differ from Navigation main menu. " +
+                                 "Regenerate the nav export or update the custom data file.");
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Failed to read site-nav.json for navigation consistency: {ex.Message}");
         }
     }
 
