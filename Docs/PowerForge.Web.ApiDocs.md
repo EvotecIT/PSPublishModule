@@ -162,7 +162,7 @@ Member layout:
 - `.member-kind` buttons with `data-member-kind`
 - `#api-show-inherited` checkbox
 - `.sidebar-empty` placeholder (optional)
-- URL hash state (optional): `#k=class&ns=My.Namespace&q=filter&mk=method&mq=member&mi=1`
+- URL hash state (optional): `#k=class&ns=My.Namespace&q=filter&mk=method&mq=member&mi=1&mc=methods,fields&tc=1`
 
 ## Type metadata
 
