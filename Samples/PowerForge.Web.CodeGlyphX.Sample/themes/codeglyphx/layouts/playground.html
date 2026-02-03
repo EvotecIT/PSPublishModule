@@ -8,7 +8,9 @@
   {{ canonical_html }}
   {{ head_html }}
   <script>(function(){const t=localStorage.getItem('theme')||'auto';document.documentElement.dataset.theme=t;})();</script>
+  {{ assets.preloads_html }}
   {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
   {{ extra_css_html }}
   {{ assets.css_html }}
   {{ opengraph_html }}
