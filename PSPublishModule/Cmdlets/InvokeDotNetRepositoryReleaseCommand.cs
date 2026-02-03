@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Management.Automation;
 using PowerForge;
@@ -208,7 +209,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
                 if (File.Exists(full))
                     return File.ReadAllText(full).Trim();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"ResolveSecret file read failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(envName))
@@ -218,7 +222,10 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
                 var value = Environment.GetEnvironmentVariable(envName);
                 if (!string.IsNullOrWhiteSpace(value)) return value.Trim();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"ResolveSecret env read failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(inline))

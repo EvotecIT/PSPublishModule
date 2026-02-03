@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using Scriban;
 using Scriban.Runtime;
@@ -207,7 +209,7 @@ public static class WebSitemapGenerator
 
         try
         {
-            var doc = XDocument.Load(full);
+            var doc = LoadXmlSafe(full);
             var ns = doc.Root?.Name.Namespace ?? XNamespace.None;
             foreach (var url in doc.Descendants(ns + "url"))
             {
@@ -228,10 +230,24 @@ public static class WebSitemapGenerator
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"Failed to merge API sitemap {full}: {ex.GetType().Name}: {ex.Message}");
             return;
         }
+    }
+
+    private static XDocument LoadXmlSafe(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            CloseInput = false
+        };
+        using var reader = XmlReader.Create(stream, settings);
+        return XDocument.Load(reader, LoadOptions.None);
     }
 
     private static void AddOrUpdate(Dictionary<string, WebSitemapEntry> entries, string path, WebSitemapEntry? update)

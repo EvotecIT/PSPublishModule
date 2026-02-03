@@ -745,6 +745,7 @@ try
                 Source = source,
                 ChangelogPath = changelogPath,
                 OutputPath = outPath,
+                BaseDirectory = Directory.GetCurrentDirectory(),
                 Repo = repo,
                 RepoUrl = repoUrl,
                 Token = token,

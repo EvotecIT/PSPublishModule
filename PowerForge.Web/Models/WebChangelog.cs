@@ -17,6 +17,8 @@ public sealed class WebChangelogOptions
     public int? MaxReleases { get; set; }
     /// <summary>Output JSON path.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Optional base directory for resolving relative paths.</summary>
+    public string? BaseDirectory { get; set; }
     /// <summary>Optional title override.</summary>
     public string? Title { get; set; }
     /// <summary>Include release assets.</summary>

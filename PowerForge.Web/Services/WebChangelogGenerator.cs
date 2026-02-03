@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -10,6 +11,12 @@ namespace PowerForge.Web;
 /// <summary>Generates a changelog data file.</summary>
 public static class WebChangelogGenerator
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex ReleaseTagRegex = new(@"\[(?<tag>[^\]]+)\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ReleaseVersionRegex = new(@"\b(v?\d+\.\d+[^ ]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, RegexTimeout);
+    private static readonly Regex ReleaseDateRegex = new(@"\b(?<date>\d{4}-\d{2}-\d{2})\b", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex MarkdownLinkRegex = new(@"(!?\[[^\]]*\]\()([^\)]+)(\))", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly HttpClient GitHubClient = CreateGitHubClient();
     /// <summary>Generates a changelog JSON file from a local file or repository releases.</summary>
     /// <param name="options">Generation options.</param>
     /// <returns>Result payload describing the generated output.</returns>
@@ -20,7 +27,10 @@ public static class WebChangelogGenerator
             throw new ArgumentException("OutputPath is required.", nameof(options));
 
         var warnings = new List<string>();
-        var outputPath = Path.GetFullPath(options.OutputPath);
+        var baseDir = ResolveBaseDirectory(options.BaseDirectory);
+        var outputPath = ResolvePath(options.OutputPath, baseDir, warnings, "OutputPath");
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new ArgumentException("OutputPath is invalid.", nameof(options));
         var outputDir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDir))
             Directory.CreateDirectory(outputDir);
@@ -30,7 +40,7 @@ public static class WebChangelogGenerator
 
         if (options.Source is WebChangelogSource.Auto or WebChangelogSource.File)
         {
-            var filePath = ResolveChangelogPath(options.ChangelogPath);
+            var filePath = ResolveChangelogPath(options.ChangelogPath, baseDir, warnings);
             if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
             {
                 items = ParseChangelogFile(filePath);
@@ -83,12 +93,59 @@ public static class WebChangelogGenerator
         };
     }
 
-    private static string? ResolveChangelogPath(string? path)
+    private static string? ResolveChangelogPath(string? path, string? baseDir, List<string> warnings)
     {
         if (string.IsNullOrWhiteSpace(path))
             return null;
-        var full = Path.GetFullPath(path.Trim().Trim('"'));
+        return ResolvePath(path, baseDir, warnings, "ChangelogPath");
+    }
+
+    private static string? ResolveBaseDirectory(string? baseDir)
+    {
+        if (string.IsNullOrWhiteSpace(baseDir))
+            return null;
+        try
+        {
+            return Path.GetFullPath(baseDir.Trim().Trim('"'));
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Failed to resolve base directory: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static string? ResolvePath(string path, string? baseDir, List<string> warnings, string label)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        var trimmed = path.Trim().Trim('"');
+        string full;
+        try
+        {
+            full = Path.IsPathRooted(trimmed) || string.IsNullOrWhiteSpace(baseDir)
+                ? Path.GetFullPath(trimmed)
+                : Path.GetFullPath(Path.Combine(baseDir, trimmed));
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"{label} could not be resolved: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseDir) && !IsUnderRoot(full, baseDir))
+            warnings.Add($"{label} resolves outside base directory: {full}");
+
         return full;
+    }
+
+    private static bool IsUnderRoot(string path, string root)
+    {
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(path, normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            return true;
+        normalizedRoot += Path.DirectorySeparatorChar;
+        return path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 
     private static (string Owner, string Repo)? ResolveRepo(WebChangelogOptions options, List<string> warnings)
@@ -168,17 +225,17 @@ public static class WebChangelogGenerator
         string? tag = null;
         DateTimeOffset? published = null;
 
-        var tagMatch = Regex.Match(title, @"\[(?<tag>[^\]]+)\]");
+        var tagMatch = ReleaseTagRegex.Match(title);
         if (tagMatch.Success)
             tag = tagMatch.Groups["tag"].Value.Trim();
         else
         {
-            var vMatch = Regex.Match(title, @"\b(v?\d+\.\d+[^ ]*)", RegexOptions.IgnoreCase);
+            var vMatch = ReleaseVersionRegex.Match(title);
             if (vMatch.Success)
                 tag = vMatch.Groups[1].Value.Trim();
         }
 
-        var dateMatch = Regex.Match(title, @"\b(?<date>\d{4}-\d{2}-\d{2})\b");
+        var dateMatch = ReleaseDateRegex.Match(title);
         if (dateMatch.Success && DateTimeOffset.TryParse(dateMatch.Groups["date"].Value, out var parsed))
             published = parsed;
 
@@ -190,14 +247,17 @@ public static class WebChangelogGenerator
         var results = new List<ChangelogItem>();
         try
         {
-            using var client = CreateGitHubClient(options.Token);
             var url = $"https://api.github.com/repos/{owner}/{repo}/releases";
-            var resp = client.GetAsync(url).GetAwaiter().GetResult();
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(options.Token))
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
+
+            using var resp = GitHubClient.Send(request);
             if (!resp.IsSuccessStatusCode)
                 return results;
 
-            var json = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            using var doc = JsonDocument.Parse(json);
+            using var stream = resp.Content.ReadAsStream();
+            using var doc = JsonDocument.Parse(stream);
             if (doc.RootElement.ValueKind != JsonValueKind.Array)
                 return results;
 
@@ -240,21 +300,20 @@ public static class WebChangelogGenerator
                 results.Add(item);
             }
         }
-        catch
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"GitHub release fetch failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
             return results;
         }
 
         return results;
     }
 
-    private static HttpClient CreateGitHubClient(string? token)
+    private static HttpClient CreateGitHubClient()
     {
         var client = new HttpClient();
         client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("PowerForge.Web", "1.0"));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        if (!string.IsNullOrWhiteSpace(token))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }
 
@@ -292,8 +351,7 @@ public static class WebChangelogGenerator
             }
         }
 
-        var pattern = @"(!?\[[^\]]*\]\()([^\)]+)(\))";
-        return Regex.Replace(markdown, pattern, new MatchEvaluator(Replace));
+        return MarkdownLinkRegex.Replace(markdown, new MatchEvaluator(Replace));
     }
 
     private sealed class ChangelogDocument

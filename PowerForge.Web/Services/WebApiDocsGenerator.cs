@@ -1,10 +1,12 @@
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Runtime.Loader;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace PowerForge.Web;
@@ -77,6 +79,12 @@ public sealed class WebApiDocsOptions
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static class WebApiDocsGenerator
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex GenericArityRegex = new("`{1,2}\\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex SlugNonAlnumRegex = new("[^a-z0-9]+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex SlugDashRegex = new("-{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>[^\\]]+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     /// <summary>Generates API documentation output.</summary>
     /// <param name="options">Generation options.</param>
     /// <returns>Result payload describing generated artifacts.</returns>
@@ -149,9 +157,10 @@ public static class WebApiDocsGenerator
                 if (assemblyNameInfo.Version is not null)
                     assemblyVersion = assemblyNameInfo.Version.ToString();
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore assembly inspection errors
+                warnings.Add($"Assembly inspection failed: {Path.GetFileName(options.AssemblyPath)} ({ex.GetType().Name}: {ex.Message})");
+                Trace.TraceWarning($"Assembly inspection failed: {options.AssemblyPath} ({ex.GetType().Name}: {ex.Message})");
             }
         }
 
@@ -479,7 +488,16 @@ public static class WebApiDocsGenerator
             return apiDoc;
 
         using var stream = File.OpenRead(xmlPath);
-        var doc = XDocument.Load(stream);
+        XDocument doc;
+        try
+        {
+            doc = LoadXmlSafe(stream);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Failed to parse XML docs: {xmlPath} ({ex.GetType().Name}: {ex.Message})");
+            return apiDoc;
+        }
         var docElement = doc.Element("doc");
         if (docElement is null) return apiDoc;
 
@@ -542,7 +560,7 @@ public static class WebApiDocsGenerator
         XDocument doc;
         try
         {
-            doc = XDocument.Load(resolved);
+            doc = LoadXmlSafe(resolved);
         }
         catch (Exception ex)
         {
@@ -612,6 +630,24 @@ public static class WebApiDocsGenerator
         }
 
         return apiDoc;
+    }
+
+    private static XDocument LoadXmlSafe(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return LoadXmlSafe(stream);
+    }
+
+    private static XDocument LoadXmlSafe(Stream stream)
+    {
+        var settings = new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            CloseInput = false
+        };
+        using var reader = XmlReader.Create(stream, settings);
+        return XDocument.Load(reader, LoadOptions.None);
     }
 
     private static string? ResolvePowerShellHelpFile(string helpPath, List<string> warnings)
@@ -984,7 +1020,7 @@ public static class WebApiDocsGenerator
             name = name.Substring(7);
         name = name.Replace("+", ".");
         name = name.Replace("{", "<").Replace("}", ">");
-        name = Regex.Replace(name, "`{1,2}\\d+", string.Empty);
+        name = GenericArityRegex.Replace(name, string.Empty);
         return name.Replace(" ", string.Empty);
     }
 
@@ -1470,10 +1506,12 @@ public static class WebApiDocsGenerator
         }
         catch (ReflectionTypeLoadException ex)
         {
+            Trace.TraceWarning($"ReflectionTypeLoadException in GetExportedTypesSafe: {ex.Message}");
             return ex.Types ?? Array.Empty<Type?>();
         }
-        catch
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"GetExportedTypesSafe failed: {ex.GetType().Name}: {ex.Message}");
             return Array.Empty<Type?>();
         }
     }
@@ -1846,12 +1884,14 @@ public static class WebApiDocsGenerator
         if (typeName.StartsWith("``", StringComparison.Ordinal))
         {
             isMethodParameter = true;
-            return int.TryParse(typeName.Substring(2), out position);
+            if (typeName.Length <= 2) return false;
+            return int.TryParse(typeName.Substring(2), out position) && position >= 0 && position < 128;
         }
         if (typeName.StartsWith("`", StringComparison.Ordinal))
         {
             isMethodParameter = false;
-            return int.TryParse(typeName.Substring(1), out position);
+            if (typeName.Length <= 1) return false;
+            return int.TryParse(typeName.Substring(1), out position) && position >= 0 && position < 128;
         }
         return false;
     }
@@ -1909,7 +1949,7 @@ public static class WebApiDocsGenerator
     private static string StripGenericArity(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return name;
-        return Regex.Replace(name, "`{1,2}\\d+", string.Empty);
+        return GenericArityRegex.Replace(name, string.Empty);
     }
 
     private static List<string> ParseParameterTypes(string fullName)
@@ -2052,7 +2092,7 @@ public static class WebApiDocsGenerator
 
     private static string Normalize(string value)
     {
-        return Regex.Replace(value, "\\s+", " ").Trim();
+        return WhitespaceRegex.Replace(value, " ").Trim();
     }
 
     private static string CleanCref(string? cref)
@@ -2132,9 +2172,9 @@ public static class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(value)) return string.Empty;
         var slug = value.ToLowerInvariant();
         slug = slug.Replace('+', '-');
-        slug = Regex.Replace(slug, "`\\d+", string.Empty);
-        slug = Regex.Replace(slug, "[^a-z0-9]+", "-");
-        slug = Regex.Replace(slug, "-{2,}", "-").Trim('-');
+        slug = GenericArityRegex.Replace(slug, string.Empty);
+        slug = SlugNonAlnumRegex.Replace(slug, "-");
+        slug = SlugDashRegex.Replace(slug, "-").Trim('-');
         return slug;
     }
 
@@ -3149,7 +3189,7 @@ public static class WebApiDocsGenerator
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
         var encoded = System.Web.HttpUtility.HtmlEncode(text);
-        return Regex.Replace(encoded, "\\[\\[cref:(?<name>[^\\]]+)\\]\\]", match =>
+        return CrefTokenRegex.Replace(encoded, match =>
         {
             var name = match.Groups["name"].Value;
             return LinkifyType(name, baseUrl, slugMap);
@@ -3159,7 +3199,7 @@ public static class WebApiDocsGenerator
     private static string StripCrefTokens(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        return Regex.Replace(text, "\\[\\[cref:(?<name>[^\\]]+)\\]\\]", match =>
+        return CrefTokenRegex.Replace(text, match =>
         {
             var name = match.Groups["name"].Value;
             return GetDisplayTypeName(name);
@@ -3212,9 +3252,9 @@ public static class WebApiDocsGenerator
     {
         if (string.IsNullOrWhiteSpace(name)) return name;
         var normalized = name.Replace("{", "<").Replace("}", ">");
-        normalized = Regex.Replace(normalized, "`{1,2}\\d+", string.Empty);
+        normalized = GenericArityRegex.Replace(normalized, string.Empty);
         var lastDot = normalized.LastIndexOf('.');
-        return lastDot > 0 ? normalized.Substring(lastDot + 1) : normalized;
+        return lastDot >= 0 ? normalized.Substring(lastDot + 1) : normalized;
     }
 
     private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types)
@@ -3905,9 +3945,9 @@ public static class WebApiDocsGenerator
                     return BuildSourceLink(path, sp.StartLine);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore source mapping failures
+                Trace.TraceWarning($"Source mapping failed for {method.DeclaringType?.FullName}.{method.Name}: {ex.GetType().Name}: {ex.Message}");
             }
             return null;
         }
@@ -3939,8 +3979,9 @@ public static class WebApiDocsGenerator
                 {
                     resolved = Path.GetRelativePath(_sourceRoot, path);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Trace.TraceWarning($"Source path relativize failed: {ex.GetType().Name}: {ex.Message}");
                     resolved = path;
                 }
             }

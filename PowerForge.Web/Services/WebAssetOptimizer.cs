@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using HtmlTinkerX;
 
@@ -33,6 +34,10 @@ public sealed class WebAssetOptimizerOptions
 /// <summary>Optimizes generated site assets (critical CSS, minification).</summary>
 public static class WebAssetOptimizer
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
     /// <param name="options">Optimization options.</param>
     /// <returns>Number of HTML files updated with critical CSS.</returns>
@@ -58,7 +63,16 @@ public static class WebAssetOptimizer
             }
         }
         var criticalCss = LoadCriticalCss(options.CriticalCssPath);
-        var cssPattern = new Regex(options.CssLinkPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        Regex cssPattern;
+        try
+        {
+            cssPattern = new Regex(options.CssLinkPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Invalid CssLinkPattern '{options.CssLinkPattern}': {ex.GetType().Name}: {ex.Message}");
+            cssPattern = new Regex("(app|api-docs)\\.css", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+        }
 
         var processed = 0;
         foreach (var htmlFile in htmlFiles)
@@ -100,8 +114,9 @@ public static class WebAssetOptimizer
                 {
                     minified = HtmlOptimizer.OptimizeHtml(html, cssDecodeEscapes: true, treatAsDocument: true);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Trace.TraceWarning($"HTML minify failed for {htmlFile}: {ex.GetType().Name}: {ex.Message}");
                     minified = null;
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(html, minified, StringComparison.Ordinal))
@@ -120,8 +135,9 @@ public static class WebAssetOptimizer
                 {
                     minified = HtmlOptimizer.OptimizeCss(css);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Trace.TraceWarning($"CSS minify failed for {cssFile}: {ex.GetType().Name}: {ex.Message}");
                     minified = null;
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(css, minified, StringComparison.Ordinal))
@@ -140,8 +156,9 @@ public static class WebAssetOptimizer
                 {
                     minified = HtmlOptimizer.OptimizeJavaScript(js);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    Trace.TraceWarning($"JS minify failed for {jsFile}: {ex.GetType().Name}: {ex.Message}");
                     minified = null;
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(js, minified, StringComparison.Ordinal))
@@ -182,7 +199,11 @@ public static class WebAssetOptimizer
             if (!File.Exists(source)) continue;
 
             var destRelative = rewrite.Destination.TrimStart('/', '\\');
-            var dest = Path.Combine(siteRoot, destRelative.Replace('/', Path.DirectorySeparatorChar));
+            if (!TryResolveUnderRoot(siteRoot, destRelative, out var dest))
+            {
+                Trace.TraceWarning($"Asset rewrite destination outside site root: {rewrite.Destination}");
+                continue;
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             File.Copy(source, dest, overwrite: true);
         }
@@ -191,8 +212,7 @@ public static class WebAssetOptimizer
     private static string RewriteHtmlAssets(string html, AssetRewriteSpec[] rewrites)
     {
         if (rewrites.Length == 0) return html;
-        var attrRegex = new Regex("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase);
-        return attrRegex.Replace(html, match =>
+        return HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
             var replaced = ApplyRewriteRules(url, rewrites);
@@ -224,13 +244,13 @@ public static class WebAssetOptimizer
                 case "regex":
                     try
                     {
-                        var regex = new Regex(rewrite.Match, RegexOptions.IgnoreCase);
+                        var regex = new Regex(rewrite.Match, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
                         if (regex.IsMatch(url))
                             return regex.Replace(url, rewrite.Replace);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // ignore regex errors
+                        Trace.TraceWarning($"Invalid rewrite regex '{rewrite.Match}': {ex.GetType().Name}: {ex.Message}");
                     }
                     break;
                 default:
@@ -258,6 +278,7 @@ public static class WebAssetOptimizer
 
             var hash = ComputeShortHash(File.ReadAllBytes(file));
             var ext = Path.GetExtension(relative);
+            if (relative.Length <= ext.Length) continue;
             var without = relative.Substring(0, relative.Length - ext.Length);
             var hashedName = $"{without}.{hash}{ext}";
             var target = Path.Combine(siteRoot, hashedName.Replace('/', Path.DirectorySeparatorChar));
@@ -294,8 +315,7 @@ public static class WebAssetOptimizer
 
     private static string RewriteReferences(string html, Dictionary<string, string> map)
     {
-        var attrRegex = new Regex("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase);
-        return attrRegex.Replace(html, match =>
+        return HtmlAttrRegex.Replace(html, match =>
         {
             var url = match.Groups["url"].Value;
             var rewritten = RewriteUrlWithMap(url, map);
@@ -305,8 +325,7 @@ public static class WebAssetOptimizer
 
     private static string RewriteCssUrls(string css, Dictionary<string, string> map)
     {
-        var urlRegex = new Regex("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase);
-        return urlRegex.Replace(css, match =>
+        return CssUrlRegex.Replace(css, match =>
         {
             var url = match.Groups["url"].Value;
             var rewritten = RewriteUrlWithMap(url, map);
@@ -356,9 +375,14 @@ public static class WebAssetOptimizer
     private static void WriteHashManifest(string siteRoot, AssetHashSpec spec, Dictionary<string, string> map)
     {
         if (map.Count == 0) return;
-        var path = string.IsNullOrWhiteSpace(spec.ManifestPath)
-            ? Path.Combine(siteRoot, "asset-manifest.json")
-            : Path.Combine(siteRoot, spec.ManifestPath.TrimStart('/', '\\'));
+        var manifestRelative = string.IsNullOrWhiteSpace(spec.ManifestPath)
+            ? "asset-manifest.json"
+            : spec.ManifestPath.TrimStart('/', '\\');
+        if (!TryResolveUnderRoot(siteRoot, manifestRelative, out var path))
+        {
+            Trace.TraceWarning($"Hash manifest path outside site root: {spec.ManifestPath}");
+            return;
+        }
         var json = System.Text.Json.JsonSerializer.Serialize(map, new System.Text.Json.JsonSerializerOptions
         {
             WriteIndented = true
@@ -369,7 +393,11 @@ public static class WebAssetOptimizer
     private static void WriteCacheHeaders(string siteRoot, CacheHeadersSpec headers, Dictionary<string, string>? map)
     {
         var output = string.IsNullOrWhiteSpace(headers.OutputPath) ? "_headers" : headers.OutputPath;
-        var outputPath = Path.Combine(siteRoot, output.TrimStart('/', '\\'));
+        if (!TryResolveUnderRoot(siteRoot, output.TrimStart('/', '\\'), out var outputPath))
+        {
+            Trace.TraceWarning($"Cache headers output path outside site root: {headers.OutputPath}");
+            return;
+        }
         var htmlCache = string.IsNullOrWhiteSpace(headers.HtmlCacheControl)
             ? "public, max-age=0, must-revalidate"
             : headers.HtmlCacheControl!;
@@ -415,13 +443,12 @@ public static class WebAssetOptimizer
             .Replace("\\*\\*", ".*")
             .Replace("\\*", "[^/]*")
             .Replace("\\?", ".") + "$";
-        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
+        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
     }
 
     private static string InlineCriticalCss(string content, string criticalCss, Regex cssPattern)
     {
-        var linkRegex = new Regex("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase);
-        var match = linkRegex.Match(content);
+        var match = StylesheetLinkRegex.Match(content);
         if (!match.Success) return content;
 
         var href = match.Groups[1].Value;
@@ -442,10 +469,35 @@ public static class WebAssetOptimizer
             var optimized = HtmlOptimizer.OptimizeCss(css);
             return string.IsNullOrWhiteSpace(optimized) ? css : optimized;
         }
-        catch
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"Critical CSS optimize failed for {full}: {ex.GetType().Name}: {ex.Message}");
             return css;
         }
+    }
+
+    private static bool TryResolveUnderRoot(string siteRoot, string relativePath, out string resolved)
+    {
+        resolved = string.Empty;
+        if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(relativePath))
+            return false;
+
+        var rootFull = Path.GetFullPath(siteRoot);
+        var combined = Path.GetFullPath(Path.Combine(rootFull, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsUnderRoot(combined, rootFull))
+            return false;
+
+        resolved = combined;
+        return true;
+    }
+
+    private static bool IsUnderRoot(string path, string root)
+    {
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(path, normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            return true;
+        normalizedRoot += Path.DirectorySeparatorChar;
+        return path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 
 }

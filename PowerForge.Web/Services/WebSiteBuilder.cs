@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -13,6 +14,13 @@ namespace PowerForge.Web;
 /// <summary>Builds a static site from configuration and content.</summary>
 public static class WebSiteBuilder
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex TocHeaderRegex = new("<h(?<level>[2-3])[^>]*>(?<text>.*?)</h\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex StripTagsRegex = new("<.*?>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex HrefRegex = new("href\\s*=\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CodeBlockRegex = new("<pre[^>]*>\\s*<code(?<attrs>[^>]*)>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ClassAttrRegex = new("class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     /// <summary>Builds the site output.</summary>
     /// <param name="spec">Site configuration.</param>
     /// <param name="plan">Resolved site plan.</param>
@@ -265,8 +273,9 @@ public static class WebSiteBuilder
                 value = ConvertJsonElement(doc.RootElement);
                 value = NormalizeMarkdownData(value);
             }
-            catch
+            catch (Exception ex)
             {
+                Trace.TraceWarning($"Failed to load data file {file}: {ex.GetType().Name}: {ex.Message}");
                 continue;
             }
 
@@ -687,8 +696,7 @@ public static class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
 
-        var regex = new Regex("<h(?<level>[2-3])[^>]*>(?<text>.*?)</h\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        var matches = regex.Matches(html);
+        var matches = TocHeaderRegex.Matches(html);
         if (matches.Count == 0)
             return string.Empty;
 
@@ -711,7 +719,7 @@ public static class WebSiteBuilder
 
     private static string StripTags(string input)
     {
-        return Regex.Replace(input, "<.*?>", string.Empty);
+        return StripTagsRegex.Replace(input, string.Empty);
     }
 
     private static void WriteSearchIndex(string outputRoot, IReadOnlyList<ContentItem> items)
@@ -807,7 +815,7 @@ public static class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html))
             yield break;
 
-        var matches = Regex.Matches(html, "href\\s*=\\s*\"([^\"]+)\"", RegexOptions.IgnoreCase);
+        var matches = HrefRegex.Matches(html);
         foreach (Match match in matches)
         {
             if (match.Groups.Count < 2) continue;
@@ -851,7 +859,7 @@ public static class WebSiteBuilder
     {
         var text = StripTags(html);
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        text = Regex.Replace(text, "\\s+", " ").Trim();
+        text = WhitespaceRegex.Replace(text, " ").Trim();
         if (text.Length <= maxLength) return text;
         return text.Substring(0, maxLength).Trim() + "...";
     }
@@ -872,9 +880,9 @@ public static class WebSiteBuilder
             {
                 project = WebSiteSpecLoader.LoadProjectWithPath(projectFile, options).Spec;
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore invalid project specs for now
+                Trace.TraceWarning($"Invalid project spec {projectFile}: {ex.GetType().Name}: {ex.Message}");
             }
 
             if (project is not null)
@@ -1572,16 +1580,15 @@ public static class WebSiteBuilder
     {
         if (string.IsNullOrWhiteSpace(htmlContent)) return htmlContent;
 
-        return Regex.Replace(
+        return CodeBlockRegex.Replace(
             htmlContent,
-            "<pre[^>]*>\\s*<code(?<attrs>[^>]*)>",
             match =>
             {
                 var attrs = match.Groups["attrs"].Value;
                 if (string.IsNullOrWhiteSpace(attrs))
                     return match.Value.Replace("<code", "<code class=\"language-plain\"", StringComparison.OrdinalIgnoreCase);
 
-                var classMatch = Regex.Match(attrs, "class\\s*=\\s*\"(?<value>[^\"]*)\"", RegexOptions.IgnoreCase);
+                var classMatch = ClassAttrRegex.Match(attrs);
                 if (!classMatch.Success)
                     return match.Value.Replace("<code", "<code class=\"language-plain\"", StringComparison.OrdinalIgnoreCase);
 
@@ -1592,8 +1599,7 @@ public static class WebSiteBuilder
                 var replacement = classMatch.Value.Replace(classes, classes + " language-plain");
                 var newAttrs = attrs.Replace(classMatch.Value, replacement);
                 return match.Value.Replace(attrs, newAttrs, StringComparison.OrdinalIgnoreCase);
-            },
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            });
     }
 
     private static void AppendMetaHtml(Dictionary<string, object?> meta, string key, string html)
@@ -3348,7 +3354,7 @@ public static class WebSiteBuilder
         var regex = "^" + Regex.Escape(pattern)
             .Replace("\\*\\*", ".*")
             .Replace("\\*", "[^/]*") + "$";
-        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
+        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
     }
 
     private static string BuildRoute(string baseOutput, string slug, TrailingSlashMode slashMode)
