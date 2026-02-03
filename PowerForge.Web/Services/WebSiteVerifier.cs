@@ -497,7 +497,10 @@ public static class WebSiteVerifier
 
             var tocPath = ResolveTocPath(collection, plan.RootPath);
             if (string.IsNullOrWhiteSpace(tocPath) || !File.Exists(tocPath))
+            {
+                warnings.Add($"TOC is enabled for collection '{collection.Name}' but no toc.json/toc.yml was found.");
                 continue;
+            }
 
             var tocItems = LoadTocFromPath(tocPath);
             if (tocItems.Length == 0)
