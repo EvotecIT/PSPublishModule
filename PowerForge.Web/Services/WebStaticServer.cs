@@ -133,6 +133,12 @@ public static class WebStaticServer
             var indexPath = Path.Combine(candidate, "index.html");
             if (File.Exists(indexPath))
                 return indexPath;
+            var htmlPath = candidate + ".html";
+            if (File.Exists(htmlPath))
+                return htmlPath;
+            var htmPath = candidate + ".htm";
+            if (File.Exists(htmPath))
+                return htmPath;
         }
 
         return candidate;
