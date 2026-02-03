@@ -7,8 +7,11 @@ Short, high-signal list to keep parity and stability work visible.
 - Docs API parity: namespace/type filters, search UX, member grouping (methods/properties/fields/events).
 - Fix markdown parser precedence: `## Heading: Text` should be heading, not definition list.
 - Syntax highlighting: verify Prism injection for all markdown code blocks and API pages.
+- Theme layout hook validation (`extra_css_html` / `extra_scripts_html`) so per-page assets are reliable.
+- Prism local asset validation to prevent silent 404s.
 - Link consistency: nav parity across all pages + edit links resolve to correct sources.
 - Optional: API docs edit links per symbol (XML/CS source mapping) when available.
+- Site spec layering (base + overrides) for reuse across many projects.
 
 ## Assets & performance
 - Asset policy examples for local/CDN/hybrid with rewrites and hashing.
@@ -18,7 +21,9 @@ Short, high-signal list to keep parity and stability work visible.
 ## Automation & verification
 - Built‑in website verification: broken links, missing assets, missing nav parity, CSS/JS load errors.
 - Optional Playwright smoke checks (config‑driven, no custom tests required).
+- Configured audit step in sample pipelines (docs + scaffolder defaults).
 
 ## Documentation
 - “Theme anatomy” doc: where assets live, how `extra_css_html`/`extra_scripts_html` are used.
 - Content spec examples for multi‑site reuse and CodeGlyphX migration steps.
+- Prism local asset expectations + troubleshooting (docs/assets).

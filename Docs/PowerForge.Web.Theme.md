@@ -155,6 +155,10 @@ To keep features reusable across projects, layouts should include:
 - `{{ extra_css_html }}` in `<head>` so the engine can inject per‑page CSS (syntax highlighting, experiments, analytics styles).
 - `{{ extra_scripts_html }}` before `</body>` so the engine can inject per‑page scripts (syntax highlighting, analytics, widgets).
 
+For the **simple** engine, the equivalent placeholders are `{{EXTRA_CSS}}` and
+`{{EXTRA_SCRIPTS}}`. `powerforge-web verify` warns when these hooks are missing,
+because features like Prism injection rely on them.
+
 Recommended base ordering:
 ```
 {{ assets.critical_css_html }}

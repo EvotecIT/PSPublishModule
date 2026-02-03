@@ -10,4 +10,10 @@
 - Optional per‑type mini‑TOC (“In this article”)
 - Type hierarchy tree (base chain + derived types when available)
 
+### Engine quality
+- Validate layout hooks (`extra_css_html` / `extra_scripts_html`) so per-page assets load.
+- Warn when Prism local assets are missing (prevent silent 404s).
+- Site spec layering (base + overrides) for reusable multi-site configs.
+- Pipeline defaults: include audit step (links/assets/nav/rendered).
+
 ## Websites

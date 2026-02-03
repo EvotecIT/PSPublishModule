@@ -90,6 +90,24 @@ prism_source: cdn
 prism_cdn: https://cdn.jsdelivr.net/npm/prismjs@1.29.0
 ```
 
+### Local Prism assets (required when Source=local)
+PowerForge.Web does **not** bundle Prism assets. When using `Source: "local"` you
+must provide the files yourself, for example:
+
+```
+assets/
+  prism/
+    prism.css
+    prism-okaidia.css
+    prism-core.js
+    prism-autoloader.js
+    components/
+```
+
+If the assets are missing, `powerforge-web verify` will emit warnings so you
+catch it before publishing. You can also point to theme assets instead by
+setting `Prism.Local` paths to `/themes/<theme>/assets/prism/...`.
+
 ## Asset hashing
 Hashing renames assets and rewrites HTML/CSS references, enabling immutable
 cache headers without stale files.

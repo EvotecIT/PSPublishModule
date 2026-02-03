@@ -91,6 +91,8 @@ public static class WebSiteVerifier
 
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
+        ValidateLayoutHooks(spec, plan, warnings);
+        ValidatePrismAssets(spec, plan, warnings);
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
 
         return new WebVerifyResult
@@ -314,6 +316,136 @@ public static class WebSiteVerifier
 
         ValidateAssetRegistryPaths(manifest.Assets, themeRoot, $"theme:{manifest.Name}", warnings);
         ValidateAssetRegistryPaths(spec.AssetRegistry, plan.RootPath, "site", warnings);
+    }
+
+    private static void ValidateLayoutHooks(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme)) return;
+
+        var themeRoot = ResolveThemeRoot(spec, plan.RootPath, plan.ThemesRoot);
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return;
+
+        var loader = new ThemeLoader();
+        ThemeManifest? manifest = null;
+        try
+        {
+            manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, plan.RootPath, plan.ThemesRoot));
+        }
+        catch
+        {
+            return;
+        }
+
+        if (manifest is null)
+            return;
+
+        var engine = spec.ThemeEngine ?? manifest.Engine ?? "simple";
+        var requiredTokens = ResolveRequiredLayoutTokens(engine);
+        if (requiredTokens.Length == 0) return;
+
+        var layoutNames = CollectLayoutNames(spec, manifest);
+        foreach (var layoutName in layoutNames)
+        {
+            var layoutPath = loader.ResolveLayoutPath(themeRoot, manifest, layoutName);
+            if (string.IsNullOrWhiteSpace(layoutPath) || !File.Exists(layoutPath))
+                continue;
+
+            var content = File.ReadAllText(layoutPath);
+            foreach (var token in requiredTokens)
+            {
+                if (content.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+                    continue;
+
+                warnings.Add($"Layout '{layoutName}' is missing required token '{token}'. " +
+                             "Per-page assets (e.g., Prism) may not load.");
+            }
+        }
+    }
+
+    private static string[] ResolveRequiredLayoutTokens(string engine)
+    {
+        if (engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
+            return new[] { "extra_css_html", "extra_scripts_html" };
+        return new[] { "EXTRA_CSS", "EXTRA_SCRIPTS" };
+    }
+
+    private static HashSet<string> CollectLayoutNames(SiteSpec spec, ThemeManifest manifest)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(manifest.DefaultLayout))
+            names.Add(manifest.DefaultLayout);
+
+        if (manifest.Layouts is not null)
+        {
+            foreach (var key in manifest.Layouts.Keys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                    names.Add(key);
+            }
+        }
+
+        if (spec.Collections is not null)
+        {
+            foreach (var collection in spec.Collections)
+            {
+                var layout = collection?.DefaultLayout;
+                if (!string.IsNullOrWhiteSpace(layout))
+                    names.Add(layout);
+            }
+        }
+
+        return names;
+    }
+
+    private static void ValidatePrismAssets(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+
+        var source = spec.Prism?.Source ?? spec.AssetPolicy?.Mode ?? "cdn";
+        if (!source.Equals("local", StringComparison.OrdinalIgnoreCase) &&
+            !source.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var (light, dark, core, autoloader, _) = ResolvePrismLocalAssets(spec.Prism);
+        var missing = new List<string>();
+
+        CheckPrismAsset(plan.RootPath, light, missing);
+        CheckPrismAsset(plan.RootPath, dark, missing);
+        CheckPrismAsset(plan.RootPath, core, missing);
+        CheckPrismAsset(plan.RootPath, autoloader, missing);
+
+        if (missing.Count > 0)
+        {
+            var files = string.Join(", ", missing);
+            warnings.Add($"Prism local assets not found: {files}. " +
+                         "Add the files to the site root or set Prism.Source to 'cdn'/'hybrid'.");
+        }
+    }
+
+    private static (string light, string dark, string core, string autoloader, string langPath) ResolvePrismLocalAssets(PrismSpec? prismSpec)
+    {
+        var local = prismSpec?.Local;
+        var light = local?.ThemeLight ?? "/assets/prism/prism.css";
+        var dark = local?.ThemeDark ?? "/assets/prism/prism-okaidia.css";
+        var core = local?.Core ?? "/assets/prism/prism-core.js";
+        var autoloader = local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
+        var langPath = local?.LanguagesPath ?? "/assets/prism/components/";
+        return (light, dark, core, autoloader, langPath);
+    }
+
+    private static void CheckPrismAsset(string rootPath, string? href, List<string> missing)
+    {
+        if (string.IsNullOrWhiteSpace(href)) return;
+        if (IsExternalPath(href)) return;
+
+        var trimmed = href.TrimStart('/');
+        if (string.IsNullOrWhiteSpace(trimmed)) return;
+
+        var fullPath = Path.Combine(rootPath, trimmed.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(fullPath))
+            missing.Add(href);
     }
 
     private static void ValidateTocCoverage(
