@@ -1484,7 +1484,12 @@ public static class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(href)) return null;
         if (href.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
         var trimmed = href.TrimStart('/');
-        return Path.Combine(rootPath, trimmed.Replace('/', Path.DirectorySeparatorChar));
+        var relative = trimmed.Replace('/', Path.DirectorySeparatorChar);
+        var primary = Path.Combine(rootPath, relative);
+        if (File.Exists(primary))
+            return primary;
+        var staticPath = Path.Combine(rootPath, "static", relative);
+        return File.Exists(staticPath) ? staticPath : primary;
     }
 
     private static string BuildPrismCdnCss(Dictionary<string, object?> meta, PrismSpec? prismSpec)

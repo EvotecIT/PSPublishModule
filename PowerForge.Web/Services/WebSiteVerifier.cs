@@ -468,8 +468,13 @@ public static class WebSiteVerifier
         var trimmed = href.TrimStart('/');
         if (string.IsNullOrWhiteSpace(trimmed)) return;
 
-        var fullPath = Path.Combine(rootPath, trimmed.Replace('/', Path.DirectorySeparatorChar));
-        if (!File.Exists(fullPath))
+        var relative = trimmed.Replace('/', Path.DirectorySeparatorChar);
+        var fullPath = Path.Combine(rootPath, relative);
+        if (File.Exists(fullPath))
+            return;
+
+        var staticPath = Path.Combine(rootPath, "static", relative);
+        if (!File.Exists(staticPath))
             missing.Add(href);
     }
 
