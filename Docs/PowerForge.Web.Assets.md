@@ -92,6 +92,15 @@ prism_source: cdn
 prism_cdn: https://cdn.jsdelivr.net/npm/prismjs@1.29.0
 ```
 
+### Prism init behavior
+PowerForge.Web injects a small init script that:
+- Sets `Prism.plugins.autoloader.languages_path`
+- Runs `Prism.highlightAll()` if no tokens are present yet
+
+This protects against cases where Prism’s auto‑run doesn’t fire. If your page
+injects code blocks dynamically (tabs, accordions, client‑side fetch), call
+`Prism.highlightAll()` or `Prism.highlightElement()` after you add new content.
+
 ### Theme selection shortcuts
 `ThemeLight` / `ThemeDark` accept:
 - A full URL (used as-is)
