@@ -3,6 +3,8 @@ namespace PowerForge.Web;
 /// <summary>Site navigation configuration.</summary>
 public sealed class NavigationSpec
 {
+    /// <summary>Whether to generate default auto-navigation when no menus are defined.</summary>
+    public bool AutoDefaults { get; set; } = true;
     /// <summary>Named menus to expose in templates.</summary>
     public MenuSpec[] Menus { get; set; } = Array.Empty<MenuSpec>();
 

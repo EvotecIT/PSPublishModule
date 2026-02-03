@@ -2284,19 +2284,47 @@ public static class WebSiteBuilder
     private static MenuSpec[] BuildMenuSpecs(SiteSpec spec, IReadOnlyList<ContentItem> items, string rootPath)
     {
         var result = new Dictionary<string, MenuSpec>(StringComparer.OrdinalIgnoreCase);
+        var navSpec = spec.Navigation ?? new NavigationSpec();
 
-        if (spec.Navigation?.Menus is not null)
+        if (navSpec.Menus is not null)
         {
-            foreach (var menu in spec.Navigation.Menus)
+            foreach (var menu in navSpec.Menus)
             {
                 if (menu is null || string.IsNullOrWhiteSpace(menu.Name)) continue;
                 result[menu.Name] = CloneMenu(menu);
             }
         }
 
-        if (spec.Navigation?.Auto is not null && spec.Navigation.Auto.Length > 0)
+        if (navSpec.Auto is not null && navSpec.Auto.Length > 0)
         {
-            foreach (var auto in spec.Navigation.Auto)
+            foreach (var auto in navSpec.Auto)
+            {
+                if (auto is null || string.IsNullOrWhiteSpace(auto.Collection) || string.IsNullOrWhiteSpace(auto.Menu))
+                    continue;
+
+                var collection = spec.Collections.FirstOrDefault(c =>
+                    string.Equals(c.Name, auto.Collection, StringComparison.OrdinalIgnoreCase));
+                var menuItems = BuildAutoMenuItems(auto, collection, items, rootPath);
+                if (menuItems.Length == 0) continue;
+
+                if (result.TryGetValue(auto.Menu, out var existing))
+                {
+                    existing.Items = existing.Items.Concat(menuItems).ToArray();
+                }
+                else
+                {
+                    result[auto.Menu] = new MenuSpec
+                    {
+                        Name = auto.Menu,
+                        Label = auto.Menu,
+                        Items = menuItems
+                    };
+                }
+            }
+        }
+        else if (result.Count == 0 && navSpec.AutoDefaults)
+        {
+            foreach (var auto in BuildDefaultAutoSpecs(spec))
             {
                 if (auto is null || string.IsNullOrWhiteSpace(auto.Collection) || string.IsNullOrWhiteSpace(auto.Menu))
                     continue;
@@ -2323,6 +2351,49 @@ public static class WebSiteBuilder
         }
 
         return result.Values.ToArray();
+    }
+
+    private static NavigationAutoSpec[] BuildDefaultAutoSpecs(SiteSpec spec)
+    {
+        if (spec.Collections is null || spec.Collections.Length == 0)
+            return Array.Empty<NavigationAutoSpec>();
+
+        var docsCollection = spec.Collections.FirstOrDefault(c =>
+            string.Equals(c.Name, "docs", StringComparison.OrdinalIgnoreCase)) ??
+                             spec.Collections.FirstOrDefault(c =>
+                                 !string.IsNullOrWhiteSpace(c.Output) &&
+                                 c.Output.StartsWith("/docs", StringComparison.OrdinalIgnoreCase));
+
+        var mainCollection = spec.Collections.FirstOrDefault(c =>
+            string.Equals(c.Name, "pages", StringComparison.OrdinalIgnoreCase)) ??
+                              spec.Collections.FirstOrDefault(c =>
+                                  string.IsNullOrWhiteSpace(c.Output) || c.Output == "/");
+
+        var results = new List<NavigationAutoSpec>();
+        if (docsCollection is not null)
+        {
+            results.Add(new NavigationAutoSpec
+            {
+                Collection = docsCollection.Name,
+                Menu = "docs",
+                MaxDepth = 3,
+                IncludeIndex = true
+            });
+        }
+
+        if (mainCollection is not null &&
+            (docsCollection is null || !string.Equals(mainCollection.Name, docsCollection.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            results.Add(new NavigationAutoSpec
+            {
+                Collection = mainCollection.Name,
+                Menu = "main",
+                MaxDepth = 1,
+                IncludeIndex = true
+            });
+        }
+
+        return results.ToArray();
     }
 
     private static MenuItemSpec[] BuildAutoMenuItems(NavigationAutoSpec auto, CollectionSpec? collection, IReadOnlyList<ContentItem> items, string rootPath)

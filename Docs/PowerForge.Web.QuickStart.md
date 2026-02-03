@@ -194,6 +194,15 @@ To override a shortcode, add:
 `themes/<name>/partials/shortcodes/cards.html`
 
 ## Navigation + breadcrumbs
+Default auto navigation:
+- Generates a `docs` menu from the `docs` collection (or any `/docs` collection).
+- Generates a `main` menu from the `pages` collection (or any root `/` collection).
+
+Disable defaults if you want full manual control:
+```json
+{ "Navigation": { "AutoDefaults": false } }
+```
+
 Define menus in `site.json`:
 ```json
 {

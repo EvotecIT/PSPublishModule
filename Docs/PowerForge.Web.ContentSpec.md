@@ -376,6 +376,16 @@ Shortcodes can be implemented as:
 Navigation lives in `site.json` under `Navigation.Menus` with optional `Navigation.Actions`.
 Templates receive a computed `navigation` object with active states.
 
+### Default auto navigation
+If `Navigation` is **omitted**, PowerForge.Web generates sensible defaults:
+- A `docs` menu from the `docs` collection (or any collection whose output starts with `/docs`).
+- A `main` menu from the `pages` collection (or any collection whose output is `/`).
+
+To disable this default behavior, define `Navigation` and set:
+```json
+{ "Navigation": { "AutoDefaults": false } }
+```
+
 `Navigation.Actions` is for header buttons/icons (theme toggles, GitHub, CTA).
 These items can be links or buttons and are exposed as `navigation.actions`.
 

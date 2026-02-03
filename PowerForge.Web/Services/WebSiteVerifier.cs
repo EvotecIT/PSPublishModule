@@ -92,8 +92,10 @@ public static class WebSiteVerifier
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
         ValidateLayoutHooks(spec, plan, warnings);
+        ValidateThemeTokens(spec, plan, warnings);
         ValidatePrismAssets(spec, plan, warnings);
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
+        ValidateNavigationDefaults(spec, warnings);
 
         return new WebVerifyResult
         {
@@ -369,6 +371,73 @@ public static class WebSiteVerifier
         if (engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
             return new[] { "extra_css_html", "extra_scripts_html" };
         return new[] { "EXTRA_CSS", "EXTRA_SCRIPTS" };
+    }
+
+    private static void ValidateThemeTokens(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme)) return;
+
+        var themeRoot = ResolveThemeRoot(spec, plan.RootPath, plan.ThemesRoot);
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return;
+
+        var loader = new ThemeLoader();
+        ThemeManifest? manifest = null;
+        try
+        {
+            manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, plan.RootPath, plan.ThemesRoot));
+        }
+        catch
+        {
+            return;
+        }
+
+        if (manifest is null)
+            return;
+
+        var hasThemeTokens = false;
+        if (manifest.Partials is not null && manifest.Partials.ContainsKey("theme-tokens"))
+            hasThemeTokens = true;
+        else
+        {
+            var partialPath = loader.ResolvePartialPath(themeRoot, manifest, "theme-tokens");
+            if (!string.IsNullOrWhiteSpace(partialPath) && File.Exists(partialPath))
+                hasThemeTokens = true;
+        }
+
+        if (!hasThemeTokens)
+            return;
+
+        var layoutNames = CollectLayoutNames(spec, manifest);
+        foreach (var layoutName in layoutNames)
+        {
+            var layoutPath = loader.ResolveLayoutPath(themeRoot, manifest, layoutName);
+            if (string.IsNullOrWhiteSpace(layoutPath) || !File.Exists(layoutPath))
+                continue;
+
+            var content = File.ReadAllText(layoutPath);
+            if (content.IndexOf("theme-tokens", StringComparison.OrdinalIgnoreCase) >= 0)
+                continue;
+
+            warnings.Add($"Layout '{layoutName}' does not include 'theme-tokens' partial. " +
+                         "Design tokens may not apply consistently across pages.");
+        }
+    }
+
+    private static void ValidateNavigationDefaults(SiteSpec spec, List<string> warnings)
+    {
+        if (spec is null || warnings is null) return;
+
+        var nav = spec.Navigation;
+        if (nav is null) return;
+
+        var hasMenus = nav.Menus is not null && nav.Menus.Length > 0;
+        var hasAuto = nav.Auto is not null && nav.Auto.Length > 0;
+        if (!hasMenus && !hasAuto && !nav.AutoDefaults)
+        {
+            warnings.Add("Navigation.AutoDefaults is disabled and no menus/auto navigation are defined.");
+        }
     }
 
     private static HashSet<string> CollectLayoutNames(SiteSpec spec, ThemeManifest manifest)

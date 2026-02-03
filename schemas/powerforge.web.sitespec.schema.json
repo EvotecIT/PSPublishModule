@@ -423,11 +423,12 @@
       "NavigationSpec": {
         "type": "object",
         "additionalProperties": false,
-        "properties": {
-          "Menus": {
-            "type": "array",
-            "items": { "$ref": "#/$defs/MenuSpec" }
-          },
+          "properties": {
+            "AutoDefaults": { "type": "boolean", "default": true },
+            "Menus": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/MenuSpec" }
+            },
           "Actions": {
             "type": "array",
             "items": { "$ref": "#/$defs/MenuItemSpec" }
