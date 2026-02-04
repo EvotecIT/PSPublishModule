@@ -95,14 +95,14 @@
           "id": "decoding",
           "question": "Can CodeGlyphX decode/read barcodes?",
           "answer": [
-            "<p>Yes. CodeGlyphX includes a barcode decoder that can read QR codes and 1D barcodes from images. It supports multiple image formats (PNG, JPEG, BMP, GIF, TIFF) and can detect multiple codes in a single image.</p>"
+            "<p>Yes. CodeGlyphX can decode QR + 1D/2D barcodes from images. Supported image formats include PNG, JPEG, BMP, GIF, TIFF, PPM/PGM/PBM/PAM, TGA, ICO/CUR, XBM, and XPM. It can detect multiple codes in a single image.</p><p><em>Note:</em> animated GIF is first-frame only; TIFF is baseline/strip-based.</p>"
           ]
         },
         {
           "id": "output-formats",
           "question": "What output formats are supported?",
           "answer": [
-            "<p>CodeGlyphX can output to PNG (with its built-in encoder), SVG (vector graphics), raw pixel data (for custom rendering), ASCII art (for terminal output), HTML, PDF, EPS, and more. The PNG encoder requires no external libraries.</p>"
+            "<p>CodeGlyphX can output to PNG, JPEG, BMP, TGA, ICO, PPM/PGM/PBM/PAM, XBM/XPM, SVG/SVGZ, HTML, PDF, EPS, ASCII, and raw RGBA (API). The PNG encoder requires no external libraries.</p>"
           ]
         }
       ]
