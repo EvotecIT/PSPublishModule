@@ -95,6 +95,12 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Allow prerelease versions when installing dependencies.</summary>
     [Parameter] public SwitchParameter InstallMissingModulesPrerelease { get; set; }
 
+    /// <summary>Resolve Auto/Latest dependency versions from the repository without installing.</summary>
+    [Parameter] public SwitchParameter ResolveMissingModulesOnline { get; set; }
+
+    /// <summary>Warn if RequiredModules are older than the latest available in the repository.</summary>
+    [Parameter] public SwitchParameter WarnIfRequiredModulesOutdated { get; set; }
+
     /// <summary>Repository name used for dependency installation (defaults to PSGallery).</summary>
     [Parameter] public string? InstallMissingModulesRepository { get; set; }
 
@@ -227,6 +233,8 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
         if (bound.ContainsKey(nameof(InstallMissingModules))) { EnsureBuildModule(); buildModule!.InstallMissingModules = InstallMissingModules.IsPresent; }
         if (bound.ContainsKey(nameof(InstallMissingModulesForce))) { EnsureBuildModule(); buildModule!.InstallMissingModulesForce = InstallMissingModulesForce.IsPresent; }
         if (bound.ContainsKey(nameof(InstallMissingModulesPrerelease))) { EnsureBuildModule(); buildModule!.InstallMissingModulesPrerelease = InstallMissingModulesPrerelease.IsPresent; }
+        if (bound.ContainsKey(nameof(ResolveMissingModulesOnline))) { EnsureBuildModule(); buildModule!.ResolveMissingModulesOnline = ResolveMissingModulesOnline.IsPresent; }
+        if (bound.ContainsKey(nameof(WarnIfRequiredModulesOutdated))) { EnsureBuildModule(); buildModule!.WarnIfRequiredModulesOutdated = WarnIfRequiredModulesOutdated.IsPresent; }
         if (bound.ContainsKey(nameof(InstallMissingModulesRepository))) { EnsureBuildModule(); buildModule!.InstallMissingModulesRepository = InstallMissingModulesRepository; }
 
         string? missingModulesSecret = null;
