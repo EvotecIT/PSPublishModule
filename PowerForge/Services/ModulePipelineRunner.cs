@@ -143,8 +143,9 @@ public sealed class ModulePipelineRunner
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var externalModulesDraft = new List<RequiredModuleDraft>();
+        var externalIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var externalModules = new List<string>();
-        var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
         {
@@ -222,10 +223,26 @@ public sealed class ModulePipelineRunner
 
                     if (moduleSeg.Kind == ModuleDependencyKind.ExternalModule)
                     {
-                        if (!externalIndex.Contains(name))
+                        if (!externalIndex.ContainsKey(name))
                         {
-                            externalIndex.Add(name);
+                            externalIndex[name] = externalModulesDraft.Count;
+                            externalModulesDraft.Add(new RequiredModuleDraft(
+                                moduleName: name,
+                                moduleVersion: md.ModuleVersion,
+                                minimumVersion: md.MinimumVersion,
+                                requiredVersion: md.RequiredVersion,
+                                guid: md.Guid));
                             externalModules.Add(name);
+                        }
+                        else
+                        {
+                            var extIdx = externalIndex[name];
+                            externalModulesDraft[extIdx] = new RequiredModuleDraft(
+                                moduleName: name,
+                                moduleVersion: md.ModuleVersion,
+                                minimumVersion: md.MinimumVersion,
+                                requiredVersion: md.RequiredVersion,
+                                guid: md.Guid);
                         }
                         break;
                     }
@@ -488,8 +505,12 @@ public sealed class ModulePipelineRunner
             _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because RequiredModules use Auto/Latest/Guid Auto.");
         }
 
+        var requiredDraftsCombined = requiredModulesDraft;
+        if (externalModulesDraft.Count > 0)
+            requiredDraftsCombined = requiredModulesDraft.Concat(externalModulesDraft).ToList();
+
         var requiredModules = ResolveRequiredModules(
-            requiredModulesDraft,
+            requiredDraftsCombined,
             resolveMissingModulesOnline,
             warnIfRequiredModulesOutdated,
             installMissingModulesPrerelease,
@@ -786,6 +807,9 @@ public sealed class ModulePipelineRunner
                         }
                     }
                 }
+
+                if (plan.Formatting?.Options.UpdateProjectRoot == true)
+                    SyncManifestToProjectRoot(buildResult.ManifestPath, plan.ProjectRoot, plan.ModuleName);
 
                 if (!mergedScripts)
                     TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
@@ -2609,6 +2633,38 @@ exit 0
         catch (Exception ex)
         {
             _logger.Warn($"Failed to write PSM1 after placeholder replacement: {ex.Message}");
+        }
+    }
+
+    private void SyncManifestToProjectRoot(string stagingManifestPath, string projectRoot, string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(stagingManifestPath) || !File.Exists(stagingManifestPath))
+            return;
+        if (string.IsNullOrWhiteSpace(projectRoot) || string.IsNullOrWhiteSpace(moduleName))
+            return;
+
+        var target = Path.Combine(projectRoot, $"{moduleName}.psd1");
+        if (!File.Exists(target))
+            return;
+
+        try
+        {
+            var sourceFull = Path.GetFullPath(stagingManifestPath);
+            var targetFull = Path.GetFullPath(target);
+            if (string.Equals(sourceFull, targetFull, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var sourceBytes = File.ReadAllBytes(sourceFull);
+            var targetBytes = File.ReadAllBytes(targetFull);
+            if (sourceBytes.SequenceEqual(targetBytes))
+                return;
+
+            File.WriteAllBytes(targetFull, sourceBytes);
+            _logger.Info($"Updated project manifest: {targetFull}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to sync project manifest: {ex.Message}");
         }
     }
 
