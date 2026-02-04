@@ -28,6 +28,19 @@ public sealed class DotNetRepositoryReleaseSpec
     /// </summary>
     public Dictionary<string, string>? ExpectedVersionsByProject { get; set; }
 
+    /// <summary>When false, skips updating project files and uses existing csproj versions.</summary>
+    public bool UpdateVersions { get; set; } = true;
+
+    /// <summary>
+    /// When true, only projects matching <see cref="ExpectedVersionsByProject"/> are included.
+    /// </summary>
+    public bool ExpectedVersionMapAsInclude { get; set; }
+
+    /// <summary>
+    /// When true, keys in <see cref="ExpectedVersionsByProject"/> may contain wildcards (*, ?).
+    /// </summary>
+    public bool ExpectedVersionMapUseWildcards { get; set; }
+
     /// <summary>Sources used to resolve the current package version (v3 index or local path).</summary>
     public string[]? VersionSources { get; set; }
 
@@ -46,6 +59,21 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>When true, runs dotnet pack.</summary>
     public bool Pack { get; set; } = true;
 
+    /// <summary>When true, create a release zip from the build output.</summary>
+    public bool CreateReleaseZip { get; set; }
+
+    /// <summary>Optional output path for release zips.</summary>
+    public string? ReleaseZipOutputPath { get; set; }
+
+    /// <summary>Certificate thumbprint used for signing packages (optional).</summary>
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>Certificate store location used to resolve the signing certificate.</summary>
+    public CertificateStoreLocation CertificateStore { get; set; } = CertificateStoreLocation.CurrentUser;
+
+    /// <summary>Timestamp server URL used during package signing.</summary>
+    public string? TimeStampServer { get; set; }
+
     /// <summary>When true, publishes packages with dotnet nuget push.</summary>
     public bool Publish { get; set; }
 
@@ -57,6 +85,9 @@ public sealed class DotNetRepositoryReleaseSpec
 
     /// <summary>When publishing, skip duplicates on push.</summary>
     public bool SkipDuplicate { get; set; }
+
+    /// <summary>When true, stop on the first publish/signing failure.</summary>
+    public bool PublishFailFast { get; set; }
 
     /// <summary>When true, computes plan only (no file modifications or dotnet operations).</summary>
     public bool WhatIf { get; set; }

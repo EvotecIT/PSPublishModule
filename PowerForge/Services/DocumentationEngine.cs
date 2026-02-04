@@ -291,6 +291,7 @@ public sealed class DocumentationEngine
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
 
                 var message = ExtractError(result.StdOut) ?? result.StdErr;
+                message = AppendRequiredModulesHint(moduleManifestPath, message);
                 throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? "Documentation help extraction failed." : message.Trim());
             }
 
@@ -307,6 +308,21 @@ public sealed class DocumentationEngine
             try { File.Delete(scriptPath); } catch { /* ignore */ }
             try { File.Delete(jsonPath); } catch { /* ignore */ }
         }
+    }
+
+    private static string AppendRequiredModulesHint(string moduleManifestPath, string? message)
+    {
+        var msg = message ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(moduleManifestPath) || !File.Exists(moduleManifestPath))
+            return msg;
+
+        if (!ManifestEditor.TryGetInvalidRequiredModuleSpecs(moduleManifestPath, out var invalid) ||
+            invalid is null || invalid.Length == 0)
+            return msg;
+
+        var list = string.Join(", ", invalid);
+        var hint = $" RequiredModules contains hashtable entries without ModuleVersion/RequiredVersion/MaximumVersion: {list}. Use string module names or include a version field.";
+        return string.IsNullOrWhiteSpace(msg) ? hint.Trim() : msg.TrimEnd() + hint;
     }
 
     private static string ResolvePath(string baseDir, string path, bool optional = false)

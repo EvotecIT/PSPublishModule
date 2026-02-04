@@ -97,6 +97,9 @@ public sealed class ModuleSkipConfiguration
 
     /// <summary>Continue build even if modules/commands are not available.</summary>
     public bool Force { get; set; }
+
+    /// <summary>Fail build when unresolved commands are detected during merge.</summary>
+    public bool FailOnMissingCommands { get; set; }
 }
 
 /// <summary>

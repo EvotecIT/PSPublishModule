@@ -49,6 +49,9 @@ public sealed class DotNetRepositoryProjectResult
     /// <summary>Packages produced for this project.</summary>
     public List<string> Packages { get; } = new();
 
+    /// <summary>Release zip path (if created).</summary>
+    public string? ReleaseZipPath { get; set; }
+
     /// <summary>Optional error message for the project.</summary>
     public string? ErrorMessage { get; set; }
 }

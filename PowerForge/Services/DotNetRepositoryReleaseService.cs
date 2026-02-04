@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -14,6 +17,11 @@ public sealed class DotNetRepositoryReleaseService
 {
     private readonly ILogger _logger;
     private readonly NuGetPackageVersionResolver _resolver;
+    private static readonly string[] DefaultExcludeDirectories =
+    {
+        ".git", ".vs", ".idea", "bin", "obj", "node_modules", "packages",
+        "Artifacts", "Artefacts", "TestResults", "Ignore"
+    };
 
     /// <summary>
     /// Creates a new repository release service.
@@ -53,12 +61,23 @@ public sealed class DotNetRepositoryReleaseService
             var include = BuildNameSet(spec.IncludeProjects);
             var exclude = BuildNameSet(spec.ExcludeProjects);
             var expectedMap = BuildExpectedVersionMap(spec.ExpectedVersionsByProject);
+            if (include.Count > 0)
+            {
+                var includeList = string.Join(", ", include.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+                _logger.Info($"Include projects: {includeList}");
+            }
+            if (exclude.Count > 0)
+            {
+                var excludeList = string.Join(", ", exclude.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+                _logger.Info($"Exclude projects: {excludeList}");
+            }
 
+            var excludeDirectories = BuildExcludeDirectories(spec.ExcludeDirectories);
             var enumeration = new ProjectEnumeration(
                 rootPath: root,
                 kind: ProjectKind.CSharp,
                 customExtensions: new[] { "*.csproj" },
-                excludeDirectories: spec.ExcludeDirectories);
+                excludeDirectories: excludeDirectories);
 
             var projectFiles = ProjectFileEnumerator.Enumerate(enumeration)
                 .Where(p => p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
@@ -66,17 +85,80 @@ public sealed class DotNetRepositoryReleaseService
                 .ToArray();
 
             var projects = new List<DotNetRepositoryProjectResult>();
+            var candidates = new List<(string Name, string Path)>();
             foreach (var csproj in projectFiles)
             {
                 var name = Path.GetFileNameWithoutExtension(csproj) ?? csproj;
                 if (include.Count > 0 && !include.Contains(name)) continue;
                 if (exclude.Contains(name)) continue;
 
+                candidates.Add((name, csproj));
+            }
+
+            if (spec.ExpectedVersionMapAsInclude)
+            {
+                if (expectedMap.Count == 0)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = "ExpectedVersionMapAsInclude is set but ExpectedVersionMap is empty.";
+                    return result;
+                }
+
+                var excludedByMap = new List<string>();
+                var filtered = new List<(string Name, string Path)>();
+                foreach (var candidate in candidates)
+                {
+                    if (MatchesExpectedMap(candidate.Name, expectedMap, spec.ExpectedVersionMapUseWildcards))
+                        filtered.Add(candidate);
+                    else
+                        excludedByMap.Add(candidate.Name);
+                }
+
+                var matched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kvp in expectedMap)
+                {
+                    var pattern = kvp.Key;
+                    bool any = filtered.Any(c => MatchesPattern(c.Name, pattern, spec.ExpectedVersionMapUseWildcards));
+                    if (any) matched.Add(pattern);
+                    else _logger.Warn($"Expected version map entry '{pattern}' did not match any projects.");
+                }
+
+                candidates = filtered;
+                _logger.Info($"Expected version map include-only: {candidates.Count} project(s) matched.");
+                if (excludedByMap.Count > 0)
+                {
+                    var distinctExcluded = excludedByMap.Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
+                    _logger.Info($"Excluded by ExpectedVersionMap: {string.Join(", ", distinctExcluded)}");
+                }
+            }
+
+            foreach (var group in candidates.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                if (group.Count() > 1)
+                {
+                    var dupPaths = string.Join("; ", group.Select(g => g.Path));
+                    foreach (var item in group)
+                    {
+                        projects.Add(new DotNetRepositoryProjectResult
+                        {
+                            ProjectName = item.Name,
+                            CsprojPath = item.Path,
+                            IsPackable = IsPackable(item.Path),
+                            ErrorMessage = $"Duplicate project name found in multiple paths: {dupPaths}. Exclude directories or rename projects."
+                        });
+                    }
+                    result.Success = false;
+                    _logger.Warn($"Duplicate project name '{group.Key}' found in multiple paths: {dupPaths}");
+                    continue;
+                }
+
+                var entry = group.First();
                 projects.Add(new DotNetRepositoryProjectResult
                 {
-                    ProjectName = name,
-                    CsprojPath = csproj,
-                    IsPackable = IsPackable(csproj)
+                    ProjectName = entry.Name,
+                    CsprojPath = entry.Path,
+                    IsPackable = IsPackable(entry.Path)
                 });
             }
 
@@ -98,16 +180,81 @@ public sealed class DotNetRepositoryReleaseService
                 return result;
             }
 
+            _logger.Info($"Discovered {projects.Count} project(s), {packable.Length} packable.");
+
+            string? signingSha256 = null;
+            if (spec.Pack && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint))
+            {
+                var stamp = string.IsNullOrWhiteSpace(spec.TimeStampServer)
+                    ? "http://timestamp.digicert.com"
+                    : spec.TimeStampServer!.Trim();
+                spec.TimeStampServer = stamp;
+
+                signingSha256 = GetCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.CertificateStore);
+                if (signingSha256 is null)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Certificate not found for signing (thumbprint {spec.CertificateThumbprint}).";
+                    return result;
+                }
+
+                _logger.Info($"Package signing enabled (store {spec.CertificateStore}, thumbprint {spec.CertificateThumbprint}).");
+            }
+
             var expectedGlobal = string.IsNullOrWhiteSpace(spec.ExpectedVersion) ? null : spec.ExpectedVersion!.Trim();
+            if (!string.IsNullOrWhiteSpace(expectedGlobal))
+                _logger.Info($"Expected version (global): {expectedGlobal}");
+            if (expectedMap.Count > 0)
+            {
+                var mode = spec.ExpectedVersionMapAsInclude ? "include-only" : "override";
+                var wildcard = spec.ExpectedVersionMapUseWildcards ? ", wildcards enabled" : string.Empty;
+                _logger.Info($"Expected version map: {expectedMap.Count} project(s) ({mode}{wildcard}).");
+            }
             foreach (var project in packable)
             {
-                var resolvedVersion = ResolveVersion(project, expectedGlobal, expectedMap, spec);
-                if (string.IsNullOrWhiteSpace(resolvedVersion))
+                var expectedVersion = expectedGlobal;
+                var expectedSource = "global";
+                if (expectedMap.TryGetValue(project.ProjectName, out var overrideVersion) && !string.IsNullOrWhiteSpace(overrideVersion))
                 {
-                    project.ErrorMessage = "Unable to resolve a version for the project.";
+                    expectedVersion = overrideVersion;
+                    expectedSource = "per-project";
+                }
+                else if (string.IsNullOrWhiteSpace(expectedGlobal))
+                {
+                    expectedSource = "csproj";
+                }
+
+                if (!string.IsNullOrWhiteSpace(expectedVersion))
+                    _logger.Info($"{project.ProjectName}: expected version {expectedVersion} ({expectedSource}).");
+                else
+                    _logger.Info($"{project.ProjectName}: no expected version; using csproj version.");
+
+                string resolvedVersion;
+                string? resolutionWarning;
+                try
+                {
+                    resolvedVersion = ResolveVersion(project, expectedVersion, spec, out resolutionWarning);
+                }
+                catch (Exception ex)
+                {
+                    project.ErrorMessage = $"Version resolution failed: {ex.Message}";
+                    _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
                     result.Success = false;
                     continue;
                 }
+
+                if (string.IsNullOrWhiteSpace(resolvedVersion))
+                {
+                    project.ErrorMessage = string.IsNullOrWhiteSpace(resolutionWarning)
+                        ? "Unable to resolve a version for the project."
+                        : resolutionWarning;
+                    _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
+                    result.Success = false;
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(resolutionWarning))
+                    _logger.Warn($"{project.ProjectName}: {resolutionWarning}");
 
                 result.ResolvedVersionsByProject[project.ProjectName] = resolvedVersion;
 
@@ -115,13 +262,24 @@ public sealed class DotNetRepositoryReleaseService
                     project.OldVersion = oldV;
 
                 project.NewVersion = resolvedVersion;
-                if (spec.WhatIf) continue;
+                if (spec.WhatIf || !spec.UpdateVersions) continue;
 
                 var content = File.ReadAllText(project.CsprojPath);
                 var updated = CsprojVersionEditor.UpdateVersionText(content, resolvedVersion, out _);
 
                 if (!string.Equals(content, updated, StringComparison.Ordinal))
+                {
                     File.WriteAllText(project.CsprojPath, updated);
+                    if (!string.IsNullOrWhiteSpace(project.OldVersion))
+                        _logger.Success($"{project.ProjectName}: {project.OldVersion} -> {resolvedVersion}");
+                    else
+                        _logger.Success($"{project.ProjectName}: set version {resolvedVersion}");
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(project.OldVersion))
+                        _logger.Info($"{project.ProjectName}: version unchanged ({project.OldVersion}).");
+                }
             }
 
             if (spec.Pack)
@@ -137,6 +295,7 @@ public sealed class DotNetRepositoryReleaseService
                     if (string.IsNullOrWhiteSpace(project.NewVersion))
                     {
                         project.ErrorMessage = "No resolved version for project.";
+                        _logger.Warn($"{project.ProjectName}: no resolved version; skipping pack.");
                         result.Success = false;
                         continue;
                     }
@@ -149,16 +308,84 @@ public sealed class DotNetRepositoryReleaseService
                         continue;
                     }
 
+                    _logger.Info($"Packing {project.ProjectName}...");
                     var packResult = PackProject(project, spec);
                     if (!packResult.Success)
                     {
                         project.ErrorMessage = packResult.ErrorMessage;
+                        _logger.Warn($"{project.ProjectName}: pack failed. {packResult.ErrorMessage}");
                         result.Success = false;
                         continue;
                     }
 
-                    foreach (var pkg in packResult.Packages)
+                    var filtered = FilterPackages(packResult.Packages, project.ProjectName, project.NewVersion!);
+                    if (filtered.Count == 0)
+                    {
+                        project.ErrorMessage = $"No packages found for version {project.NewVersion}.";
+                        _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
+                        result.Success = false;
+                        if (spec.PublishFailFast)
+                            return result;
+                        continue;
+                    }
+
+                    foreach (var pkg in filtered)
                         project.Packages.Add(pkg);
+
+                    var ignored = packResult.Packages.Except(filtered, StringComparer.OrdinalIgnoreCase).ToArray();
+                    if (ignored.Length > 0)
+                        _logger.Verbose($"{project.ProjectName}: ignored {ignored.Length} package(s) from other versions.");
+
+                    if (filtered.Count > 0)
+                        _logger.Success($"{project.ProjectName}: packed {filtered.Count} package(s).");
+
+                    if (signingSha256 is not null)
+                    {
+                        if (project.Packages.Count == 0)
+                        {
+                            project.ErrorMessage = "No packages to sign.";
+                            _logger.Warn($"{project.ProjectName}: {project.ErrorMessage}");
+                            result.Success = false;
+                            if (spec.PublishFailFast)
+                                return result;
+                            continue;
+                        }
+
+                        _logger.Info($"Signing {project.ProjectName} package(s)...");
+                        if (!SignPackages(project.Packages, spec, signingSha256, out var signError))
+                        {
+                            project.ErrorMessage = signError;
+                            _logger.Warn($"{project.ProjectName}: {signError}");
+                            result.Success = false;
+                            if (spec.PublishFailFast)
+                                return result;
+                        }
+                        else
+                        {
+                            _logger.Success($"{project.ProjectName}: signed {project.Packages.Count} package(s).");
+                        }
+                    }
+
+                    if (spec.CreateReleaseZip && !string.IsNullOrWhiteSpace(project.NewVersion))
+                    {
+                        var zipPath = BuildReleaseZipPath(project, spec);
+                        project.ReleaseZipPath = zipPath;
+                        if (!spec.WhatIf)
+                        {
+                            if (!TryCreateReleaseZip(project, spec.Configuration, zipPath, out var zipError))
+                            {
+                                project.ErrorMessage = zipError;
+                                _logger.Warn($"{project.ProjectName}: {zipError}");
+                                result.Success = false;
+                                if (spec.PublishFailFast)
+                                    return result;
+                            }
+                            else
+                            {
+                                _logger.Success($"{project.ProjectName}: release zip created.");
+                            }
+                        }
+                    }
                 }
             }
 
@@ -189,6 +416,11 @@ public sealed class DotNetRepositoryReleaseService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
+                var packageLookup = orderedProjects
+                    .SelectMany(p => p.Packages.Select(pkg => new { Package = pkg, Project = p }))
+                    .GroupBy(x => x.Package, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Project, StringComparer.OrdinalIgnoreCase);
+
                 foreach (var pkg in packages)
                 {
                     if (spec.WhatIf)
@@ -197,13 +429,25 @@ public sealed class DotNetRepositoryReleaseService
                         continue;
                     }
 
+                    _logger.Info($"Publishing {Path.GetFileName(pkg)}...");
                     var push = PushPackage(pkg, spec.PublishApiKey!, source, spec.SkipDuplicate, out var error);
                     if (push)
+                    {
                         result.PublishedPackages.Add(pkg);
+                        _logger.Success($"Published {Path.GetFileName(pkg)}.");
+                    }
                     else
                     {
                         result.Success = false;
                         _logger.Warn($"NuGet push failed for {pkg}: {error}");
+                        if (packageLookup.TryGetValue(pkg, out var project) && string.IsNullOrWhiteSpace(project.ErrorMessage))
+                            project.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}: {error}";
+                        if (spec.PublishFailFast)
+                        {
+                            if (string.IsNullOrWhiteSpace(result.ErrorMessage))
+                                result.ErrorMessage = $"Publish failed for {Path.GetFileName(pkg)}.";
+                            return result;
+                        }
                     }
                 }
             }
@@ -214,6 +458,13 @@ public sealed class DotNetRepositoryReleaseService
                 if (distinct.Count == 1)
                     result.ResolvedVersion = distinct[0];
             }
+
+            var projectErrors = projects
+                .Where(p => !string.IsNullOrWhiteSpace(p.ErrorMessage))
+                .Select(p => $"{p.ProjectName}: {p.ErrorMessage}")
+                .ToArray();
+            if (projectErrors.Length > 0 && string.IsNullOrWhiteSpace(result.ErrorMessage))
+                result.ErrorMessage = "One or more projects failed: " + string.Join("; ", projectErrors);
 
             return result;
         }
@@ -227,18 +478,25 @@ public sealed class DotNetRepositoryReleaseService
 
     private string ResolveVersion(
         DotNetRepositoryProjectResult project,
-        string? expectedGlobal,
-        Dictionary<string, string> expectedByProject,
-        DotNetRepositoryReleaseSpec spec)
+        string? expectedVersion,
+        DotNetRepositoryReleaseSpec spec,
+        out string? warning)
     {
-        var expectedVersion = expectedGlobal;
-        if (expectedByProject.TryGetValue(project.ProjectName, out var overrideVersion) && !string.IsNullOrWhiteSpace(overrideVersion))
-            expectedVersion = overrideVersion;
+        warning = null;
+
+        if (!spec.UpdateVersions)
+        {
+            if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var v))
+                return v;
+            warning = "UpdateVersions is disabled and no version tags were found in the project file.";
+            return string.Empty;
+        }
 
         if (string.IsNullOrWhiteSpace(expectedVersion))
         {
             if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var v))
                 return v;
+            warning = "No expected version provided and no version tags were found in the project file.";
             return string.Empty;
         }
 
@@ -250,6 +508,9 @@ public sealed class DotNetRepositoryReleaseService
             sources: spec.VersionSources,
             credential: spec.VersionSourceCredential,
             includePrerelease: spec.IncludePrerelease);
+
+        if (current is null)
+            warning = $"No current package version found; using 0 baseline for '{expectedVersion}'.";
 
         return VersionPatternStepper.Step(expectedVersion!, current);
     }
@@ -402,6 +663,24 @@ public sealed class DotNetRepositoryReleaseService
         return set;
     }
 
+    private static IReadOnlyList<string> BuildExcludeDirectories(IEnumerable<string>? items)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dir in DefaultExcludeDirectories)
+            set.Add(dir);
+
+        if (items is not null)
+        {
+            foreach (var item in items)
+            {
+                if (string.IsNullOrWhiteSpace(item)) continue;
+                set.Add(item.Trim());
+            }
+        }
+
+        return set.ToArray();
+    }
+
     private (bool Success, string? ErrorMessage) ValidatePublishPreflight(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec)
@@ -542,6 +821,247 @@ public sealed class DotNetRepositoryReleaseService
             return true;
         }
     }
+
+    private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec)
+    {
+        var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
+        var cfg = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
+        var releasePath = string.IsNullOrWhiteSpace(spec.ReleaseZipOutputPath)
+            ? Path.Combine(csprojDir, "bin", cfg)
+            : spec.ReleaseZipOutputPath!;
+        var version = string.IsNullOrWhiteSpace(project.NewVersion) ? "0.0.0" : project.NewVersion;
+        return Path.Combine(releasePath, $"{project.ProjectName}.{version}.zip");
+    }
+
+    private static bool TryCreateReleaseZip(
+        DotNetRepositoryProjectResult project,
+        string configuration,
+        string zipPath,
+        out string error)
+    {
+        error = string.Empty;
+        var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
+        var cfg = string.IsNullOrWhiteSpace(configuration) ? "Release" : configuration.Trim();
+        var releasePath = Path.Combine(csprojDir, "bin", cfg);
+
+        if (!Directory.Exists(releasePath))
+        {
+            error = $"Release path not found: {releasePath}";
+            return false;
+        }
+
+        try
+        {
+            var zipDir = Path.GetDirectoryName(zipPath);
+            if (!string.IsNullOrWhiteSpace(zipDir))
+                Directory.CreateDirectory(zipDir);
+
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            var zipFull = Path.GetFullPath(zipPath);
+
+            using var fs = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            using var archive = new System.IO.Compression.ZipArchive(fs, System.IO.Compression.ZipArchiveMode.Create);
+
+            foreach (var file in Directory.EnumerateFiles(releasePath, "*", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    if (string.Equals(Path.GetFullPath(file), zipFull, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                }
+                catch { }
+
+                if (file.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) ||
+                    file.EndsWith(".snupkg", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var rel = ComputeRelativePath(releasePath, file);
+                var entry = archive.CreateEntry(rel, System.IO.Compression.CompressionLevel.Optimal);
+                using var entryStream = entry.Open();
+                using var fileStream = File.OpenRead(file);
+                fileStream.CopyTo(entryStream);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to create release zip: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static string ComputeRelativePath(string baseDir, string fullPath)
+    {
+        try
+        {
+            var baseUri = new Uri(AppendDirectorySeparatorChar(Path.GetFullPath(baseDir)));
+            var pathUri = new Uri(Path.GetFullPath(fullPath));
+            var rel = Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString());
+            return rel.Replace('/', Path.DirectorySeparatorChar);
+        }
+        catch
+        {
+            return Path.GetFileName(fullPath) ?? fullPath;
+        }
+    }
+
+    private static string AppendDirectorySeparatorChar(string path)
+        => path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? path
+            : path + Path.DirectorySeparatorChar;
+
+    private static List<string> FilterPackages(IEnumerable<string> packages, string projectName, string version)
+    {
+        var list = new List<string>();
+        if (packages is null) return list;
+        if (string.IsNullOrWhiteSpace(projectName) || string.IsNullOrWhiteSpace(version))
+            return list;
+
+        var prefix = $"{projectName}.{version}.";
+        foreach (var pkg in packages)
+        {
+            var name = Path.GetFileName(pkg) ?? string.Empty;
+            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                list.Add(pkg);
+        }
+
+        return list;
+    }
+
+    private static bool SignPackages(
+        IReadOnlyList<string> packages,
+        DotNetRepositoryReleaseSpec spec,
+        string sha256,
+        out string error)
+    {
+        error = string.Empty;
+        if (packages is null || packages.Count == 0) return true;
+
+        var store = spec.CertificateStore == CertificateStoreLocation.LocalMachine ? "LocalMachine" : "CurrentUser";
+        var timeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim();
+
+        foreach (var pkg in packages)
+        {
+            var exitCode = RunDotnetSign(pkg, sha256, store, timeStampServer, out var stdErr, out var stdOut);
+            if (exitCode == 0) continue;
+
+            var msg = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
+            error = $"Signing failed for {Path.GetFileName(pkg)}. {msg}".Trim();
+            return false;
+        }
+
+        return true;
+    }
+
+    private static int RunDotnetSign(
+        string packagePath,
+        string sha256,
+        string store,
+        string timeStampServer,
+        out string stdErr,
+        out string stdOut)
+    {
+        stdErr = string.Empty;
+        stdOut = string.Empty;
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+#if NET472
+        var args = new List<string>
+        {
+            "nuget", "sign", packagePath,
+            "--certificate-fingerprint", sha256,
+            "--certificate-store-location", store,
+            "--certificate-store-name", "My",
+            "--timestamper", timeStampServer,
+            "--overwrite"
+        };
+        psi.Arguments = BuildWindowsArgumentString(args);
+#else
+        psi.ArgumentList.Add("nuget");
+        psi.ArgumentList.Add("sign");
+        psi.ArgumentList.Add(packagePath);
+        psi.ArgumentList.Add("--certificate-fingerprint");
+        psi.ArgumentList.Add(sha256);
+        psi.ArgumentList.Add("--certificate-store-location");
+        psi.ArgumentList.Add(store);
+        psi.ArgumentList.Add("--certificate-store-name");
+        psi.ArgumentList.Add("My");
+        psi.ArgumentList.Add("--timestamper");
+        psi.ArgumentList.Add(timeStampServer);
+        psi.ArgumentList.Add("--overwrite");
+#endif
+
+        using var p = Process.Start(psi);
+        if (p is null) return 1;
+        stdOut = p.StandardOutput.ReadToEnd();
+        stdErr = p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        return p.ExitCode;
+    }
+
+    private static string? GetCertificateSha256(string thumbprint, CertificateStoreLocation storeLocation)
+    {
+        try
+        {
+            var loc = storeLocation == CertificateStoreLocation.LocalMachine ? StoreLocation.LocalMachine : StoreLocation.CurrentUser;
+            using var store = new X509Store(StoreName.My, loc);
+            store.Open(OpenFlags.ReadOnly);
+            var cert = store.Certificates.Cast<X509Certificate2>()
+                .FirstOrDefault(c => NormalizeThumbprint(c.Thumbprint) == NormalizeThumbprint(thumbprint));
+            if (cert is null) return null;
+#if NET472
+            using var sha = SHA256.Create();
+            var hash = sha.ComputeHash(cert.RawData);
+            return BitConverter.ToString(hash).Replace("-", string.Empty).ToUpperInvariant();
+#else
+            return cert.GetCertHashString(HashAlgorithmName.SHA256);
+#endif
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string NormalizeThumbprint(string? thumbprint)
+        => (thumbprint ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();
+
+    private static bool MatchesExpectedMap(string projectName, Dictionary<string, string> expectedMap, bool allowWildcards)
+    {
+        foreach (var kvp in expectedMap)
+        {
+            if (MatchesPattern(projectName, kvp.Key, allowWildcards))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool MatchesPattern(string value, string pattern, bool allowWildcards)
+    {
+        if (!allowWildcards || string.IsNullOrWhiteSpace(pattern))
+            return string.Equals(value, pattern, StringComparison.OrdinalIgnoreCase);
+
+        if (!ContainsWildcard(pattern))
+            return string.Equals(value, pattern, StringComparison.OrdinalIgnoreCase);
+
+        var regex = "^" + Regex.Escape(pattern)
+            .Replace("\\*", ".*")
+            .Replace("\\?", ".") + "$";
+        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase);
+    }
+
+    private static bool ContainsWildcard(string value)
+        => value.IndexOf('*') >= 0 || value.IndexOf('?') >= 0;
 
     private sealed class DotNetPackResult
     {

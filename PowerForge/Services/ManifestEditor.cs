@@ -135,6 +135,27 @@ public static class ManifestEditor
         return InsertKeyValue(topHash, content, filePath, "RequiredModules", arrayText);
     }
 
+    /// <summary>Gets required module names that are declared as hashtables without any version fields.</summary>
+    public static bool TryGetInvalidRequiredModuleSpecs(string filePath, out string[]? modules)
+    {
+        modules = null;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+        Token[] tokens; ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+        var topHash = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (topHash == null) return false;
+        foreach (var kv in topHash.KeyValuePairs)
+        {
+            var key = GetKeyName(kv.Item1);
+            if (!string.Equals(key, "RequiredModules", StringComparison.OrdinalIgnoreCase)) continue;
+            var list = ExtractInvalidRequiredModules(kv.Item2 as Ast);
+            modules = list;
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>Add or update a single RequiredModule by ModuleName. Returns true if modified.</summary>
     public static bool TryUpsertRequiredModule(string filePath, RequiredModule entry)
     {
@@ -475,6 +496,75 @@ public static class ManifestEditor
         return list.Count > 0 ? list.ToArray() : Array.Empty<RequiredModule>();
     }
 
+    private static string[] ExtractInvalidRequiredModules(Ast? expr)
+    {
+        if (expr == null) return Array.Empty<string>();
+        var e2 = AsExpression(expr);
+        var invalid = new List<string>();
+
+        foreach (var item in EnumerateRequiredModuleItems(e2))
+        {
+            if (item is not HashtableAst h) continue;
+
+            string? name = null;
+            var hasVersion = false;
+
+            foreach (var kv in h.KeyValuePairs)
+            {
+                var key = GetKeyName(kv.Item1);
+                if (string.Equals(key, "ModuleName", StringComparison.OrdinalIgnoreCase))
+                {
+                    var val = AsExpression(kv.Item2);
+                    if (val is StringConstantExpressionAst sv) name = sv.Value;
+                    else if (val is ConstantExpressionAst cv && cv.Value is string vs) name = vs;
+                }
+                else if (string.Equals(key, "ModuleVersion", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(key, "RequiredVersion", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(key, "MaximumVersion", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasVersion = true;
+                }
+            }
+
+            if (!hasVersion)
+            {
+                string entry = string.IsNullOrWhiteSpace(name) ? "<unknown>" : name!;
+                if (!invalid.Contains(entry, StringComparer.OrdinalIgnoreCase))
+                    invalid.Add(entry);
+            }
+        }
+
+        return invalid.ToArray();
+    }
+
+    private static IEnumerable<ExpressionAst> EnumerateRequiredModuleItems(ExpressionAst? expr)
+    {
+        if (expr == null) yield break;
+
+        if (expr is ArrayExpressionAst ae && ae.SubExpression is StatementBlockAst sb)
+        {
+            foreach (var st in sb.Statements)
+            {
+                var itemExpr = AsExpression(st);
+                foreach (var item in EnumerateRequiredModuleItems(itemExpr))
+                    yield return item;
+            }
+            yield break;
+        }
+
+        if (expr is ArrayLiteralAst al)
+        {
+            foreach (var el in al.Elements)
+            {
+                foreach (var item in EnumerateRequiredModuleItems(el))
+                    yield return item;
+            }
+            yield break;
+        }
+
+        yield return expr;
+    }
+
     private static RequiredModule? ParseRequiredModuleItem(ExpressionAst? expr)
     {
         if (expr == null) return null;
@@ -515,19 +605,63 @@ public static class ManifestEditor
 
     private static string BuildRequiredModulesArrayText(RequiredModule[] modules)
     {
-        // Keep compact, on one line per entry for readability
-        var items = modules.Select(m =>
+        if (modules == null || modules.Length == 0)
+            return "@()";
+
+        var order = new[] { "Guid", "ModuleName", "ModuleVersion", "RequiredVersion", "MaximumVersion" };
+        var width = order.Max(k => k.Length);
+        var sb = new StringBuilder();
+        sb.Append("@(");
+
+        var wroteAny = false;
+
+        for (int i = 0; i < modules.Length; i++)
         {
-            if (m.ModuleVersion == null && m.RequiredVersion == null && m.MaximumVersion == null && m.Guid == null)
-                return EscapeAndQuote(m.ModuleName);
-            var parts = new System.Collections.Generic.List<string> { $"ModuleName = {EscapeAndQuote(m.ModuleName)}" };
-            if (!string.IsNullOrWhiteSpace(m.ModuleVersion)) parts.Add($"ModuleVersion = {EscapeAndQuote(m.ModuleVersion!)}");
-            if (!string.IsNullOrWhiteSpace(m.RequiredVersion)) parts.Add($"RequiredVersion = {EscapeAndQuote(m.RequiredVersion!)}");
-            if (!string.IsNullOrWhiteSpace(m.MaximumVersion)) parts.Add($"MaximumVersion = {EscapeAndQuote(m.MaximumVersion!)}");
-            if (!string.IsNullOrWhiteSpace(m.Guid)) parts.Add($"Guid = {EscapeAndQuote(m.Guid!)}");
-            return "@{ " + string.Join("; ", parts) + " }";
-        });
-        return "@(" + string.Join(", ", items) + ")";
+            var m = modules[i];
+            if (m is null || string.IsNullOrWhiteSpace(m.ModuleName)) continue;
+
+            var hasVersion = !string.IsNullOrWhiteSpace(m.ModuleVersion) ||
+                             !string.IsNullOrWhiteSpace(m.RequiredVersion) ||
+                             !string.IsNullOrWhiteSpace(m.MaximumVersion);
+
+            if (!hasVersion)
+            {
+                if (wroteAny) sb.Append(", ");
+                sb.Append(EscapeAndQuote(m.ModuleName));
+                wroteAny = true;
+                continue;
+            }
+
+            if (wroteAny) sb.Append(", ");
+            sb.Append("@{");
+            sb.Append(NewLine);
+
+            void AppendLine(string key, string? value)
+            {
+                if (string.IsNullOrWhiteSpace(value)) return;
+                sb.Append("            ")
+                  .Append(key)
+                  .Append(new string(' ', width - key.Length))
+                  .Append(" = ")
+                  .Append(EscapeAndQuote(value!))
+                  .Append(NewLine);
+            }
+
+            AppendLine("Guid", m.Guid);
+            AppendLine("ModuleName", m.ModuleName);
+            AppendLine("ModuleVersion", m.ModuleVersion);
+            AppendLine("RequiredVersion", m.RequiredVersion);
+            AppendLine("MaximumVersion", m.MaximumVersion);
+
+            sb.Append("        }");
+            wroteAny = true;
+        }
+
+        if (!wroteAny)
+            return "@()";
+
+        sb.Append(")");
+        return sb.ToString();
     }
 
     private static ExpressionAst? AsExpression(Ast ast)

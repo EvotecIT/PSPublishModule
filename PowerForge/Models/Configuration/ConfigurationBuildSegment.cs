@@ -74,6 +74,16 @@ public sealed class BuildModuleConfiguration
     public bool? InstallMissingModulesPrerelease { get; set; }
 
     /// <summary>
+    /// When true, resolves Auto/Latest dependency versions from the repository without installing.
+    /// </summary>
+    public bool? ResolveMissingModulesOnline { get; set; }
+
+    /// <summary>
+    /// When true, warns if RequiredModules are older than the latest available in the repository.
+    /// </summary>
+    public bool? WarnIfRequiredModulesOutdated { get; set; }
+
+    /// <summary>
     /// Repository name to use when installing missing dependencies (defaults to PSGallery).
     /// </summary>
     public string? InstallMissingModulesRepository { get; set; }
