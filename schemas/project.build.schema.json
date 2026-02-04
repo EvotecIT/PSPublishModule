@@ -1,0 +1,257 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project Build Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "RootPath": {
+      "type": "string"
+    },
+    "ExpectedVersion": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ExpectedVersionMap": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "ExpectedVersionMapAsInclude": {
+      "type": "boolean"
+    },
+    "ExpectedVersionMapUseWildcards": {
+      "type": "boolean"
+    },
+    "IncludeProjects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ExcludeProjects": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ExcludeDirectories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "NugetSource": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "IncludePrerelease": {
+      "type": "boolean"
+    },
+    "Configuration": {
+      "type": "string",
+      "enum": [
+        "Release",
+        "Debug"
+      ]
+    },
+    "OutputPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ReleaseZipOutputPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "StagingPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "CleanStaging": {
+      "type": "boolean"
+    },
+    "PlanOnly": {
+      "type": "boolean"
+    },
+    "PlanOutputPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "UpdateVersions": {
+      "type": "boolean"
+    },
+    "Build": {
+      "type": "boolean"
+    },
+    "PublishNuget": {
+      "type": "boolean"
+    },
+    "PublishGitHub": {
+      "type": "boolean"
+    },
+    "CreateReleaseZip": {
+      "type": "boolean"
+    },
+    "CertificateThumbprint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "CertificateStore": {
+      "type": "string",
+      "enum": [
+        "CurrentUser",
+        "LocalMachine"
+      ]
+    },
+    "TimeStampServer": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "PublishSource": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "PublishApiKey": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "PublishApiKeyFilePath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "PublishApiKeyEnvName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "SkipDuplicate": {
+      "type": "boolean"
+    },
+    "PublishFailFast": {
+      "type": "boolean"
+    },
+    "NugetCredentialUserName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "NugetCredentialSecret": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "NugetCredentialSecretFilePath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "NugetCredentialSecretEnvName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubAccessToken": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubAccessTokenFilePath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubAccessTokenEnvName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubUsername": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubRepositoryName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubReleaseMode": {
+      "type": "string",
+      "enum": [
+        "Single",
+        "PerProject"
+      ]
+    },
+    "GitHubPrimaryProject": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubTagName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubTagTemplate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "GitHubIsPreRelease": {
+      "type": "boolean"
+    },
+    "GitHubIncludeProjectNameInTag": {
+      "type": "boolean"
+    },
+    "GitHubGenerateReleaseNotes": {
+      "type": "boolean"
+    },
+    "GitHubReleaseName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

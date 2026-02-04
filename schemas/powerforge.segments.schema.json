@@ -58,6 +58,8 @@
         "InstallMissingModules": { "type": ["boolean", "null"] },
         "InstallMissingModulesForce": { "type": ["boolean", "null"] },
         "InstallMissingModulesPrerelease": { "type": ["boolean", "null"] },
+        "ResolveMissingModulesOnline": { "type": ["boolean", "null"] },
+        "WarnIfRequiredModulesOutdated": { "type": ["boolean", "null"] },
         "InstallMissingModulesRepository": { "type": ["string", "null"] },
         "InstallMissingModulesCredential": { "anyOf": [{ "$ref": "#/$defs/RepositoryCredential" }, { "type": "null" }] },
         "DoNotAttemptToFixRelativePaths": { "type": ["boolean", "null"] },
@@ -151,7 +153,8 @@
       "properties": {
         "IgnoreModuleName": { "type": ["array", "null"], "items": { "type": "string" } },
         "IgnoreFunctionName": { "type": ["array", "null"], "items": { "type": "string" } },
-        "Force": { "type": "boolean" }
+        "Force": { "type": "boolean" },
+        "FailOnMissingCommands": { "type": "boolean" }
       }
     },
 
