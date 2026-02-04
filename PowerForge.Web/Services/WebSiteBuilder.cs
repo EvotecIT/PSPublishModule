@@ -187,10 +187,11 @@ public static class WebSiteBuilder
                 continue;
             }
 
-        var targetRoot = string.IsNullOrWhiteSpace(destination)
-            ? outputRoot
-            : Path.Combine(outputRoot, destination);
-        CopyDirectory(sourcePath, targetRoot);
+            var targetRoot = string.IsNullOrWhiteSpace(destination)
+                ? outputRoot
+                : Path.Combine(outputRoot, destination);
+            CopyDirectory(sourcePath, targetRoot);
+        }
     }
 
     private static void WriteSiteNavData(SiteSpec spec, string outputRoot, MenuSpec[] menuSpecs)
@@ -254,7 +255,6 @@ public static class WebSiteBuilder
             description = item.Description,
             items = MapMenuItems(item.Items)
         }).ToArray();
-    }
     }
 
     private static IReadOnlyDictionary<string, object?> LoadData(SiteSpec spec, WebSitePlan plan, IReadOnlyList<ProjectSpec> projects)

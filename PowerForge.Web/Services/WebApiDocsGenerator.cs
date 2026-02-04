@@ -2309,7 +2309,7 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug, docsHomeUrl);
-            var sidebarClass = BuildSidebarClass(options.SidebarPosition);
+            var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
@@ -2321,7 +2321,7 @@ public static class WebApiDocsGenerator
               ["FOOTER"] = footer,
               ["BODY_CLASS"] = bodyClass,
               ["SIDEBAR"] = sidebar,
-              ["SIDEBAR_CLASS"] = sidebarClass,
+              ["SIDEBAR_CLASS"] = sidebarClassForType,
               ["MAIN"] = typeMain,
               ["DOCS_SCRIPT"] = docsScript
           });
@@ -2796,7 +2796,7 @@ public static class WebApiDocsGenerator
               sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
           sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods ({type.Methods.Count})</button>");
           sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
-          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == \"Enum\" ? \"Values\" : \"Fields\")} ({type.Fields.Count})</button>");
+          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
           sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
           if (type.ExtensionMethods.Count > 0)
               sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
