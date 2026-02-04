@@ -1,4 +1,4 @@
-# PSPublishModule bootstrapper (script module)
+﻿# PSPublishModule bootstrapper (script module)
 # Loads binary cmdlets (preferred) and optionally dot-sources script helpers when present.
 try {
     if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
@@ -11,10 +11,10 @@ try {
 }
 
 # Get public and private function definition files.
-$Public  = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
+$Public = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Public', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
 $Private = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Private', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
 $Classes = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Classes', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
-$Enums   = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
+$Enums = @(Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, 'Enums', '*.ps1')) -ErrorAction SilentlyContinue -Recurse)
 
 $LibPath = [IO.Path]::Combine($PSScriptRoot, 'Lib')
 
@@ -60,7 +60,7 @@ $FoundErrors = @(
             if ($candidates.Count -gt 0) {
                 $devBinary = $candidates |
                     Sort-Object { (Get-Item -LiteralPath $_).LastWriteTimeUtc } -Descending |
-                    Select-Object -First 1
+                        Select-Object -First 1
             }
 
             if ($devBinary) {
@@ -119,21 +119,9 @@ $FoundErrors = @(
 )
 
 if ($FoundErrors.Count -gt 0) {
-    $ModuleName = (Get-ChildItem -Path ([IO.Path]::Combine($PSScriptRoot, '*.psd1'))).BaseName
+    $ModuleName = (Get-ChildItem $PSScriptRoot\*.psd1).BaseName
     Write-Warning "Importing module $ModuleName failed. Fix errors before continuing."
     break
 }
 
-# Export only public functions to avoid leaking Private helpers.
-$ExportFunctions = @($Public | ForEach-Object { $_.BaseName })
-$ExportAliases   = @('New-PrepareModule', 'Build-Module', 'Invoke-ModuleBuilder')
-
-# Ensure backwards-compatible aliases exist even when legacy public functions are removed.
-foreach ($AliasName in $ExportAliases) {
-    try {
-        Set-Alias -Name $AliasName -Value 'Invoke-ModuleBuild' -Scope Local -Force -ErrorAction Stop
-    } catch {
-        # best-effort
-    }
-}
-Export-ModuleMember -Function $ExportFunctions -Alias $ExportAliases -Cmdlet '*'
+Export-ModuleMember -Function '*' -Alias '*' -Cmdlet '*'

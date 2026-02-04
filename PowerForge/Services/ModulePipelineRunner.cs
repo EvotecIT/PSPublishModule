@@ -586,6 +586,22 @@ public sealed class ModulePipelineRunner
             .Where(p => p is not null && (!string.IsNullOrWhiteSpace(p.Find) || !string.IsNullOrWhiteSpace(p.Replace)))
             .ToArray();
 
+        if (formatting?.Options is not null && !formatting.Options.UpdateProjectRoot)
+        {
+            var standard = formatting.Options.Standard;
+            var hasDefaultTargets =
+                standard?.FormatCodePS1 is not null ||
+                standard?.FormatCodePSM1 is not null ||
+                standard?.FormatCodePSD1 is not null ||
+                standard?.Style?.PSD1 is not null;
+
+            if (hasDefaultTargets)
+            {
+                // 2.x compatibility: DefaultPS* formatting always updated project root.
+                formatting.Options.UpdateProjectRoot = true;
+            }
+        }
+
         return new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,

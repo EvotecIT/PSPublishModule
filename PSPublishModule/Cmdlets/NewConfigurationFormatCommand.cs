@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 
@@ -336,10 +337,20 @@ public sealed class NewConfigurationFormatCommand : PSCmdlet
             }
         }
 
+        var applyDefaults = ApplyTo.Any(a =>
+            string.Equals(a, "DefaultPS1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a, "DefaultPSM1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a, "DefaultPSD1", StringComparison.OrdinalIgnoreCase));
+
         if (UpdateProjectRoot.IsPresent)
         {
             options.UpdateProjectRoot = true;
             settingsCount++;
+        }
+        else if (applyDefaults && settingsCount > 0)
+        {
+            // 2.x compatibility: DefaultPS* formatting always updated project root.
+            options.UpdateProjectRoot = true;
         }
 
         if (settingsCount > 0)
