@@ -49,6 +49,9 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 Complete module testing suite that handles dependencies, imports, and test execution.
 
+### [Invoke-ProjectBuild](Invoke-ProjectBuild.md)
+Executes a repository-wide .NET build/release pipeline from a JSON configuration.
+
 ### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
 Tells the module to create an artefact of a specified type.
 

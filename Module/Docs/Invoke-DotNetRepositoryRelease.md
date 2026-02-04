@@ -11,7 +11,7 @@ Repository-wide .NET package release workflow (discover, version, pack, publish)
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-DotNetRepositoryRelease [-Path <string>] [-ExpectedVersion <string>] [-ExpectedVersionMap <IDictionary>] [-ExpectedVersionMapAsInclude] [-ExpectedVersionMapUseWildcards] [-IncludeProject <string[]>] [-ExcludeProject <string[]>] [-ExcludeDirectories <string[]>] [-NugetSource <string[]>] [-IncludePrerelease] [-NugetCredentialUserName <string>] [-NugetCredentialSecret <string>] [-NugetCredentialSecretFilePath <string>] [-NugetCredentialSecretEnvName <string>] [-Configuration <string>] [-OutputPath <string>] [-CertificateThumbprint <string>] [-CertificateStore <CertificateStoreLocation>] [-TimeStampServer <string>] [-SkipPack] [-Publish] [-PublishSource <string>] [-PublishApiKey <string>] [-PublishApiKeyFilePath <string>] [-PublishApiKeyEnvName <string>] [-SkipDuplicate] [-PublishFailFast] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -31,6 +31,36 @@ Invoke-DotNetRepositoryRelease -Path . -ExpectedVersion '2.0.X' -ExcludeProject 
 ```
 
 ## PARAMETERS
+
+### -CertificateStore
+Certificate store location used when searching for the signing certificate.
+
+```yaml
+Type: CertificateStoreLocation
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -CertificateThumbprint
+Certificate thumbprint used for signing packages.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -Configuration
 Build configuration (Release/Debug).
@@ -97,6 +127,36 @@ Per-project expected versions (hashtable: ProjectName = Version).
 
 ```yaml
 Type: IDictionary
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExpectedVersionMapAsInclude
+When set, only projects listed in ExpectedVersionMap are processed.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ExpectedVersionMapUseWildcards
+Allow wildcards (*, ?) in ExpectedVersionMap keys.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 
@@ -302,6 +362,21 @@ Accept pipeline input: False
 Accept wildcard characters: True
 ```
 
+### -PublishFailFast
+Stop on the first publish/signing failure.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
 ### -PublishSource
 NuGet feed source for publishing.
 
@@ -337,6 +412,21 @@ Skip dotnet pack step.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -TimeStampServer
+Timestamp server URL used while signing packages.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 
