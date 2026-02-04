@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
@@ -870,7 +871,7 @@ try
                 return Fail("Missing required --config.", outputJson, logger, "web.pipeline");
 
             var fullPath = ResolveExistingFilePath(pipelinePath);
-            var result = WebPipelineRunner.RunPipeline(fullPath);
+            var result = WebPipelineRunner.RunPipeline(fullPath, logger);
 
             if (outputJson)
             {
@@ -1468,7 +1469,7 @@ internal static class CliPatternHelper
 
 internal static class WebPipelineRunner
 {
-    internal static WebPipelineResult RunPipeline(string pipelinePath)
+    internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger)
     {
         var json = File.ReadAllText(pipelinePath);
         using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
@@ -1483,13 +1484,27 @@ internal static class WebPipelineRunner
 
         var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
         var result = new WebPipelineResult();
-
+        var steps = new List<JsonElement>();
+        var totalSteps = 0;
         foreach (var step in stepsElement.EnumerateArray())
+        {
+            steps.Add(step);
+            var taskName = GetString(step, "task");
+            if (!string.IsNullOrWhiteSpace(taskName))
+                totalSteps++;
+        }
+
+        var stepIndex = 0;
+        foreach (var step in steps)
         {
             var task = GetString(step, "task")?.ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(task))
                 continue;
 
+            stepIndex++;
+            var label = $"[{stepIndex}/{totalSteps}] {task}";
+            logger?.Info($"Starting {label}...");
+            var stopwatch = Stopwatch.StartNew();
             var stepResult = new WebPipelineStepResult { Task = task };
             try
             {
@@ -2007,19 +2022,37 @@ internal static class WebPipelineRunner
             catch (Exception ex)
             {
                 stepResult.Success = false;
-                stepResult.Message = ex.Message;
+                stepResult.Message = AppendDuration(ex.Message, stopwatch);
                 result.Steps.Add(stepResult);
                 result.StepCount = result.Steps.Count;
                 result.Success = false;
                 return result;
             }
 
+            stepResult.Message = AppendDuration(stepResult.Message, stopwatch);
             result.Steps.Add(stepResult);
         }
 
         result.StepCount = result.Steps.Count;
         result.Success = result.Steps.All(s => s.Success);
         return result;
+    }
+
+    private static string AppendDuration(string? message, Stopwatch stopwatch)
+    {
+        stopwatch.Stop();
+        var duration = FormatDuration(stopwatch.Elapsed);
+        var baseMessage = string.IsNullOrWhiteSpace(message) ? "Completed" : message;
+        return $"{baseMessage} ({duration})";
+    }
+
+    private static string FormatDuration(TimeSpan elapsed)
+    {
+        if (elapsed.TotalSeconds < 1)
+            return $"{elapsed.TotalMilliseconds:0} ms";
+        if (elapsed.TotalMinutes < 1)
+            return $"{elapsed.TotalSeconds:0.0} s";
+        return $"{elapsed.TotalMinutes:0.0} min";
     }
 
     private static string? GetString(JsonElement element, string name)
