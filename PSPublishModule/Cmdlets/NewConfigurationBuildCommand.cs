@@ -95,7 +95,10 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Allow prerelease versions when installing dependencies.</summary>
     [Parameter] public SwitchParameter InstallMissingModulesPrerelease { get; set; }
 
-    /// <summary>Resolve Auto/Latest dependency versions from the repository without installing.</summary>
+    /// <summary>
+    /// Resolve Auto/Latest dependency versions from the repository without installing.
+    /// When not explicitly set, this is auto-enabled if any RequiredModules use Auto/Latest/Guid Auto.
+    /// </summary>
     [Parameter] public SwitchParameter ResolveMissingModulesOnline { get; set; }
 
     /// <summary>Warn if RequiredModules are older than the latest available in the repository.</summary>
