@@ -48,6 +48,11 @@ public sealed class ModulePipelinePlan
     public ManifestEditor.RequiredModule[] RequiredModules { get; }
 
     /// <summary>
+    /// External module dependencies (PSData.ExternalModuleDependencies).
+    /// </summary>
+    public string[] ExternalModuleDependencies { get; }
+
+    /// <summary>
     /// Required modules that should be packaged into artefacts when enabled (excludes ExternalModule dependencies).
     /// </summary>
     public ManifestEditor.RequiredModule[] RequiredModulesForPackaging { get; }
@@ -224,6 +229,7 @@ public sealed class ModulePipelinePlan
         ModuleBuildSpec buildSpec,
         string[] compatiblePSEditions,
         ManifestEditor.RequiredModule[] requiredModules,
+        string[] externalModuleDependencies,
         ManifestEditor.RequiredModule[] requiredModulesForPackaging,
         InformationConfiguration? information,
         DocumentationConfiguration? documentation,
@@ -266,6 +272,7 @@ public sealed class ModulePipelinePlan
         BuildSpec = buildSpec;
         CompatiblePSEditions = compatiblePSEditions;
         RequiredModules = requiredModules;
+        ExternalModuleDependencies = externalModuleDependencies ?? Array.Empty<string>();
         RequiredModulesForPackaging = requiredModulesForPackaging;
         Information = information;
         Documentation = documentation;

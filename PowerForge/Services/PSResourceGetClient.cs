@@ -15,6 +15,8 @@ public sealed class PSResourceInfo
     public string Name { get; }
     /// <summary>Resolved resource version.</summary>
     public string Version { get; }
+    /// <summary>Resource GUID (when available).</summary>
+    public string? Guid { get; }
     /// <summary>Repository name (when available).</summary>
     public string? Repository { get; }
     /// <summary>Author (when available).</summary>
@@ -25,10 +27,11 @@ public sealed class PSResourceInfo
     /// <summary>
     /// Creates a new instance.
     /// </summary>
-    public PSResourceInfo(string name, string version, string? repository, string? author, string? description)
+    public PSResourceInfo(string name, string version, string? repository, string? author, string? description, string? guid = null)
     {
         Name = name;
         Version = version;
+        Guid = guid;
         Repository = repository;
         Author = author;
         Description = description;
@@ -466,7 +469,8 @@ public sealed partial class PSResourceGetClient
             var repo = EmptyToNull(Decode(parts[4]));
             var author = EmptyToNull(Decode(parts[5]));
             var desc = EmptyToNull(Decode(parts[6]));
-            list.Add(new PSResourceInfo(name, version, repo, author, desc));
+            var guid = parts.Length > 7 ? EmptyToNull(Decode(parts[7])) : null;
+            list.Add(new PSResourceInfo(name, version, repo, author, desc, guid));
         }
         return list;
     }

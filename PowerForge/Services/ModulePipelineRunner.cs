@@ -137,11 +137,14 @@ public sealed class ModulePipelineRunner
         var moduleSkipIgnoreFunctions = new List<string>();
         bool moduleSkipForce = false;
         bool moduleSkipFailOnMissingCommands = false;
+        bool resolveMissingModulesOnlineSet = false;
 
         var requiredModulesDraft = new List<RequiredModuleDraft>();
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var externalModules = new List<string>();
+        var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
         {
@@ -171,7 +174,11 @@ public sealed class ModulePipelineRunner
                     if (b.InstallMissingModules.HasValue) installMissingModules = b.InstallMissingModules.Value;
                     if (b.InstallMissingModulesForce.HasValue) installMissingModulesForce = b.InstallMissingModulesForce.Value;
                     if (b.InstallMissingModulesPrerelease.HasValue) installMissingModulesPrerelease = b.InstallMissingModulesPrerelease.Value;
-                    if (b.ResolveMissingModulesOnline.HasValue) resolveMissingModulesOnline = b.ResolveMissingModulesOnline.Value;
+                    if (b.ResolveMissingModulesOnline.HasValue)
+                    {
+                        resolveMissingModulesOnline = b.ResolveMissingModulesOnline.Value;
+                        resolveMissingModulesOnlineSet = true;
+                    }
                     if (b.WarnIfRequiredModulesOutdated.HasValue) warnIfRequiredModulesOutdated = b.WarnIfRequiredModulesOutdated.Value;
                     if (!string.IsNullOrWhiteSpace(b.InstallMissingModulesRepository)) installMissingModulesRepository = b.InstallMissingModulesRepository;
                     if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
@@ -213,7 +220,17 @@ public sealed class ModulePipelineRunner
                         break;
                     }
 
-                    if (moduleSeg.Kind is not (ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule))
+                    if (moduleSeg.Kind == ModuleDependencyKind.ExternalModule)
+                    {
+                        if (!externalIndex.Contains(name))
+                        {
+                            externalIndex.Add(name);
+                            externalModules.Add(name);
+                        }
+                        break;
+                    }
+
+                    if (moduleSeg.Kind is not ModuleDependencyKind.RequiredModule)
                         break;
 
                     var draft = new RequiredModuleDraft(
@@ -465,6 +482,12 @@ public sealed class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
+        if (!resolveMissingModulesOnlineSet && HasAutoRequiredModules(requiredModulesDraft))
+        {
+            resolveMissingModulesOnline = true;
+            _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because RequiredModules use Auto/Latest/Guid Auto.");
+        }
+
         var requiredModules = ResolveRequiredModules(
             requiredModulesDraft,
             resolveMissingModulesOnline,
@@ -551,6 +574,11 @@ public sealed class ModulePipelineRunner
             buildSpec: buildSpec,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,
+            externalModuleDependencies: externalModules
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
             requiredModulesForPackaging: requiredModulesForPackaging,
             information: information,
             documentation: documentation,
@@ -712,6 +740,10 @@ public sealed class ModulePipelineRunner
 
                 if (plan.RequiredModules is { Length: > 0 })
                     ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
+                if (plan.ExternalModuleDependencies is { Length: > 0 })
+                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
+                if (plan.ExternalModuleDependencies is { Length: > 0 })
+                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
 
                 if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
                     !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
@@ -1620,6 +1652,21 @@ public sealed class ModulePipelineRunner
         => !string.IsNullOrWhiteSpace(value) &&
            value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
+    private static bool HasAutoRequiredModules(IEnumerable<RequiredModuleDraft> drafts)
+    {
+        if (drafts is null) return false;
+        foreach (var d in drafts)
+        {
+            if (d is null) continue;
+            if (IsAutoOrLatest(d.RequiredVersion) ||
+                IsAutoOrLatest(d.MinimumVersion) ||
+                IsAutoOrLatest(d.ModuleVersion) ||
+                IsAutoGuid(d.Guid))
+                return true;
+        }
+        return false;
+    }
+
     private ManifestEditor.RequiredModule[] ResolveRequiredModules(
         IReadOnlyList<RequiredModuleDraft> drafts,
         bool resolveMissingModulesOnline,
@@ -1636,7 +1683,7 @@ public sealed class ModulePipelineRunner
         var moduleNames = list.Select(d => d.ModuleName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var installed = TryGetLatestInstalledModuleInfo(moduleNames);
 
-        Dictionary<string, string?>? onlineVersions = null;
+        Dictionary<string, (string? Version, string? Guid)>? onlineVersions = null;
         if (resolveMissingModulesOnline || warnIfRequiredModulesOutdated)
         {
             var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1670,13 +1717,17 @@ public sealed class ModulePipelineRunner
             installed.TryGetValue(d.ModuleName, out var info);
 
             var availableVersion = info.Version;
-            if (string.IsNullOrWhiteSpace(availableVersion) &&
-                onlineVersions is not null &&
-                onlineVersions.TryGetValue(d.ModuleName, out var onlineVersion) &&
-                !string.IsNullOrWhiteSpace(onlineVersion))
+            var availableGuid = info.Guid;
+            if (onlineVersions is not null &&
+                onlineVersions.TryGetValue(d.ModuleName, out var onlineInfo))
             {
-                availableVersion = onlineVersion;
-                resolvedOnline.Add(d.ModuleName);
+                if (string.IsNullOrWhiteSpace(availableVersion) && !string.IsNullOrWhiteSpace(onlineInfo.Version))
+                {
+                    availableVersion = onlineInfo.Version;
+                    resolvedOnline.Add(d.ModuleName);
+                }
+                if (string.IsNullOrWhiteSpace(availableGuid) && !string.IsNullOrWhiteSpace(onlineInfo.Guid))
+                    availableGuid = onlineInfo.Guid;
             }
 
             var required = ResolveAutoOrLatest(d.RequiredVersion, availableVersion);
@@ -1688,7 +1739,7 @@ public sealed class ModulePipelineRunner
                 _logger.Warn($"Module dependency '{d.ModuleName}' specifies both MinimumVersion and ModuleVersion; using MinimumVersion '{d.MinimumVersion}'.");
             }
             var moduleVersion = ResolveAutoOrLatest(minimumSource, availableVersion);
-            var guid = ResolveAutoGuid(d.Guid, info.Guid);
+            var guid = ResolveAutoGuid(d.Guid, availableGuid);
 
             if (IsAutoOrLatest(d.RequiredVersion) && string.IsNullOrWhiteSpace(required))
                 unresolvedVersion.Add(d.ModuleName);
@@ -1721,8 +1772,9 @@ public sealed class ModulePipelineRunner
                 var installedVersion = info.Version;
 
                 string? latestVersion = null;
-                if (onlineVersions is not null)
-                    onlineVersions.TryGetValue(name, out latestVersion);
+                if (onlineVersions is not null &&
+                    onlineVersions.TryGetValue(name, out var onlineInfo))
+                    latestVersion = onlineInfo.Version;
 
                 if (string.IsNullOrWhiteSpace(latestVersion))
                     continue;
@@ -1820,14 +1872,29 @@ public sealed class ModulePipelineRunner
             return Array.Empty<ModuleDependencyInstallResult>();
         }
 
-        var deps = required
+        var depList = required
             .Where(r => !string.IsNullOrWhiteSpace(r.ModuleName))
             .Select(r => new ModuleDependency(
                 name: r.ModuleName.Trim(),
                 requiredVersion: r.RequiredVersion,
                 minimumVersion: r.ModuleVersion,
                 maximumVersion: r.MaximumVersion))
-            .ToArray();
+            .ToList();
+
+        if (plan.ExternalModuleDependencies is { Length: > 0 })
+        {
+            var known = new HashSet<string>(depList.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var name in plan.ExternalModuleDependencies)
+            {
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var trimmed = name.Trim();
+                if (known.Contains(trimmed)) continue;
+                known.Add(trimmed);
+                depList.Add(new ModuleDependency(trimmed, requiredVersion: null, minimumVersion: null, maximumVersion: null));
+            }
+        }
+
+        var deps = depList.ToArray();
 
         if (deps.Length == 0)
         {
@@ -1924,7 +1991,7 @@ public sealed class ModulePipelineRunner
         return map;
     }
 
-    private Dictionary<string, string?> TryResolveLatestOnlineVersions(
+    private Dictionary<string, (string? Version, string? Guid)> TryResolveLatestOnlineVersions(
         IReadOnlyCollection<string> names,
         string? repository,
         RepositoryCredential? credential,
@@ -1936,13 +2003,13 @@ public sealed class ModulePipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (list.Length == 0)
-            return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
 
         var repos = ParseRepositoryList(repository);
         var runner = new PowerShellRunner();
 
         IReadOnlyList<PSResourceInfo> items = Array.Empty<PSResourceInfo>();
-        var resolved = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var resolved = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -1993,9 +2060,9 @@ public sealed class ModulePipelineRunner
             .ToArray();
     }
 
-    private static Dictionary<string, string?> SelectLatestVersions(IEnumerable<PSResourceInfo> items, bool allowPrerelease)
+    private static Dictionary<string, (string? Version, string? Guid)> SelectLatestVersions(IEnumerable<PSResourceInfo> items, bool allowPrerelease)
     {
-        var map = new Dictionary<string, (Version Version, string? Pre, string Raw)>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, (Version Version, string? Pre, string Raw, string? Guid)>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in items ?? Array.Empty<PSResourceInfo>())
         {
@@ -2010,17 +2077,17 @@ public sealed class ModulePipelineRunner
 
             if (!map.TryGetValue(item.Name, out var current))
             {
-                map[item.Name] = (version, pre, item.Version);
+                map[item.Name] = (version, pre, item.Version, item.Guid);
                 continue;
             }
 
             if (CompareVersionParts(version, pre, current.Version, current.Pre) > 0)
-                map[item.Name] = (version, pre, item.Version);
+                map[item.Name] = (version, pre, item.Version, item.Guid);
         }
 
-        var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in map)
-            result[kvp.Key] = kvp.Value.Raw;
+            result[kvp.Key] = (kvp.Value.Raw, kvp.Value.Guid);
         return result;
     }
 

@@ -381,7 +381,9 @@ public sealed class PowerShellGetClient
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(version)) continue;
 
             var repo = Decode(parts[4]);
-            list.Add(new PSResourceInfo(name, version, string.IsNullOrWhiteSpace(repo) ? null : repo, author: null, description: null));
+            var guid = parts.Length > 5 ? Decode(parts[5]) : null;
+            if (string.IsNullOrWhiteSpace(guid)) guid = null;
+            list.Add(new PSResourceInfo(name, version, string.IsNullOrWhiteSpace(repo) ? null : repo, author: null, description: null, guid: guid));
         }
         return list;
     }

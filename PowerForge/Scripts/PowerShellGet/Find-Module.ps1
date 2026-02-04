@@ -47,7 +47,8 @@ try {
     $name = [string]$r.Name
     $ver = [string]$r.Version
     $repo = [string]$r.Repository
-    $fields = @($name, $ver, $repo) | ForEach-Object { Enc ([string]$_) }
+    $guid = [string]$r.Guid
+    $fields = @($name, $ver, $repo, $guid) | ForEach-Object { Enc ([string]$_) }
     Write-Output ('PFPWSGET::ITEM::' + ($fields -join '::'))
   }
   exit 0
