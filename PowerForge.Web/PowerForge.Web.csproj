@@ -13,11 +13,11 @@
     <ProjectReference Include="..\PowerForge\PowerForge.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
-    <ProjectReference Include="..\..\PSParseHTML\Sources\HtmlTinkerX\HtmlTinkerX.csproj" />
-    <ProjectReference Include="..\..\OfficeIMO\OfficeIMO.Markdown\OfficeIMO.Markdown.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="HtmlTinkerX" Version="2.0.6" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="0.5.2" />
     <PackageReference Include="Scriban" Version="5.11.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
