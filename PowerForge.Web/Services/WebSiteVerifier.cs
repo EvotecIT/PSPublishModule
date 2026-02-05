@@ -103,6 +103,7 @@ public static class WebSiteVerifier
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
+        ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 
         return new WebVerifyResult
         {
@@ -526,6 +527,28 @@ public static class WebSiteVerifier
         }
     }
 
+    private static void ValidateNotFoundAssetBundles(SiteSpec spec, IEnumerable<string> routes, List<string> warnings)
+    {
+        if (spec is null || warnings is null || routes is null) return;
+
+        var assets = spec.AssetRegistry;
+        if (assets is null) return;
+        if (assets.Bundles is null || assets.Bundles.Length == 0) return;
+        if (assets.RouteBundles is null || assets.RouteBundles.Length == 0) return;
+
+        var notFoundRoute = routes
+            .FirstOrDefault(route => string.Equals(NormalizeRouteNoTrailingSlash(route), "/404", StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(notFoundRoute))
+            return;
+
+        var matched = ResolveBundlesForRoute(assets, notFoundRoute);
+        if (matched.Count > 0)
+            return;
+
+        warnings.Add($"Route '{notFoundRoute}' does not match any AssetRegistry.RouteBundles entry. " +
+                     "404 pages may render without full CSS/JS. Add '/**' or '/404/**' mapping to your global bundle.");
+    }
+
     private static HashSet<string> CollectLayoutNames(SiteSpec spec, ThemeManifest manifest)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -826,6 +849,49 @@ public static class WebSiteVerifier
 
     private sealed record CollectionRoute(string Route, string File, bool Draft);
 
+    private static List<AssetBundleSpec> ResolveBundlesForRoute(AssetRegistrySpec assets, string route)
+    {
+        var routeValue = string.IsNullOrWhiteSpace(route) ? "/" : route.Trim();
+        var bundleMap = assets.Bundles
+            .Where(bundle => !string.IsNullOrWhiteSpace(bundle.Name))
+            .ToDictionary(bundle => bundle.Name, StringComparer.OrdinalIgnoreCase);
+        var selected = new List<AssetBundleSpec>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mapping in assets.RouteBundles ?? Array.Empty<RouteBundleSpec>())
+        {
+            if (!GlobMatch(mapping.Match, routeValue))
+                continue;
+
+            foreach (var name in mapping.Bundles ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+                if (!seen.Add(name))
+                    continue;
+                if (bundleMap.TryGetValue(name, out var bundle))
+                    selected.Add(bundle);
+            }
+        }
+
+        return selected;
+    }
+
+    private static string NormalizeRouteNoTrailingSlash(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        var normalized = route.Trim();
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized.TrimStart('/');
+
+        if (normalized.Length > 1 && normalized.EndsWith("/", StringComparison.Ordinal))
+            normalized = normalized.TrimEnd('/');
+
+        return string.IsNullOrWhiteSpace(normalized) ? "/" : normalized;
+    }
+
     private static void ValidateAssetRegistryPaths(
         AssetRegistrySpec? assets,
         string rootPath,
@@ -883,6 +949,15 @@ public static class WebSiteVerifier
             return planThemesRoot;
         var themesRoot = string.IsNullOrWhiteSpace(spec.ThemesRoot) ? "themes" : spec.ThemesRoot;
         return Path.IsPathRooted(themesRoot) ? themesRoot : Path.Combine(rootPath, themesRoot);
+    }
+
+    private static bool GlobMatch(string pattern, string value)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var regex = "^" + Regex.Escape(pattern)
+            .Replace("\\*\\*", ".*")
+            .Replace("\\*", "[^/]*") + "$";
+        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
     }
 
     private static bool IsExternalPath(string path)
