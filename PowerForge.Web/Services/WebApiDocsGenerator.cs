@@ -2814,13 +2814,13 @@ public static class WebApiDocsGenerator
           sb.AppendLine("        </div>");
           sb.AppendLine("      </div>");
 
-        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, groupOverloads: true, sectionId: "methods");
-        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, sectionId: "properties");
-        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, sectionId: type.Kind == "Enum" ? "values" : "fields");
-        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, sectionId: "events");
+        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, groupOverloads: true, sectionId: "methods");
+        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, sectionId: "properties");
+        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, sectionId: type.Kind == "Enum" ? "values" : "fields");
+        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, sectionId: "events");
         if (type.ExtensionMethods.Count > 0)
-            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
@@ -2833,6 +2833,7 @@ public static class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage,
         bool treatAsInherited = true,
         bool groupOverloads = false,
         string? sectionId = null)
@@ -2844,9 +2845,9 @@ public static class WebApiDocsGenerator
         var directId = direct.Count > 0 ? sectionId : null;
         var inheritedId = direct.Count == 0 ? sectionId : null;
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false, groupOverloads, directId);
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, codeLanguage, false, groupOverloads, directId);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true, groupOverloads, inheritedId);
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, codeLanguage, true, groupOverloads, inheritedId);
     }
 
     private static void AppendMemberCards(
@@ -2856,6 +2857,7 @@ public static class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage,
         bool inheritedSection,
         bool groupOverloads,
         string? sectionId)
@@ -2884,7 +2886,7 @@ public static class WebApiDocsGenerator
             {
                 if (group.Count() == 1)
                 {
-                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, label);
+                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, codeLanguage, label);
                     continue;
                 }
                 sb.AppendLine("          <div class=\"member-group\">");
@@ -2895,7 +2897,7 @@ public static class WebApiDocsGenerator
                 sb.AppendLine("            <div class=\"member-group-body\">");
                 foreach (var member in group)
                 {
-                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, label);
+                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, label);
                 }
                 sb.AppendLine("            </div>");
                 sb.AppendLine("          </div>");
@@ -2905,7 +2907,7 @@ public static class WebApiDocsGenerator
         {
             foreach (var member in members)
             {
-                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, label);
+                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, label);
             }
         }
         sb.AppendLine("        </div>");
@@ -2918,6 +2920,7 @@ public static class WebApiDocsGenerator
         ApiMemberModel member,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage,
         string sectionLabel)
     {
         var memberId = BuildMemberId(memberKind, member);
