@@ -235,7 +235,8 @@ try
                 if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CssPattern))
                     optimizerOptions.CssLinkPattern = publishSpec.Optimize.CssPattern;
 
-                optimizeUpdated = WebAssetOptimizer.Optimize(optimizerOptions);
+                var optimizeResult = WebAssetOptimizer.OptimizeDetailed(optimizerOptions);
+                optimizeUpdated = optimizeResult.UpdatedCount;
             }
 
             var publishSummary = new WebPublishResult
@@ -343,6 +344,7 @@ try
             var exclude = ReadOptionList(subArgs, "--exclude");
             var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
             var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
+            var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
             var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
             var navSelector = TryGetOptionValue(subArgs, "--nav-selector") ?? "nav";
             var navRequired = !HasOption(subArgs, "--nav-optional");
@@ -383,6 +385,7 @@ try
                 NavSelector = navSelector,
                 NavRequired = navRequired,
                 NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
+                NavRequiredLinks = navRequiredLinks.ToArray(),
                 CheckLinks = !HasOption(subArgs, "--no-links"),
                 CheckAssets = !HasOption(subArgs, "--no-assets"),
                 CheckNavConsistency = !HasOption(subArgs, "--no-nav"),
@@ -833,7 +836,7 @@ try
                     policy.CacheHeaders.ImmutableCacheControl = headersAssets;
             }
 
-            var updated = WebAssetOptimizer.Optimize(new WebAssetOptimizerOptions
+            var optimizeResult = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
             {
                 SiteRoot = siteRoot,
                 CriticalCssPath = criticalCss,
@@ -856,12 +859,24 @@ try
                     Command = "web.optimize",
                     Success = true,
                     ExitCode = 0,
-                    Result = WebCliJson.SerializeToElement(new WebOptimizeResult { UpdatedCount = updated }, WebCliJson.Context.WebOptimizeResult)
+                    Result = WebCliJson.SerializeToElement(optimizeResult, WebCliJson.Context.WebOptimizeResult)
                 });
                 return 0;
             }
 
-            logger.Success($"Optimized HTML files: {updated}");
+            logger.Success($"Optimize updated files: {optimizeResult.UpdatedCount}");
+            logger.Info($"HTML files: {optimizeResult.HtmlFileCount}");
+            logger.Info($"Critical CSS inlined: {optimizeResult.CriticalCssInlinedCount}");
+            logger.Info($"Minified HTML: {optimizeResult.HtmlMinifiedCount}");
+            logger.Info($"Minified CSS: {optimizeResult.CssMinifiedCount}");
+            logger.Info($"Minified JS: {optimizeResult.JsMinifiedCount}");
+            if (optimizeResult.HashedAssetCount > 0)
+            {
+                logger.Info($"Hashed assets: {optimizeResult.HashedAssetCount}");
+                logger.Info($"Hashed reference rewrites: HTML {optimizeResult.HtmlHashRewriteCount}, CSS {optimizeResult.CssHashRewriteCount}");
+            }
+            if (optimizeResult.CacheHeadersWritten)
+                logger.Info($"Cache headers: {optimizeResult.CacheHeadersPath}");
             return 0;
         }
         case "pipeline":
@@ -950,6 +965,7 @@ try
             var outPath = TryGetOptionValue(subArgs, "--out") ??
                           TryGetOptionValue(subArgs, "--out-path") ??
                           TryGetOptionValue(subArgs, "--output-path");
+            var cleanOutput = HasOption(subArgs, "--clean") || HasOption(subArgs, "--clean-out");
             var configuration = TryGetOptionValue(subArgs, "--configuration");
             var framework = TryGetOptionValue(subArgs, "--framework");
             var runtime = TryGetOptionValue(subArgs, "--runtime");
@@ -965,6 +981,8 @@ try
                 return Fail("Missing required --project.", outputJson, logger, "web.dotnet-publish");
             if (string.IsNullOrWhiteSpace(outPath))
                 return Fail("Missing required --out.", outputJson, logger, "web.dotnet-publish");
+            if (cleanOutput)
+                WebCliFileSystem.CleanOutputDirectory(outPath);
 
             var result = WebDotNetRunner.Publish(new WebDotNetPublishOptions
             {
@@ -1227,6 +1245,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
     Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
     Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
+    Console.WriteLine("                     [--nav-required-link <path[,path]>]");
     Console.WriteLine("                     [--nav-optional]");
     Console.WriteLine("                     [--no-default-exclude]");
     Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
@@ -1249,6 +1268,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
     Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--define-constants <list>]");
+    Console.WriteLine("                     [--clean]");
     Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
     Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
     Console.WriteLine("  powerforge-web pipeline --config <pipeline.json>");
@@ -1815,7 +1835,7 @@ internal static class WebPipelineRunner
                                 policy.CacheHeaders.ImmutablePaths = cacheHeadersPaths;
                         }
 
-                        var updated = WebAssetOptimizer.Optimize(new WebAssetOptimizerOptions
+                        var optimize = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
                         {
                             SiteRoot = siteRoot,
                             CriticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCss") ?? GetString(step, "critical-css")),
@@ -1830,7 +1850,7 @@ internal static class WebPipelineRunner
                             AssetPolicy = policy
                         });
                         stepResult.Success = true;
-                        stepResult.Message = $"Optimized {updated} files";
+                        stepResult.Message = BuildOptimizeSummary(optimize);
                         break;
                     }
                     case "audit":
@@ -1844,6 +1864,8 @@ internal static class WebPipelineRunner
                         var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
                         var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
                                                 GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
+                        var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
+                                               GetString(step, "navRequiredLink") ?? GetString(step, "nav-required-link");
                         var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
                         var navRequired = GetBool(step, "navRequired");
                         var navOptional = GetBool(step, "navOptional");
@@ -1889,6 +1911,7 @@ internal static class WebPipelineRunner
                             NavSelector = navSelector,
                             NavRequired = navRequiredValue,
                             NavIgnorePrefixes = navIgnorePrefixList,
+                            NavRequiredLinks = CliPatternHelper.SplitPatterns(navRequiredLinks),
                             CheckLinks = checkLinks,
                             CheckAssets = checkAssets,
                             CheckNavConsistency = checkNav,
@@ -1916,7 +1939,7 @@ internal static class WebPipelineRunner
 
                         stepResult.Success = audit.Success;
                         stepResult.Message = audit.Success
-                            ? "Audit ok"
+                            ? $"Audit ok pages {audit.PageCount}, links {audit.LinkCount} (broken {audit.BrokenLinkCount}), assets {audit.AssetCount} (missing {audit.MissingAssetCount}), nav mismatches {audit.NavMismatchCount}, warnings {audit.Warnings.Length}"
                             : $"Audit failed ({audit.Errors.Length} errors)";
                         if (!audit.Success)
                             throw new InvalidOperationException(stepResult.Message);
@@ -1950,6 +1973,7 @@ internal static class WebPipelineRunner
                     {
                         var project = ResolvePath(baseDir, GetString(step, "project"));
                         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                        var cleanOutput = GetBool(step, "clean") ?? false;
                         var configuration = GetString(step, "configuration");
                         var framework = GetString(step, "framework");
                         var runtime = GetString(step, "runtime");
@@ -1958,10 +1982,13 @@ internal static class WebPipelineRunner
                         var noRestore = GetBool(step, "noRestore") ?? false;
                         var baseHref = GetString(step, "baseHref");
                         var defineConstants = GetString(step, "defineConstants") ?? GetString(step, "define-constants");
-                        var blazorFixes = GetBool(step, "blazorFixes") ?? true;
+                        var noBlazorFixes = GetBool(step, "noBlazorFixes") ?? false;
+                        var blazorFixes = GetBool(step, "blazorFixes") ?? !noBlazorFixes;
 
                         if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(outPath))
                             throw new InvalidOperationException("dotnet-publish requires project and out.");
+                        if (cleanOutput)
+                            WebCliFileSystem.CleanOutputDirectory(outPath);
 
                         var res = WebDotNetRunner.Publish(new WebDotNetPublishOptions
                         {
@@ -2053,6 +2080,25 @@ internal static class WebPipelineRunner
         if (elapsed.TotalMinutes < 1)
             return $"{elapsed.TotalSeconds:0.0} s";
         return $"{elapsed.TotalMinutes:0.0} min";
+    }
+
+    private static string BuildOptimizeSummary(WebOptimizeResult result)
+    {
+        var parts = new List<string>
+        {
+            $"updated {result.UpdatedCount}",
+            $"critical-css {result.CriticalCssInlinedCount}",
+            $"html {result.HtmlMinifiedCount}",
+            $"css {result.CssMinifiedCount}",
+            $"js {result.JsMinifiedCount}"
+        };
+
+        if (result.HashedAssetCount > 0)
+            parts.Add($"hashed {result.HashedAssetCount}");
+        if (result.CacheHeadersWritten)
+            parts.Add("headers");
+
+        return $"Optimize {string.Join(", ", parts)}";
     }
 
     private static string? GetString(JsonElement element, string name)

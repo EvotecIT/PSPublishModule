@@ -2041,12 +2041,16 @@ public static class WebSiteBuilder
 
         var targetDir = ResolveOutputDirectory(outputRoot, item.OutputPath);
         Directory.CreateDirectory(targetDir);
+        var isNotFoundRoute = string.Equals(NormalizePath(item.OutputPath), "404", StringComparison.OrdinalIgnoreCase);
 
         var effectiveData = ResolveDataForProject(data, item.ProjectSlug);
         var formats = ResolveOutputFormats(spec, item);
         foreach (var format in formats)
         {
-            var outputFile = Path.Combine(targetDir, ResolveOutputFileName(format));
+            var outputFileName = ResolveOutputFileName(format);
+            var outputFile = isNotFoundRoute && string.Equals(outputFileName, "index.html", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(outputRoot, "404.html")
+                : Path.Combine(targetDir, outputFileName);
             var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format);
             File.WriteAllText(outputFile, content);
         }

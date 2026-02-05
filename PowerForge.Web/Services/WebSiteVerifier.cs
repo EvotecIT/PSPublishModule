@@ -439,6 +439,19 @@ public static class WebSiteVerifier
         {
             warnings.Add("Navigation.AutoDefaults is disabled and no menus/auto navigation are defined.");
         }
+
+        if (hasMenus)
+        {
+            var menus = nav.Menus ?? Array.Empty<MenuSpec>();
+            var mainMenu = menus.FirstOrDefault(menu => string.Equals(menu.Name, "main", StringComparison.OrdinalIgnoreCase));
+            if (mainMenu?.Items is { Length: > 0 })
+            {
+                var hasHome = mainMenu.Items.Any(item =>
+                    string.Equals(item.Url, "/", StringComparison.OrdinalIgnoreCase));
+                if (!hasHome)
+                    warnings.Add("Navigation main menu does not contain '/'. Add a Home link to keep global navigation consistent.");
+            }
+        }
     }
 
     private static void ValidateSiteNavExport(SiteSpec spec, WebSitePlan plan, List<string> warnings)

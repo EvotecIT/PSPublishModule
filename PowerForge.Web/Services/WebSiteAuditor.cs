@@ -39,6 +39,8 @@ public sealed class WebAuditOptions
     public bool NavRequired { get; set; } = true;
     /// <summary>Skip nav checks on pages that match a prefix list (path-based).</summary>
     public string[] NavIgnorePrefixes { get; set; } = Array.Empty<string>();
+    /// <summary>Optional list of links that must be present in the nav (for example "/").</summary>
+    public string[] NavRequiredLinks { get; set; } = Array.Empty<string>();
     /// <summary>When true, run rendered (Playwright) checks.</summary>
     public bool CheckRendered { get; set; }
     /// <summary>Maximum number of pages to render (0 = all).</summary>
@@ -124,6 +126,12 @@ public static class WebSiteAuditor
         var renderedConsoleErrorCount = 0;
         var renderedConsoleWarningCount = 0;
         var renderedFailedRequestCount = 0;
+        var requiredNavLinks = options.NavRequiredLinks
+            .Where(link => !string.IsNullOrWhiteSpace(link))
+            .Select(NormalizeNavHref)
+            .Where(link => !string.IsNullOrWhiteSpace(link))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         foreach (var file in htmlFiles)
         {
@@ -205,6 +213,22 @@ public static class WebSiteAuditor
                     {
                         navMismatchCount++;
                         warnings.Add($"{relativePath}: nav differs from baseline.");
+                    }
+
+                    if (requiredNavLinks.Length > 0)
+                    {
+                        var navLinks = navElement.QuerySelectorAll("a[href]")
+                            .Select(a => NormalizeNavHref(a.GetAttribute("href")))
+                            .Where(link => !string.IsNullOrWhiteSpace(link))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                        var missing = requiredNavLinks
+                            .Where(required => !navLinks.Contains(required))
+                            .ToArray();
+
+                        if (missing.Length > 0)
+                            warnings.Add($"{relativePath}: nav missing required links: {string.Join(", ", missing)}.");
                     }
                 }
             }
@@ -581,6 +605,24 @@ public static class WebSiteAuditor
             tokens.Add($"{href.Trim()}|{text.Trim()}");
         }
         return string.Join("||", tokens);
+    }
+
+    private static string NormalizeNavHref(string? href)
+    {
+        if (string.IsNullOrWhiteSpace(href)) return string.Empty;
+        var normalized = StripQueryAndFragment(href).Trim();
+        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
+
+        if (IsExternalLink(normalized))
+            return normalized;
+
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized;
+
+        if (normalized.Length > 1 && !normalized.EndsWith("/", StringComparison.Ordinal) && !Path.HasExtension(normalized))
+            normalized += "/";
+
+        return normalized;
     }
 
     private static IEnumerable<string> GetAssetHrefs(AngleSharp.Dom.IDocument doc)

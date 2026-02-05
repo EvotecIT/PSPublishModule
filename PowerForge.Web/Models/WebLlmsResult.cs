@@ -89,8 +89,28 @@ public sealed class WebPipelineStepResult
 /// <summary>Result payload for optimization pass.</summary>
 public sealed class WebOptimizeResult
 {
-    /// <summary>Number of files updated.</summary>
+    /// <summary>Total number of unique files updated.</summary>
     public int UpdatedCount { get; set; }
+    /// <summary>Total HTML files discovered under site root.</summary>
+    public int HtmlFileCount { get; set; }
+    /// <summary>Number of HTML files updated by critical CSS inlining.</summary>
+    public int CriticalCssInlinedCount { get; set; }
+    /// <summary>Number of HTML files minified.</summary>
+    public int HtmlMinifiedCount { get; set; }
+    /// <summary>Number of CSS files minified.</summary>
+    public int CssMinifiedCount { get; set; }
+    /// <summary>Number of JavaScript files minified.</summary>
+    public int JsMinifiedCount { get; set; }
+    /// <summary>Number of assets renamed during hashing.</summary>
+    public int HashedAssetCount { get; set; }
+    /// <summary>Number of HTML files with rewritten references after hashing.</summary>
+    public int HtmlHashRewriteCount { get; set; }
+    /// <summary>Number of CSS files with rewritten references after hashing.</summary>
+    public int CssHashRewriteCount { get; set; }
+    /// <summary>True when cache headers file was written.</summary>
+    public bool CacheHeadersWritten { get; set; }
+    /// <summary>Optional path to generated cache headers file.</summary>
+    public string? CacheHeadersPath { get; set; }
 }
 
 /// <summary>Result payload for dotnet build.</summary>
