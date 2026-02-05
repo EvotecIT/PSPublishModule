@@ -2060,7 +2060,7 @@ public static class WebApiDocsGenerator
                     var local = el.Name.LocalName;
                     if (local.Equals("code", StringComparison.OrdinalIgnoreCase))
                     {
-                        var code = el.Value.Trim('\r', '\n');
+                        var code = Dedent(el.Value.Trim('\r', '\n'));
                         if (!string.IsNullOrWhiteSpace(code))
                             results.Add(new ApiExampleModel { Kind = "code", Text = code });
                     }
@@ -2094,6 +2094,32 @@ public static class WebApiDocsGenerator
                 results.Add(text);
         }
         return results;
+    }
+
+    private static string Dedent(string code)
+    {
+        var lines = code.Split('\n');
+        var minIndent = int.MaxValue;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var indent = 0;
+            while (indent < line.Length && line[indent] == ' ') indent++;
+            if (indent < minIndent) minIndent = indent;
+        }
+        if (minIndent == 0 || minIndent == int.MaxValue) return code;
+        var sb = new StringBuilder();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) sb.Append('\n');
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+                sb.Append("");
+            else
+                sb.Append(line.Substring(Math.Min(minIndent, line.Length)));
+        }
+        return sb.ToString();
     }
 
     private static string Normalize(string value)
@@ -2235,10 +2261,11 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             var memberHtml = new StringBuilder();
-            AppendMembers(memberHtml, "Methods", type.Methods);
-            AppendMembers(memberHtml, "Properties", type.Properties);
-            AppendMembers(memberHtml, "Fields", type.Fields);
-            AppendMembers(memberHtml, "Events", type.Events);
+            var codeLanguage = GetDefaultCodeLanguage(options);
+            AppendMembers(memberHtml, "Methods", type.Methods, codeLanguage);
+            AppendMembers(memberHtml, "Properties", type.Properties, codeLanguage);
+            AppendMembers(memberHtml, "Fields", type.Fields, codeLanguage);
+            AppendMembers(memberHtml, "Events", type.Events, codeLanguage);
 
             var summaryHtml = string.IsNullOrWhiteSpace(type.Summary)
                 ? string.Empty
@@ -2310,7 +2337,7 @@ public static class WebApiDocsGenerator
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug, docsHomeUrl);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, GetDefaultCodeLanguage(options));
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
           var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
@@ -2338,7 +2365,7 @@ public static class WebApiDocsGenerator
         GenerateDocsSitemap(sitemapPath, baseUrl, types);
     }
 
-    private static void AppendMembers(StringBuilder sb, string label, List<ApiMemberModel> members)
+    private static void AppendMembers(StringBuilder sb, string label, List<ApiMemberModel> members, string codeLanguage)
     {
         if (members.Count == 0) return;
         sb.AppendLine($"    <section class=\"pf-api-section\">");
@@ -2602,7 +2629,8 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         IReadOnlyDictionary<string, ApiTypeModel> typeIndex,
-        IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap)
+        IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap,
+        string codeLanguage)
     {
         var sb = new StringBuilder();
         var inheritanceChain = BuildInheritanceChain(type, typeIndex);
@@ -2767,7 +2795,7 @@ public static class WebApiDocsGenerator
         {
             sb.AppendLine("      <section class=\"type-examples\" id=\"examples\">");
             sb.AppendLine("        <h2>Examples</h2>");
-            AppendExamples(sb, type.Examples, baseUrl, slugMap);
+            AppendExamples(sb, type.Examples, baseUrl, slugMap, codeLanguage);
             sb.AppendLine("      </section>");
         }
 
@@ -2812,13 +2840,13 @@ public static class WebApiDocsGenerator
           sb.AppendLine("        </div>");
           sb.AppendLine("      </div>");
 
-        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, groupOverloads: true, sectionId: "methods");
-        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, sectionId: "properties");
-        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, sectionId: type.Kind == "Enum" ? "values" : "fields");
-        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, sectionId: "events");
+        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, groupOverloads: true, sectionId: "methods");
+        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, sectionId: "properties");
+        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, sectionId: type.Kind == "Enum" ? "values" : "fields");
+        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, sectionId: "events");
         if (type.ExtensionMethods.Count > 0)
-            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
@@ -2831,6 +2859,7 @@ public static class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage,
         bool treatAsInherited = true,
         bool groupOverloads = false,
         string? sectionId = null)
@@ -2842,9 +2871,9 @@ public static class WebApiDocsGenerator
         var directId = direct.Count > 0 ? sectionId : null;
         var inheritedId = direct.Count == 0 ? sectionId : null;
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, false, groupOverloads, directId);
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, codeLanguage, false, groupOverloads, directId);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, true, groupOverloads, inheritedId);
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, codeLanguage, true, groupOverloads, inheritedId);
     }
 
     private static void AppendMemberCards(
@@ -2854,6 +2883,7 @@ public static class WebApiDocsGenerator
         List<ApiMemberModel> members,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage,
         bool inheritedSection,
         bool groupOverloads,
         string? sectionId)
@@ -2882,7 +2912,7 @@ public static class WebApiDocsGenerator
             {
                 if (group.Count() == 1)
                 {
-                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, label);
+                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, codeLanguage, label);
                     continue;
                 }
                 sb.AppendLine("          <div class=\"member-group\">");
@@ -2893,7 +2923,7 @@ public static class WebApiDocsGenerator
                 sb.AppendLine("            <div class=\"member-group-body\">");
                 foreach (var member in group)
                 {
-                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, label);
+                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, label);
                 }
                 sb.AppendLine("            </div>");
                 sb.AppendLine("          </div>");
@@ -2903,7 +2933,7 @@ public static class WebApiDocsGenerator
         {
             foreach (var member in members)
             {
-                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, label);
+                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, label);
             }
         }
         sb.AppendLine("        </div>");
@@ -2916,6 +2946,7 @@ public static class WebApiDocsGenerator
         ApiMemberModel member,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage,
         string sectionLabel)
     {
         var memberId = BuildMemberId(memberKind, member);
@@ -3011,7 +3042,7 @@ public static class WebApiDocsGenerator
         if (member.Examples.Count > 0)
         {
             sb.AppendLine("          <h4>Examples</h4>");
-            AppendExamples(sb, member.Examples, baseUrl, slugMap);
+            AppendExamples(sb, member.Examples, baseUrl, slugMap, codeLanguage);
         }
         if (member.SeeAlso.Count > 0)
         {
@@ -3030,14 +3061,16 @@ public static class WebApiDocsGenerator
         StringBuilder sb,
         List<ApiExampleModel> examples,
         string baseUrl,
-        IReadOnlyDictionary<string, string> slugMap)
+        IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage)
     {
         foreach (var example in examples)
         {
             if (string.IsNullOrWhiteSpace(example.Text)) continue;
             if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
             {
-                sb.AppendLine("        <pre><code>");
+                var languageClass = string.IsNullOrWhiteSpace(codeLanguage) ? string.Empty : $" class=\"language-{codeLanguage}\"";
+                sb.AppendLine($"        <pre{languageClass}><code{languageClass}>");
                 sb.AppendLine(System.Web.HttpUtility.HtmlEncode(example.Text));
                 sb.AppendLine("        </code></pre>");
             }
@@ -3046,6 +3079,16 @@ public static class WebApiDocsGenerator
                 sb.AppendLine($"        <p>{RenderLinkedText(example.Text, baseUrl, slugMap)}</p>");
             }
         }
+    }
+
+    private static string GetDefaultCodeLanguage(WebApiDocsOptions options)
+    {
+        return options.Type switch
+        {
+            ApiDocsType.PowerShell => "powershell",
+            ApiDocsType.CSharp => "csharp",
+            _ => string.Empty
+        };
     }
 
     private static string BuildSignature(ApiMemberModel member, string section)
