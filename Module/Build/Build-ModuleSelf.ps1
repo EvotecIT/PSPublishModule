@@ -18,8 +18,10 @@ param(
 
 $repoRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..', '..')))).Path
 $cliProject = Join-Path -Path $repoRoot -ChildPath 'PowerForge.Cli\PowerForge.Cli.csproj'
+$moduleProject = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule\PSPublishModule.csproj'
 
 if (-not (Test-Path -LiteralPath $cliProject)) { throw "PowerForge.Cli project not found: $cliProject" }
+if (-not (Test-Path -LiteralPath $moduleProject)) { throw "PSPublishModule project not found: $moduleProject" }
 
 if ($Framework -eq 'auto') {
     $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
@@ -39,6 +41,19 @@ if (-not $NoBuild) {
         $buildOutput = & dotnet @buildArgs 2>&1
         if ($LASTEXITCODE -ne 0) { $buildOutput | Out-Host; exit $LASTEXITCODE }
         Write-Host "✅ Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
+    }
+
+    Write-Host "ℹ️ Building PSPublishModule ($Framework, $Configuration)" -ForegroundColor DarkGray
+    $moduleArgs = @('build', $moduleProject, '-c', $Configuration, '-f', $Framework, '--nologo')
+    if ($PSBoundParameters.ContainsKey('Verbose')) {
+        $moduleArgs += @('--verbosity', 'minimal')
+        & dotnet @moduleArgs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    } else {
+        $moduleArgs += @('--verbosity', 'quiet')
+        $moduleOutput = & dotnet @moduleArgs 2>&1
+        if ($LASTEXITCODE -ne 0) { $moduleOutput | Out-Host; exit $LASTEXITCODE }
+        Write-Host "✅ Built PSPublishModule ($Framework, $Configuration)" -ForegroundColor Green
     }
 }
 

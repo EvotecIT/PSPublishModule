@@ -1088,8 +1088,8 @@ public static class WebSiteBuilder
                 var htmlContent = renderMarkdown
                     ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
                     : processedBody;
-                htmlContent = NormalizeCodeBlockClasses(htmlContent, ResolvePrismDefaultLanguage(meta, spec));
                 var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                htmlContent = NormalizeCodeBlockClasses(htmlContent, ResolvePrismDefaultLanguage(meta, spec));
                 EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
                 var toc = BuildTableOfContents(htmlContent);
                 if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&

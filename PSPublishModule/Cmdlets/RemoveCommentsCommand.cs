@@ -132,7 +132,7 @@ public sealed class RemoveCommentsCommand : PSCmdlet
 
         // Tokenize and remove comment tokens using the same state machine as the legacy PowerShell implementation.
         var ast = Parser.ParseInput(text, out Token[] tokens, out ParseError[] _);
-        _ = ast; // kept for parity with legacy behavior; ParseInput always returns an AST.
+        var scriptAst = ast as ScriptBlockAst;
 
         var toRemove = new List<Token>();
         bool doNotRemove = false;
@@ -140,6 +140,7 @@ public sealed class RemoveCommentsCommand : PSCmdlet
         int countParams = 0;
         bool paramFound = false;
         bool signatureBlock = false;
+        var scriptParamOffset = scriptAst?.ParamBlock?.Extent.StartOffset ?? -1;
 
         // Group tokens by StartLineNumber to mirror the legacy approach (though ordering is unchanged).
         foreach (var lineGroup in tokens.GroupBy(t => t.Extent.StartLineNumber))
@@ -197,6 +198,9 @@ public sealed class RemoveCommentsCommand : PSCmdlet
                     continue;
 
                 if (token.Kind != TokenKind.Comment)
+                    continue;
+
+                if (!removeCommentsBeforeParamBlock && scriptParamOffset >= 0 && token.Extent.EndOffset <= scriptParamOffset)
                     continue;
 
                 if (doNotRemoveSignatureBlock)
