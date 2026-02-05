@@ -134,3 +134,8 @@ body.pf-api-docs a:hover{color:var(--pf-accent,#a78bfa)}
   .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30}
   .sidebar-overlay.active{display:block}
 }
+.api-sidebar::-webkit-scrollbar,.sidebar-nav::-webkit-scrollbar{width:6px}
+.api-sidebar::-webkit-scrollbar-track,.sidebar-nav::-webkit-scrollbar-track{background:transparent}
+.api-sidebar::-webkit-scrollbar-thumb,.sidebar-nav::-webkit-scrollbar-thumb{background:rgba(148,163,184,.25);border-radius:3px}
+.api-sidebar::-webkit-scrollbar-thumb:hover,.sidebar-nav::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.4)}
+.api-sidebar,.sidebar-nav{scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.25) transparent}

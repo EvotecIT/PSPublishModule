@@ -2060,7 +2060,7 @@ public static class WebApiDocsGenerator
                     var local = el.Name.LocalName;
                     if (local.Equals("code", StringComparison.OrdinalIgnoreCase))
                     {
-                        var code = el.Value.Trim('\r', '\n');
+                        var code = Dedent(el.Value.Trim('\r', '\n'));
                         if (!string.IsNullOrWhiteSpace(code))
                             results.Add(new ApiExampleModel { Kind = "code", Text = code });
                     }
@@ -2094,6 +2094,32 @@ public static class WebApiDocsGenerator
                 results.Add(text);
         }
         return results;
+    }
+
+    private static string Dedent(string code)
+    {
+        var lines = code.Split('\n');
+        var minIndent = int.MaxValue;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var indent = 0;
+            while (indent < line.Length && line[indent] == ' ') indent++;
+            if (indent < minIndent) minIndent = indent;
+        }
+        if (minIndent == 0 || minIndent == int.MaxValue) return code;
+        var sb = new StringBuilder();
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) sb.Append('\n');
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+                sb.Append("");
+            else
+                sb.Append(line.Substring(Math.Min(minIndent, line.Length)));
+        }
+        return sb.ToString();
     }
 
     private static string Normalize(string value)
