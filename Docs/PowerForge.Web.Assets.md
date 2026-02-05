@@ -71,6 +71,7 @@ Configuration lives in `site.json`:
   "Prism": {
     "Mode": "auto",
     "Source": "local",
+    "DefaultLanguage": "csharp",
     "ThemeLight": "intelligencex-light",
     "ThemeDark": "intelligencex-dark",
     "Local": {
@@ -90,6 +91,7 @@ prism: false
 prism_mode: always
 prism_source: cdn
 prism_cdn: https://cdn.jsdelivr.net/npm/prismjs@1.29.0
+prism_default_language: csharp
 ```
 
 ### Prism init behavior

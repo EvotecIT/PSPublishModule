@@ -13,6 +13,8 @@ public sealed class PrismSpec
     public string? ThemeDark { get; set; }
     /// <summary>CDN base URL (used when Source=cdn).</summary>
     public string? CdnBase { get; set; }
+    /// <summary>Default language for code blocks missing an explicit language (e.g., "csharp").</summary>
+    public string? DefaultLanguage { get; set; }
     /// <summary>Local asset paths (used when Source=local).</summary>
     public PrismLocalSpec? Local { get; set; }
 }

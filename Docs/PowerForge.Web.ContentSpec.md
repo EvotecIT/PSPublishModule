@@ -103,6 +103,7 @@ Supported fields:
   - `meta.prism_mode` (`auto`, `always`, `off`)
   - `meta.prism_source` (`local`, `cdn`, `hybrid`)
   - `meta.prism_cdn` (override Prism CDN base URL; default: `https://cdn.jsdelivr.net/npm/prismjs@1.29.0`)
+  - `meta.prism_default_language` (default language for code blocks without a language)
   - `meta.prism_css_light` / `meta.prism_css_dark` (local Prism theme paths)
   - `meta.prism_core` / `meta.prism_autoloader` (local Prism script paths)
   - `meta.prism_lang_path` (local Prism language components base path)

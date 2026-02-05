@@ -1088,7 +1088,7 @@ public static class WebSiteBuilder
                 var htmlContent = renderMarkdown
                     ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
                     : processedBody;
-                htmlContent = NormalizeCodeBlockClasses(htmlContent);
+                htmlContent = NormalizeCodeBlockClasses(htmlContent, ResolvePrismDefaultLanguage(meta, spec));
                 var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
                 var toc = BuildTableOfContents(htmlContent);
@@ -1657,7 +1657,7 @@ public static class WebSiteBuilder
                htmlContent.IndexOf("<pre><code", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private static string NormalizeCodeBlockClasses(string htmlContent)
+    private static string NormalizeCodeBlockClasses(string htmlContent, string defaultLanguageClass)
     {
         if (string.IsNullOrWhiteSpace(htmlContent)) return htmlContent;
 
@@ -1669,27 +1669,38 @@ public static class WebSiteBuilder
                 var codeAttrs = match.Groups["codeAttrs"].Value;
 
                 var updatedPre = EnsureClass(preAttrs, "code-block");
-                var updatedCode = EnsureLanguageClass(codeAttrs);
+                var updatedCode = EnsureLanguageClass(codeAttrs, defaultLanguageClass);
 
                 return $"<pre{updatedPre}><code{updatedCode}>";
             });
     }
 
-    private static string EnsureLanguageClass(string attrs)
+    private static string EnsureLanguageClass(string attrs, string defaultLanguageClass)
     {
         if (string.IsNullOrWhiteSpace(attrs))
-            return " class=\"language-plain\"";
+            return $" class=\"{defaultLanguageClass}\"";
 
         var classMatch = ClassAttrRegex.Match(attrs);
         if (!classMatch.Success)
-            return attrs + " class=\"language-plain\"";
+            return attrs + $" class=\"{defaultLanguageClass}\"";
 
         var classes = classMatch.Groups["value"].Value;
         if (classes.IndexOf("language-", StringComparison.OrdinalIgnoreCase) >= 0)
             return attrs;
 
-        var replacement = classMatch.Value.Replace(classes, (classes + " language-plain").Trim());
+        var replacement = classMatch.Value.Replace(classes, (classes + " " + defaultLanguageClass).Trim());
         return attrs.Replace(classMatch.Value, replacement);
+    }
+
+    private static string ResolvePrismDefaultLanguage(Dictionary<string, object?>? meta, SiteSpec spec)
+    {
+        var metaLanguage = meta is null ? null : GetMetaStringOrNull(meta, "prism_default_language");
+        var configured = metaLanguage ?? spec.Prism?.DefaultLanguage;
+        if (string.IsNullOrWhiteSpace(configured))
+            return "language-plain";
+        return configured.StartsWith("language-", StringComparison.OrdinalIgnoreCase)
+            ? configured
+            : $"language-{configured}";
     }
 
     private static string EnsureClass(string attrs, string className)
