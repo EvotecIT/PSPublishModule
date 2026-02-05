@@ -27,6 +27,7 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebOptimizeResult))]
 [JsonSerializable(typeof(WebAuditResult))]
 [JsonSerializable(typeof(WebAuditSummary))]
+[JsonSerializable(typeof(WebAuditIssue))]
 [JsonSerializable(typeof(WebDotNetBuildResult))]
 [JsonSerializable(typeof(WebDotNetPublishResult))]
 [JsonSerializable(typeof(WebStaticOverlayResult))]

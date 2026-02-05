@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlTinkerX;
 
@@ -75,6 +77,30 @@ public sealed class WebAuditOptions
     public string? SummaryPath { get; set; }
     /// <summary>Maximum number of issues to include in the summary.</summary>
     public int SummaryMaxIssues { get; set; } = 10;
+    /// <summary>Optional path to canonical nav HTML used as the baseline signature.</summary>
+    public string? NavCanonicalPath { get; set; }
+    /// <summary>CSS selector used to identify nav in the canonical nav file.</summary>
+    public string? NavCanonicalSelector { get; set; }
+    /// <summary>When true, fail if the canonical nav file is not found or invalid.</summary>
+    public bool NavCanonicalRequired { get; set; }
+    /// <summary>When true, validate UTF-8 decoding strictly for HTML files.</summary>
+    public bool CheckUtf8 { get; set; } = true;
+    /// <summary>When true, check for UTF-8 meta charset declaration.</summary>
+    public bool CheckMetaCharset { get; set; } = true;
+    /// <summary>When true, warn when replacement characters are present in output.</summary>
+    public bool CheckUnicodeReplacementChars { get; set; } = true;
+    /// <summary>Optional baseline file path for issue key suppression/diffing.</summary>
+    public string? BaselinePath { get; set; }
+    /// <summary>When true, warnings make audit fail.</summary>
+    public bool FailOnWarnings { get; set; }
+    /// <summary>When true, newly introduced issues (not present in baseline) make audit fail.</summary>
+    public bool FailOnNewIssues { get; set; }
+    /// <summary>Maximum allowed errors (-1 disables threshold).</summary>
+    public int MaxErrors { get; set; } = -1;
+    /// <summary>Maximum allowed warnings (-1 disables threshold).</summary>
+    public int MaxWarnings { get; set; } = -1;
+    /// <summary>Fail audit when any issue in selected categories is found.</summary>
+    public string[] FailOnCategories { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Audits generated HTML output using static checks.</summary>
@@ -108,13 +134,52 @@ public static class WebSiteAuditor
 
         var errors = new List<string>();
         var warnings = new List<string>();
-        var htmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes).ToList();
-        if (htmlFiles.Count == 0)
+        var issues = new List<WebAuditIssue>();
+        var htmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var navIgnorePrefixes = options.NavIgnorePrefixes
+            .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
+            .Select(prefix => prefix.Trim().TrimStart('/'))
+            .ToArray();
+        var failCategories = options.FailOnCategories
+            .Where(category => !string.IsNullOrWhiteSpace(category))
+            .Select(category => category.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        void AddIssue(string severity, string category, string? path, string message, string? keyHint = null)
         {
-            warnings.Add("No HTML files found to audit.");
+            var normalizedSeverity = string.IsNullOrWhiteSpace(severity)
+                ? "warning"
+                : severity.Trim().ToLowerInvariant();
+            var normalizedCategory = string.IsNullOrWhiteSpace(category)
+                ? "general"
+                : category.Trim().ToLowerInvariant();
+            var issuePath = string.IsNullOrWhiteSpace(path) ? null : path.Replace('\\', '/');
+            var issueText = string.IsNullOrWhiteSpace(issuePath)
+                ? message
+                : $"{issuePath}: {message}";
+            var issueKey = BuildIssueKey(normalizedSeverity, normalizedCategory, issuePath, keyHint ?? message);
+            issues.Add(new WebAuditIssue
+            {
+                Severity = normalizedSeverity,
+                Category = normalizedCategory,
+                Path = issuePath,
+                Message = message,
+                Key = issueKey
+            });
+
+            if (normalizedSeverity == "error")
+                errors.Add(issueText);
+            else
+                warnings.Add(issueText);
         }
 
+        if (htmlFiles.Count == 0)
+            AddIssue("warning", "general", null, "No HTML files found to audit.", "no-html");
+
         var baselineNavSignature = (string?)null;
+        var baselineNavSource = (string?)null;
         var pageCount = 0;
         var linkCount = 0;
         var brokenLinkCount = 0;
@@ -132,15 +197,85 @@ public static class WebSiteAuditor
             .Where(link => !string.IsNullOrWhiteSpace(link))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var canonicalNavLinks = Array.Empty<string>();
+
+        if (options.CheckNavConsistency && !string.IsNullOrWhiteSpace(options.NavCanonicalPath))
+        {
+            var canonicalPath = ResolveSummaryPath(siteRoot, options.NavCanonicalPath);
+            if (!File.Exists(canonicalPath))
+            {
+                var missingMessage = $"Canonical nav file not found: {ToRelative(siteRoot, canonicalPath)}.";
+                if (options.NavCanonicalRequired)
+                    AddIssue("error", "nav", null, missingMessage, "nav-canonical-missing");
+                else
+                    AddIssue("warning", "nav", null, missingMessage, "nav-canonical-missing");
+            }
+            else
+            {
+                try
+                {
+                    var canonicalHtml = File.ReadAllText(canonicalPath);
+                    var canonicalDoc = HtmlParser.ParseWithAngleSharp(canonicalHtml);
+                    var selector = string.IsNullOrWhiteSpace(options.NavCanonicalSelector)
+                        ? options.NavSelector
+                        : options.NavCanonicalSelector!;
+                    var canonicalNav = canonicalDoc.QuerySelector(selector);
+                    if (canonicalNav is null)
+                    {
+                        var selectorMessage = $"Canonical nav selector '{selector}' was not found in {ToRelative(siteRoot, canonicalPath)}.";
+                        if (options.NavCanonicalRequired)
+                            AddIssue("error", "nav", null, selectorMessage, "nav-canonical-selector");
+                        else
+                            AddIssue("warning", "nav", null, selectorMessage, "nav-canonical-selector");
+                    }
+                    else
+                    {
+                        baselineNavSignature = BuildNavSignature(canonicalNav);
+                        baselineNavSource = ToRelative(siteRoot, canonicalPath);
+                        canonicalNavLinks = canonicalNav.QuerySelectorAll("a[href]")
+                            .Select(anchor => NormalizeNavHref(anchor.GetAttribute("href")))
+                            .Where(link => !string.IsNullOrWhiteSpace(link))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToArray();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    var parseMessage = $"Canonical nav parse failed ({ex.Message}).";
+                    if (options.NavCanonicalRequired)
+                        AddIssue("error", "nav", null, parseMessage, "nav-canonical-parse");
+                    else
+                        AddIssue("warning", "nav", null, parseMessage, "nav-canonical-parse");
+                }
+            }
+        }
+
+        if (canonicalNavLinks.Length > 0)
+        {
+            requiredNavLinks = requiredNavLinks
+                .Concat(canonicalNavLinks)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        HashSet<string>? baselineIssueKeys = null;
+        string? baselinePath = null;
+        if (!string.IsNullOrWhiteSpace(options.BaselinePath))
+        {
+            baselinePath = ResolveSummaryPath(siteRoot, options.BaselinePath);
+            baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue);
+        }
 
         foreach (var file in htmlFiles)
         {
             pageCount++;
             var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
-            var html = File.ReadAllText(file);
+            var html = options.CheckUtf8
+                ? ReadFileAsUtf8(file, relativePath, AddIssue)
+                : File.ReadAllText(file);
             if (string.IsNullOrWhiteSpace(html))
             {
-                warnings.Add($"{relativePath}: empty HTML file.");
+                AddIssue("warning", "html", relativePath, "empty HTML file.", "empty-html");
                 continue;
             }
 
@@ -151,24 +286,30 @@ public static class WebSiteAuditor
             }
             catch (Exception ex)
             {
-                errors.Add($"{relativePath}: failed to parse HTML ({ex.Message}).");
+                AddIssue("error", "html", relativePath, $"failed to parse HTML ({ex.Message}).", "parse-html");
                 continue;
             }
+
+            if (options.CheckUtf8 && options.CheckUnicodeReplacementChars && html.IndexOf('\uFFFD') >= 0)
+                AddIssue("warning", "utf8", relativePath, "contains replacement characters (�).", "replacement-char");
+
+            if (options.CheckUtf8 && options.CheckMetaCharset && !HasUtf8Meta(doc))
+                AddIssue("warning", "utf8", relativePath, "missing UTF-8 meta charset declaration.", "meta-charset");
 
             if (options.CheckHtmlStructure)
             {
                 if (doc.DocumentElement is null || !string.Equals(doc.DocumentElement.TagName, "HTML", StringComparison.OrdinalIgnoreCase))
-                    warnings.Add($"{relativePath}: missing <html> root element.");
+                    AddIssue("warning", "structure", relativePath, "missing <html> root element.", "html-root");
                 if (doc.Head is null)
-                    warnings.Add($"{relativePath}: missing <head> section.");
+                    AddIssue("warning", "structure", relativePath, "missing <head> section.", "head");
                 if (doc.Body is null)
-                    warnings.Add($"{relativePath}: missing <body> section.");
+                    AddIssue("warning", "structure", relativePath, "missing <body> section.", "body");
             }
 
             if (options.CheckTitles)
             {
                 if (string.IsNullOrWhiteSpace(doc.Title))
-                    errors.Add($"{relativePath}: missing <title>.");
+                    AddIssue("error", "title", relativePath, "missing <title>.", "title");
             }
 
             if (options.CheckDuplicateIds)
@@ -185,22 +326,21 @@ public static class WebSiteAuditor
                 if (duplicateIds.Length > 0)
                 {
                     duplicateIdCount += duplicateIds.Length;
-                    warnings.Add($"{relativePath}: duplicate id(s) detected: {string.Join(", ", duplicateIds)}.");
+                    AddIssue("warning", "duplicate-id", relativePath, $"duplicate id(s) detected: {string.Join(", ", duplicateIds)}.", string.Join('|', duplicateIds));
                 }
             }
 
             var navIgnored = options.IgnoreNavFor.Length > 0 &&
                              MatchesAny(options.IgnoreNavFor, relativePath);
-            var prefixIgnored = options.NavIgnorePrefixes.Length > 0 &&
-                                options.NavIgnorePrefixes.Any(prefix =>
-                                    relativePath.StartsWith(prefix.TrimStart('/'), StringComparison.OrdinalIgnoreCase));
+            var prefixIgnored = navIgnorePrefixes.Length > 0 &&
+                                navIgnorePrefixes.Any(prefix => relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
             if (options.CheckNavConsistency && !navIgnored && !prefixIgnored)
             {
                 var navElement = doc.QuerySelector(options.NavSelector);
                 if (navElement is null)
                 {
                     if (options.NavRequired)
-                        warnings.Add($"{relativePath}: nav not found using selector '{options.NavSelector}'.");
+                        AddIssue("warning", "nav", relativePath, $"nav not found using selector '{options.NavSelector}'.", "nav-missing");
                 }
                 else
                 {
@@ -208,11 +348,13 @@ public static class WebSiteAuditor
                     if (baselineNavSignature is null)
                     {
                         baselineNavSignature = signature;
+                        baselineNavSource = relativePath;
                     }
                     else if (!string.Equals(baselineNavSignature, signature, StringComparison.Ordinal))
                     {
                         navMismatchCount++;
-                        warnings.Add($"{relativePath}: nav differs from baseline.");
+                        var sourceLabel = string.IsNullOrWhiteSpace(baselineNavSource) ? "baseline" : baselineNavSource;
+                        AddIssue("warning", "nav", relativePath, $"nav differs from baseline ({sourceLabel}).", "nav-mismatch");
                     }
 
                     if (requiredNavLinks.Length > 0)
@@ -228,7 +370,7 @@ public static class WebSiteAuditor
                             .ToArray();
 
                         if (missing.Length > 0)
-                            warnings.Add($"{relativePath}: nav missing required links: {string.Join(", ", missing)}.");
+                            AddIssue("warning", "nav", relativePath, $"nav missing required links: {string.Join(", ", missing)}.", string.Join('|', missing));
                     }
                 }
             }
@@ -252,7 +394,7 @@ public static class WebSiteAuditor
                         if (!File.Exists(resolvedPath))
                         {
                             brokenLinkCount++;
-                            errors.Add($"{relativePath}: broken link '{href}' -> {ToRelative(siteRoot, resolvedPath)}");
+                            AddIssue("error", "link", relativePath, $"broken link '{href}' -> {ToRelative(siteRoot, resolvedPath)}", href);
                         }
                     }
                 }
@@ -270,7 +412,7 @@ public static class WebSiteAuditor
                     if (!File.Exists(resolvedPath))
                     {
                         missingAssetCount++;
-                        errors.Add($"{relativePath}: missing asset '{href}' -> {ToRelative(siteRoot, resolvedPath)}");
+                        AddIssue("error", "asset", relativePath, $"missing asset '{href}' -> {ToRelative(siteRoot, resolvedPath)}", href);
                     }
                 }
 
@@ -287,7 +429,7 @@ public static class WebSiteAuditor
                         if (!File.Exists(resolvedPath))
                         {
                             missingAssetCount++;
-                            errors.Add($"{relativePath}: missing asset '{src}' -> {ToRelative(siteRoot, resolvedPath)}");
+                            AddIssue("error", "asset", relativePath, $"missing asset '{src}' -> {ToRelative(siteRoot, resolvedPath)}", src);
                         }
                     }
                 }
@@ -296,7 +438,10 @@ public static class WebSiteAuditor
 
         if (options.CheckRendered && htmlFiles.Count > 0)
         {
-            var engine = ResolveEngine(options.RenderedEngine, warnings);
+            var renderedWarnings = new List<string>();
+            var engine = ResolveEngine(options.RenderedEngine, renderedWarnings);
+            foreach (var warning in renderedWarnings)
+                AddIssue("warning", "rendered", null, warning, "rendered-engine");
             if (options.RenderedEnsureInstalled)
             {
                 try
@@ -313,7 +458,7 @@ public static class WebSiteAuditor
                     {
                         // ignore secondary failure, use original message for visibility
                     }
-                    warnings.Add($"Rendered audit install failed: {ex.Message}");
+                    AddIssue("warning", "rendered", null, $"Rendered audit install failed: {ex.Message}", "rendered-install");
                 }
             }
             var renderedFiles = FilterRenderedFiles(siteRoot, htmlFiles, options.RenderedInclude, options.RenderedExclude);
@@ -321,7 +466,10 @@ public static class WebSiteAuditor
                 ? renderedFiles.Count
                 : Math.Min(renderedFiles.Count, options.RenderedMaxPages);
 
-            var (baseUrl, serverCts, serverTask) = EnsureRenderedBaseUrl(siteRoot, options, warnings);
+            var serveWarnings = new List<string>();
+            var (baseUrl, serverCts, serverTask) = EnsureRenderedBaseUrl(siteRoot, options, serveWarnings);
+            foreach (var warning in serveWarnings)
+                AddIssue("warning", "rendered", null, warning, "rendered-serve");
             foreach (var file in renderedFiles.Take(maxPages))
             {
                 var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
@@ -341,9 +489,10 @@ public static class WebSiteAuditor
 
                     if (IsPlaywrightMissing(renderedResult.ConsoleErrors, out var missingMessage))
                     {
-                        warnings.Add(string.IsNullOrWhiteSpace(missingMessage)
+                        AddIssue("warning", "rendered", relativePath, string.IsNullOrWhiteSpace(missingMessage)
                             ? "Rendered audit skipped: Playwright browsers not installed."
-                            : $"Rendered audit skipped: Playwright browsers not installed. {missingMessage}");
+                            : $"Rendered audit skipped: Playwright browsers not installed. {missingMessage}",
+                            "rendered-playwright");
                         break;
                     }
 
@@ -353,32 +502,35 @@ public static class WebSiteAuditor
                     {
                         renderedConsoleErrorCount += renderedResult.ErrorCount;
                         var detail = BuildConsoleSummary(renderedResult.ConsoleErrors, RenderedDetailLimit);
-                        errors.Add(string.IsNullOrWhiteSpace(detail)
-                            ? $"{relativePath}: console errors ({renderedResult.ErrorCount})."
-                            : $"{relativePath}: console errors ({renderedResult.ErrorCount}) -> {detail}");
+                        AddIssue("error", "rendered-console-error", relativePath, string.IsNullOrWhiteSpace(detail)
+                            ? $"console errors ({renderedResult.ErrorCount})."
+                            : $"console errors ({renderedResult.ErrorCount}) -> {detail}",
+                            "rendered-console-errors");
                     }
 
                     if (options.RenderedCheckConsoleWarnings && renderedResult.WarningCount > 0)
                     {
                         renderedConsoleWarningCount += renderedResult.WarningCount;
                         var detail = BuildConsoleSummary(renderedResult.ConsoleWarnings, RenderedDetailLimit);
-                        warnings.Add(string.IsNullOrWhiteSpace(detail)
-                            ? $"{relativePath}: console warnings ({renderedResult.WarningCount})."
-                            : $"{relativePath}: console warnings ({renderedResult.WarningCount}) -> {detail}");
+                        AddIssue("warning", "rendered-console-warning", relativePath, string.IsNullOrWhiteSpace(detail)
+                            ? $"console warnings ({renderedResult.WarningCount})."
+                            : $"console warnings ({renderedResult.WarningCount}) -> {detail}",
+                            "rendered-console-warnings");
                     }
 
                     if (options.RenderedCheckFailedRequests && renderedResult.FailedRequestCount > 0)
                     {
                         renderedFailedRequestCount += renderedResult.FailedRequestCount;
                         var detail = BuildFailedRequestSummary(renderedResult.FailedRequests, RenderedDetailLimit);
-                        errors.Add(string.IsNullOrWhiteSpace(detail)
-                            ? $"{relativePath}: failed network requests ({renderedResult.FailedRequestCount})."
-                            : $"{relativePath}: failed network requests ({renderedResult.FailedRequestCount}) -> {detail}");
+                        AddIssue("error", "rendered-request-failure", relativePath, string.IsNullOrWhiteSpace(detail)
+                            ? $"failed network requests ({renderedResult.FailedRequestCount})."
+                            : $"failed network requests ({renderedResult.FailedRequestCount}) -> {detail}",
+                            "rendered-failed-requests");
                     }
                 }
                 catch (Exception ex)
                 {
-                    errors.Add($"{relativePath}: rendered audit failed ({ex.Message}).");
+                    AddIssue("error", "rendered", relativePath, $"rendered audit failed ({ex.Message}).", "rendered-failed");
                 }
             }
 
@@ -392,9 +544,70 @@ public static class WebSiteAuditor
             }
         }
 
+        if (baselineIssueKeys is not null)
+        {
+            foreach (var issue in issues)
+                issue.IsNew = !baselineIssueKeys.Contains(issue.Key);
+        }
+
+        var preGateErrorCount = errors.Count;
+        var preGateWarningCount = warnings.Count;
+        var preGateNewIssueCount = issues.Count(issue => issue.IsNew);
+
+        if (failCategories.Count > 0)
+        {
+            var categoryHits = issues.Count(issue => failCategories.Contains(issue.Category));
+            if (categoryHits > 0)
+            {
+                AddIssue("error", "gate", null,
+                    $"Audit gate failed: {categoryHits} issue(s) match fail categories [{string.Join(", ", failCategories.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))}].",
+                    "gate-category");
+            }
+        }
+
+        if (options.MaxErrors >= 0 && preGateErrorCount > options.MaxErrors)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: errors {preGateErrorCount} exceed max-errors {options.MaxErrors}.",
+                "gate-max-errors");
+        }
+
+        if (options.MaxWarnings >= 0 && preGateWarningCount > options.MaxWarnings)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: warnings {preGateWarningCount} exceed max-warnings {options.MaxWarnings}.",
+                "gate-max-warnings");
+        }
+
+        if (options.FailOnWarnings && preGateWarningCount > 0)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: warnings present ({preGateWarningCount}) and fail-on-warnings is enabled.",
+                "gate-fail-warnings");
+        }
+
+        if (options.FailOnNewIssues && preGateNewIssueCount > 0)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: new issues present ({preGateNewIssueCount}) and fail-on-new is enabled.",
+                "gate-fail-new");
+        }
+
+        if (baselineIssueKeys is not null)
+        {
+            foreach (var issue in issues)
+                issue.IsNew = !baselineIssueKeys.Contains(issue.Key);
+        }
+
+        var errorCount = errors.Count;
+        var warningCount = warnings.Count;
+        var newIssueCount = issues.Count(issue => issue.IsNew);
+        var newErrorCount = issues.Count(issue => issue.IsNew && issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
+        var newWarningCount = issues.Count(issue => issue.IsNew && issue.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase));
+
         var result = new WebAuditResult
         {
-            Success = errors.Count == 0,
+            Success = errorCount == 0,
             PageCount = pageCount,
             LinkCount = linkCount,
             BrokenLinkCount = brokenLinkCount,
@@ -406,6 +619,14 @@ public static class WebSiteAuditor
             RenderedConsoleErrorCount = renderedConsoleErrorCount,
             RenderedConsoleWarningCount = renderedConsoleWarningCount,
             RenderedFailedRequestCount = renderedFailedRequestCount,
+            ErrorCount = errorCount,
+            WarningCount = warningCount,
+            NewIssueCount = newIssueCount,
+            NewErrorCount = newErrorCount,
+            NewWarningCount = newWarningCount,
+            BaselinePath = baselinePath,
+            BaselineIssueCount = baselineIssueKeys?.Count ?? 0,
+            Issues = issues.ToArray(),
             Errors = errors.ToArray(),
             Warnings = warnings.ToArray()
         };
@@ -427,6 +648,14 @@ public static class WebSiteAuditor
                 RenderedConsoleErrorCount = result.RenderedConsoleErrorCount,
                 RenderedConsoleWarningCount = result.RenderedConsoleWarningCount,
                 RenderedFailedRequestCount = result.RenderedFailedRequestCount,
+                ErrorCount = result.ErrorCount,
+                WarningCount = result.WarningCount,
+                NewIssueCount = result.NewIssueCount,
+                NewErrorCount = result.NewErrorCount,
+                NewWarningCount = result.NewWarningCount,
+                BaselinePath = result.BaselinePath,
+                BaselineIssueCount = result.BaselineIssueCount,
+                Issues = TakeIssues(result.Issues, options.SummaryMaxIssues),
                 Errors = TakeIssues(result.Errors, options.SummaryMaxIssues),
                 Warnings = TakeIssues(result.Warnings, options.SummaryMaxIssues)
             };
@@ -795,10 +1024,156 @@ public static class WebSiteAuditor
         return Path.GetFullPath(full);
     }
 
+    private static string BuildIssueKey(string severity, string category, string? path, string hint)
+    {
+        static string Normalize(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+            var trimmed = value.Trim().ToLowerInvariant();
+            var chars = trimmed.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
+            var normalized = new string(chars);
+            while (normalized.Contains("--", StringComparison.Ordinal))
+                normalized = normalized.Replace("--", "-", StringComparison.Ordinal);
+            return normalized.Trim('-');
+        }
+
+        var normalizedPath = string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.Replace('\\', '/').Trim().ToLowerInvariant();
+        return string.Join("|", new[]
+        {
+            Normalize(severity),
+            Normalize(category),
+            Normalize(normalizedPath),
+            Normalize(hint)
+        });
+    }
+
+    private static HashSet<string> LoadBaselineIssueKeys(
+        string baselinePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!File.Exists(baselinePath))
+        {
+            addIssue("warning", "baseline", null, $"Baseline file not found: {baselinePath}.", "baseline-missing");
+            return keys;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(baselinePath));
+            var root = doc.RootElement;
+            if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in issueKeys.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var value = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        keys.Add(value);
+                }
+            }
+
+            if (TryGetPropertyIgnoreCase(root, "issues", out var issues) && issues.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var issue in issues.EnumerateArray())
+                {
+                    if (issue.ValueKind != JsonValueKind.Object) continue;
+                    if (!TryGetPropertyIgnoreCase(issue, "key", out var keyElement) || keyElement.ValueKind != JsonValueKind.String) continue;
+                    var value = keyElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        keys.Add(value);
+                }
+            }
+
+            if (keys.Count == 0)
+                addIssue("warning", "baseline", null, $"Baseline file does not contain issue keys: {baselinePath}.", "baseline-empty");
+        }
+        catch (Exception ex)
+        {
+            addIssue("warning", "baseline", null, $"Baseline file parse failed ({ex.Message}).", "baseline-parse");
+        }
+
+        return keys;
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            value = default;
+            return false;
+        }
+
+        if (element.TryGetProperty(propertyName, out value))
+            return true;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string ReadFileAsUtf8(
+        string filePath,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        var bytes = File.ReadAllBytes(filePath);
+        try
+        {
+            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+        }
+        catch (DecoderFallbackException ex)
+        {
+            addIssue("error", "utf8", relativePath, $"invalid UTF-8 byte sequence ({ex.Message}).", "utf8-invalid");
+            return Encoding.UTF8.GetString(bytes);
+        }
+    }
+
+    private static bool HasUtf8Meta(AngleSharp.Dom.IDocument doc)
+    {
+        foreach (var meta in doc.QuerySelectorAll("meta"))
+        {
+            var charset = meta.GetAttribute("charset");
+            if (!string.IsNullOrWhiteSpace(charset) &&
+                charset.Trim().Equals("utf-8", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var httpEquiv = meta.GetAttribute("http-equiv");
+            var content = meta.GetAttribute("content");
+            if (!string.IsNullOrWhiteSpace(httpEquiv) &&
+                httpEquiv.Equals("content-type", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(content) &&
+                content.IndexOf("charset=utf-8", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string[] TakeIssues(string[] issues, int max)
     {
         if (issues.Length == 0) return Array.Empty<string>();
         if (max <= 0) return Array.Empty<string>();
+        return issues.Take(max).ToArray();
+    }
+
+    private static WebAuditIssue[] TakeIssues(WebAuditIssue[] issues, int max)
+    {
+        if (issues.Length == 0) return Array.Empty<WebAuditIssue>();
+        if (max <= 0) return Array.Empty<WebAuditIssue>();
         return issues.Take(max).ToArray();
     }
 

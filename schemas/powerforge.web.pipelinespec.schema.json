@@ -7,6 +7,10 @@
   "properties": {
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "cache": { "type": "boolean" },
+    "cachePath": { "type": "string" },
+    "profile": { "type": "boolean" },
+    "profilePath": { "type": "string" },
     "steps": {
       "type": "array",
       "minItems": 1,
@@ -225,7 +229,23 @@
         "renderedExclude": { "type": "string" },
         "summary": { "type": "boolean" },
         "summaryPath": { "type": "string" },
-        "summaryMaxIssues": { "type": "integer", "minimum": 0 }
+        "summaryMaxIssues": { "type": "integer", "minimum": 0 },
+        "baselinePath": { "type": "string" },
+        "baseline": { "type": "string" },
+        "failOnWarnings": { "type": "boolean" },
+        "failOnNewIssues": { "type": "boolean" },
+        "failOnNew": { "type": "boolean" },
+        "maxErrors": { "type": "integer" },
+        "maxWarnings": { "type": "integer" },
+        "failOnCategories": { "type": "string" },
+        "failCategories": { "type": "string" },
+        "navCanonicalPath": { "type": "string" },
+        "navCanonical": { "type": "string" },
+        "navCanonicalSelector": { "type": "string" },
+        "navCanonicalRequired": { "type": "boolean" },
+        "checkUtf8": { "type": "boolean" },
+        "checkMetaCharset": { "type": "boolean" },
+        "checkUnicodeReplacementChars": { "type": "boolean" }
       },
       "required": ["task", "siteRoot"]
     },

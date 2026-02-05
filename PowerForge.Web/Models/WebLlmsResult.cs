@@ -56,6 +56,12 @@ public sealed class WebPipelineResult
     public int StepCount { get; set; }
     /// <summary>Overall success status.</summary>
     public bool Success { get; set; }
+    /// <summary>Total pipeline duration in milliseconds.</summary>
+    public long DurationMs { get; set; }
+    /// <summary>Resolved cache path when cache is enabled.</summary>
+    public string? CachePath { get; set; }
+    /// <summary>Resolved profile path when profile output is written.</summary>
+    public string? ProfilePath { get; set; }
     /// <summary>Step-by-step results.</summary>
     public List<WebPipelineStepResult> Steps { get; set; } = new();
 }
@@ -82,6 +88,10 @@ public sealed class WebPipelineStepResult
     public string Task { get; set; } = string.Empty;
     /// <summary>Step success status.</summary>
     public bool Success { get; set; }
+    /// <summary>True when step execution was skipped due to cache hit.</summary>
+    public bool Cached { get; set; }
+    /// <summary>Step duration in milliseconds.</summary>
+    public long DurationMs { get; set; }
     /// <summary>Optional step message.</summary>
     public string? Message { get; set; }
 }

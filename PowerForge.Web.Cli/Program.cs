@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
@@ -367,12 +369,26 @@ try
             var summaryPath = TryGetOptionValue(subArgs, "--summary-path");
             var summaryMaxText = TryGetOptionValue(subArgs, "--summary-max");
             var useDefaultExclude = !HasOption(subArgs, "--no-default-exclude");
+            var baselinePathValue = TryGetOptionValue(subArgs, "--baseline");
+            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
+            var failOnNew = HasOption(subArgs, "--fail-on-new");
+            var maxErrorsText = TryGetOptionValue(subArgs, "--max-errors");
+            var maxWarningsText = TryGetOptionValue(subArgs, "--max-warnings");
+            var failCategories = ReadOptionList(subArgs, "--fail-category", "--fail-categories");
+            var navCanonical = TryGetOptionValue(subArgs, "--nav-canonical");
+            var navCanonicalSelector = TryGetOptionValue(subArgs, "--nav-canonical-selector");
+            var navCanonicalRequired = HasOption(subArgs, "--nav-canonical-required");
+            var checkUtf8 = !HasOption(subArgs, "--no-utf8");
+            var checkMetaCharset = !HasOption(subArgs, "--no-meta-charset");
+            var checkReplacementChars = !HasOption(subArgs, "--no-replacement-char-check");
 
             var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
             var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
             var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
             var renderedPort = ParseIntOption(renderedPortText, 0);
             var summaryMax = ParseIntOption(summaryMaxText, 10);
+            var maxErrors = ParseIntOption(maxErrorsText, -1);
+            var maxWarnings = ParseIntOption(maxWarningsText, -1);
             var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
 
             var result = WebSiteAuditor.Audit(new WebAuditOptions
@@ -408,7 +424,19 @@ try
                 RenderedInclude = renderedInclude.ToArray(),
                 RenderedExclude = renderedExclude.ToArray(),
                 SummaryPath = resolvedSummaryPath,
-                SummaryMaxIssues = summaryMax
+                SummaryMaxIssues = summaryMax,
+                BaselinePath = baselinePathValue,
+                FailOnWarnings = failOnWarnings,
+                FailOnNewIssues = failOnNew,
+                MaxErrors = maxErrors,
+                MaxWarnings = maxWarnings,
+                FailOnCategories = failCategories.ToArray(),
+                NavCanonicalPath = navCanonical,
+                NavCanonicalSelector = navCanonicalSelector,
+                NavCanonicalRequired = navCanonicalRequired,
+                CheckUtf8 = checkUtf8,
+                CheckMetaCharset = checkMetaCharset,
+                CheckUnicodeReplacementChars = checkReplacementChars
             });
 
             if (outputJson)
@@ -442,6 +470,9 @@ try
             logger.Info($"Pages: {result.PageCount}");
             logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
             logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");
+            logger.Info($"Issues: {result.ErrorCount} errors, {result.WarningCount} warnings");
+            if (result.NewIssueCount > 0 || !string.IsNullOrWhiteSpace(result.BaselinePath))
+                logger.Info($"New issues: {result.NewIssueCount} (errors {result.NewErrorCount}, warnings {result.NewWarningCount})");
             if (result.NavMismatchCount > 0)
                 logger.Info($"Nav mismatches: {result.NavMismatchCount}");
             if (result.DuplicateIdCount > 0)
@@ -456,6 +487,8 @@ try
                 if (result.RenderedFailedRequestCount > 0)
                     logger.Info($"Rendered failed requests: {result.RenderedFailedRequestCount}");
             }
+            if (!string.IsNullOrWhiteSpace(result.BaselinePath))
+                logger.Info($"Baseline: {result.BaselinePath} ({result.BaselineIssueCount} keys)");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath))
                 logger.Info($"Audit summary: {result.SummaryPath}");
 
@@ -886,7 +919,8 @@ try
                 return Fail("Missing required --config.", outputJson, logger, "web.pipeline");
 
             var fullPath = ResolveExistingFilePath(pipelinePath);
-            var result = WebPipelineRunner.RunPipeline(fullPath, logger);
+            var profilePipeline = HasOption(subArgs, "--profile");
+            var result = WebPipelineRunner.RunPipeline(fullPath, logger, profilePipeline);
 
             if (outputJson)
             {
@@ -908,6 +942,12 @@ try
                 else
                     logger.Error($"{step.Task}: {step.Message}");
             }
+
+            logger.Info($"Pipeline duration: {result.DurationMs} ms");
+            if (!string.IsNullOrWhiteSpace(result.CachePath))
+                logger.Info($"Pipeline cache: {result.CachePath}");
+            if (!string.IsNullOrWhiteSpace(result.ProfilePath))
+                logger.Info($"Pipeline profile: {result.ProfilePath}");
 
             return result.Success ? 0 : 1;
         }
@@ -1245,8 +1285,11 @@ static void PrintUsage()
     Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
     Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
     Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
+    Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
     Console.WriteLine("                     [--nav-required-link <path[,path]>]");
     Console.WriteLine("                     [--nav-optional]");
+    Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>]");
+    Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
     Console.WriteLine("                     [--no-default-exclude]");
     Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
     Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
@@ -1271,7 +1314,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--clean]");
     Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
     Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
-    Console.WriteLine("  powerforge-web pipeline --config <pipeline.json>");
+    Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile]");
     Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
     Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
     Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
@@ -1489,7 +1532,34 @@ internal static class CliPatternHelper
 
 internal static class WebPipelineRunner
 {
-    internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger)
+    private static readonly HashSet<string> FingerprintPathKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "config", "siteRoot", "site-root", "project", "solution", "path",
+        "out", "output", "source", "destination", "dest",
+        "xml", "help", "helpPath", "assembly",
+        "changelog", "changelogPath",
+        "apiIndex", "apiSitemap", "criticalCss", "hashManifest",
+        "summaryPath", "baselinePath", "navCanonicalPath",
+        "templateRoot", "templateIndex", "templateType",
+        "templateDocsIndex", "templateDocsType",
+        "docsScript", "searchScript",
+        "headerHtml", "footerHtml", "quickstart", "extra",
+        "htmlOutput", "htmlTemplate", "cachePath", "profilePath"
+    };
+
+    private sealed class WebPipelineCacheState
+    {
+        public int Version { get; set; } = 1;
+        public Dictionary<string, WebPipelineCacheEntry> Entries { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class WebPipelineCacheEntry
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+        public string? Message { get; set; }
+    }
+
+    internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger, bool forceProfile = false)
     {
         var json = File.ReadAllText(pipelinePath);
         using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
@@ -1503,7 +1573,21 @@ internal static class WebPipelineRunner
             throw new InvalidOperationException("Pipeline config must include a steps array.");
 
         var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
-        var result = new WebPipelineResult();
+        var profileEnabled = (GetBool(root, "profile") ?? false) || forceProfile;
+        var profilePath = ResolvePath(baseDir, GetString(root, "profilePath") ?? GetString(root, "profile-path"));
+        if (profileEnabled && string.IsNullOrWhiteSpace(profilePath))
+            profilePath = Path.Combine(baseDir, ".powerforge", "pipeline-profile.json");
+        var cacheEnabled = GetBool(root, "cache") ?? false;
+        var cachePath = ResolvePath(baseDir, GetString(root, "cachePath") ?? GetString(root, "cache-path")) ??
+                        Path.Combine(baseDir, ".powerforge", "pipeline-cache.json");
+        var cacheState = cacheEnabled ? LoadPipelineCache(cachePath, logger) : null;
+        var cacheUpdated = false;
+        var runStopwatch = Stopwatch.StartNew();
+
+        var result = new WebPipelineResult
+        {
+            CachePath = cacheEnabled ? cachePath : null
+        };
         var steps = new List<JsonElement>();
         var totalSteps = 0;
         foreach (var step in stepsElement.EnumerateArray())
@@ -1526,6 +1610,27 @@ internal static class WebPipelineRunner
             logger?.Info($"Starting {label}...");
             var stopwatch = Stopwatch.StartNew();
             var stepResult = new WebPipelineStepResult { Task = task };
+            var cacheKey = $"{stepIndex}:{task}";
+            var stepFingerprint = string.Empty;
+            var expectedOutputs = GetExpectedStepOutputs(task, step, baseDir);
+            if (cacheEnabled && cacheState is not null)
+            {
+                stepFingerprint = ComputeStepFingerprint(baseDir, step);
+                if (cacheState.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
+                    string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
+                    AreExpectedOutputsPresent(expectedOutputs))
+                {
+                    stepResult.Success = true;
+                    stepResult.Cached = true;
+                    stepResult.Message = AppendDuration(cacheEntry.Message ?? "cache hit", stopwatch);
+                    stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
+                    result.Steps.Add(stepResult);
+                    if (profileEnabled)
+                        logger?.Info($"Finished {label} (cache hit) in {FormatDuration(stopwatch.Elapsed)}");
+                    continue;
+                }
+            }
+
             try
             {
                 switch (task)
@@ -1893,6 +1998,18 @@ internal static class WebPipelineRunner
                         var summary = GetBool(step, "summary") ?? false;
                         var summaryPath = GetString(step, "summaryPath");
                         var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                        var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline");
+                        var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
+                        var failOnNewIssues = GetBool(step, "failOnNewIssues") ?? GetBool(step, "failOnNew") ?? false;
+                        var maxErrors = GetInt(step, "maxErrors") ?? -1;
+                        var maxWarnings = GetInt(step, "maxWarnings") ?? -1;
+                        var failOnCategories = GetString(step, "failOnCategories") ?? GetString(step, "failCategories");
+                        var navCanonicalPath = GetString(step, "navCanonicalPath") ?? GetString(step, "navCanonical");
+                        var navCanonicalSelector = GetString(step, "navCanonicalSelector");
+                        var navCanonicalRequired = GetBool(step, "navCanonicalRequired") ?? false;
+                        var checkUtf8 = GetBool(step, "checkUtf8") ?? true;
+                        var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
+                        var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
                         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
                         var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
                         var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
@@ -1934,12 +2051,24 @@ internal static class WebPipelineRunner
                             RenderedInclude = CliPatternHelper.SplitPatterns(renderedInclude),
                             RenderedExclude = CliPatternHelper.SplitPatterns(renderedExclude),
                             SummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath),
-                            SummaryMaxIssues = summaryMax
+                            SummaryMaxIssues = summaryMax,
+                            BaselinePath = baselinePath,
+                            FailOnWarnings = failOnWarnings,
+                            FailOnNewIssues = failOnNewIssues,
+                            MaxErrors = maxErrors,
+                            MaxWarnings = maxWarnings,
+                            FailOnCategories = CliPatternHelper.SplitPatterns(failOnCategories),
+                            NavCanonicalPath = navCanonicalPath,
+                            NavCanonicalSelector = navCanonicalSelector,
+                            NavCanonicalRequired = navCanonicalRequired,
+                            CheckUtf8 = checkUtf8,
+                            CheckMetaCharset = checkMetaCharset,
+                            CheckUnicodeReplacementChars = checkReplacement
                         });
 
                         stepResult.Success = audit.Success;
                         stepResult.Message = audit.Success
-                            ? $"Audit ok pages {audit.PageCount}, links {audit.LinkCount} (broken {audit.BrokenLinkCount}), assets {audit.AssetCount} (missing {audit.MissingAssetCount}), nav mismatches {audit.NavMismatchCount}, warnings {audit.Warnings.Length}"
+                            ? $"Audit ok pages {audit.PageCount}, links {audit.LinkCount} (broken {audit.BrokenLinkCount}), assets {audit.AssetCount} (missing {audit.MissingAssetCount}), nav mismatches {audit.NavMismatchCount}, warnings {audit.WarningCount}, new {audit.NewIssueCount}"
                             : $"Audit failed ({audit.Errors.Length} errors)";
                         if (!audit.Success)
                             throw new InvalidOperationException(stepResult.Message);
@@ -2050,18 +2179,48 @@ internal static class WebPipelineRunner
             {
                 stepResult.Success = false;
                 stepResult.Message = AppendDuration(ex.Message, stopwatch);
+                stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
                 result.Steps.Add(stepResult);
                 result.StepCount = result.Steps.Count;
                 result.Success = false;
+                result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
+                if (cacheEnabled && cacheState is not null && cacheUpdated)
+                    SavePipelineCache(cachePath, cacheState, logger);
+                if (!string.IsNullOrWhiteSpace(profilePath))
+                {
+                    WritePipelineProfile(profilePath, result, logger);
+                    result.ProfilePath = profilePath;
+                }
                 return result;
             }
 
             stepResult.Message = AppendDuration(stepResult.Message, stopwatch);
+            stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
+            if (cacheEnabled && cacheState is not null && !string.IsNullOrWhiteSpace(stepFingerprint))
+            {
+                cacheState.Entries[cacheKey] = new WebPipelineCacheEntry
+                {
+                    Fingerprint = stepFingerprint,
+                    Message = stepResult.Message
+                };
+                cacheUpdated = true;
+            }
             result.Steps.Add(stepResult);
+            if (profileEnabled)
+                logger?.Info($"Finished {label} in {FormatDuration(stopwatch.Elapsed)}");
         }
 
+        runStopwatch.Stop();
         result.StepCount = result.Steps.Count;
         result.Success = result.Steps.All(s => s.Success);
+        result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
+        if (cacheEnabled && cacheState is not null && cacheUpdated)
+            SavePipelineCache(cachePath, cacheState, logger);
+        if (!string.IsNullOrWhiteSpace(profilePath))
+        {
+            WritePipelineProfile(profilePath, result, logger);
+            result.ProfilePath = profilePath;
+        }
         return result;
     }
 
@@ -2099,6 +2258,237 @@ internal static class WebPipelineRunner
             parts.Add("headers");
 
         return $"Optimize {string.Join(", ", parts)}";
+    }
+
+    private static WebPipelineCacheState LoadPipelineCache(string cachePath, WebConsoleLogger? logger)
+    {
+        try
+        {
+            if (!File.Exists(cachePath))
+                return new WebPipelineCacheState();
+
+            var json = File.ReadAllText(cachePath);
+            var state = JsonSerializer.Deserialize<WebPipelineCacheState>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            return state ?? new WebPipelineCacheState();
+        }
+        catch (Exception ex)
+        {
+            logger?.Warn($"Pipeline cache load failed: {ex.Message}");
+            return new WebPipelineCacheState();
+        }
+    }
+
+    private static void SavePipelineCache(string cachePath, WebPipelineCacheState state, WebConsoleLogger? logger)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(cachePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+            var json = JsonSerializer.Serialize(state, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            File.WriteAllText(cachePath, json);
+        }
+        catch (Exception ex)
+        {
+            logger?.Warn($"Pipeline cache save failed: {ex.Message}");
+        }
+    }
+
+    private static void WritePipelineProfile(string profilePath, WebPipelineResult result, WebConsoleLogger? logger)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(profilePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+            var json = JsonSerializer.Serialize(result, WebCliJson.Context.WebPipelineResult);
+            File.WriteAllText(profilePath, json);
+        }
+        catch (Exception ex)
+        {
+            logger?.Warn($"Pipeline profile write failed: {ex.Message}");
+        }
+    }
+
+    private static string ComputeStepFingerprint(string baseDir, JsonElement step)
+    {
+        var parts = new List<string> { step.GetRawText() };
+        var paths = EnumerateFingerprintPaths(baseDir, step)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in paths)
+        {
+            parts.Add(BuildPathStamp(path));
+        }
+
+        var payload = string.Join('\n', parts);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static IEnumerable<string> EnumerateFingerprintPaths(string baseDir, JsonElement step)
+    {
+        if (step.ValueKind != JsonValueKind.Object)
+            yield break;
+
+        foreach (var property in step.EnumerateObject())
+        {
+            if (!FingerprintPathKeys.Contains(property.Name))
+                continue;
+
+            if (property.Value.ValueKind == JsonValueKind.String)
+            {
+                var value = property.Value.GetString();
+                if (string.IsNullOrWhiteSpace(value) || IsExternalUri(value))
+                    continue;
+                var resolved = ResolvePath(baseDir, value);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    yield return Path.GetFullPath(resolved);
+                continue;
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Array)
+                continue;
+
+            foreach (var item in property.Value.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                    continue;
+                var value = item.GetString();
+                if (string.IsNullOrWhiteSpace(value) || IsExternalUri(value))
+                    continue;
+                var resolved = ResolvePath(baseDir, value);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    yield return Path.GetFullPath(resolved);
+            }
+        }
+    }
+
+    private static string BuildPathStamp(string path)
+    {
+        if (File.Exists(path))
+        {
+            var info = new FileInfo(path);
+            return $"f|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
+        }
+
+        if (!Directory.Exists(path))
+            return $"m|{path}";
+
+        try
+        {
+            var maxTicks = Directory.GetLastWriteTimeUtc(path).Ticks;
+            var fileCount = 0;
+            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                fileCount++;
+                var ticks = File.GetLastWriteTimeUtc(file).Ticks;
+                if (ticks > maxTicks)
+                    maxTicks = ticks;
+            }
+            return $"d|{path}|{fileCount}|{maxTicks}";
+        }
+        catch
+        {
+            return $"d|{path}|unreadable";
+        }
+    }
+
+    private static bool IsExternalUri(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            return false;
+        return uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+               uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] GetExpectedStepOutputs(string task, JsonElement step, string baseDir)
+    {
+        switch (task)
+        {
+            case "build":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "apidocs":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "dotnet-publish":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "overlay":
+                return ResolveOutputCandidates(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
+            case "changelog":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "llms":
+            {
+                var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                if (string.IsNullOrWhiteSpace(siteRoot))
+                    return Array.Empty<string>();
+                return new[]
+                {
+                    Path.Combine(siteRoot, "llms.txt"),
+                    Path.Combine(siteRoot, "llms.json"),
+                    Path.Combine(siteRoot, "llms-full.txt")
+                };
+            }
+            case "sitemap":
+            {
+                var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                if (string.IsNullOrWhiteSpace(outPath) && !string.IsNullOrWhiteSpace(siteRoot))
+                    outPath = Path.Combine(siteRoot, "sitemap.xml");
+                return ResolveOutputCandidates(baseDir, outPath);
+            }
+            case "audit":
+            {
+                var summaryEnabled = GetBool(step, "summary") ?? false;
+                var summaryPath = GetString(step, "summaryPath");
+                if (!summaryEnabled && string.IsNullOrWhiteSpace(summaryPath))
+                    return Array.Empty<string>();
+
+                var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                if (string.IsNullOrWhiteSpace(summaryPath))
+                    summaryPath = "audit-summary.json";
+                if (!string.IsNullOrWhiteSpace(siteRoot) && !Path.IsPathRooted(summaryPath))
+                    summaryPath = Path.Combine(siteRoot, summaryPath);
+                return ResolveOutputCandidates(baseDir, summaryPath);
+            }
+            default:
+                return Array.Empty<string>();
+        }
+    }
+
+    private static string[] ResolveOutputCandidates(string baseDir, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+        if (IsExternalUri(value))
+            return Array.Empty<string>();
+        var resolved = ResolvePath(baseDir, value);
+        if (string.IsNullOrWhiteSpace(resolved))
+            return Array.Empty<string>();
+        return new[] { Path.GetFullPath(resolved) };
+    }
+
+    private static bool AreExpectedOutputsPresent(string[] outputs)
+    {
+        if (outputs.Length == 0)
+            return true;
+
+        foreach (var output in outputs)
+        {
+            if (File.Exists(output))
+                continue;
+            if (Directory.Exists(output))
+                continue;
+            return false;
+        }
+
+        return true;
     }
 
     private static string? GetString(JsonElement element, string name)
