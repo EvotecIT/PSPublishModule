@@ -36,6 +36,19 @@ if (-not $JsonOnly -and -not $NoDotnetBuild) {
 
 Import-Module "$PSScriptRoot\..\PSPublishModule.psd1" -Force
 
+if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
+    $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
+    $tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
+    $binaryModule = Join-Path -Path $PSScriptRoot -ChildPath ("..\..\PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $tfm)
+    if (Test-Path -LiteralPath $binaryModule) {
+        Import-Module $binaryModule -Force
+    }
+}
+
+if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
+    throw "Invoke-ModuleBuild is not available. Ensure PSPublishModule.dll built and importable."
+}
+
 $buildParams = @{
     ModuleName = 'PSPublishModule'
     ExitCode   = $true
@@ -45,7 +58,7 @@ if ($JsonOnly) {
     $buildParams.JsonPath = $JsonPath
 }
 
-Build-Module @buildParams -Settings {
+Invoke-ModuleBuild @buildParams -Settings {
     # Usual defaults as per standard module
     $Manifest = [ordered] @{
         ModuleVersion          = $ModuleVersion
