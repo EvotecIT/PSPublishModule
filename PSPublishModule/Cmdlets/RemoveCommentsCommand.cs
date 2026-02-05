@@ -140,6 +140,16 @@ public sealed class RemoveCommentsCommand : PSCmdlet
         int countParams = 0;
         bool paramFound = false;
         bool signatureBlock = false;
+        var firstParamOffset = -1;
+
+        foreach (var token in tokens)
+        {
+            if (string.Equals(token.Extent.Text, "param", StringComparison.OrdinalIgnoreCase))
+            {
+                firstParamOffset = token.Extent.StartOffset;
+                break;
+            }
+        }
 
         // Group tokens by StartLineNumber to mirror the legacy approach (though ordering is unchanged).
         foreach (var lineGroup in tokens.GroupBy(t => t.Extent.StartLineNumber))
@@ -197,6 +207,9 @@ public sealed class RemoveCommentsCommand : PSCmdlet
                     continue;
 
                 if (token.Kind != TokenKind.Comment)
+                    continue;
+
+                if (!removeCommentsBeforeParamBlock && firstParamOffset >= 0 && token.Extent.EndOffset <= firstParamOffset)
                     continue;
 
                 if (doNotRemoveSignatureBlock)
