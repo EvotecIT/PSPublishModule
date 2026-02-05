@@ -317,6 +317,68 @@ try
 
             return verify.Success ? 0 : 1;
         }
+        case "markdown-fix":
+        {
+            var rootPath = TryGetOptionValue(subArgs, "--root") ??
+                           TryGetOptionValue(subArgs, "--path");
+            var configPath = TryGetOptionValue(subArgs, "--config");
+            var include = ReadOptionList(subArgs, "--include");
+            var exclude = ReadOptionList(subArgs, "--exclude");
+            var apply = HasOption(subArgs, "--apply") ||
+                        HasOption(subArgs, "--write") ||
+                        HasOption(subArgs, "--in-place");
+
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                var fullConfigPath = ResolveExistingFilePath(configPath);
+                var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+                var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                if (string.IsNullOrWhiteSpace(rootPath))
+                {
+                    var contentRoot = string.IsNullOrWhiteSpace(spec.ContentRoot) ? "content" : spec.ContentRoot;
+                    rootPath = Path.IsPathRooted(contentRoot)
+                        ? contentRoot
+                        : Path.Combine(plan.RootPath, contentRoot);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(rootPath))
+                return Fail("Missing required --path or --config.", outputJson, logger, "web.markdown-fix");
+
+            var result = WebMarkdownHygieneFixer.Fix(new WebMarkdownFixOptions
+            {
+                RootPath = rootPath,
+                Include = include.ToArray(),
+                Exclude = exclude.ToArray(),
+                ApplyChanges = apply
+            });
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.markdown-fix",
+                    Success = result.Success,
+                    ExitCode = result.Success ? 0 : 1,
+                    Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebMarkdownFixResult)
+                });
+                return result.Success ? 0 : 1;
+            }
+
+            logger.Success(apply
+                ? $"Markdown fixer updated {result.ChangedFileCount} file(s)."
+                : $"Markdown fixer found {result.ChangedFileCount} file(s) to update (dry-run).");
+            logger.Info($"Files scanned: {result.FileCount}");
+            logger.Info($"Replacements: {result.ReplacementCount}");
+            if (result.Warnings.Length > 0)
+            {
+                foreach (var warning in result.Warnings)
+                    logger.Warn(warning);
+            }
+
+            return result.Success ? 0 : 1;
+        }
         case "audit":
         {
             var siteRoot = TryGetOptionValue(subArgs, "--site-root") ??
@@ -369,6 +431,8 @@ try
             var summaryPath = TryGetOptionValue(subArgs, "--summary-path");
             var summaryMaxText = TryGetOptionValue(subArgs, "--summary-max");
             var useDefaultExclude = !HasOption(subArgs, "--no-default-exclude");
+            var baselineGenerate = HasOption(subArgs, "--baseline-generate");
+            var baselineUpdate = HasOption(subArgs, "--baseline-update");
             var baselinePathValue = TryGetOptionValue(subArgs, "--baseline");
             var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
             var failOnNew = HasOption(subArgs, "--fail-on-new");
@@ -389,6 +453,8 @@ try
             var summaryMax = ParseIntOption(summaryMaxText, 10);
             var maxErrors = ParseIntOption(maxErrorsText, -1);
             var maxWarnings = ParseIntOption(maxWarningsText, -1);
+            if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
+                baselinePathValue = "audit-baseline.json";
             var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
 
             var result = WebSiteAuditor.Audit(new WebAuditOptions
@@ -438,6 +504,13 @@ try
                 CheckMetaCharset = checkMetaCharset,
                 CheckUnicodeReplacementChars = checkReplacementChars
             });
+
+            string? writtenBaselinePath = null;
+            if (baselineGenerate || baselineUpdate)
+            {
+                writtenBaselinePath = WebAuditBaselineStore.Write(siteRoot, baselinePathValue, result, baselineUpdate, logger);
+                result.BaselinePath = writtenBaselinePath;
+            }
 
             if (outputJson)
             {
@@ -489,6 +562,8 @@ try
             }
             if (!string.IsNullOrWhiteSpace(result.BaselinePath))
                 logger.Info($"Baseline: {result.BaselinePath} ({result.BaselineIssueCount} keys)");
+            if (!string.IsNullOrWhiteSpace(writtenBaselinePath))
+                logger.Info($"Baseline written: {writtenBaselinePath}");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath))
                 logger.Info($"Audit summary: {result.SummaryPath}");
 
@@ -1276,6 +1351,8 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
     Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
     Console.WriteLine("  powerforge-web verify --config <site.json> [--output json]");
+    Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
+    Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
     Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
     Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
     Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
@@ -1289,6 +1366,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--nav-required-link <path[,path]>]");
     Console.WriteLine("                     [--nav-optional]");
     Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>]");
+    Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
     Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
     Console.WriteLine("                     [--no-default-exclude]");
     Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
@@ -1530,6 +1608,135 @@ internal static class CliPatternHelper
     }
 }
 
+internal static class WebAuditBaselineStore
+{
+    internal static string Write(
+        string siteRoot,
+        string? baselinePath,
+        WebAuditResult result,
+        bool mergeWithExisting,
+        WebConsoleLogger? logger)
+    {
+        var resolvedPath = ResolveBaselinePath(siteRoot, baselinePath);
+        try
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (mergeWithExisting)
+            {
+                foreach (var key in LoadIssueKeys(resolvedPath))
+                    keys.Add(key);
+            }
+
+            foreach (var issue in result.Issues)
+            {
+                if (!string.IsNullOrWhiteSpace(issue.Key))
+                    keys.Add(issue.Key);
+            }
+
+            var issues = result.Issues
+                .Where(issue => !string.IsNullOrWhiteSpace(issue.Key) && keys.Contains(issue.Key))
+                .GroupBy(issue => issue.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderBy(issue => issue.Key, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var payload = new
+            {
+                version = 1,
+                generatedAtUtc = DateTimeOffset.UtcNow,
+                issueCount = keys.Count,
+                issueKeys = keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToArray(),
+                issues
+            };
+
+            var directory = Path.GetDirectoryName(resolvedPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            File.WriteAllText(resolvedPath, json);
+            return resolvedPath;
+        }
+        catch (Exception ex)
+        {
+            logger?.Warn($"Audit baseline write failed: {ex.Message}");
+            return resolvedPath;
+        }
+    }
+
+    internal static string ResolveBaselinePath(string siteRoot, string? baselinePath)
+    {
+        var candidate = string.IsNullOrWhiteSpace(baselinePath) ? "audit-baseline.json" : baselinePath.Trim();
+        if (Path.IsPathRooted(candidate))
+            return Path.GetFullPath(candidate);
+        return Path.GetFullPath(Path.Combine(siteRoot, candidate));
+    }
+
+    private static IEnumerable<string> LoadIssueKeys(string path)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<string>();
+
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            var root = doc.RootElement;
+            if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in issueKeys.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var value = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        keys.Add(value);
+                }
+            }
+
+            if (TryGetPropertyIgnoreCase(root, "issues", out var issues) && issues.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var issue in issues.EnumerateArray())
+                {
+                    if (issue.ValueKind != JsonValueKind.Object) continue;
+                    if (!TryGetPropertyIgnoreCase(issue, "key", out var keyElement) || keyElement.ValueKind != JsonValueKind.String) continue;
+                    var value = keyElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        keys.Add(value);
+                }
+            }
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+
+        return keys.ToArray();
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty(propertyName, out value))
+                return true;
+
+            foreach (var property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
+}
+
 internal static class WebPipelineRunner
 {
     private static readonly HashSet<string> FingerprintPathKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -1557,6 +1764,16 @@ internal static class WebPipelineRunner
     {
         public string Fingerprint { get; set; } = string.Empty;
         public string? Message { get; set; }
+    }
+
+    private sealed class PipelineStepDefinition
+    {
+        public int Index { get; set; }
+        public string Task { get; set; } = string.Empty;
+        public string Id { get; set; } = string.Empty;
+        public string[] DependsOn { get; set; } = Array.Empty<string>();
+        public int[] DependencyIndexes { get; set; } = Array.Empty<int>();
+        public JsonElement Element { get; set; }
     }
 
     internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger, bool forceProfile = false)
@@ -1588,24 +1805,15 @@ internal static class WebPipelineRunner
         {
             CachePath = cacheEnabled ? cachePath : null
         };
-        var steps = new List<JsonElement>();
-        var totalSteps = 0;
-        foreach (var step in stepsElement.EnumerateArray())
-        {
-            steps.Add(step);
-            var taskName = GetString(step, "task");
-            if (!string.IsNullOrWhiteSpace(taskName))
-                totalSteps++;
-        }
+        var steps = BuildStepDefinitions(stepsElement);
+        var totalSteps = steps.Count;
+        var stepResultsByIndex = new Dictionary<int, WebPipelineStepResult>();
 
-        var stepIndex = 0;
-        foreach (var step in steps)
+        foreach (var definition in steps)
         {
-            var task = GetString(step, "task")?.ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(task))
-                continue;
-
-            stepIndex++;
+            var step = definition.Element;
+            var task = definition.Task;
+            var stepIndex = definition.Index;
             var label = $"[{stepIndex}/{totalSteps}] {task}";
             logger?.Info($"Starting {label}...");
             var stopwatch = Stopwatch.StartNew();
@@ -1613,11 +1821,25 @@ internal static class WebPipelineRunner
             var cacheKey = $"{stepIndex}:{task}";
             var stepFingerprint = string.Empty;
             var expectedOutputs = GetExpectedStepOutputs(task, step, baseDir);
+            if (definition.DependencyIndexes.Length > 0)
+            {
+                foreach (var dependencyIndex in definition.DependencyIndexes)
+                {
+                    if (!stepResultsByIndex.TryGetValue(dependencyIndex, out var dependencyResult) || !dependencyResult.Success)
+                    {
+                        throw new InvalidOperationException($"Step '{definition.Id}' dependency #{dependencyIndex} failed or was not executed.");
+                    }
+                }
+            }
+
+            var dependencyMiss = definition.DependencyIndexes.Any(index =>
+                !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
             if (cacheEnabled && cacheState is not null)
             {
                 stepFingerprint = ComputeStepFingerprint(baseDir, step);
                 if (cacheState.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
+                    !dependencyMiss &&
                     AreExpectedOutputsPresent(expectedOutputs))
                 {
                     stepResult.Success = true;
@@ -1625,6 +1847,7 @@ internal static class WebPipelineRunner
                     stepResult.Message = AppendDuration(cacheEntry.Message ?? "cache hit", stopwatch);
                     stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
                     result.Steps.Add(stepResult);
+                    stepResultsByIndex[stepIndex] = stepResult;
                     if (profileEnabled)
                         logger?.Info($"Finished {label} (cache hit) in {FormatDuration(stopwatch.Elapsed)}");
                     continue;
@@ -1672,6 +1895,41 @@ internal static class WebPipelineRunner
                         stepResult.Message = warnCount > 0
                             ? $"Verify {warnCount} warnings"
                             : "Verify ok";
+                        break;
+                    }
+                    case "markdown-fix":
+                    {
+                        var config = ResolvePath(baseDir, GetString(step, "config"));
+                        var rootPath = ResolvePath(baseDir, GetString(step, "root") ?? GetString(step, "path") ?? GetString(step, "siteRoot"));
+                        var include = GetString(step, "include");
+                        var exclude = GetString(step, "exclude");
+                        var applyFixes = GetBool(step, "apply") ?? false;
+
+                        if (string.IsNullOrWhiteSpace(rootPath) && !string.IsNullOrWhiteSpace(config))
+                        {
+                            var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+                            var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                            var contentRoot = string.IsNullOrWhiteSpace(spec.ContentRoot) ? "content" : spec.ContentRoot;
+                            rootPath = Path.IsPathRooted(contentRoot)
+                                ? contentRoot
+                                : Path.Combine(plan.RootPath, contentRoot);
+                        }
+
+                        if (string.IsNullOrWhiteSpace(rootPath))
+                            throw new InvalidOperationException("markdown-fix requires root/path/siteRoot or config.");
+
+                        var fix = WebMarkdownHygieneFixer.Fix(new WebMarkdownFixOptions
+                        {
+                            RootPath = rootPath,
+                            Include = CliPatternHelper.SplitPatterns(include),
+                            Exclude = CliPatternHelper.SplitPatterns(exclude),
+                            ApplyChanges = applyFixes
+                        });
+
+                        stepResult.Success = fix.Success;
+                        stepResult.Message = applyFixes
+                            ? $"Markdown fix updated {fix.ChangedFileCount}/{fix.FileCount} files ({fix.ReplacementCount} replacements)"
+                            : $"Markdown fix dry-run {fix.ChangedFileCount}/{fix.FileCount} files ({fix.ReplacementCount} replacements)";
                         break;
                     }
                     case "apidocs":
@@ -1998,6 +2256,8 @@ internal static class WebPipelineRunner
                         var summary = GetBool(step, "summary") ?? false;
                         var summaryPath = GetString(step, "summaryPath");
                         var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                        var baselineGenerate = GetBool(step, "baselineGenerate") ?? false;
+                        var baselineUpdate = GetBool(step, "baselineUpdate") ?? false;
                         var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline");
                         var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
                         var failOnNewIssues = GetBool(step, "failOnNewIssues") ?? GetBool(step, "failOnNew") ?? false;
@@ -2010,6 +2270,8 @@ internal static class WebPipelineRunner
                         var checkUtf8 = GetBool(step, "checkUtf8") ?? true;
                         var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
                         var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
+                        if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
+                            baselinePath = "audit-baseline.json";
                         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
                         var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
                         var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
@@ -2066,10 +2328,19 @@ internal static class WebPipelineRunner
                             CheckUnicodeReplacementChars = checkReplacement
                         });
 
+                        string? baselineWrittenPath = null;
+                        if (baselineGenerate || baselineUpdate)
+                        {
+                            baselineWrittenPath = WebAuditBaselineStore.Write(siteRoot, baselinePath, audit, baselineUpdate, logger);
+                            audit.BaselinePath = baselineWrittenPath;
+                        }
+
                         stepResult.Success = audit.Success;
                         stepResult.Message = audit.Success
                             ? $"Audit ok pages {audit.PageCount}, links {audit.LinkCount} (broken {audit.BrokenLinkCount}), assets {audit.AssetCount} (missing {audit.MissingAssetCount}), nav mismatches {audit.NavMismatchCount}, warnings {audit.WarningCount}, new {audit.NewIssueCount}"
                             : $"Audit failed ({audit.Errors.Length} errors)";
+                        if (!string.IsNullOrWhiteSpace(baselineWrittenPath))
+                            stepResult.Message += $", baseline {baselineWrittenPath}";
                         if (!audit.Success)
                             throw new InvalidOperationException(stepResult.Message);
                         break;
@@ -2181,6 +2452,7 @@ internal static class WebPipelineRunner
                 stepResult.Message = AppendDuration(ex.Message, stopwatch);
                 stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
                 result.Steps.Add(stepResult);
+                stepResultsByIndex[stepIndex] = stepResult;
                 result.StepCount = result.Steps.Count;
                 result.Success = false;
                 result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
@@ -2206,6 +2478,7 @@ internal static class WebPipelineRunner
                 cacheUpdated = true;
             }
             result.Steps.Add(stepResult);
+            stepResultsByIndex[stepIndex] = stepResult;
             if (profileEnabled)
                 logger?.Info($"Finished {label} in {FormatDuration(stopwatch.Elapsed)}");
         }
@@ -2222,6 +2495,87 @@ internal static class WebPipelineRunner
             result.ProfilePath = profilePath;
         }
         return result;
+    }
+
+    private static List<PipelineStepDefinition> BuildStepDefinitions(JsonElement stepsElement)
+    {
+        var steps = new List<PipelineStepDefinition>();
+        var aliases = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var index = 0;
+        foreach (var step in stepsElement.EnumerateArray())
+        {
+            var task = GetString(step, "task")?.ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(task))
+                continue;
+
+            index++;
+            var id = GetString(step, "id");
+            if (string.IsNullOrWhiteSpace(id))
+                id = $"{task}-{index}";
+
+            if (aliases.ContainsKey(id))
+                throw new InvalidOperationException($"Duplicate pipeline step id '{id}'.");
+
+            aliases[id] = index;
+            aliases[$"{task}#{index}"] = index;
+            if (!aliases.ContainsKey(task))
+                aliases[task] = index;
+
+            steps.Add(new PipelineStepDefinition
+            {
+                Index = index,
+                Task = task,
+                Id = id,
+                DependsOn = ParseDependsOn(step),
+                Element = step
+            });
+        }
+
+        foreach (var step in steps)
+        {
+            if (step.DependsOn.Length == 0)
+                continue;
+
+            var resolved = new List<int>();
+            foreach (var dependency in step.DependsOn)
+            {
+                if (string.IsNullOrWhiteSpace(dependency))
+                    continue;
+
+                if (int.TryParse(dependency, out var numeric))
+                {
+                    if (numeric <= 0 || numeric > steps.Count)
+                        throw new InvalidOperationException($"Step '{step.Id}' has invalid dependsOn reference '{dependency}'.");
+                    resolved.Add(numeric);
+                    continue;
+                }
+
+                if (!aliases.TryGetValue(dependency, out var dependencyIndex))
+                    throw new InvalidOperationException($"Step '{step.Id}' has unknown dependsOn reference '{dependency}'.");
+
+                resolved.Add(dependencyIndex);
+            }
+
+            step.DependencyIndexes = resolved
+                .Distinct()
+                .OrderBy(value => value)
+                .ToArray();
+
+            if (step.DependencyIndexes.Any(value => value >= step.Index))
+                throw new InvalidOperationException($"Step '{step.Id}' has dependsOn reference to current/future step.");
+        }
+
+        return steps;
+    }
+
+    private static string[] ParseDependsOn(JsonElement step)
+    {
+        var array = GetArrayOfStrings(step, "dependsOn") ?? GetArrayOfStrings(step, "depends-on");
+        if (array is { Length: > 0 })
+            return array;
+
+        var value = GetString(step, "dependsOn") ?? GetString(step, "depends-on");
+        return CliPatternHelper.SplitPatterns(value);
     }
 
     private static string AppendDuration(string? message, Stopwatch stopwatch)

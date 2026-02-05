@@ -24,6 +24,7 @@
       "oneOf": [
         { "$ref": "#/$defs/BuildStep" },
         { "$ref": "#/$defs/VerifyStep" },
+        { "$ref": "#/$defs/MarkdownFixStep" },
         { "$ref": "#/$defs/ApiDocsStep" },
         { "$ref": "#/$defs/ChangelogStep" },
         { "$ref": "#/$defs/LlmsStep" },
@@ -40,6 +41,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "build" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "config": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
@@ -52,15 +55,36 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "verify" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "config": { "type": "string" }
       },
       "required": ["task", "config"]
+    },
+    "MarkdownFixStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "markdown-fix" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "config": { "type": "string" },
+        "root": { "type": "string" },
+        "path": { "type": "string" },
+        "siteRoot": { "type": "string" },
+        "include": { "type": "string" },
+        "exclude": { "type": "string" },
+        "apply": { "type": "boolean" }
+      },
+      "required": ["task"]
     },
     "ApiDocsStep": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "task": { "const": "apidocs" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
         "xml": { "type": "string" },
         "help": { "type": "string" },
@@ -105,6 +129,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "changelog" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "source": { "type": "string", "enum": ["Auto", "File", "GitHub"] },
         "changelog": { "type": "string" },
         "changelogPath": { "type": "string" },
@@ -123,6 +149,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "llms" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "project": { "type": "string" },
         "apiIndex": { "type": "string" },
@@ -147,6 +175,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "sitemap" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "baseUrl": { "type": "string" },
         "apiSitemap": { "type": "string" },
@@ -170,6 +200,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "optimize" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "config": { "type": "string" },
         "criticalCss": { "type": "string" },
@@ -194,6 +226,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "audit" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
@@ -245,7 +279,9 @@
         "navCanonicalRequired": { "type": "boolean" },
         "checkUtf8": { "type": "boolean" },
         "checkMetaCharset": { "type": "boolean" },
-        "checkUnicodeReplacementChars": { "type": "boolean" }
+        "checkUnicodeReplacementChars": { "type": "boolean" },
+        "baselineGenerate": { "type": "boolean" },
+        "baselineUpdate": { "type": "boolean" }
       },
       "required": ["task", "siteRoot"]
     },
@@ -254,6 +290,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "dotnet-build" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "project": { "type": "string" },
         "configuration": { "type": "string" },
         "framework": { "type": "string" },
@@ -267,6 +305,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "dotnet-publish" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "project": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
@@ -288,6 +328,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "overlay" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "source": { "type": "string" },
         "destination": { "type": "string" },
         "clean": { "type": "boolean" },
