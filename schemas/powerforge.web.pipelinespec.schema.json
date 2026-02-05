@@ -7,6 +7,10 @@
   "properties": {
     "$schema": { "type": "string" },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "cache": { "type": "boolean" },
+    "cachePath": { "type": "string" },
+    "profile": { "type": "boolean" },
+    "profilePath": { "type": "string" },
     "steps": {
       "type": "array",
       "minItems": 1,
@@ -20,6 +24,7 @@
       "oneOf": [
         { "$ref": "#/$defs/BuildStep" },
         { "$ref": "#/$defs/VerifyStep" },
+        { "$ref": "#/$defs/MarkdownFixStep" },
         { "$ref": "#/$defs/ApiDocsStep" },
         { "$ref": "#/$defs/ChangelogStep" },
         { "$ref": "#/$defs/LlmsStep" },
@@ -36,10 +41,15 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "build" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "config": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
-        "clean": { "type": "boolean" }
+        "clean": {
+          "type": "boolean",
+          "description": "When true, delete existing output contents before writing new build artifacts."
+        }
       },
       "required": ["task", "config", "out"]
     },
@@ -48,15 +58,36 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "verify" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "config": { "type": "string" }
       },
       "required": ["task", "config"]
+    },
+    "MarkdownFixStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "markdown-fix" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "config": { "type": "string" },
+        "root": { "type": "string" },
+        "path": { "type": "string" },
+        "siteRoot": { "type": "string" },
+        "include": { "type": "string" },
+        "exclude": { "type": "string" },
+        "apply": { "type": "boolean" }
+      },
+      "required": ["task"]
     },
     "ApiDocsStep": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "task": { "const": "apidocs" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
         "xml": { "type": "string" },
         "help": { "type": "string" },
@@ -101,6 +132,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "changelog" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "source": { "type": "string", "enum": ["Auto", "File", "GitHub"] },
         "changelog": { "type": "string" },
         "changelogPath": { "type": "string" },
@@ -119,6 +152,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "llms" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "project": { "type": "string" },
         "apiIndex": { "type": "string" },
@@ -143,6 +178,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "sitemap" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "baseUrl": { "type": "string" },
         "apiSitemap": { "type": "string" },
@@ -166,6 +203,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "optimize" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "config": { "type": "string" },
         "criticalCss": { "type": "string" },
@@ -190,6 +229,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "audit" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
@@ -200,6 +241,14 @@
         "navRequired": { "type": "boolean" },
         "navOptional": { "type": "boolean" },
         "navIgnorePrefixes": { "type": "string" },
+        "navRequiredLinks": {
+          "type": "string",
+          "description": "Comma-separated list of links that must exist in each audited nav."
+        },
+        "navRequiredLink": {
+          "type": "string",
+          "description": "Deprecated alias for navRequiredLinks."
+        },
         "checkLinks": { "type": "boolean" },
         "checkAssets": { "type": "boolean" },
         "checkNav": { "type": "boolean" },
@@ -223,7 +272,25 @@
         "renderedExclude": { "type": "string" },
         "summary": { "type": "boolean" },
         "summaryPath": { "type": "string" },
-        "summaryMaxIssues": { "type": "integer", "minimum": 0 }
+        "summaryMaxIssues": { "type": "integer", "minimum": 0 },
+        "baselinePath": { "type": "string" },
+        "baseline": { "type": "string" },
+        "failOnWarnings": { "type": "boolean" },
+        "failOnNewIssues": { "type": "boolean" },
+        "failOnNew": { "type": "boolean" },
+        "maxErrors": { "type": "integer" },
+        "maxWarnings": { "type": "integer" },
+        "failOnCategories": { "type": "string" },
+        "failCategories": { "type": "string" },
+        "navCanonicalPath": { "type": "string" },
+        "navCanonical": { "type": "string" },
+        "navCanonicalSelector": { "type": "string" },
+        "navCanonicalRequired": { "type": "boolean" },
+        "checkUtf8": { "type": "boolean" },
+        "checkMetaCharset": { "type": "boolean" },
+        "checkUnicodeReplacementChars": { "type": "boolean" },
+        "baselineGenerate": { "type": "boolean" },
+        "baselineUpdate": { "type": "boolean" }
       },
       "required": ["task", "siteRoot"]
     },
@@ -232,6 +299,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "dotnet-build" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "project": { "type": "string" },
         "configuration": { "type": "string" },
         "framework": { "type": "string" },
@@ -245,12 +314,18 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "dotnet-publish" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "project": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
         "configuration": { "type": "string" },
         "framework": { "type": "string" },
         "runtime": { "type": "string" },
+        "clean": {
+          "type": "boolean",
+          "description": "When true, clear dotnet publish output to prevent stale files from previous runs."
+        },
         "selfContained": { "type": "boolean" },
         "noBuild": { "type": "boolean" },
         "noRestore": { "type": "boolean" },
@@ -265,6 +340,8 @@
       "additionalProperties": false,
       "properties": {
         "task": { "const": "overlay" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "source": { "type": "string" },
         "destination": { "type": "string" },
         "clean": { "type": "boolean" },

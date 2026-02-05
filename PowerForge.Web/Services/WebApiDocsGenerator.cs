@@ -2840,13 +2840,14 @@ public static class WebApiDocsGenerator
           sb.AppendLine("        </div>");
           sb.AppendLine("      </div>");
 
-        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, groupOverloads: true, sectionId: "methods");
-        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, sectionId: "properties");
-        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, sectionId: type.Kind == "Enum" ? "values" : "fields");
-        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, sectionId: "events");
+        var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: "methods");
+        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
+        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
+        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
         if (type.ExtensionMethods.Count > 0)
-            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();
@@ -2860,6 +2861,7 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         string codeLanguage,
+        ISet<string> usedMemberIds,
         bool treatAsInherited = true,
         bool groupOverloads = false,
         string? sectionId = null)
@@ -2871,9 +2873,9 @@ public static class WebApiDocsGenerator
         var directId = direct.Count > 0 ? sectionId : null;
         var inheritedId = direct.Count == 0 ? sectionId : null;
         if (direct.Count > 0)
-            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, codeLanguage, false, groupOverloads, directId);
+            AppendMemberCards(sb, label, memberKind, direct, baseUrl, slugMap, codeLanguage, usedMemberIds, false, groupOverloads, directId);
         if (inherited.Count > 0)
-            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, codeLanguage, true, groupOverloads, inheritedId);
+            AppendMemberCards(sb, $"Inherited {label}", memberKind, inherited, baseUrl, slugMap, codeLanguage, usedMemberIds, true, groupOverloads, inheritedId);
     }
 
     private static void AppendMemberCards(
@@ -2884,6 +2886,7 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         string codeLanguage,
+        ISet<string> usedMemberIds,
         bool inheritedSection,
         bool groupOverloads,
         string? sectionId)
@@ -2912,7 +2915,7 @@ public static class WebApiDocsGenerator
             {
                 if (group.Count() == 1)
                 {
-                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, codeLanguage, label);
+                    AppendMemberCard(sb, memberKind, group.First(), baseUrl, slugMap, codeLanguage, usedMemberIds, label);
                     continue;
                 }
                 sb.AppendLine("          <div class=\"member-group\">");
@@ -2923,7 +2926,7 @@ public static class WebApiDocsGenerator
                 sb.AppendLine("            <div class=\"member-group-body\">");
                 foreach (var member in group)
                 {
-                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, label);
+                    AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, usedMemberIds, label);
                 }
                 sb.AppendLine("            </div>");
                 sb.AppendLine("          </div>");
@@ -2933,7 +2936,7 @@ public static class WebApiDocsGenerator
         {
             foreach (var member in members)
             {
-                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, label);
+                AppendMemberCard(sb, memberKind, member, baseUrl, slugMap, codeLanguage, usedMemberIds, label);
             }
         }
         sb.AppendLine("        </div>");
@@ -2947,9 +2950,10 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         string codeLanguage,
+        ISet<string> usedMemberIds,
         string sectionLabel)
     {
-        var memberId = BuildMemberId(memberKind, member);
+        var memberId = BuildUniqueMemberId(BuildMemberId(memberKind, member), usedMemberIds);
         var signature = !string.IsNullOrWhiteSpace(member.Signature)
             ? member.Signature
             : BuildSignature(member, sectionLabel);
@@ -3140,6 +3144,19 @@ public static class WebApiDocsGenerator
                 baseName = $"{baseName}-{suffix}";
         }
         return Slugify(baseName);
+    }
+
+    private static string BuildUniqueMemberId(string preferredId, ISet<string> usedIds)
+    {
+        var candidate = preferredId;
+        var suffix = 2;
+        while (!usedIds.Add(candidate))
+        {
+            candidate = $"{preferredId}-{suffix}";
+            suffix++;
+        }
+
+        return candidate;
     }
 
     private static IReadOnlyDictionary<string, string> BuildTypeSlugMap(IReadOnlyList<ApiTypeModel> types)

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
@@ -10,6 +11,10 @@ namespace PowerForge.Web;
 /// <summary>Verifies site content and routing integrity.</summary>
 public static class WebSiteVerifier
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex MarkdownFenceRegex = new("```[\\s\\S]*?```", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex MarkdownRawHtmlRegex = new("<\\s*(b|i|strong|em|u|h[1-6]|p|ul|ol|li|br)\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+
     /// <summary>Validates the site spec against discovered content.</summary>
     /// <param name="spec">Site configuration.</param>
     /// <param name="plan">Resolved site plan.</param>
@@ -53,6 +58,7 @@ public static class WebSiteVerifier
                 {
                     errors.Add($"Missing title in: {file}");
                 }
+                ValidateMarkdownHygiene(plan.RootPath, file, collection.Name, body, warnings);
 
                 var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
@@ -438,6 +444,19 @@ public static class WebSiteVerifier
         if (!hasMenus && !hasAuto && !nav.AutoDefaults)
         {
             warnings.Add("Navigation.AutoDefaults is disabled and no menus/auto navigation are defined.");
+        }
+
+        if (hasMenus)
+        {
+            var menus = nav.Menus!;
+            var mainMenu = menus.FirstOrDefault(menu => string.Equals(menu.Name, "main", StringComparison.OrdinalIgnoreCase));
+            if (mainMenu?.Items is { Length: > 0 })
+            {
+                var hasHome = mainMenu.Items.Any(item =>
+                    string.Equals(item.Url, "/", StringComparison.OrdinalIgnoreCase));
+                if (!hasHome)
+                    warnings.Add("Navigation main menu does not contain '/'. Add a Home link to keep global navigation consistent.");
+            }
         }
     }
 
@@ -1024,6 +1043,38 @@ public static class WebSiteVerifier
         }
 
         return false;
+    }
+
+    private static void ValidateMarkdownHygiene(string rootPath, string filePath, string? collectionName, string body, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return;
+        if (string.IsNullOrWhiteSpace(collectionName) ||
+            collectionName.IndexOf("doc", StringComparison.OrdinalIgnoreCase) < 0)
+            return;
+
+        var markdownHygieneWarnings = warnings.Count(warning =>
+            warning.StartsWith("Markdown hygiene:", StringComparison.OrdinalIgnoreCase));
+        if (markdownHygieneWarnings >= 10)
+            return;
+
+        var withoutCodeBlocks = MarkdownFenceRegex.Replace(body, string.Empty);
+        var matches = MarkdownRawHtmlRegex.Matches(withoutCodeBlocks);
+        if (matches.Count == 0)
+            return;
+
+        var tags = matches
+            .Select(match => match.Groups[1].Value.ToLowerInvariant())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToArray();
+
+        if (tags.Length == 0)
+            return;
+
+        var relative = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+        warnings.Add($"Markdown hygiene: '{relative}' contains raw HTML tags ({string.Join(", ", tags)}). Prefer Markdown syntax when possible.");
     }
 
     private static string ResolveSlugPath(string relativePath, string relativeDir, string? slugOverride)

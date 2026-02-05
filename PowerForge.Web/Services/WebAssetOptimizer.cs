@@ -43,12 +43,31 @@ public static class WebAssetOptimizer
     /// <returns>Number of HTML files updated with critical CSS.</returns>
     public static int Optimize(WebAssetOptimizerOptions options)
     {
+        return OptimizeDetailed(options).UpdatedCount;
+    }
+
+    /// <summary>Runs asset optimization and returns detailed counters.</summary>
+    /// <param name="options">Optimization options.</param>
+    /// <returns>Detailed optimization result.</returns>
+    public static WebOptimizeResult OptimizeDetailed(WebAssetOptimizerOptions options)
+    {
         if (options is null) throw new ArgumentNullException(nameof(options));
         var siteRoot = Path.GetFullPath(options.SiteRoot);
         if (!Directory.Exists(siteRoot))
             throw new DirectoryNotFoundException($"Site root not found: {siteRoot}");
 
+        var result = new WebOptimizeResult();
+        var updatedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void MarkUpdated(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            var full = Path.GetFullPath(path);
+            if (updatedFiles.Add(full))
+                result.UpdatedCount++;
+        }
+
         var htmlFiles = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories).ToArray();
+        result.HtmlFileCount = htmlFiles.Length;
         var policy = options.AssetPolicy;
         if (policy?.Rewrites is { Length: > 0 })
         {
@@ -59,7 +78,10 @@ public static class WebAssetOptimizer
                 if (string.IsNullOrWhiteSpace(content)) continue;
                 var updated = RewriteHtmlAssets(content, policy.Rewrites);
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
+                {
                     File.WriteAllText(htmlFile, updated);
+                    MarkUpdated(htmlFile);
+                }
             }
         }
         var criticalCss = LoadCriticalCss(options.CriticalCssPath);
@@ -74,7 +96,6 @@ public static class WebAssetOptimizer
             cssPattern = new Regex("(app|api-docs)\\.css", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
         }
 
-        var processed = 0;
         foreach (var htmlFile in htmlFiles)
         {
             var content = File.ReadAllText(htmlFile);
@@ -86,7 +107,8 @@ public static class WebAssetOptimizer
                 if (!string.Equals(updated, content, StringComparison.Ordinal))
                 {
                     File.WriteAllText(htmlFile, updated);
-                    processed++;
+                    result.CriticalCssInlinedCount++;
+                    MarkUpdated(htmlFile);
                 }
             }
         }
@@ -95,10 +117,13 @@ public static class WebAssetOptimizer
         Dictionary<string, string>? hashMap = null;
         if (hashSpec.Enabled)
         {
-            hashMap = HashAssets(siteRoot, hashSpec);
+            hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, MarkUpdated);
+            result.HashedAssetCount = hashedAssetCount;
             if (hashMap.Count > 0)
             {
-                RewriteHashedReferences(siteRoot, htmlFiles, hashMap);
+                var rewrites = RewriteHashedReferences(siteRoot, htmlFiles, hashMap, MarkUpdated);
+                result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
+                result.CssHashRewriteCount = rewrites.CssFilesRewritten;
                 WriteHashManifest(siteRoot, hashSpec, hashMap);
             }
         }
@@ -120,7 +145,11 @@ public static class WebAssetOptimizer
                     minified = null;
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(html, minified, StringComparison.Ordinal))
+                {
                     File.WriteAllText(htmlFile, minified);
+                    result.HtmlMinifiedCount++;
+                    MarkUpdated(htmlFile);
+                }
             }
         }
 
@@ -141,7 +170,11 @@ public static class WebAssetOptimizer
                     minified = null;
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(css, minified, StringComparison.Ordinal))
+                {
                     File.WriteAllText(cssFile, minified);
+                    result.CssMinifiedCount++;
+                    MarkUpdated(cssFile);
+                }
             }
         }
 
@@ -162,14 +195,26 @@ public static class WebAssetOptimizer
                     minified = null;
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(js, minified, StringComparison.Ordinal))
+                {
                     File.WriteAllText(jsFile, minified);
+                    result.JsMinifiedCount++;
+                    MarkUpdated(jsFile);
+                }
             }
         }
 
         if (policy?.CacheHeaders?.Enabled == true)
-            WriteCacheHeaders(siteRoot, policy.CacheHeaders, hashMap);
+        {
+            var headersPath = WriteCacheHeaders(siteRoot, policy.CacheHeaders, hashMap);
+            if (!string.IsNullOrWhiteSpace(headersPath))
+            {
+                result.CacheHeadersWritten = true;
+                result.CacheHeadersPath = headersPath;
+                MarkUpdated(headersPath);
+            }
+        }
 
-        return processed;
+        return result;
     }
 
     private static AssetHashSpec ResolveHashSpec(WebAssetOptimizerOptions options, AssetPolicySpec? policy)
@@ -262,9 +307,10 @@ public static class WebAssetOptimizer
         return url;
     }
 
-    private static Dictionary<string, string> HashAssets(string siteRoot, AssetHashSpec spec)
+    private static Dictionary<string, string> HashAssets(string siteRoot, AssetHashSpec spec, out int hashedAssetCount, Action<string>? onUpdated = null)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        hashedAssetCount = 0;
         var extensions = (spec.Extensions?.Length ?? 0) == 0 ? new[] { ".css", ".js" } : spec.Extensions!;
         var files = Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
             .Where(path => extensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
@@ -284,6 +330,8 @@ public static class WebAssetOptimizer
             var target = Path.Combine(siteRoot, hashedName.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Move(file, target, overwrite: true);
+            onUpdated?.Invoke(target);
+            hashedAssetCount++;
 
             map[$"/{relative}"] = $"/{hashedName}";
             map[relative] = hashedName;
@@ -292,15 +340,25 @@ public static class WebAssetOptimizer
         return map;
     }
 
-    private static void RewriteHashedReferences(string siteRoot, string[] htmlFiles, Dictionary<string, string> map)
+    private static (int HtmlFilesRewritten, int CssFilesRewritten) RewriteHashedReferences(
+        string siteRoot,
+        string[] htmlFiles,
+        Dictionary<string, string> map,
+        Action<string>? onUpdated = null)
     {
+        var htmlFilesRewritten = 0;
+        var cssFilesRewritten = 0;
         foreach (var htmlFile in htmlFiles)
         {
             var html = File.ReadAllText(htmlFile);
             if (string.IsNullOrWhiteSpace(html)) continue;
             var updated = RewriteReferences(html, map);
             if (!string.Equals(updated, html, StringComparison.Ordinal))
+            {
                 File.WriteAllText(htmlFile, updated);
+                htmlFilesRewritten++;
+                onUpdated?.Invoke(htmlFile);
+            }
         }
 
         foreach (var cssFile in Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories))
@@ -309,8 +367,14 @@ public static class WebAssetOptimizer
             if (string.IsNullOrWhiteSpace(css)) continue;
             var updated = RewriteCssUrls(css, map);
             if (!string.Equals(updated, css, StringComparison.Ordinal))
+            {
                 File.WriteAllText(cssFile, updated);
+                cssFilesRewritten++;
+                onUpdated?.Invoke(cssFile);
+            }
         }
+
+        return (htmlFilesRewritten, cssFilesRewritten);
     }
 
     private static string RewriteReferences(string html, Dictionary<string, string> map)
@@ -390,13 +454,13 @@ public static class WebAssetOptimizer
         File.WriteAllText(path, json);
     }
 
-    private static void WriteCacheHeaders(string siteRoot, CacheHeadersSpec headers, Dictionary<string, string>? map)
+    private static string? WriteCacheHeaders(string siteRoot, CacheHeadersSpec headers, Dictionary<string, string>? map)
     {
         var output = string.IsNullOrWhiteSpace(headers.OutputPath) ? "_headers" : headers.OutputPath;
         if (!TryResolveUnderRoot(siteRoot, output.TrimStart('/', '\\'), out var outputPath))
         {
             Trace.TraceWarning($"Cache headers output path outside site root: {headers.OutputPath}");
-            return;
+            return null;
         }
         var htmlCache = string.IsNullOrWhiteSpace(headers.HtmlCacheControl)
             ? "public, max-age=0, must-revalidate"
@@ -433,6 +497,7 @@ public static class WebAssetOptimizer
         }
 
         File.WriteAllText(outputPath, sb.ToString().TrimEnd() + Environment.NewLine);
+        return outputPath;
     }
 
     private static bool GlobMatch(string pattern, string value)

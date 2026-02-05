@@ -29,6 +29,22 @@ public sealed class WebAuditSummary
     public int RenderedConsoleWarningCount { get; set; }
     /// <summary>Total failed network requests during rendered checks.</summary>
     public int RenderedFailedRequestCount { get; set; }
+    /// <summary>Total errors emitted by audit.</summary>
+    public int ErrorCount { get; set; }
+    /// <summary>Total warnings emitted by audit.</summary>
+    public int WarningCount { get; set; }
+    /// <summary>Total issues considered new vs baseline.</summary>
+    public int NewIssueCount { get; set; }
+    /// <summary>Total new errors considered new vs baseline.</summary>
+    public int NewErrorCount { get; set; }
+    /// <summary>Total new warnings considered new vs baseline.</summary>
+    public int NewWarningCount { get; set; }
+    /// <summary>Resolved baseline path if baseline file was used.</summary>
+    public string? BaselinePath { get; set; }
+    /// <summary>Number of issue keys loaded from baseline.</summary>
+    public int BaselineIssueCount { get; set; }
+    /// <summary>Limited set of structured issues.</summary>
+    public WebAuditIssue[] Issues { get; set; } = Array.Empty<WebAuditIssue>();
     /// <summary>Limited set of errors (if any).</summary>
     public string[] Errors { get; set; } = Array.Empty<string>();
     /// <summary>Limited set of warnings (if any).</summary>

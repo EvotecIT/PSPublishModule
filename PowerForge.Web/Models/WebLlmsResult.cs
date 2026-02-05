@@ -56,6 +56,12 @@ public sealed class WebPipelineResult
     public int StepCount { get; set; }
     /// <summary>Overall success status.</summary>
     public bool Success { get; set; }
+    /// <summary>Total pipeline duration in milliseconds.</summary>
+    public long DurationMs { get; set; }
+    /// <summary>Resolved cache path when cache is enabled.</summary>
+    public string? CachePath { get; set; }
+    /// <summary>Resolved profile path when profile output is written.</summary>
+    public string? ProfilePath { get; set; }
     /// <summary>Step-by-step results.</summary>
     public List<WebPipelineStepResult> Steps { get; set; } = new();
 }
@@ -82,6 +88,10 @@ public sealed class WebPipelineStepResult
     public string Task { get; set; } = string.Empty;
     /// <summary>Step success status.</summary>
     public bool Success { get; set; }
+    /// <summary>True when step execution was skipped due to cache hit.</summary>
+    public bool Cached { get; set; }
+    /// <summary>Step duration in milliseconds.</summary>
+    public long DurationMs { get; set; }
     /// <summary>Optional step message.</summary>
     public string? Message { get; set; }
 }
@@ -89,8 +99,28 @@ public sealed class WebPipelineStepResult
 /// <summary>Result payload for optimization pass.</summary>
 public sealed class WebOptimizeResult
 {
-    /// <summary>Number of files updated.</summary>
+    /// <summary>Total number of unique files updated.</summary>
     public int UpdatedCount { get; set; }
+    /// <summary>Total HTML files discovered under site root.</summary>
+    public int HtmlFileCount { get; set; }
+    /// <summary>Number of HTML files updated by critical CSS inlining.</summary>
+    public int CriticalCssInlinedCount { get; set; }
+    /// <summary>Number of HTML files minified.</summary>
+    public int HtmlMinifiedCount { get; set; }
+    /// <summary>Number of CSS files minified.</summary>
+    public int CssMinifiedCount { get; set; }
+    /// <summary>Number of JavaScript files minified.</summary>
+    public int JsMinifiedCount { get; set; }
+    /// <summary>Number of assets renamed during hashing.</summary>
+    public int HashedAssetCount { get; set; }
+    /// <summary>Number of HTML files with rewritten references after hashing.</summary>
+    public int HtmlHashRewriteCount { get; set; }
+    /// <summary>Number of CSS files with rewritten references after hashing.</summary>
+    public int CssHashRewriteCount { get; set; }
+    /// <summary>True when cache headers file was written.</summary>
+    public bool CacheHeadersWritten { get; set; }
+    /// <summary>Optional path to generated cache headers file.</summary>
+    public string? CacheHeadersPath { get; set; }
 }
 
 /// <summary>Result payload for dotnet build.</summary>
