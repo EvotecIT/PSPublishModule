@@ -1,0 +1,15 @@
+{
+  "steps": [
+    {
+      "task": "changelog",
+      "source": "file",
+      "changelog": "./CHANGELOG.md",
+      "out": "./data/changelog.json"
+    },
+    {
+      "task": "build",
+      "config": "./site.json",
+      "out": "./_site"
+    }
+  ]
+}

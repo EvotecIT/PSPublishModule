@@ -1,0 +1,19 @@
+{
+  "title": "Changelog",
+  "source": "file",
+  "generatedAtUtc": "2026-02-02T00:00:00Z",
+  "items": [
+    {
+      "title": "v0.2.0 - 2026-02-01",
+      "tag": "v0.2.0",
+      "publishedAt": "2026-02-01T00:00:00+00:00",
+      "body_md": "- Added API docs integration hooks\n- Added changelog data generator"
+    },
+    {
+      "title": "v0.1.0 - 2026-01-15",
+      "tag": "v0.1.0",
+      "publishedAt": "2026-01-15T00:00:00+00:00",
+      "body_md": "- Initial sample site"
+    }
+  ]
+}

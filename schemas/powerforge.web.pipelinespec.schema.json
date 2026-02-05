@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.pipelinespec.schema.json",
+  "title": "PowerForge Web PipelineSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/PipelineStep" }
+    }
+  },
+  "required": ["steps"],
+  "$defs": {
+    "PipelineStep": {
+      "type": "object",
+      "oneOf": [
+        { "$ref": "#/$defs/BuildStep" },
+        { "$ref": "#/$defs/VerifyStep" },
+        { "$ref": "#/$defs/ApiDocsStep" },
+        { "$ref": "#/$defs/ChangelogStep" },
+        { "$ref": "#/$defs/LlmsStep" },
+        { "$ref": "#/$defs/SitemapStep" },
+        { "$ref": "#/$defs/OptimizeStep" },
+        { "$ref": "#/$defs/AuditStep" },
+        { "$ref": "#/$defs/DotNetBuildStep" },
+        { "$ref": "#/$defs/DotNetPublishStep" },
+        { "$ref": "#/$defs/OverlayStep" }
+      ]
+    },
+    "BuildStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "build" },
+        "config": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "clean": { "type": "boolean" }
+      },
+      "required": ["task", "config", "out"]
+    },
+    "VerifyStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "verify" },
+        "config": { "type": "string" }
+      },
+      "required": ["task", "config"]
+    },
+    "ApiDocsStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "apidocs" },
+        "type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
+        "xml": { "type": "string" },
+        "help": { "type": "string" },
+        "helpPath": { "type": "string" },
+        "assembly": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "title": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "format": { "type": "string", "enum": ["json", "hybrid", "html", "both"] },
+        "css": { "type": "string" },
+        "headerHtml": { "type": "string" },
+        "footerHtml": { "type": "string" },
+        "template": { "type": "string" },
+        "templateRoot": { "type": "string" },
+        "templateIndex": { "type": "string" },
+        "templateType": { "type": "string" },
+        "templateDocsIndex": { "type": "string" },
+        "templateDocsType": { "type": "string" },
+        "docsScript": { "type": "string" },
+        "searchScript": { "type": "string" },
+          "docsHome": { "type": "string" },
+          "docsHomeUrl": { "type": "string" },
+          "sidebar": { "type": "string", "enum": ["left", "right"] },
+          "sidebarPosition": { "type": "string", "enum": ["left", "right"] },
+          "bodyClass": { "type": "string" },
+          "body-class": { "type": "string" },
+          "sourceRoot": { "type": "string" },
+        "sourceUrl": { "type": "string" },
+        "includeUndocumented": { "type": "boolean" },
+        "nav": { "type": "string" },
+        "navJson": { "type": "string" },
+        "includeNamespace": { "type": "string" },
+        "excludeNamespace": { "type": "string" },
+        "includeType": { "type": "string" },
+        "excludeType": { "type": "string" }
+      },
+      "required": ["task", "out"]
+    },
+    "ChangelogStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "changelog" },
+        "source": { "type": "string", "enum": ["Auto", "File", "GitHub"] },
+        "changelog": { "type": "string" },
+        "changelogPath": { "type": "string" },
+        "repo": { "type": "string" },
+        "repoUrl": { "type": "string" },
+        "token": { "type": "string" },
+        "max": { "type": ["string", "integer"] },
+        "title": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" }
+      },
+      "required": ["task", "out"]
+    },
+    "LlmsStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "llms" },
+        "siteRoot": { "type": "string" },
+        "project": { "type": "string" },
+        "apiIndex": { "type": "string" },
+        "apiBase": { "type": "string" },
+        "name": { "type": "string" },
+        "package": { "type": "string" },
+        "packageId": { "type": "string" },
+        "version": { "type": "string" },
+        "quickstart": { "type": "string" },
+        "overview": { "type": "string" },
+        "license": { "type": "string" },
+        "targets": { "type": "string" },
+        "extra": { "type": "string" },
+        "apiLevel": { "type": "string", "enum": ["None", "Summary", "Full"] },
+        "apiMaxTypes": { "type": "integer", "minimum": 0 },
+        "apiMaxMembers": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["task", "siteRoot"]
+    },
+    "SitemapStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "sitemap" },
+        "siteRoot": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "apiSitemap": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/SitemapEntry" } },
+        "includeHtmlFiles": { "type": "boolean" },
+        "includeTextFiles": { "type": "boolean" },
+        "extraPaths": { "type": "array", "items": { "type": "string" } },
+        "html": { "type": "boolean" },
+        "htmlOutput": { "type": "string" },
+        "htmlOut": { "type": "string" },
+        "htmlTemplate": { "type": "string" },
+        "htmlCss": { "type": "string" },
+        "htmlTitle": { "type": "string" }
+      },
+      "required": ["task", "siteRoot", "baseUrl"]
+    },
+    "OptimizeStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "optimize" },
+        "siteRoot": { "type": "string" },
+        "config": { "type": "string" },
+        "criticalCss": { "type": "string" },
+        "cssPattern": { "type": "string" },
+        "minifyHtml": { "type": "boolean" },
+        "minifyCss": { "type": "boolean" },
+        "minifyJs": { "type": "boolean" },
+        "hashAssets": { "type": "boolean" },
+        "hashExtensions": { "type": "array", "items": { "type": "string" } },
+        "hashExclude": { "type": "array", "items": { "type": "string" } },
+        "hashManifest": { "type": "string" },
+        "cacheHeaders": { "type": "boolean" },
+        "cacheHeadersOut": { "type": "string" },
+        "cacheHeadersHtml": { "type": "string" },
+        "cacheHeadersAssets": { "type": "string" },
+        "cacheHeadersPaths": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["task", "siteRoot"]
+    },
+    "AuditStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "audit" },
+        "siteRoot": { "type": "string" },
+        "include": { "type": "string" },
+        "exclude": { "type": "string" },
+        "noDefaultExclude": { "type": "boolean" },
+        "ignoreNav": { "type": "string" },
+        "noDefaultIgnoreNav": { "type": "boolean" },
+        "navSelector": { "type": "string" },
+        "navRequired": { "type": "boolean" },
+        "navOptional": { "type": "boolean" },
+        "navIgnorePrefixes": { "type": "string" },
+        "checkLinks": { "type": "boolean" },
+        "checkAssets": { "type": "boolean" },
+        "checkNav": { "type": "boolean" },
+        "checkTitles": { "type": "boolean" },
+        "checkDuplicateIds": { "type": "boolean" },
+        "checkHtmlStructure": { "type": "boolean" },
+        "rendered": { "type": "boolean" },
+        "renderedEngine": { "type": "string" },
+        "renderedEnsureInstalled": { "type": "boolean" },
+        "renderedHeadless": { "type": "boolean" },
+        "renderedBaseUrl": { "type": "string" },
+        "renderedHost": { "type": "string" },
+        "renderedPort": { "type": "integer", "minimum": 0 },
+        "renderedServe": { "type": "boolean" },
+        "renderedMaxPages": { "type": "integer", "minimum": 0 },
+        "renderedTimeoutMs": { "type": "integer", "minimum": 0 },
+        "renderedCheckConsoleErrors": { "type": "boolean" },
+        "renderedCheckConsoleWarnings": { "type": "boolean" },
+        "renderedCheckFailedRequests": { "type": "boolean" },
+        "renderedInclude": { "type": "string" },
+        "renderedExclude": { "type": "string" },
+        "summary": { "type": "boolean" },
+        "summaryPath": { "type": "string" },
+        "summaryMaxIssues": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["task", "siteRoot"]
+    },
+    "DotNetBuildStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "dotnet-build" },
+        "project": { "type": "string" },
+        "configuration": { "type": "string" },
+        "framework": { "type": "string" },
+        "runtime": { "type": "string" },
+        "noRestore": { "type": "boolean" }
+      },
+      "required": ["task", "project"]
+    },
+    "DotNetPublishStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "dotnet-publish" },
+        "project": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "configuration": { "type": "string" },
+        "framework": { "type": "string" },
+        "runtime": { "type": "string" },
+        "selfContained": { "type": "boolean" },
+        "noBuild": { "type": "boolean" },
+        "noRestore": { "type": "boolean" },
+        "baseHref": { "type": "string" },
+        "defineConstants": { "type": "string" },
+        "noBlazorFixes": { "type": "boolean" }
+      },
+      "required": ["task", "project", "out"]
+    },
+    "OverlayStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "overlay" },
+        "source": { "type": "string" },
+        "destination": { "type": "string" },
+        "clean": { "type": "boolean" },
+        "include": { "type": "string" },
+        "exclude": { "type": "string" }
+      },
+      "required": ["task", "source", "destination"]
+    },
+    "SitemapEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "route": { "type": "string" },
+        "url": { "type": "string" },
+        "priority": { "type": "string" },
+        "changefreq": { "type": "string" },
+        "changeFrequency": { "type": "string" },
+        "lastmod": { "type": "string" },
+        "lastModified": { "type": "string" }
+      }
+    }
+  }
+}

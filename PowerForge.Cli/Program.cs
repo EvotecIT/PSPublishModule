@@ -1,6 +1,7 @@
 using PowerForge;
 using PowerForge.Cli;
 using Spectre.Console;
+using System.Diagnostics;
 using System.Text.Json;
 
 const int OutputSchemaVersion = 1;
@@ -211,6 +212,96 @@ switch (cmd)
                 {
                     SchemaVersion = OutputSchemaVersion,
                     Command = "build",
+                    Success = false,
+                    ExitCode = 1,
+                    Error = ex.Message
+                });
+                return 1;
+            }
+
+            logger.Error(ex.Message);
+            return 1;
+        }
+    }
+    case "template":
+    {
+        var argv = filteredArgs.Skip(1).ToArray();
+        var outputJson = IsJsonOutput(argv);
+
+        var scriptPath = TryGetOptionValue(argv, "--script") ?? TryGetOptionValue(argv, "--build-script");
+        if (string.IsNullOrWhiteSpace(scriptPath))
+        {
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "template",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = "Missing --script <Build-Module.ps1>."
+                });
+            }
+            Console.WriteLine("Usage: powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]");
+            return 2;
+        }
+
+        try
+        {
+            var fullScriptPath = ResolveExistingFilePath(scriptPath);
+            var projectRoot = TryGetProjectRoot(argv);
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+                projectRoot = Path.GetFullPath(projectRoot.Trim().Trim('"'));
+            if (string.IsNullOrWhiteSpace(projectRoot))
+                projectRoot = Path.GetDirectoryName(fullScriptPath) ?? Directory.GetCurrentDirectory();
+
+            var outPath = TryGetOptionValue(argv, "--out") ?? TryGetOptionValue(argv, "--out-path") ?? TryGetOptionValue(argv, "--output-path");
+            if (string.IsNullOrWhiteSpace(outPath))
+                outPath = Path.Combine(projectRoot, "powerforge.json");
+            else
+                outPath = Path.GetFullPath(outPath.Trim().Trim('"'));
+
+            var shell = TryGetOptionValue(argv, "--powershell");
+            if (string.IsNullOrWhiteSpace(shell))
+                shell = OperatingSystem.IsWindows() ? "powershell.exe" : "pwsh";
+
+            var psScript = BuildTemplateScript(fullScriptPath, outPath, projectRoot);
+            var psArgs = BuildPowerShellArgs(psScript);
+
+            var result = RunProcess(shell, psArgs, projectRoot);
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "template",
+                    Success = result.ExitCode == 0,
+                    ExitCode = result.ExitCode,
+                    Error = result.ExitCode == 0 ? null : (string.IsNullOrWhiteSpace(result.Error) ? "Template generation failed." : result.Error),
+                    Config = "pipeline",
+                    ConfigPath = outPath
+                });
+                return result.ExitCode;
+            }
+
+            if (result.ExitCode != 0)
+            {
+                if (!string.IsNullOrWhiteSpace(result.Error))
+                    logger.Error(result.Error);
+                return result.ExitCode;
+            }
+
+            logger.Success($"Generated {outPath}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            if (outputJson)
+            {
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "template",
                     Success = false,
                     ExitCode = 1,
                     Error = ex.Message
@@ -1428,6 +1519,7 @@ Usage:
   powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
   powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]
   powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
+  powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]
   powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|AotSpeed|AotSize>] [--skip-restore] [--skip-build]
   powerforge normalize <files...>   Normalize encodings and line endings [--output json]
   powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
@@ -3043,10 +3135,79 @@ static JsonElement? LogsToJsonElement(BufferingLogger? logBuffer)
     return CliJson.SerializeToElement(logBuffer.Entries.ToArray(), CliJson.Context.LogEntryArray);
 }
 
+static ProcessResult RunProcess(string command, IEnumerable<string> args, string workingDirectory)
+{
+    var psi = new ProcessStartInfo
+    {
+        FileName = command,
+        WorkingDirectory = workingDirectory,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
+    foreach (var arg in args)
+        psi.ArgumentList.Add(arg);
+
+    using var process = Process.Start(psi);
+    if (process is null)
+        return new ProcessResult(1, string.Empty, "Failed to start PowerShell process.");
+
+    var stdout = process.StandardOutput.ReadToEnd();
+    var stderr = process.StandardError.ReadToEnd();
+    process.WaitForExit();
+    return new ProcessResult(process.ExitCode, stdout, stderr);
+}
+
+static string[] BuildPowerShellArgs(string script)
+{
+    var args = new List<string> { "-NoProfile", "-NonInteractive" };
+    if (OperatingSystem.IsWindows())
+    {
+        args.Add("-ExecutionPolicy");
+        args.Add("Bypass");
+    }
+    args.Add("-Command");
+    args.Add(script);
+    return args.ToArray();
+}
+
+static string QuotePowerShellLiteral(string value)
+    => "'" + value.Replace("'", "''") + "'";
+
+static string BuildTemplateScript(string scriptPath, string outPath, string projectRoot)
+{
+    var escapedScript = QuotePowerShellLiteral(scriptPath);
+    var escapedConfig = QuotePowerShellLiteral(outPath);
+    var escapedRoot = QuotePowerShellLiteral(projectRoot);
+
+    return string.Join("; ", new[]
+    {
+        "$ErrorActionPreference = 'Stop'",
+        $"Set-Location -LiteralPath {escapedRoot}",
+        "try {",
+        "  Import-Module PSPublishModule -Force -ErrorAction Stop",
+        $"  $targetJson = {escapedConfig}",
+        "  function Invoke-ModuleBuild {",
+        "    param([Parameter(ValueFromRemainingArguments = $true)][object[]]$Args)",
+        "    $cmd = Get-Command -Name Invoke-ModuleBuild -CommandType Cmdlet -Module PSPublishModule",
+        "    & $cmd @Args -JsonOnly -JsonPath $targetJson -NoInteractive",
+        "  }",
+        "  Set-Alias -Name Build-Module -Value Invoke-ModuleBuild -Scope Local",
+        $"  . {escapedScript}",
+        "} catch {",
+        "  Write-Error $_.Exception.Message",
+        "  exit 1",
+        "}"
+    });
+}
+
 static void WriteJson(CliJsonEnvelope envelope, Action<Utf8JsonWriter>? writeAdditionalProperties = null)
 {
     CliJsonWriter.Write(envelope, writeAdditionalProperties);
 }
+
+sealed record ProcessResult(int ExitCode, string Output, string Error);
 
 sealed class LogEntry
 {

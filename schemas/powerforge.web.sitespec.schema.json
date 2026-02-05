@@ -1,0 +1,497 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.sitespec.schema.json",
+  "title": "PowerForge Web SiteSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Name": { "type": "string" },
+    "BaseUrl": { "type": "string" },
+    "Extends": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "extends": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "DefaultTheme": { "type": "string" },
+    "ThemeEngine": { "type": "string" },
+    "TrailingSlash": { "type": "string", "enum": ["always", "never", "ignore"] },
+    "ContentRoot": { "type": "string" },
+    "ProjectsRoot": { "type": "string" },
+    "ThemesRoot": { "type": "string" },
+    "SharedRoot": { "type": "string" },
+    "DataRoot": { "type": "string" },
+    "ArchetypesRoot": { "type": "string" },
+    "StaticAssets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/StaticAssetSpec" }
+    },
+    "Head": { "$ref": "#/$defs/HeadSpec" },
+    "Social": { "$ref": "#/$defs/SocialSpec" },
+    "StructuredData": { "$ref": "#/$defs/StructuredDataSpec" },
+    "Collections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/CollectionSpec" }
+    },
+    "Outputs": { "$ref": "#/$defs/OutputsSpec" },
+    "Taxonomies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/TaxonomySpec" }
+    },
+    "EditLinks": { "$ref": "#/$defs/EditLinksSpec" },
+    "RouteOverrides": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RedirectSpec" }
+    },
+    "Redirects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RedirectSpec" }
+    },
+    "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
+    "AssetPolicy": { "$ref": "#/$defs/AssetPolicySpec" },
+    "Prism": { "$ref": "#/$defs/PrismSpec" },
+    "A11y": { "$ref": "#/$defs/A11ySpec" },
+    "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
+    "Analytics": { "$ref": "#/$defs/AnalyticsSpec" },
+    "Navigation": { "$ref": "#/$defs/NavigationSpec" },
+    "Versioning": { "$ref": "#/$defs/VersioningSpec" },
+    "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
+    "Cache": { "$ref": "#/$defs/BuildCacheSpec" }
+  },
+  "required": ["Name", "BaseUrl", "Collections"],
+  "$defs": {
+    "CollectionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Input": { "type": "string" },
+        "Output": { "type": "string" },
+        "DefaultLayout": { "type": "string" },
+        "ListLayout": { "type": "string" },
+        "TocFile": { "type": "string" },
+        "UseToc": { "type": "boolean", "default": true },
+        "Include": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } },
+        "SortBy": { "type": "string" },
+        "SortOrder": { "type": "string", "enum": ["asc", "desc"] },
+        "Outputs": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Name", "Input", "Output"]
+    },
+    "EditLinksSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Template": { "type": "string" },
+        "PathBase": { "type": "string" }
+      }
+    },
+    "RedirectSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "From": { "type": "string" },
+        "To": { "type": "string" },
+        "Status": { "type": "integer", "enum": [301, 302, 307, 308] },
+        "MatchType": { "type": "string", "enum": ["Exact", "Prefix", "Wildcard", "Regex"] },
+        "PreserveQuery": { "type": "boolean" }
+      },
+      "required": ["From", "To"]
+    },
+    "AssetRegistrySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Bundles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssetBundleSpec" }
+        },
+        "RouteBundles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RouteBundleSpec" }
+        },
+        "Preloads": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PreloadSpec" }
+        },
+        "CriticalCss": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CriticalCssSpec" }
+        },
+        "CssStrategy": { "type": "string", "enum": ["standard", "async"] }
+      }
+    },
+    "AssetPolicySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Mode": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
+        "Hashing": { "$ref": "#/$defs/AssetHashSpec" },
+        "CacheHeaders": { "$ref": "#/$defs/CacheHeadersSpec" },
+        "Rewrites": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/AssetRewriteSpec" }
+        }
+      }
+    },
+    "AssetHashSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Extensions": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } },
+        "ManifestPath": { "type": "string" }
+      }
+    },
+    "CacheHeadersSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "OutputPath": { "type": "string" },
+        "HtmlCacheControl": { "type": "string" },
+        "ImmutableCacheControl": { "type": "string" },
+        "ImmutablePaths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AssetRewriteSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Match": { "type": "string" },
+        "Replace": { "type": "string" },
+        "MatchType": { "type": "string", "enum": ["contains", "prefix", "exact", "regex"] },
+        "Source": { "type": "string" },
+        "Destination": { "type": "string" }
+      },
+      "required": ["Match", "Replace"]
+    },
+      "PrismSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "Mode": { "type": "string", "enum": ["auto", "always", "off"] },
+          "Source": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
+          "ThemeLight": { "type": "string" },
+          "ThemeDark": { "type": "string" },
+          "CdnBase": { "type": "string" },
+          "DefaultLanguage": { "type": "string" },
+          "Local": { "$ref": "#/$defs/PrismLocalSpec" }
+        }
+      },
+    "PrismLocalSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ThemeLight": { "type": "string" },
+        "ThemeDark": { "type": "string" },
+        "Core": { "type": "string" },
+        "Autoloader": { "type": "string" },
+        "LanguagesPath": { "type": "string" }
+      }
+    },
+    "AssetBundleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Css": { "type": "array", "items": { "type": "string" } },
+        "Js": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Name"]
+    },
+    "RouteBundleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Match": { "type": "string" },
+        "Bundles": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Match", "Bundles"]
+    },
+    "PreloadSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Href": { "type": "string" },
+        "As": { "type": "string" },
+        "Type": { "type": "string" },
+        "Crossorigin": { "type": "string" }
+      },
+      "required": ["Href", "As"]
+    },
+    "CriticalCssSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Path": { "type": "string" }
+      },
+      "required": ["Name", "Path"]
+    },
+    "StaticAssetSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Source": { "type": "string" },
+        "Destination": { "type": "string" }
+      },
+      "required": ["Source"]
+    },
+    "HeadSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Html": { "type": "string" },
+        "BodyClass": { "type": "string" },
+        "Links": { "type": "array", "items": { "$ref": "#/$defs/HeadLinkSpec" } },
+        "Meta": { "type": "array", "items": { "$ref": "#/$defs/HeadMetaSpec" } }
+      }
+    },
+    "HeadLinkSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Rel": { "type": "string" },
+        "Href": { "type": "string" },
+        "Type": { "type": "string" },
+        "Sizes": { "type": "string" },
+        "Crossorigin": { "type": "string" }
+      },
+      "required": ["Rel", "Href"]
+    },
+    "HeadMetaSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Property": { "type": "string" },
+        "Content": { "type": "string" }
+      },
+      "required": ["Content"]
+    },
+    "SocialSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "SiteName": { "type": "string" },
+        "Image": { "type": "string" },
+        "TwitterCard": { "type": "string" }
+      }
+    },
+    "StructuredDataSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Breadcrumbs": { "type": "boolean" }
+      }
+    },
+    "A11ySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SkipLinkLabel": { "type": "string" },
+        "ExternalLinkLabel": { "type": "string" },
+        "NavToggleLabel": { "type": "string" },
+        "SearchLabel": { "type": "string" }
+      }
+    },
+    "LinkRulesSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ExternalRel": { "type": "string" },
+        "ExternalTarget": { "type": "string" },
+        "AddExternalIcon": { "type": "boolean" }
+      }
+    },
+    "AnalyticsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Provider": { "type": "string", "enum": ["FirstParty", "None"] },
+        "Endpoint": { "type": "string" },
+        "RespectDnt": { "type": "boolean" },
+        "SampleRate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "OutputsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Formats": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputFormatSpec" }
+        },
+        "Rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OutputRuleSpec" }
+        }
+      }
+    },
+    "OutputFormatSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "MediaType": { "type": "string" },
+        "Suffix": { "type": "string" },
+        "Rel": { "type": "string" },
+        "IsPlainText": { "type": "boolean" }
+      },
+      "required": ["Name"]
+    },
+    "OutputRuleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Kind": { "type": "string" },
+        "Formats": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Kind", "Formats"]
+    },
+    "TaxonomySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "BasePath": { "type": "string" },
+        "ListLayout": { "type": "string" },
+        "TermLayout": { "type": "string" },
+        "SortBy": { "type": "string" },
+        "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
+      },
+      "required": ["Name", "BasePath"]
+    },
+    "VersioningSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "BasePath": { "type": "string" },
+        "Current": { "type": "string" },
+        "Versions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/VersionSpec" }
+        }
+      }
+    },
+    "VersionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Label": { "type": "string" },
+        "Url": { "type": "string" },
+        "Default": { "type": "boolean" },
+        "Latest": { "type": "boolean" },
+        "Deprecated": { "type": "boolean" }
+      },
+      "required": ["Name"]
+    },
+    "LinkCheckSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "IncludeExternal": { "type": "boolean" },
+        "Skip": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "BuildCacheSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Root": { "type": "string" },
+        "Mode": { "type": "string", "enum": ["contenthash", "mtime"] }
+      }
+    },
+      "NavigationSpec": {
+        "type": "object",
+        "additionalProperties": false,
+          "properties": {
+            "AutoDefaults": { "type": "boolean", "default": true },
+            "Menus": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/MenuSpec" }
+            },
+          "Actions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/MenuItemSpec" }
+          },
+          "Auto": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/NavigationAutoSpec" }
+          }
+        }
+      },
+    "MenuSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Label": { "type": "string" },
+        "Items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        }
+      },
+      "required": ["Name"]
+    },
+      "MenuItemSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "Title": { "type": "string" },
+          "Text": { "type": "string" },
+          "Url": { "type": "string" },
+          "Icon": { "type": "string" },
+          "IconHtml": { "type": "string" },
+          "Kind": { "type": "string" },
+          "CssClass": { "type": "string" },
+          "AriaLabel": { "type": "string" },
+          "Badge": { "type": "string" },
+          "Description": { "type": "string" },
+          "Target": { "type": "string" },
+        "Rel": { "type": "string" },
+        "External": { "type": "boolean" },
+        "Weight": { "type": "number" },
+        "Match": { "type": "string" },
+        "Items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        }
+      },
+      "required": ["Title"]
+    },
+    "NavigationAutoSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Collection": { "type": "string" },
+        "Menu": { "type": "string" },
+        "Root": { "type": "string" },
+        "MaxDepth": { "type": "integer", "minimum": 1 },
+        "IncludeIndex": { "type": "boolean" },
+        "IncludeDrafts": { "type": "boolean" },
+        "Sort": { "type": "string" }
+      },
+      "required": ["Collection", "Menu"]
+    }
+  }
+}

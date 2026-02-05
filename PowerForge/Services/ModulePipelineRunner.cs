@@ -95,6 +95,13 @@ public sealed class ModulePipelineRunner
         bool localVersioning = false;
         InstallationStrategy? installStrategyFromSegments = null;
         int? keepVersionsFromSegments = null;
+        bool installMissingModules = false;
+        bool installMissingModulesForce = false;
+        bool installMissingModulesPrerelease = false;
+        bool resolveMissingModulesOnline = false;
+        bool warnIfRequiredModulesOutdated = false;
+        string? installMissingModulesRepository = null;
+        RepositoryCredential? installMissingModulesCredential = null;
         bool signModule = false;
         bool mergeModule = false;
         bool mergeModuleSet = false;
@@ -118,17 +125,26 @@ public sealed class ModulePipelineRunner
         FileConsistencySettings? fileConsistencySettings = null;
         ModuleValidationSettings? validationSettings = null;
         ConfigurationFormattingSegment? formatting = null;
+        ImportModulesConfiguration? importModules = null;
+        PlaceHolderOptionConfiguration? placeHolderOption = null;
+        var placeHolders = new List<PlaceHolderReplacement>();
+        var commandDependencies = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var testsAfterMerge = new List<TestConfiguration>();
         var artefacts = new List<ConfigurationArtefactSegment>();
         var publishes = new List<ConfigurationPublishSegment>();
         var approvedModules = new List<string>();
         var moduleSkipIgnoreModules = new List<string>();
         var moduleSkipIgnoreFunctions = new List<string>();
         bool moduleSkipForce = false;
+        bool moduleSkipFailOnMissingCommands = false;
+        bool resolveMissingModulesOnlineSet = false;
 
         var requiredModulesDraft = new List<RequiredModuleDraft>();
         var requiredIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var requiredModulesDraftForPackaging = new List<RequiredModuleDraft>();
         var requiredPackagingIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var externalModules = new List<string>();
+        var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
         {
@@ -155,6 +171,17 @@ public sealed class ModulePipelineRunner
                     if (b.LocalVersion.HasValue) localVersioning = b.LocalVersion.Value;
                     if (b.VersionedInstallStrategy.HasValue) installStrategyFromSegments = b.VersionedInstallStrategy.Value;
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
+                    if (b.InstallMissingModules.HasValue) installMissingModules = b.InstallMissingModules.Value;
+                    if (b.InstallMissingModulesForce.HasValue) installMissingModulesForce = b.InstallMissingModulesForce.Value;
+                    if (b.InstallMissingModulesPrerelease.HasValue) installMissingModulesPrerelease = b.InstallMissingModulesPrerelease.Value;
+                    if (b.ResolveMissingModulesOnline.HasValue)
+                    {
+                        resolveMissingModulesOnline = b.ResolveMissingModulesOnline.Value;
+                        resolveMissingModulesOnlineSet = true;
+                    }
+                    if (b.WarnIfRequiredModulesOutdated.HasValue) warnIfRequiredModulesOutdated = b.WarnIfRequiredModulesOutdated.Value;
+                    if (!string.IsNullOrWhiteSpace(b.InstallMissingModulesRepository)) installMissingModulesRepository = b.InstallMissingModulesRepository;
+                    if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
                     if (b.Merge.HasValue)
                     {
@@ -193,7 +220,17 @@ public sealed class ModulePipelineRunner
                         break;
                     }
 
-                    if (moduleSeg.Kind is not (ModuleDependencyKind.RequiredModule or ModuleDependencyKind.ExternalModule))
+                    if (moduleSeg.Kind == ModuleDependencyKind.ExternalModule)
+                    {
+                        if (!externalIndex.Contains(name))
+                        {
+                            externalIndex.Add(name);
+                            externalModules.Add(name);
+                        }
+                        break;
+                    }
+
+                    if (moduleSeg.Kind is not ModuleDependencyKind.RequiredModule)
                         break;
 
                     var draft = new RequiredModuleDraft(
@@ -240,6 +277,30 @@ public sealed class ModulePipelineRunner
                     if (cfg.IgnoreFunctionName is { Length: > 0 })
                         moduleSkipIgnoreFunctions.AddRange(cfg.IgnoreFunctionName);
                     if (cfg.Force) moduleSkipForce = true;
+                    if (cfg.FailOnMissingCommands) moduleSkipFailOnMissingCommands = true;
+                    break;
+                }
+                case ConfigurationCommandSegment commandSeg:
+                {
+                    var cfg = commandSeg.Configuration ?? new CommandConfiguration();
+                    var commandModuleName = cfg.ModuleName?.Trim();
+                    var commandNames = cfg.CommandName ?? Array.Empty<string>();
+                    if (string.IsNullOrWhiteSpace(commandModuleName) || commandNames.Length == 0)
+                        break;
+
+                    var commandKey = commandModuleName!;
+                    if (!commandDependencies.TryGetValue(commandKey, out var list))
+                    {
+                        list = new List<string>();
+                        commandDependencies[commandKey] = list;
+                    }
+
+                    foreach (var name in commandNames)
+                    {
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+                        if (list.Any(c => string.Equals(c, name, StringComparison.OrdinalIgnoreCase))) continue;
+                        list.Add(name.Trim());
+                    }
                     break;
                 }
                 case ConfigurationInformationSegment info:
@@ -250,6 +311,15 @@ public sealed class ModulePipelineRunner
                 case ConfigurationDocumentationSegment docs:
                 {
                     documentation = docs.Configuration;
+                    break;
+                }
+                case ConfigurationImportModulesSegment importSeg:
+                {
+                    var cfg = importSeg.ImportModules ?? new ImportModulesConfiguration();
+                    importModules ??= new ImportModulesConfiguration();
+                    if (cfg.Self.HasValue) importModules.Self = cfg.Self;
+                    if (cfg.RequiredModules.HasValue) importModules.RequiredModules = cfg.RequiredModules;
+                    if (cfg.Verbose.HasValue) importModules.Verbose = cfg.Verbose;
                     break;
                 }
                 case ConfigurationBuildDocumentationSegment buildDocs:
@@ -272,9 +342,32 @@ public sealed class ModulePipelineRunner
                     formatting = MergeFormattingSegments(formatting, formattingSegment);
                     break;
                 }
+                case ConfigurationPlaceHolderSegment placeHolder:
+                {
+                    var cfg = placeHolder.Configuration;
+                    if (!string.IsNullOrWhiteSpace(cfg.Find) || !string.IsNullOrWhiteSpace(cfg.Replace))
+                        placeHolders.Add(cfg);
+                    break;
+                }
+                case ConfigurationPlaceHolderOptionSegment placeHolderOptionSeg:
+                {
+                    if (placeHolderOptionSeg.PlaceHolderOption?.SkipBuiltinReplacements == true)
+                    {
+                        placeHolderOption ??= new PlaceHolderOptionConfiguration();
+                        placeHolderOption.SkipBuiltinReplacements = true;
+                    }
+                    break;
+                }
                 case ConfigurationValidationSegment validationSegment:
                 {
                     validationSettings = validationSegment.Settings;
+                    break;
+                }
+                case ConfigurationTestSegment testSeg:
+                {
+                    var cfg = testSeg.Configuration ?? new TestConfiguration();
+                    if (!string.IsNullOrWhiteSpace(cfg.TestsPath))
+                        testsAfterMerge.Add(cfg);
                     break;
                 }
                 case ConfigurationPublishSegment publish:
@@ -389,8 +482,26 @@ public sealed class ModulePipelineRunner
         if (roots.Length == 0 && compatible is { Length: > 0 })
             roots = ResolveInstallRootsFromCompatiblePSEditions(compatible);
 
-        var requiredModules = ResolveRequiredModules(requiredModulesDraft);
-        var requiredModulesForPackaging = ResolveRequiredModules(requiredModulesDraftForPackaging);
+        if (!resolveMissingModulesOnlineSet && HasAutoRequiredModules(requiredModulesDraft))
+        {
+            resolveMissingModulesOnline = true;
+            _logger.Info("ResolveMissingModulesOnline not explicitly set; enabling because RequiredModules use Auto/Latest/Guid Auto.");
+        }
+
+        var requiredModules = ResolveRequiredModules(
+            requiredModulesDraft,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential);
+        var requiredModulesForPackaging = ResolveRequiredModules(
+            requiredModulesDraftForPackaging,
+            resolveMissingModulesOnline,
+            warnIfRequiredModulesOutdated,
+            installMissingModulesPrerelease,
+            installMissingModulesRepository,
+            installMissingModulesCredential);
 
         var approved = approvedModules
             .Where(m => !string.IsNullOrWhiteSpace(m))
@@ -411,18 +522,13 @@ public sealed class ModulePipelineRunner
             _logger.Info($"MergeMissing not explicitly set; enabling because approved modules are configured {context}.");
         }
 
-        if (mergeMissing && approved.Length > 0)
-        {
-            requiredModules = FilterRequiredModules(requiredModules, approved);
-            requiredModulesForPackaging = FilterRequiredModules(requiredModulesForPackaging, approved);
-        }
-
         ModuleSkipConfiguration? moduleSkip = null;
-        if (moduleSkipForce || moduleSkipIgnoreModules.Count > 0 || moduleSkipIgnoreFunctions.Count > 0)
+        if (moduleSkipForce || moduleSkipFailOnMissingCommands || moduleSkipIgnoreModules.Count > 0 || moduleSkipIgnoreFunctions.Count > 0)
         {
             moduleSkip = new ModuleSkipConfiguration
             {
                 Force = moduleSkipForce,
+                FailOnMissingCommands = moduleSkipFailOnMissingCommands,
                 IgnoreModuleName = moduleSkipIgnoreModules
                     .Where(s => !string.IsNullOrWhiteSpace(s))
                     .Select(s => s.Trim())
@@ -443,6 +549,22 @@ public sealed class ModulePipelineRunner
             .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
 
+        var commandDeps = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in commandDependencies)
+        {
+            var cmds = kvp.Value
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (cmds.Length == 0) continue;
+            commandDeps[kvp.Key] = cmds;
+        }
+
+        var placeHolderEntries = placeHolders
+            .Where(p => p is not null && (!string.IsNullOrWhiteSpace(p.Find) || !string.IsNullOrWhiteSpace(p.Replace)))
+            .ToArray();
+
         return new ModulePipelinePlan(
             moduleName: moduleName,
             projectRoot: projectRoot,
@@ -452,6 +574,11 @@ public sealed class ModulePipelineRunner
             buildSpec: buildSpec,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,
+            externalModuleDependencies: externalModules
+                .Where(m => !string.IsNullOrWhiteSpace(m))
+                .Select(m => m.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
             requiredModulesForPackaging: requiredModulesForPackaging,
             information: information,
             documentation: documentation,
@@ -461,6 +588,11 @@ public sealed class ModulePipelineRunner
             fileConsistencySettings: fileConsistencySettings,
             validationSettings: validationSettings,
             formatting: formatting,
+            importModules: importModules,
+            placeHolders: placeHolderEntries,
+            placeHolderOption: placeHolderOption,
+            commandModuleDependencies: commandDeps,
+            testsAfterMerge: testsAfterMerge.ToArray(),
             mergeModule: mergeModule,
             mergeMissing: mergeMissing,
             approvedModules: approved,
@@ -473,6 +605,11 @@ public sealed class ModulePipelineRunner
             installStrategy: strategy,
             installKeepVersions: keep,
             installRoots: roots,
+            installMissingModules: installMissingModules,
+            installMissingModulesForce: installMissingModulesForce,
+            installMissingModulesPrerelease: installMissingModulesPrerelease,
+            installMissingModulesRepository: installMissingModulesRepository,
+            installMissingModulesCredential: installMissingModulesCredential,
             stagingWasGenerated: stagingWasGenerated,
             deleteGeneratedStagingAfterRun: deleteAfter);
     }
@@ -520,6 +657,8 @@ public sealed class ModulePipelineRunner
         var projectFileConsistencyStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:fileconsistency-project", StringComparison.OrdinalIgnoreCase));
         var compatibilityStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:compatibility", StringComparison.OrdinalIgnoreCase));
         var moduleValidationStep = steps.FirstOrDefault(s => string.Equals(s.Key, "validate:module", StringComparison.OrdinalIgnoreCase));
+        var importModulesStep = steps.FirstOrDefault(s => string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase));
+        var testSteps = steps.Where(s => s.Kind == ModulePipelineStepKind.Tests && s.Key.StartsWith("tests:", StringComparison.OrdinalIgnoreCase) && !string.Equals(s.Key, "tests:import-modules", StringComparison.OrdinalIgnoreCase)).ToArray();
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
@@ -548,6 +687,20 @@ public sealed class ModulePipelineRunner
 
         try
         {
+            if (plan.InstallMissingModules)
+            {
+                try
+                {
+                    _ = EnsureBuildDependenciesInstalled(plan);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Dependency installation failed. {ex.Message}");
+                    if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
+                    throw;
+                }
+            }
+
             ModuleBuildPipeline.StagingResult staged;
             SafeStart(stageStep);
             try
@@ -577,6 +730,7 @@ public sealed class ModulePipelineRunner
             }
 
             var mergedScripts = ApplyMerge(plan, buildResult);
+            ApplyPlaceholders(plan, buildResult);
 
             SafeStart(manifestStep);
             try
@@ -586,6 +740,19 @@ public sealed class ModulePipelineRunner
 
                 if (plan.RequiredModules is { Length: > 0 })
                     ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
+                if (plan.ExternalModuleDependencies is { Length: > 0 })
+                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
+                if (plan.ExternalModuleDependencies is { Length: > 0 })
+                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
+
+                if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
+                    !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
+                {
+                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", Array.Empty<string>());
+                }
+
+                if (plan.CommandModuleDependencies is { Count: > 0 })
+                    ManifestEditor.TrySetTopLevelHashtableStringArray(buildResult.ManifestPath, "CommandModuleDependencies", plan.CommandModuleDependencies);
 
                 if (!string.IsNullOrWhiteSpace(plan.PreRelease))
                     ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
@@ -742,6 +909,23 @@ public sealed class ModulePipelineRunner
                         throw;
                     }
                 }
+            }
+
+            try
+            {
+                if (plan.RequiredModules is { Length: > 0 })
+                    ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, plan.RequiredModules);
+
+                if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
+                    !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
+                {
+                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", Array.Empty<string>());
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"Post-format manifest patch failed. {ex.Message}");
+                if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
             if (plan.SignModule)
@@ -1064,6 +1248,43 @@ public sealed class ModulePipelineRunner
             {
                 SafeFail(moduleValidationStep, ex);
                 throw;
+            }
+        }
+
+        if (plan.ImportModules is not null &&
+            (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
+        {
+            SafeStart(importModulesStep);
+            try
+            {
+                RunImportModules(plan, buildResult);
+                SafeDone(importModulesStep);
+            }
+            catch (Exception ex)
+            {
+                SafeFail(importModulesStep, ex);
+                throw;
+            }
+        }
+
+        if (plan.TestsAfterMerge is { Length: > 0 })
+        {
+            var testService = new ModuleTestSuiteService(new PowerShellRunner(), _logger);
+            for (int i = 0; i < plan.TestsAfterMerge.Length; i++)
+            {
+                var cfg = plan.TestsAfterMerge[i];
+                var step = testSteps.Length > i ? testSteps[i] : null;
+                SafeStart(step);
+                try
+                {
+                    RunTestsAfterMerge(plan, buildResult, cfg, testService);
+                    SafeDone(step);
+                }
+                catch (Exception ex)
+                {
+                    SafeFail(step, ex);
+                    throw;
+                }
             }
         }
 
@@ -1422,7 +1643,37 @@ public sealed class ModulePipelineRunner
         => string.IsNullOrWhiteSpace(value) ||
            value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
 
-    private ManifestEditor.RequiredModule[] ResolveRequiredModules(IReadOnlyList<RequiredModuleDraft> drafts)
+    private static bool IsAutoOrLatest(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           (value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase) ||
+            value.Trim().Equals("Latest", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsAutoGuid(string? value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           value!.Trim().Equals("Auto", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasAutoRequiredModules(IEnumerable<RequiredModuleDraft> drafts)
+    {
+        if (drafts is null) return false;
+        foreach (var d in drafts)
+        {
+            if (d is null) continue;
+            if (IsAutoOrLatest(d.RequiredVersion) ||
+                IsAutoOrLatest(d.MinimumVersion) ||
+                IsAutoOrLatest(d.ModuleVersion) ||
+                IsAutoGuid(d.Guid))
+                return true;
+        }
+        return false;
+    }
+
+    private ManifestEditor.RequiredModule[] ResolveRequiredModules(
+        IReadOnlyList<RequiredModuleDraft> drafts,
+        bool resolveMissingModulesOnline,
+        bool warnIfRequiredModulesOutdated,
+        bool prerelease,
+        string? repository,
+        RepositoryCredential? credential)
     {
         var list = (drafts ?? Array.Empty<RequiredModuleDraft>())
             .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.ModuleName))
@@ -1432,12 +1683,54 @@ public sealed class ModulePipelineRunner
         var moduleNames = list.Select(d => d.ModuleName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var installed = TryGetLatestInstalledModuleInfo(moduleNames);
 
+        Dictionary<string, (string? Version, string? Guid)>? onlineVersions = null;
+        if (resolveMissingModulesOnline || warnIfRequiredModulesOutdated)
+        {
+            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var d in list)
+            {
+                if (warnIfRequiredModulesOutdated)
+                {
+                    candidates.Add(d.ModuleName);
+                    continue;
+                }
+
+                installed.TryGetValue(d.ModuleName, out var info);
+                if (!string.IsNullOrWhiteSpace(info.Version)) continue;
+
+                var minimumSource = !string.IsNullOrWhiteSpace(d.MinimumVersion) ? d.MinimumVersion : d.ModuleVersion;
+                if (IsAutoOrLatest(d.RequiredVersion) || IsAutoOrLatest(minimumSource))
+                    candidates.Add(d.ModuleName);
+            }
+
+            if (candidates.Count > 0)
+                onlineVersions = TryResolveLatestOnlineVersions(candidates, repository, credential, prerelease);
+        }
+
+        var resolvedOnline = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var unresolvedVersion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var unresolvedGuid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var results = new List<ManifestEditor.RequiredModule>(list.Length);
         foreach (var d in list)
         {
             installed.TryGetValue(d.ModuleName, out var info);
 
-            var required = ResolveAutoOrLatest(d.RequiredVersion, info.Version);
+            var availableVersion = info.Version;
+            var availableGuid = info.Guid;
+            if (onlineVersions is not null &&
+                onlineVersions.TryGetValue(d.ModuleName, out var onlineInfo))
+            {
+                if (string.IsNullOrWhiteSpace(availableVersion) && !string.IsNullOrWhiteSpace(onlineInfo.Version))
+                {
+                    availableVersion = onlineInfo.Version;
+                    resolvedOnline.Add(d.ModuleName);
+                }
+                if (string.IsNullOrWhiteSpace(availableGuid) && !string.IsNullOrWhiteSpace(onlineInfo.Guid))
+                    availableGuid = onlineInfo.Guid;
+            }
+
+            var required = ResolveAutoOrLatest(d.RequiredVersion, availableVersion);
             var minimumSource = !string.IsNullOrWhiteSpace(d.MinimumVersion) ? d.MinimumVersion : d.ModuleVersion;
             if (!string.IsNullOrWhiteSpace(d.MinimumVersion) &&
                 !string.IsNullOrWhiteSpace(d.ModuleVersion) &&
@@ -1445,13 +1738,100 @@ public sealed class ModulePipelineRunner
             {
                 _logger.Warn($"Module dependency '{d.ModuleName}' specifies both MinimumVersion and ModuleVersion; using MinimumVersion '{d.MinimumVersion}'.");
             }
-            var moduleVersion = ResolveAutoOrLatest(minimumSource, info.Version);
-            var guid = ResolveAutoGuid(d.Guid, info.Guid);
+            var moduleVersion = ResolveAutoOrLatest(minimumSource, availableVersion);
+            var guid = ResolveAutoGuid(d.Guid, availableGuid);
+
+            if (IsAutoOrLatest(d.RequiredVersion) && string.IsNullOrWhiteSpace(required))
+                unresolvedVersion.Add(d.ModuleName);
+            if (IsAutoOrLatest(minimumSource) && string.IsNullOrWhiteSpace(moduleVersion))
+                unresolvedVersion.Add(d.ModuleName);
+            if (IsAutoGuid(d.Guid) && string.IsNullOrWhiteSpace(guid))
+                unresolvedGuid.Add(d.ModuleName);
 
             // RequiredVersion is exact; do not also emit ModuleVersion when present.
             if (!string.IsNullOrWhiteSpace(required)) moduleVersion = null;
 
             results.Add(new ManifestEditor.RequiredModule(d.ModuleName, moduleVersion: moduleVersion, requiredVersion: required, guid: guid));
+        }
+
+        if (resolvedOnline.Count > 0)
+        {
+            var listText = string.Join(", ", resolvedOnline.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            _logger.Info($"Resolved RequiredModules from repository without installing: {listText}.");
+        }
+
+        if (warnIfRequiredModulesOutdated)
+        {
+            var outdated = new List<(string Name, string Installed, string Latest)>();
+            var missing = new List<(string Name, string Latest)>();
+            var unparsable = new List<string>();
+
+            foreach (var name in moduleNames)
+            {
+                installed.TryGetValue(name, out var info);
+                var installedVersion = info.Version;
+
+                string? latestVersion = null;
+                if (onlineVersions is not null &&
+                    onlineVersions.TryGetValue(name, out var onlineInfo))
+                    latestVersion = onlineInfo.Version;
+
+                if (string.IsNullOrWhiteSpace(latestVersion))
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(installedVersion))
+                {
+                    missing.Add((name, latestVersion!));
+                    continue;
+                }
+
+                if (!TryParseVersionParts(installedVersion!, out var installedParsed, out var installedPre) ||
+                    !TryParseVersionParts(latestVersion!, out var latestParsed, out var latestPre))
+                {
+                    unparsable.Add(name);
+                    continue;
+                }
+
+                if (CompareVersionParts(latestParsed, latestPre, installedParsed, installedPre) > 0)
+                    outdated.Add((name, installedVersion!, latestVersion!));
+            }
+
+            if (outdated.Count > 0)
+            {
+                var items = string.Join(", ", outdated
+                    .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(o => $"{o.Name} ({o.Installed} -> {o.Latest})"));
+                _logger.Warn($"RequiredModules outdated compared to repository: {items}.");
+            }
+
+            if (missing.Count > 0)
+            {
+                var items = string.Join(", ", missing
+                    .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(o => $"{o.Name} (latest {o.Latest})"));
+                _logger.Warn($"RequiredModules not installed locally (repository has newer versions): {items}.");
+            }
+
+            if (unparsable.Count > 0)
+            {
+                var items = string.Join(", ", unparsable.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+                _logger.Warn($"RequiredModules installed versions could not be parsed for outdated check: {items}.");
+            }
+        }
+
+        if (unresolvedVersion.Count > 0)
+        {
+            var listText = string.Join(", ", unresolvedVersion.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            var hint = resolveMissingModulesOnline
+                ? "Module was not installed and online resolution did not return a version."
+                : "Module is not installed and online resolution is disabled.";
+            _logger.Warn($"RequiredModules set to Auto/Latest but version could not be resolved for: {listText}. {hint} Install it or enable InstallMissingModules to resolve versions.");
+        }
+
+        if (unresolvedGuid.Count > 0)
+        {
+            var listText = string.Join(", ", unresolvedGuid.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            _logger.Warn($"RequiredModules set Guid=Auto but module not installed: {listText}. Install it or specify the Guid explicitly.");
         }
 
         return results.ToArray();
@@ -1468,6 +1848,85 @@ public sealed class ModulePipelineRunner
         return modules
             .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName) && !approved.Contains(m.ModuleName!))
             .ToArray();
+    }
+
+    private ModuleDependencyInstallResult[] EnsureBuildDependenciesInstalled(ModulePipelinePlan plan)
+    {
+        if (plan is null) return Array.Empty<ModuleDependencyInstallResult>();
+
+        var required = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        if (required.Length == 0)
+        {
+            var manifestPath = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
+            if (File.Exists(manifestPath) &&
+                ManifestEditor.TryGetRequiredModules(manifestPath, out var fromManifest) &&
+                fromManifest is not null)
+            {
+                required = fromManifest;
+            }
+        }
+
+        if (required.Length == 0)
+        {
+            _logger.Info("InstallMissingModules enabled, but no RequiredModules were found.");
+            return Array.Empty<ModuleDependencyInstallResult>();
+        }
+
+        var depList = required
+            .Where(r => !string.IsNullOrWhiteSpace(r.ModuleName))
+            .Select(r => new ModuleDependency(
+                name: r.ModuleName.Trim(),
+                requiredVersion: r.RequiredVersion,
+                minimumVersion: r.ModuleVersion,
+                maximumVersion: r.MaximumVersion))
+            .ToList();
+
+        if (plan.ExternalModuleDependencies is { Length: > 0 })
+        {
+            var known = new HashSet<string>(depList.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
+            foreach (var name in plan.ExternalModuleDependencies)
+            {
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var trimmed = name.Trim();
+                if (known.Contains(trimmed)) continue;
+                known.Add(trimmed);
+                depList.Add(new ModuleDependency(trimmed, requiredVersion: null, minimumVersion: null, maximumVersion: null));
+            }
+        }
+
+        var deps = depList.ToArray();
+
+        if (deps.Length == 0)
+        {
+            _logger.Info("InstallMissingModules enabled, but no valid module dependencies were resolved.");
+            return Array.Empty<ModuleDependencyInstallResult>();
+        }
+
+        _logger.Info($"Installing missing modules ({deps.Length}): {string.Join(", ", deps.Select(d => d.Name))}");
+
+        var installer = new ModuleDependencyInstaller(new PowerShellRunner(), _logger);
+        var results = installer.EnsureInstalled(
+            dependencies: deps,
+            skipModules: plan.ModuleSkip?.IgnoreModuleName,
+            force: plan.InstallMissingModulesForce,
+            repository: plan.InstallMissingModulesRepository,
+            credential: plan.InstallMissingModulesCredential,
+            prerelease: plan.InstallMissingModulesPrerelease);
+
+        var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
+        if (failures.Length > 0)
+            throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+
+        if (results.Count > 0)
+        {
+            var installed = results.Count(r => r.Status == ModuleDependencyInstallStatus.Installed);
+            var updated = results.Count(r => r.Status == ModuleDependencyInstallStatus.Updated);
+            var satisfied = results.Count(r => r.Status == ModuleDependencyInstallStatus.Satisfied);
+            var skipped = results.Count(r => r.Status == ModuleDependencyInstallStatus.Skipped);
+            _logger.Info($"Dependency install summary: {installed} installed, {updated} updated, {satisfied} satisfied, {skipped} skipped.");
+        }
+
+        return results.ToArray();
     }
 
     private static string? ResolveAutoOrLatest(string? value, string? installedVersion)
@@ -1530,6 +1989,139 @@ public sealed class ModulePipelineRunner
             if (!map.ContainsKey(n)) map[n] = (null, null);
 
         return map;
+    }
+
+    private Dictionary<string, (string? Version, string? Guid)> TryResolveLatestOnlineVersions(
+        IReadOnlyCollection<string> names,
+        string? repository,
+        RepositoryCredential? credential,
+        bool prerelease)
+    {
+        var list = (names ?? Array.Empty<string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (list.Length == 0)
+            return new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+
+        var repos = ParseRepositoryList(repository);
+        var runner = new PowerShellRunner();
+
+        IReadOnlyList<PSResourceInfo> items = Array.Empty<PSResourceInfo>();
+        var resolved = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var psrg = new PSResourceGetClient(runner, _logger);
+            var opts = new PSResourceFindOptions(list, version: null, prerelease: prerelease, repositories: repos, credential: credential);
+            items = psrg.Find(opts, timeout: TimeSpan.FromMinutes(2));
+            resolved = SelectLatestVersions(items, prerelease);
+            if (resolved.Count > 0) return resolved;
+        }
+        catch (PowerShellToolNotAvailableException)
+        {
+            // fall back to PowerShellGet
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Find-PSResource failed while resolving RequiredModules. {ex.Message}");
+        }
+
+        try
+        {
+            var psg = new PowerShellGetClient(runner, _logger);
+            var useRepos = repos.Length == 0 ? new[] { "PSGallery" } : repos;
+            var opts = new PowerShellGetFindOptions(list, prerelease: prerelease, repositories: useRepos, credential: credential);
+            items = psg.Find(opts, timeout: TimeSpan.FromMinutes(2));
+            resolved = SelectLatestVersions(items, prerelease);
+        }
+        catch (PowerShellToolNotAvailableException ex)
+        {
+            _logger.Warn($"PowerShellGet not available for online resolution. {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Find-Module failed while resolving RequiredModules. {ex.Message}");
+        }
+
+        return resolved;
+    }
+
+    private static string[] ParseRepositoryList(string? repository)
+    {
+        var repoText = repository ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(repoText)) return Array.Empty<string>();
+        return repoText
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(r => r.Trim())
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static Dictionary<string, (string? Version, string? Guid)> SelectLatestVersions(IEnumerable<PSResourceInfo> items, bool allowPrerelease)
+    {
+        var map = new Dictionary<string, (Version Version, string? Pre, string Raw, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in items ?? Array.Empty<PSResourceInfo>())
+        {
+            if (item is null || string.IsNullOrWhiteSpace(item.Name) || string.IsNullOrWhiteSpace(item.Version))
+                continue;
+
+            if (!TryParseVersionParts(item.Version, out var version, out var pre))
+                continue;
+
+            if (!allowPrerelease && !string.IsNullOrWhiteSpace(pre))
+                continue;
+
+            if (!map.TryGetValue(item.Name, out var current))
+            {
+                map[item.Name] = (version, pre, item.Version, item.Guid);
+                continue;
+            }
+
+            if (CompareVersionParts(version, pre, current.Version, current.Pre) > 0)
+                map[item.Name] = (version, pre, item.Version, item.Guid);
+        }
+
+        var result = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in map)
+            result[kvp.Key] = (kvp.Value.Raw, kvp.Value.Guid);
+        return result;
+    }
+
+    private static bool TryParseVersionParts(string text, out Version version, out string? preRelease)
+    {
+        preRelease = null;
+        version = new Version(0, 0, 0, 0);
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        var trimmed = text.Trim();
+        var parts = trimmed.Split(new[] { '-' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return false;
+        if (!Version.TryParse(parts[0], out var parsed) || parsed is null) return false;
+        version = parsed;
+        if (parts.Length > 1 && !string.IsNullOrWhiteSpace(parts[1]))
+            preRelease = parts[1].Trim();
+        return true;
+    }
+
+    private static int CompareVersionParts(Version a, string? preA, Version b, string? preB)
+    {
+        var cmp = a.CompareTo(b);
+        if (cmp != 0) return cmp;
+
+        var hasPreA = !string.IsNullOrWhiteSpace(preA);
+        var hasPreB = !string.IsNullOrWhiteSpace(preB);
+        if (hasPreA == hasPreB)
+        {
+            if (!hasPreA) return 0;
+            return string.Compare(preA, preB, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Release > prerelease when same core version
+        return hasPreA ? -1 : 1;
     }
 
     private static PowerShellRunResult RunScript(IPowerShellRunner runner, string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
@@ -1950,6 +2542,236 @@ exit 0
         return mergedModule;
     }
 
+    private void ApplyPlaceholders(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        if (plan is null || buildResult is null) return;
+
+        var psm1Path = Path.Combine(buildResult.StagingPath, $"{plan.ModuleName}.psm1");
+        if (!File.Exists(psm1Path)) return;
+
+        var moduleName = plan.ModuleName;
+        var moduleVersion = plan.ResolvedVersion;
+        var preRelease = plan.PreRelease;
+        var moduleVersionWithPreRelease = string.IsNullOrWhiteSpace(preRelease)
+            ? moduleVersion
+            : $"{moduleVersion}-{preRelease}";
+        var tagName = "v" + moduleVersion;
+        var tagModuleVersionWithPreRelease = "v" + moduleVersionWithPreRelease;
+
+        var replacements = new List<(string Find, string Replace)>();
+        if (plan.PlaceHolderOption?.SkipBuiltinReplacements != true)
+        {
+            replacements.Add(("{ModuleName}", moduleName));
+            replacements.Add(("<ModuleName>", moduleName));
+            replacements.Add(("{ModuleVersion}", moduleVersion));
+            replacements.Add(("<ModuleVersion>", moduleVersion));
+            replacements.Add(("{ModuleVersionWithPreRelease}", moduleVersionWithPreRelease));
+            replacements.Add(("<ModuleVersionWithPreRelease>", moduleVersionWithPreRelease));
+            replacements.Add(("{TagModuleVersionWithPreRelease}", tagModuleVersionWithPreRelease));
+            replacements.Add(("<TagModuleVersionWithPreRelease>", tagModuleVersionWithPreRelease));
+            replacements.Add(("{TagName}", tagName));
+            replacements.Add(("<TagName>", tagName));
+        }
+
+        if (plan.PlaceHolders is { Length: > 0 })
+        {
+            foreach (var entry in plan.PlaceHolders)
+            {
+                if (entry is null) continue;
+                if (string.IsNullOrWhiteSpace(entry.Find)) continue;
+                replacements.Add((entry.Find, entry.Replace ?? string.Empty));
+            }
+        }
+
+        if (replacements.Count == 0) return;
+
+        string content;
+        try { content = File.ReadAllText(psm1Path); }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to read PSM1 for placeholder replacement: {ex.Message}");
+            return;
+        }
+
+        var updated = content;
+        foreach (var item in replacements)
+        {
+            if (string.IsNullOrEmpty(item.Find)) continue;
+            updated = updated.Replace(item.Find, item.Replace ?? string.Empty);
+        }
+
+        if (string.Equals(content, updated, StringComparison.Ordinal)) return;
+
+        try
+        {
+            File.WriteAllText(psm1Path, updated, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to write PSM1 after placeholder replacement: {ex.Message}");
+        }
+    }
+
+    private void RunImportModules(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    {
+        var cfg = plan.ImportModules;
+        if (cfg is null) return;
+
+        var importSelf = cfg.Self == true;
+        var importRequired = cfg.RequiredModules == true;
+        if (!importSelf && !importRequired) return;
+
+        var modules = importRequired
+            ? plan.RequiredModules
+                .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName))
+                .Select(m => new ImportModuleEntry
+                {
+                    Name = m.ModuleName.Trim(),
+                    MinimumVersion = string.IsNullOrWhiteSpace(m.ModuleVersion) ? null : m.ModuleVersion!.Trim(),
+                    RequiredVersion = string.IsNullOrWhiteSpace(m.RequiredVersion) ? null : m.RequiredVersion!.Trim()
+                })
+                .ToArray()
+            : Array.Empty<ImportModuleEntry>();
+
+        var modulesB64 = EncodeImportModules(modules);
+        var args = new List<string>(5)
+        {
+            modulesB64,
+            importRequired ? "1" : "0",
+            importSelf ? "1" : "0",
+            buildResult.ManifestPath,
+            cfg.Verbose == true ? "1" : "0"
+        };
+
+        var runner = new PowerShellRunner();
+        var script = BuildImportModulesScript();
+        var result = RunScript(runner, script, args, TimeSpan.FromMinutes(5));
+        if (result.ExitCode != 0)
+        {
+            var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+            if (string.IsNullOrWhiteSpace(message)) message = "Import-Module failed.";
+            throw new InvalidOperationException(message.Trim());
+        }
+    }
+
+    private void RunTestsAfterMerge(
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult,
+        TestConfiguration testConfiguration,
+        ModuleTestSuiteService service)
+    {
+        if (plan is null || buildResult is null || testConfiguration is null) return;
+
+        var testsPath = testConfiguration.TestsPath ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(testsPath))
+            throw new InvalidOperationException("TestsAfterMerge is enabled but TestsPath is empty.");
+
+        if (!Path.IsPathRooted(testsPath))
+            testsPath = Path.GetFullPath(Path.Combine(plan.ProjectRoot, testsPath));
+
+        var importCfg = plan.ImportModules;
+        var importSelf = importCfg?.Self == true;
+        var importRequired = importCfg?.RequiredModules == true;
+        var importVerbose = importCfg?.Verbose == true;
+
+        var importModules = importRequired
+            ? plan.RequiredModules
+                .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName))
+                .Select(m => new ModuleDependency(
+                    name: m.ModuleName.Trim(),
+                    requiredVersion: m.RequiredVersion,
+                    minimumVersion: m.ModuleVersion,
+                    maximumVersion: m.MaximumVersion))
+                .ToArray()
+            : Array.Empty<ModuleDependency>();
+
+        var spec = new ModuleTestSuiteSpec
+        {
+            ProjectPath = buildResult.StagingPath,
+            TestPath = testsPath,
+            Force = testConfiguration.Force,
+            SkipDependencies = true,
+            SkipImport = !importSelf,
+            ImportModules = importModules,
+            ImportModulesVerbose = importVerbose
+        };
+
+        var result = service.Run(spec);
+        if (result.FailedCount > 0)
+        {
+            if (testConfiguration.Force)
+            {
+                _logger.Warn($"TestsAfterMerge failed ({result.FailedCount} failed) but Force was set; continuing.");
+            }
+            else
+            {
+                throw new InvalidOperationException($"TestsAfterMerge failed ({result.FailedCount} failed).");
+            }
+        }
+    }
+
+    private static string BuildImportModulesScript()
+    {
+        return @"
+param(
+  [string]$ModulesB64,
+  [string]$ImportRequired,
+  [string]$ImportSelf,
+  [string]$ModulePath,
+  [string]$VerboseFlag
+)
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+$importVerbose = ($VerboseFlag -eq '1')
+$VerbosePreference = if ($importVerbose) { 'Continue' } else { 'SilentlyContinue' }
+
+function DecodeModules([string]$b64) {
+  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
+  $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
+  if ([string]::IsNullOrWhiteSpace($json)) { return @() }
+  try { return $json | ConvertFrom-Json } catch { return @() }
+}
+
+if ($ImportRequired -eq '1') {
+  $modules = DecodeModules $ModulesB64
+  foreach ($m in $modules) {
+    if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
+    if ($m.RequiredVersion) {
+      Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+    } elseif ($m.MinimumVersion) {
+      Import-Module -Name $m.Name -MinimumVersion $m.MinimumVersion -Force -ErrorAction Stop -Verbose:$importVerbose
+    } else {
+      Import-Module -Name $m.Name -Force -ErrorAction Stop -Verbose:$importVerbose
+    }
+  }
+}
+
+if ($ImportSelf -eq '1') {
+  if (-not [string]::IsNullOrWhiteSpace($ModulePath)) {
+    Import-Module -Name $ModulePath -Force -ErrorAction Stop -Verbose:$importVerbose
+  } else {
+    throw 'ModulePath is required for ImportSelf.'
+  }
+}
+exit 0
+";
+    }
+
+    private static string EncodeImportModules(IEnumerable<ImportModuleEntry> modules)
+    {
+        var list = modules?.Where(m => m is not null && !string.IsNullOrWhiteSpace(m.Name)).ToArray() ?? Array.Empty<ImportModuleEntry>();
+        if (list.Length == 0) return string.Empty;
+        var json = JsonSerializer.Serialize(list);
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+    }
+
+    private sealed class ImportModuleEntry
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? MinimumVersion { get; set; }
+        public string? RequiredVersion { get; set; }
+    }
+
 
     private static MergeSourceInfo BuildMergeSources(string rootPath, string moduleName, InformationConfiguration? information, ExportSet exports)
     {
@@ -2205,6 +3027,7 @@ exit 0
         var ignoreModules = new HashSet<string>(plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var ignoreFunctions = new HashSet<string>(plan.ModuleSkip?.IgnoreFunctionName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var force = plan.ModuleSkip?.Force == true;
+        var strictMissing = plan.ModuleSkip?.FailOnMissingCommands == true;
 
         var apps = report.Summary
             .Where(c => string.Equals(c.CommandType, "Application", StringComparison.OrdinalIgnoreCase))
@@ -2278,8 +3101,14 @@ exit 0
         if (failures.Count > 0 && !force)
         {
             var unique = failures.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            throw new InvalidOperationException(
-                $"Missing commands detected during merge. Resolve dependencies or configure ModuleSkip. Missing: {string.Join(", ", unique)}.");
+            if (strictMissing)
+            {
+                throw new InvalidOperationException(
+                    $"Missing commands detected during merge. Resolve dependencies or configure ModuleSkip. Missing: {string.Join(", ", unique)}.");
+            }
+
+            _logger.Warn(
+                $"Missing commands detected during merge. Continuing because FailOnMissingCommands is disabled. Missing: {string.Join(", ", unique)}.");
         }
     }
 

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ assets.css_html }}
+</head>
+<body>
+  {{ include "header" }}
+  <main class="pf-web-content">
+    <div class="pf-container">
+      <div class="pf-content">
+        {{ content }}
+      </div>
+    </div>
+  </main>
+  {{ include "footer" }}
+  {{ assets.js_html }}
+</body>
+</html>

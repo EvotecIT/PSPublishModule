@@ -1,0 +1,50 @@
+<header class="header">
+    <div class="header-content">
+        <a href="/" class="brand">
+            <div class="brand-icon">
+                <img src="/codeglyphx-qr-icon.png" alt="{{ site.name }} logo" width="28" height="28" />
+            </div>
+            <span>{{ site.name }}</span>
+        </a>
+
+        <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox" />
+        <label for="nav-toggle" class="nav-toggle" aria-label="Toggle navigation">
+            <span></span>
+            <span></span>
+            <span></span>
+        </label>
+
+        <nav class="nav" aria-label="Main navigation">
+            <div class="nav-links">
+                {{~ for menu in navigation.menus ~}}
+                {{~ if menu.name == "main" ~}}
+                {{~ for item in menu.items ~}}
+                {{~ if item.url ~}}
+                <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+                {{~ end ~}}
+                {{~ end ~}}
+                {{~ end ~}}
+                {{~ end ~}}
+            </div>
+            <div class="nav-actions">
+                {{~ if navigation.actions && navigation.actions.size > 0 ~}}
+                {{~ for action in navigation.actions ~}}
+                {{~ if action.kind && action.kind == "button" ~}}
+                <button type="button"{{ if action.css_class }} class="{{ action.css_class }}"{{ end }}{{ if action.title }} title="{{ action.title }}"{{ end }}{{ if action.aria_label }} aria-label="{{ action.aria_label }}"{{ else if action.title }} aria-label="{{ action.title }}"{{ end }}>
+                    {{ if action.icon_html && action.icon_html != "" }}{{ action.icon_html }}{{ else if action.icon && action.icon != "" }}{{ action.icon }}{{ end }}
+                    {{ if action.text && action.text != "" }} {{ action.text }}{{ else if (!action.icon_html && !action.icon) && action.title && action.title != "" }} {{ action.title }}{{ end }}
+                </button>
+                {{~ else ~}}
+                {{~ if action.url ~}}
+                <a href="{{ action.url }}"{{ if action.css_class }} class="{{ action.css_class }}"{{ end }}{{ if action.target }} target="{{ action.target }}"{{ end }}{{ if action.rel }} rel="{{ action.rel }}"{{ end }}{{ if action.title }} title="{{ action.title }}"{{ end }}{{ if action.aria_label }} aria-label="{{ action.aria_label }}"{{ else if action.title }} aria-label="{{ action.title }}"{{ end }}>
+                    {{ if action.icon_html && action.icon_html != "" }}{{ action.icon_html }}{{ else if action.icon && action.icon != "" }}{{ action.icon }}{{ end }}
+                    {{ if action.text && action.text != "" }} {{ action.text }}{{ else if (!action.icon_html && !action.icon) && action.title && action.title != "" }} {{ action.title }}{{ end }}
+                </a>
+                {{~ end ~}}
+                {{~ end ~}}
+                {{~ end ~}}
+                {{~ end ~}}
+            </div>
+        </nav>
+    </div>
+</header>

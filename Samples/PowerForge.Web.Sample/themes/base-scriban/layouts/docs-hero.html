@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ assets.css_html }}
+</head>
+<body>
+  <div class="pf-shell">
+    {{ include "header" }}
+
+    <section class="pf-docs-hero">
+      <div class="pf-container">
+        <div class="pf-hero-card pf-docs-hero-card">
+          <div class="pf-hero-eyebrow">
+            {{ if page.collection != "" }}<span class="pf-pill">{{ page.collection }}</span>{{ end }}
+            <span class="pf-pill pf-pill-accent">Documentation</span>
+          </div>
+          <h1>{{ page.title }}</h1>
+          {{ if page.description != "" }}<p>{{ page.description }}</p>{{ end }}
+          {{ if page.tags && page.tags.size > 0 }}
+            <div class="pf-docs-meta">
+              {{ for tag in page.tags }}
+                <span class="pf-pill">{{ tag }}</span>
+              {{ end }}
+            </div>
+          {{ end }}
+        </div>
+      </div>
+    </section>
+
+    <main class="pf-main">
+      <div class="pf-container pf-docs-shell">
+        <aside class="pf-docs-nav">
+          <div class="pf-docs-title">Documentation</div>
+          <div class="pf-docs-search">
+            <input type="search" placeholder="Search docs..." data-pf-search-input />
+            <div class="pf-docs-filters">
+              <select data-pf-search-collection>
+                <option value="">All collections</option>
+                <option value="docs">Docs</option>
+                <option value="blog">Blog</option>
+              </select>
+              <select data-pf-search-project>
+                <option value="">All projects</option>
+                <option value="HtmlForgeX">HtmlForgeX</option>
+              </select>
+              <input type="text" placeholder="Tag" data-pf-search-tag />
+            </div>
+            <div class="pf-docs-results" data-pf-search-results></div>
+          </div>
+          {{ if navigation.menus && navigation.menus.size > 0 }}
+            {{ for menu in navigation.menus }}
+              {{ if menu.name == "docs" }}
+                {{ for item in menu.items }}
+                  {{ if item.items && item.items.size > 0 }}
+                    <div class="pf-docs-group">
+                      <div class="pf-docs-group-title">{{ item.title }}</div>
+                      {{ for child in item.items }}
+                        <a class="pf-docs-link" href="{{ child.url }}">{{ child.title }}</a>
+                      {{ end }}
+                    </div>
+                  {{ else }}
+                    <div class="pf-docs-group">
+                      <a class="pf-docs-link" href="{{ item.url }}">{{ item.title }}</a>
+                    </div>
+                  {{ end }}
+                {{ end }}
+              {{ end }}
+            {{ end }}
+          {{ else if data.docs && data.docs.groups }}
+            {{ for group in data.docs.groups }}
+              <div class="pf-docs-group">
+                <div class="pf-docs-group-title">{{ group.title }}</div>
+                {{ for item in group.items }}
+                  <a class="pf-docs-link" href="{{ item.link }}">{{ item.title }}</a>
+                {{ end }}
+              </div>
+            {{ end }}
+          {{ end }}
+        </aside>
+        <section class="pf-docs-content">
+          {{ include "breadcrumbs" }}
+          <div class="pf-content pf-content-docs">
+            {{ content }}
+          </div>
+          {{ if toc != "" }}
+            <div class="pf-docs-toc">
+              {{ toc }}
+            </div>
+          {{ end }}
+        </section>
+      </div>
+    </main>
+
+    {{ include "footer" }}
+  </div>
+  {{ assets.js_html }}
+</body>
+</html>

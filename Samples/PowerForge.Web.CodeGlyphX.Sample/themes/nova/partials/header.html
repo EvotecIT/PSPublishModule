@@ -1,0 +1,23 @@
+<header class="pf-header">
+  <div class="pf-container pf-header-inner">
+    <div class="pf-brand">{{ site.name }}</div>
+    <nav class="pf-nav">
+      {{ if navigation.menus && navigation.menus.size > 0 }}
+        {{ for link in navigation.menus[0].items }}
+          <a href="{{ link.url }}">{{ link.title }}</a>
+        {{ end }}
+      {{ end }}
+    </nav>
+    {{ if navigation.actions && navigation.actions.size > 0 }}
+      <div class="pf-actions">
+        {{ for action in navigation.actions }}
+          {{ if action.kind && action.kind == "button" }}
+            <button type="button"{{ if action.css_class }} class="{{ action.css_class }}"{{ end }}>{{ if action.text }} {{ action.text }}{{ else }} {{ action.title }}{{ end }}</button>
+          {{ else }}
+            <a href="{{ action.url }}"{{ if action.css_class }} class="{{ action.css_class }}"{{ end }}>{{ if action.text }} {{ action.text }}{{ else }} {{ action.title }}{{ end }}</a>
+          {{ end }}
+        {{ end }}
+      </div>
+    {{ end }}
+  </div>
+</header>

@@ -58,6 +58,41 @@ public sealed class BuildModuleConfiguration
     /// <summary>How many versions to keep per module when using versioned installs.</summary>
     public int? VersionedInstallKeep { get; set; }
 
+    /// <summary>
+    /// When true, installs missing module dependencies (Required/External modules) before running the build.
+    /// </summary>
+    public bool? InstallMissingModules { get; set; }
+
+    /// <summary>
+    /// When true, forces re-install even if the dependency is already present.
+    /// </summary>
+    public bool? InstallMissingModulesForce { get; set; }
+
+    /// <summary>
+    /// When true, allows prerelease versions when installing dependencies.
+    /// </summary>
+    public bool? InstallMissingModulesPrerelease { get; set; }
+
+    /// <summary>
+    /// When true, resolves Auto/Latest dependency versions from the repository without installing.
+    /// </summary>
+    public bool? ResolveMissingModulesOnline { get; set; }
+
+    /// <summary>
+    /// When true, warns if RequiredModules are older than the latest available in the repository.
+    /// </summary>
+    public bool? WarnIfRequiredModulesOutdated { get; set; }
+
+    /// <summary>
+    /// Repository name to use when installing missing dependencies (defaults to PSGallery).
+    /// </summary>
+    public string? InstallMissingModulesRepository { get; set; }
+
+    /// <summary>
+    /// Optional credentials used when installing missing dependencies.
+    /// </summary>
+    public RepositoryCredential? InstallMissingModulesCredential { get; set; }
+
     /// <summary>Do not attempt to fix relative paths during merge.</summary>
     public bool? DoNotAttemptToFixRelativePaths { get; set; }
 

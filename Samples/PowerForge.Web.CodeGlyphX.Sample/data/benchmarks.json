@@ -1,0 +1,92 @@
+{
+  "hero": {
+    "title": "Performance Benchmarks",
+    "intro": "Benchmarks measure specific scenarios under controlled, ideal lab conditions. Real-world performance varies based on input size, hardware, runtime, and many other factors. Treat these numbers as directional, not definitive."
+  },
+  "about": {
+    "title": "About These Benchmarks",
+    "cards": [
+      {
+        "title": "Quick vs Full",
+        "paragraphs": [
+          "<p><strong>Quick mode</strong> uses minimal iterations (warmup=1, iterations=3) for fast feedback during development. Results have higher variance and should be treated as rough estimates.</p>",
+          "<p><strong>Full mode</strong> uses BenchmarkDotNet defaults with statistical analysis, multiple iterations, and outlier detection. These results are more reliable for comparisons.</p>"
+        ]
+      },
+      {
+        "title": "What We Measure",
+        "list": [
+          "<strong>Mean</strong> - Average time per operation (lower is better)",
+          "<strong>Allocated</strong> - Managed memory per operation (lower is better)"
+        ],
+        "paragraphs": [
+          "<p>Comparisons target PNG output and include both encoding and rendering time, not just the encoding step.</p>"
+        ]
+      },
+      {
+        "title": "Compared Libraries",
+        "list": [
+          "<strong>ZXing.Net</strong> - with ImageSharp 3.x renderer",
+          "<strong>QRCoder</strong> - PngByteQRCode (managed PNG)",
+          "<strong>Barcoder</strong> - with ImageSharp renderer"
+        ],
+        "paragraphs": [
+          "<p>Each library has different strengths. Configuration attempts to match CodeGlyphX defaults where possible.</p>"
+        ]
+      },
+      {
+        "title": "Limitations",
+        "list": [
+          "Benchmarks run on a single machine configuration",
+          "Numbers reflect ideal conditions, not production guarantees",
+          "Results may differ on other hardware/OS",
+          "Specific scenarios may not reflect your use case",
+          "Library versions and configurations affect results"
+        ]
+      }
+    ]
+  },
+  "runMode": {
+    "title": "Run Mode",
+    "buttons": [
+      { "label": "Quick", "mode": "quick", "active": true },
+      { "label": "Full", "mode": "full", "active": false }
+    ]
+  },
+  "sections": {
+    "summary": {
+      "title": "Comparison Summary",
+      "description": "How CodeGlyphX compares to the fastest library in each scenario. \"vs Fastest\" shows lag when CodeGlyphX is not fastest; when CodeGlyphX is fastest it also includes the lead vs the runner-up. Use the vendor columns and Δ lines for full context. See \"Detailed Results\" below for full vendor breakdowns."
+    },
+    "charts": {
+      "title": "Performance Comparison",
+      "description": "Visual comparison of CodeGlyphX vs the fastest competitor in each scenario. Shorter bars are better (lower execution time)."
+    },
+    "details": {
+      "title": "Detailed Results",
+      "description": "Per-scenario breakdown showing all vendors tested. Not all scenarios have comparison data (some libraries don't support certain barcode types)."
+    },
+    "baseline": {
+      "title": "Baseline Performance",
+      "description": "CodeGlyphX-only benchmarks without comparisons. Useful for tracking performance across versions."
+    },
+    "environment": {
+      "title": "Environment"
+    }
+  },
+  "notes": {
+    "title": "Methodology Notes",
+    "items": [
+      "Comparisons target PNG output and include encode+render (not encode-only).",
+      "Module size and quiet zone are matched to CodeGlyphX defaults where possible.",
+      "Image dimensions are derived from CodeGlyphX module calculations.",
+      "QR decode comparisons use raw RGBA32 bytes.",
+      "QR decode \"clean\" uses balanced settings; \"noisy\" uses robust with aggressive sampling."
+    ]
+  },
+  "run": {
+    "title": "Run Your Own",
+    "intro": "Clone the repository and run benchmarks on your own hardware:",
+    "commands": "# Quick benchmark (fast, less accurate)\npwsh Build/Run-Benchmarks-Compare.ps1\n\n# Full benchmark (slow, statistically rigorous)\npwsh Build/Run-Benchmarks-Compare.ps1 -Full\n\n# Generate report\npwsh Build/Generate-BenchmarkReport.ps1 -ArtifactsPath Build/BenchmarkResults/<run-folder>"
+  }
+}

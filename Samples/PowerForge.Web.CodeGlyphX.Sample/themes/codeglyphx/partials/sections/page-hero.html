@@ -1,0 +1,11 @@
+<section class="nova-page-hero">
+  <div class="nova-container">
+    <div class="nova-page-hero-card">
+      {{ if page.meta && page.meta.eyebrow }}
+      <div class="nova-hero-badge"><span class="nova-dot"></span>{{ page.meta.eyebrow }}</div>
+      {{ end }}
+      <h1>{{ page.title }}</h1>
+      {{ if page.description != "" }}<p>{{ page.description }}</p>{{ end }}
+    </div>
+  </div>
+</section>

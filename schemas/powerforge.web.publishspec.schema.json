@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.publishspec.schema.json",
+  "title": "PowerForge Web PublishSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Build": { "$ref": "#/$defs/BuildSpec" },
+    "Overlay": { "$ref": "#/$defs/OverlaySpec" },
+    "Publish": { "$ref": "#/$defs/PublishSpec" },
+    "Optimize": { "$ref": "#/$defs/OptimizeSpec" }
+  },
+  "required": ["Build", "Publish"],
+  "$defs": {
+    "BuildSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Config": { "type": "string" },
+        "Out": { "type": "string" },
+        "Clean": { "type": "boolean" }
+      },
+      "required": ["Config", "Out"]
+    },
+    "OverlaySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Source": { "type": "string" },
+        "Destination": { "type": "string" },
+        "Include": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["Source", "Destination"]
+    },
+    "PublishSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Project": { "type": "string" },
+        "Out": { "type": "string" },
+        "Configuration": { "type": "string" },
+        "Framework": { "type": "string" },
+        "Runtime": { "type": "string" },
+        "SelfContained": { "type": "boolean" },
+        "NoBuild": { "type": "boolean" },
+        "NoRestore": { "type": "boolean" },
+        "DefineConstants": { "type": "string" },
+        "BaseHref": { "type": "string" },
+        "ApplyBlazorFixes": { "type": "boolean" }
+      },
+      "required": ["Project", "Out"]
+    },
+    "OptimizeSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "SiteRoot": { "type": "string" },
+        "Config": { "type": "string" },
+        "CriticalCss": { "type": "string" },
+        "CssPattern": { "type": "string" },
+        "MinifyHtml": { "type": "boolean" },
+        "MinifyCss": { "type": "boolean" },
+        "MinifyJs": { "type": "boolean" },
+        "HashAssets": { "type": "boolean" },
+        "HashExtensions": { "type": "array", "items": { "type": "string" } },
+        "HashExclude": { "type": "array", "items": { "type": "string" } },
+        "HashManifest": { "type": "string" },
+        "CacheHeaders": { "type": "boolean" },
+        "CacheHeadersOut": { "type": "string" },
+        "CacheHeadersHtml": { "type": "string" },
+        "CacheHeadersAssets": { "type": "string" },
+        "CacheHeadersPaths": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

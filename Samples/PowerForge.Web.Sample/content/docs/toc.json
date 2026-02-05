@@ -1,0 +1,11 @@
+[
+  { "title": "Overview", "href": "/docs/" },
+  { "title": "Getting Started", "href": "/docs/getting-started/" },
+  {
+    "title": "Pipelines",
+    "items": [
+      { "title": "Build", "href": "/docs/build/" },
+      { "title": "Publish", "href": "/docs/publish/" }
+    ]
+  }
+]

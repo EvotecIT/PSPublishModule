@@ -1,0 +1,1 @@
+// Base theme script placeholder.

@@ -620,6 +620,7 @@ internal static class SpectrePipelineConsoleUi
             ModulePipelineStepKind.Formatting => unicode ? "[mediumpurple3]🎨[/]" : "[mediumpurple3]FM[/]",
             ModulePipelineStepKind.Signing => unicode ? "[gold3]🔏[/]" : "[gold3]SG[/]",
             ModulePipelineStepKind.Validation => unicode ? "[lightskyblue1]🔎[/]" : "[lightskyblue1]VA[/]",
+            ModulePipelineStepKind.Tests => unicode ? "[orange3]🧪[/]" : "[orange3]TS[/]",
             ModulePipelineStepKind.Artefact => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
             ModulePipelineStepKind.Publish => unicode ? "[yellow]🚀[/]" : "[yellow]PB[/]",
             ModulePipelineStepKind.Install => unicode ? "[green]📥[/]" : "[green]IN[/]",
@@ -658,6 +659,7 @@ internal static class SpectrePipelineConsoleUi
         {
             ModulePipelineStepKind.Build => step.Title,
             ModulePipelineStepKind.Documentation => step.Title,
+            ModulePipelineStepKind.Tests => step.Title,
             ModulePipelineStepKind.Artefact => "Pack",
             ModulePipelineStepKind.Publish => "Publish",
             ModulePipelineStepKind.Install => "Install",

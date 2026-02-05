@@ -1,0 +1,23 @@
+[
+  {
+    "title": "HtmlForgeX 1.2 Released",
+    "summary": "New themes, faster rendering, and simplified pipeline steps.",
+    "date": "2026-01-05",
+    "link": "/blog/htmlforgex-1-2/",
+    "tags": ["release", "htmlforgex"]
+  },
+  {
+    "title": "PowerForge.Web Preview",
+    "summary": "Early look at the markdown pipeline and theme system.",
+    "date": "2026-01-12",
+    "link": "/blog/powerforge-web-preview/",
+    "tags": ["powerforge", "docs"]
+  },
+  {
+    "title": "Testing at Scale",
+    "summary": "How TestimoX validates large estates with modular pipelines.",
+    "date": "2026-01-18",
+    "link": "/blog/testing-at-scale/",
+    "tags": ["testimox", "automation"]
+  }
+]

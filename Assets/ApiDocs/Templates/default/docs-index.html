@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{TITLE}}</title>
+  {{CSS}}
+</head>
+<body>
+{{HEADER}}
+<div class="api-layout">
+  <button class="sidebar-toggle" type="button" aria-label="Toggle API navigation">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+      <path d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+    <span>API Navigation</span>
+  </button>
+  <div class="sidebar-overlay"></div>
+  <aside class="api-sidebar">
+{{SIDEBAR}}
+  </aside>
+  <main class="api-content">
+{{MAIN}}
+  </main>
+</div>
+{{FOOTER}}
+{{DOCS_SCRIPT}}
+</body>
+</html>

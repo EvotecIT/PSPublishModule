@@ -40,11 +40,17 @@ Retrieves project version information from .csproj, .psd1, and build scripts.
 ### [Invoke-DotNetReleaseBuild](Invoke-DotNetReleaseBuild.md)
 Builds a .NET project in Release configuration and prepares release artefacts.
 
+### [Invoke-DotNetRepositoryRelease](Invoke-DotNetRepositoryRelease.md)
+Repository-wide .NET package release workflow (discover, version, pack, publish).
+
 ### [Invoke-ModuleBuild](Invoke-ModuleBuild.md)
 Creates/updates a module structure and triggers the build pipeline (legacy DSL compatible).
 
 ### [Invoke-ModuleTestSuite](Invoke-ModuleTestSuite.md)
 Complete module testing suite that handles dependencies, imports, and test execution.
+
+### [Invoke-ProjectBuild](Invoke-ProjectBuild.md)
+Executes a repository-wide .NET build/release pipeline from a JSON configuration.
 
 ### [New-ConfigurationArtefact](New-ConfigurationArtefact.md)
 Tells the module to create an artefact of a specified type.

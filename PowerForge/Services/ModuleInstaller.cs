@@ -8,7 +8,7 @@ namespace PowerForge;
 public sealed class ModuleInstaller
 {
     private readonly ILogger _logger;
-    private static readonly char[] PathSeparators = { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+    private static readonly char[] PathSeparators = { '/', '\\' };
 
     /// <summary>
     /// Creates a new installer.

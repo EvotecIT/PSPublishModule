@@ -1,0 +1,29 @@
+{
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
+  "name": "codeglyphx",
+  "engine": "scriban",
+  "extends": "nova",
+  "tokens": {
+    "color": {
+      "bg": "#0b0b12",
+      "panel": "rgba(13, 18, 30, 0.85)",
+      "ink": "#e6e9f3",
+      "muted": "#9aa3b2",
+      "accent": "#a78bfa",
+      "accent2": "#22d3ee",
+      "border": "rgba(148, 163, 184, 0.18)"
+    },
+    "radius": {
+      "base": "20px",
+      "sm": "12px"
+    },
+    "layout": {
+      "maxWidth": "1120px"
+    },
+    "font": {
+      "body": "Urbanist, Segoe UI, sans-serif",
+      "display": "Space Grotesk, Segoe UI, sans-serif",
+      "mono": "JetBrains Mono, Consolas, monospace"
+    }
+  }
+}

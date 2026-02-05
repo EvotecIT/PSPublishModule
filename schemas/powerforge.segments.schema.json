@@ -55,6 +55,13 @@
         "LocalVersion": { "type": ["boolean", "null"] },
         "VersionedInstallStrategy": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/InstallationStrategy" }, { "type": "null" }] },
         "VersionedInstallKeep": { "type": ["integer", "null"], "minimum": 1 },
+        "InstallMissingModules": { "type": ["boolean", "null"] },
+        "InstallMissingModulesForce": { "type": ["boolean", "null"] },
+        "InstallMissingModulesPrerelease": { "type": ["boolean", "null"] },
+        "ResolveMissingModulesOnline": { "type": ["boolean", "null"] },
+        "WarnIfRequiredModulesOutdated": { "type": ["boolean", "null"] },
+        "InstallMissingModulesRepository": { "type": ["string", "null"] },
+        "InstallMissingModulesCredential": { "anyOf": [{ "$ref": "#/$defs/RepositoryCredential" }, { "type": "null" }] },
         "DoNotAttemptToFixRelativePaths": { "type": ["boolean", "null"] },
         "DebugDLL": { "type": ["boolean", "null"] },
         "KillLockersBeforeInstall": { "type": ["boolean", "null"] },
@@ -146,7 +153,8 @@
       "properties": {
         "IgnoreModuleName": { "type": ["array", "null"], "items": { "type": "string" } },
         "IgnoreFunctionName": { "type": ["array", "null"], "items": { "type": "string" } },
-        "Force": { "type": "boolean" }
+        "Force": { "type": "boolean" },
+        "FailOnMissingCommands": { "type": "boolean" }
       }
     },
 
@@ -262,6 +270,7 @@
         "IncludeExe": { "type": ["boolean", "null"] },
         "Include": { "type": ["array", "null"], "items": { "type": "string" } },
         "ExcludePaths": { "type": ["array", "null"], "items": { "type": "string" } },
+        "OverwriteSigned": { "type": ["boolean", "null"] },
         "CertificateThumbprint": { "type": ["string", "null"] },
         "CertificatePFXPath": { "type": ["string", "null"] },
         "CertificatePFXBase64": { "type": ["string", "null"] },

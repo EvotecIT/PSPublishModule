@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ assets.css_html }}
+</head>
+<body>
+  <div class="pf-shell">
+    {{ include "header" }}
+
+    <main class="pf-main">
+      <div class="pf-container">
+        <section class="pf-section">
+          <div class="pf-section-title">
+            <div class="pf-section-eyebrow">{{ taxonomy.name }}</div>
+            <h2>{{ term }}</h2>
+            {{ if page.description != "" }}<p>{{ page.description }}</p>{{ end }}
+          </div>
+          {{ if items && items.size > 0 }}
+            <div class="pf-grid">
+              {{ for item in items }}
+                <a class="pf-card" href="{{ item.output_path }}">
+                  {{ if item.collection != "" }}<div class="pf-card-tag">{{ item.collection }}</div>{{ end }}
+                  <h3>{{ item.title }}</h3>
+                  {{ if item.description != "" }}<p>{{ item.description }}</p>{{ end }}
+                  {{ if item.tags && item.tags.size > 0 }}
+                    <div class="pf-showcase-chips">
+                      {{ for tag in item.tags }}
+                        <span class="pf-chip">{{ tag }}</span>
+                      {{ end }}
+                    </div>
+                  {{ end }}
+                </a>
+              {{ end }}
+            </div>
+          {{ else }}
+            <p>No matching content yet.</p>
+          {{ end }}
+        </section>
+      </div>
+    </main>
+
+    {{ include "footer" }}
+  </div>
+  {{ assets.js_html }}
+</body>
+</html>

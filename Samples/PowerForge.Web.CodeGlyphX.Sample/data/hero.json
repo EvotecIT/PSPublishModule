@@ -1,0 +1,21 @@
+{
+  "badge": "Open Source • Apache 2.0 License",
+  "title": "Generate QR Codes & Barcodes Without Dependencies",
+  "tagline": "Blazing-fast, zero-dependency .NET library for QR Codes, Data Matrix, PDF417, Aztec, and all major 1D barcodes. No System.Drawing. No SkiaSharp. Just pure .NET.",
+  "status": "Actively developed • Stable core • Expanding format support",
+  "panelTitle": "Quick preview",
+  "ctas": [
+    { "label": "Try the Playground", "href": "/playground/", "style": "primary" },
+    { "label": "View on NuGet", "href": "https://www.nuget.org/packages/CodeGlyphX", "style": "ghost" }
+  ],
+  "install": "dotnet add package CodeGlyphX",
+  "badges": [
+    { "alt": "GitHub stars", "src": "https://img.shields.io/github/stars/EvotecIT/CodeGlyphX?style=social" },
+    { "alt": "NuGet downloads", "src": "https://img.shields.io/nuget/dt/CodeGlyphX" }
+  ],
+  "previews": [
+    { "label": "QR" },
+    { "label": "Code 128" },
+    { "label": "Data Matrix" }
+  ]
+}

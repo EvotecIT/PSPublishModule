@@ -1,0 +1,142 @@
+.pf-docs-hero {
+  padding: 48px 0 12px;
+}
+
+.pf-docs-hero-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius-base) + 6px);
+  padding: 32px;
+  box-shadow: var(--shadow-base);
+}
+
+.pf-docs-header {
+  margin-bottom: 24px;
+}
+
+.pf-docs-header h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 2.8vw, 2.6rem);
+  margin-bottom: 8px;
+}
+
+.pf-docs-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.pf-docs-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pf-content-docs {
+  line-height: 1.7;
+  font-size: 1rem;
+}
+
+.pf-content-docs h2,
+.pf-content-docs h3,
+.pf-content-docs h4 {
+  font-family: var(--font-display);
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+
+.pf-content-docs h2 {
+  font-size: 1.6rem;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+
+.pf-content-docs h3 {
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+
+.pf-content-docs a {
+  color: var(--accent);
+}
+
+.pf-content-docs a:hover {
+  color: #ffffff;
+}
+
+.pf-content-docs code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.pf-content-docs pre {
+  background: rgba(3, 7, 18, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.pf-content-docs pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.pf-content-docs blockquote {
+  margin: 20px 0;
+  padding: 12px 18px;
+  border-left: 3px solid var(--accent);
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--muted);
+}
+
+.pf-content-docs ul,
+.pf-content-docs ol {
+  padding-left: 20px;
+}
+
+.pf-content-docs table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 0.95rem;
+}
+
+.pf-content-docs th,
+.pf-content-docs td {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.pf-content-docs th {
+  background: rgba(15, 23, 42, 0.7);
+  color: var(--ink);
+}
+
+.pf-content-docs hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 28px 0;
+}
+
+@media (max-width: 900px) {
+  .pf-docs-hero {
+    padding-top: 32px;
+  }
+
+  .pf-docs-hero-card {
+    padding: 24px;
+  }
+
+  .pf-docs-header h1 {
+    font-size: 1.8rem;
+  }
+}

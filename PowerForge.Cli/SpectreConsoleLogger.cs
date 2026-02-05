@@ -3,15 +3,22 @@ using Spectre.Console;
 
 namespace PowerForge.Cli;
 
+/// <summary>ILogger implementation that renders messages using Spectre.Console.</summary>
 public sealed class SpectreConsoleLogger : ILogger
 {
+    /// <summary>When true, verbose messages are emitted.</summary>
     public bool IsVerbose { get; set; }
 
+    /// <summary>Writes an informational message.</summary>
     public void Info(string message) => Write(LogLevel.Info, message);
+    /// <summary>Writes a success message.</summary>
     public void Success(string message) => Write(LogLevel.Success, message);
+    /// <summary>Writes a warning message.</summary>
     public void Warn(string message) => Write(LogLevel.Warning, message);
+    /// <summary>Writes an error message.</summary>
     public void Error(string message) => Write(LogLevel.Error, message);
 
+    /// <summary>Writes a verbose message when <see cref="IsVerbose"/> is true.</summary>
     public void Verbose(string message)
     {
         if (!IsVerbose) return;

@@ -327,7 +327,15 @@ public sealed class ModuleValidationService
 
             if (!File.Exists(jsonPath))
             {
-                issues.Add("PSScriptAnalyzer produced no output.");
+                var msg = ExtractMarker(result.StdOut, "PFVALID::ERROR::") ?? result.StdErr;
+                if (string.IsNullOrWhiteSpace(msg))
+                {
+                    issues.Add("PSScriptAnalyzer produced no output.");
+                }
+                else
+                {
+                    issues.Add($"PSScriptAnalyzer produced no output. {msg.Trim()}");
+                }
                 return BuildResult("PSScriptAnalyzer", settings.Severity, issues, "no output");
             }
 

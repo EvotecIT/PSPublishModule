@@ -35,6 +35,9 @@ public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
     /// <summary>Force build process to continue even if the module or command is not available.</summary>
     [Parameter] public SwitchParameter Force { get; set; }
 
+    /// <summary>Fail build when unresolved commands are detected during merge.</summary>
+    [Parameter] public SwitchParameter FailOnMissingCommands { get; set; }
+
     /// <summary>Emits module-skip configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -42,7 +45,8 @@ public sealed class NewConfigurationModuleSkipCommand : PSCmdlet
         {
             IgnoreModuleName = IgnoreModuleName,
             IgnoreFunctionName = IgnoreFunctionName,
-            Force = Force.IsPresent
+            Force = Force.IsPresent,
+            FailOnMissingCommands = FailOnMissingCommands.IsPresent
         };
 
         WriteObject(new ConfigurationModuleSkipSegment { Configuration = inner });

@@ -1,0 +1,17 @@
+[
+  {
+    "title": "HtmlForgeX: docs + gallery hub",
+    "summary": "One multi-page site with docs, examples, and templates. Auto-generated API docs and styled markdown in a single pipeline.",
+    "tags": ["Docs", "Templates", "Markdown"]
+  },
+  {
+    "title": "CodeGlyphX: product launch",
+    "summary": "Single repo drives landing page, playground, and API docs while keeping Lighthouse scores high.",
+    "tags": ["Launch", "Performance", "Playground"]
+  },
+  {
+    "title": "TestimoX: enterprise modules",
+    "summary": "Scales to dozens of modules with shared theme tokens and per-project overrides.",
+    "tags": ["Multi-project", "Themes", "Automation"]
+  }
+]

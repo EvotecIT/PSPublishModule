@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.projectspec.schema.json",
+  "title": "PowerForge Web ProjectSpec (schema v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "type": "integer", "minimum": 1 },
+    "Name": { "type": "string" },
+    "Slug": { "type": "string" },
+    "Theme": { "type": "string" },
+    "Repository": { "$ref": "#/$defs/RepositorySpec" },
+    "Packages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PackageSpec" }
+    },
+    "Links": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/LinkSpec" }
+    },
+    "ApiDocs": { "$ref": "#/$defs/ApiDocsSpec" },
+    "Content": { "$ref": "#/$defs/ProjectContentSpec" },
+    "Redirects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RedirectSpec" }
+    },
+    "EditLinks": { "$ref": "#/$defs/EditLinksSpec" }
+  },
+  "required": ["Name", "Slug"],
+  "$defs": {
+    "RepositorySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Provider": { "type": "string", "enum": ["GitHub", "AzureDevOps", "GitLab", "Other"] },
+        "Owner": { "type": "string" },
+        "Name": { "type": "string" },
+        "Branch": { "type": "string" },
+        "PathBase": { "type": "string" }
+      }
+    },
+    "PackageSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "type": "string", "enum": ["NuGet", "PowerShellGallery", "Other"] },
+        "Id": { "type": "string" },
+        "Version": { "type": "string" }
+      },
+      "required": ["Type", "Id"]
+    },
+    "LinkSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Title": { "type": "string" },
+        "Url": { "type": "string" }
+      },
+      "required": ["Title", "Url"]
+    },
+    "ApiDocsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
+        "AssemblyPath": { "type": "string" },
+        "XmlDocPath": { "type": "string" },
+        "HelpPath": { "type": "string" },
+        "OutputPath": { "type": "string" }
+      },
+      "required": ["Type", "OutputPath"]
+    },
+    "ProjectContentSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Include": { "type": "array", "items": { "type": "string" } },
+        "Exclude": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "RedirectSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "From": { "type": "string" },
+        "To": { "type": "string" },
+        "Status": { "type": "integer", "enum": [301, 302, 307, 308] },
+        "MatchType": { "type": "string", "enum": ["Exact", "Prefix", "Wildcard", "Regex"] },
+        "PreserveQuery": { "type": "boolean" }
+      },
+      "required": ["From", "To"]
+    },
+    "EditLinksSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Template": { "type": "string" }
+      }
+    }
+  }
+}

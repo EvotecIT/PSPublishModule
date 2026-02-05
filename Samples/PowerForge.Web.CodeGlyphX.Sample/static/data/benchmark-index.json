@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "os": "windows",
+      "runMode": "Full",
+      "generatedUtc": "2026-01-24T10:49:40.7910358Z",
+      "publish": true,
+      "framework": "net8.0",
+      "configuration": "Release",
+      "artifacts": "Build/BenchmarkResults/windows-20260124-091830",
+      "meta": {
+        "commit": null,
+        "branch": null,
+        "dotnetSdk": "10.0.102",
+        "runtime": ".NET 9.0.10",
+        "osDescription": "Microsoft Windows 10.0.26200",
+        "osArchitecture": "X64",
+        "processArchitecture": "X64",
+        "machineName": "EVOMONSTER",
+        "processorCount": 32
+      },
+      "runModeSource": "explicit"
+    },
+    {
+      "os": "windows",
+      "runMode": "quick",
+      "generatedUtc": "2026-01-30T09:22:51.7369607Z",
+      "publish": false,
+      "framework": "net8.0",
+      "configuration": "Release",
+      "artifacts": "C:\\Support\\GitHub\\CodeMatrix\\Build\\BenchmarkResults\\windows-20260130-101914",
+      "meta": {
+        "commit": null,
+        "branch": null,
+        "dotnetSdk": "10.0.102",
+        "runtime": ".NET 9.0.10",
+        "osDescription": "Microsoft Windows 10.0.26200",
+        "osArchitecture": "X64",
+        "processArchitecture": "X64",
+        "machineName": "EVOMAGIC",
+        "processorCount": 32
+      },
+      "runModeSource": "explicit"
+    },
+    {
+      "os": "linux",
+      "runMode": "quick",
+      "generatedUtc": "2026-01-30T09:35:58.1045639Z",
+      "publish": false,
+      "framework": "net8.0",
+      "configuration": "Release",
+      "artifacts": "/mnt/c/Support/GitHub/CodeMatrix/Build/BenchmarkResults/linux-20260130-103211",
+      "meta": {
+        "commit": null,
+        "branch": null,
+        "dotnetSdk": "10.0.100",
+        "runtime": ".NET 9.0.10",
+        "osDescription": "Ubuntu 24.04.3 LTS",
+        "osArchitecture": "X64",
+        "processArchitecture": "X64",
+        "machineName": "EVOMAGIC",
+        "processorCount": 32
+      },
+      "runModeSource": "explicit"
+    }
+  ]
+}

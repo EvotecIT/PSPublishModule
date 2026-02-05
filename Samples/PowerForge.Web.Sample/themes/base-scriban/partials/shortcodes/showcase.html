@@ -1,0 +1,15 @@
+<div class="pf-showcase">
+  {{ for item in shortcode.data }}
+    <a class="pf-showcase-card" href="{{ item.link }}">
+      <h3>{{ item.title }}</h3>
+      <p>{{ item.summary }}</p>
+      {{ if item.chips }}
+        <div class="pf-showcase-chips">
+          {{ for chip in item.chips }}
+            <span class="pf-chip">{{ chip }}</span>
+          {{ end }}
+        </div>
+      {{ end }}
+    </a>
+  {{ end }}
+</div>

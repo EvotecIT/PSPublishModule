@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ head_html }}
+  <script>(function(){const t=localStorage.getItem('theme')||'auto';document.documentElement.dataset.theme=t;})();</script>
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ extra_css_html }}
+  {{ assets.css_html }}
+  {{ opengraph_html }}
+  {{ structured_data_html }}
+</head>
+<body{{ if body_class != "" }} class="{{ body_class }}"{{ end }}>
+  <div class="page">
+{{ include "header" -}}
+<main>
+{{ content }}
+</main>
+{{ include "footer" -}}
+  </div>
+  {{ assets.js_html }}
+  {{ extra_scripts_html }}
+</body>
+</html>

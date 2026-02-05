@@ -13,6 +13,14 @@ namespace PSPublishModule;
 /// Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)
 /// install/package dependencies during a build.
 /// </para>
+/// <para>
+/// RequiredModule entries are written to the manifest <c>RequiredModules</c>. ExternalModule entries are written to
+/// <c>PrivateData.PSData.ExternalModuleDependencies</c> (not packaged into artefacts).
+/// </para>
+/// <para>
+/// Version/Guid values set to <c>Auto</c> or <c>Latest</c> are resolved from installed modules; when
+/// <c>ResolveMissingModulesOnline</c> is enabled, repository results are used without installing.
+/// </para>
 /// </remarks>
 /// <example>
 /// <summary>Add a required module dependency</summary>
@@ -41,7 +49,7 @@ public sealed class NewConfigurationModuleCommand : PSCmdlet
     /// <summary>Name of the PowerShell module(s) that your module depends on.</summary>
     [Parameter(Mandatory = true)] public string[] Name { get; set; } = Array.Empty<string>();
 
-    /// <summary>Minimum version of the dependency module (or 'Latest').</summary>
+    /// <summary>Minimum version of the dependency module (or 'Auto'/'Latest').</summary>
     [Parameter]
     [ArgumentCompleter(typeof(AutoLatestCompleter))]
     public string? Version { get; set; }

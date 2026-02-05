@@ -1,0 +1,49 @@
+[
+  {
+    "label": "Encoding",
+    "note": "Symbologies + payload helpers",
+    "cards": [
+      {
+        "title": "Encode & Decode",
+        "text": "Full round-trip support with robust pixel detection and easy APIs.",
+        "icon": "cycle"
+      },
+      {
+        "title": "2D Codes",
+        "text": "QR Code, Micro QR, Data Matrix, PDF417, Aztec, GS1, and more.",
+        "icon": "grid"
+      },
+      {
+        "title": "1D Barcodes",
+        "text": "Code 128, GS1-128, Code 39/93, EAN/UPC, ITF-14, and more.",
+        "icon": "bars"
+      },
+      {
+        "title": "Payment Helpers",
+        "text": "SEPA Girocode, Swiss QR Bill, BezahlCode, UPI, and crypto addresses.",
+        "icon": "payment"
+      }
+    ]
+  },
+  {
+    "label": "Performance",
+    "note": "Fast, portable, and trimming-safe",
+    "cards": [
+      {
+        "title": "AOT & Trim Ready",
+        "text": "No reflection tricks. Native AOT compatible and aggressively trimmed.",
+        "icon": "bolt"
+      },
+      {
+        "title": "Cross-Platform",
+        "text": "Runs on Windows, Linux, macOS, .NET Standard 2.0+, .NET 8+.",
+        "icon": "globe"
+      },
+      {
+        "title": "Multiple Outputs",
+        "text": "Render to PNG, SVG, PDF, EPS, HTML, ASCII, and raw bitmaps.",
+        "icon": "layers"
+      }
+    ]
+  }
+]

@@ -1,0 +1,40 @@
+{{ if data.formats }}
+<section class="nova-section" id="formats">
+  <div class="nova-container">
+    {{ formatsLabel = data.sections.formats.label; formatsTitle = data.sections.formats.title; formatsDesc = data.sections.formats.description; matrixTitle = data.sections.formats.matrixTitle; linearTitle = data.sections.formats.linearTitle; outputTitle = data.sections.formats.outputTitle; if formatsLabel == ""; formatsLabel = "Formats"; end; if formatsTitle == ""; formatsTitle = "Every format you need"; end; if matrixTitle == ""; matrixTitle = "2D Matrix Codes"; end; if linearTitle == ""; linearTitle = "1D Linear Barcodes"; end; if outputTitle == ""; outputTitle = "Output Formats"; end }}
+    <div class="nova-section-header">
+      <span>{{ formatsLabel }}</span>
+      <h2>{{ formatsTitle }}</h2>
+      {{ if formatsDesc }}
+      <p>{{ formatsDesc }}</p>
+      {{ end }}
+    </div>
+    <div class="nova-format-grid">
+      <div class="nova-format-card">
+        <h3>{{ matrixTitle }}</h3>
+        <div class="nova-chip-row">
+          {{ for item in data.formats.matrix }}
+          <span class="nova-chip">{{ item }}</span>
+          {{ end }}
+        </div>
+      </div>
+      <div class="nova-format-card">
+        <h3>{{ linearTitle }}</h3>
+        <div class="nova-chip-row">
+          {{ for item in data.formats.linear }}
+          <span class="nova-chip">{{ item }}</span>
+          {{ end }}
+        </div>
+      </div>
+      <div class="nova-format-card">
+        <h3>{{ outputTitle }}</h3>
+        <div class="nova-chip-row">
+          {{ for item in data.outputs }}
+          <span class="nova-chip">{{ item }}</span>
+          {{ end }}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{{ end }}

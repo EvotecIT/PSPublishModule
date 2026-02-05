@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PowerForge.Web</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge\PowerForge.csproj">
+      <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HtmlTinkerX" Version="2.0.6" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="0.5.2" />
+    <PackageReference Include="Scriban" Version="5.11.0" />
+    <PackageReference Include="YamlDotNet" Version="15.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\ApiDocs\fallback.css" />
+    <EmbeddedResource Include="Assets\ApiDocs\search.js" />
+    <EmbeddedResource Include="Assets\ApiDocs\index.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\type.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\docs-index.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\docs-type.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\docs.js" />
+  </ItemGroup>
+
+</Project>

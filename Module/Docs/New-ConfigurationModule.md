@@ -18,6 +18,12 @@ New-ConfigurationModule -Name <string[]> [-Type <ModuleDependencyKind>] [-Versio
 Emits module dependency configuration segments. These are later used to patch the module manifest and (optionally)
 install/package dependencies during a build.
 
+RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries are written to
+PrivateData.PSData.ExternalModuleDependencies (not packaged into artefacts).
+
+Version/Guid values set to Auto or Latest are resolved from installed modules; when
+ResolveMissingModulesOnline is enabled, repository results are used without installing.
+
 ## EXAMPLES
 
 ### EXAMPLE 1
@@ -119,7 +125,7 @@ Accept wildcard characters: True
 ```
 
 ### -Version
-Minimum version of the dependency module (or 'Latest').
+Minimum version of the dependency module (or 'Auto'/'Latest').
 
 ```yaml
 Type: String

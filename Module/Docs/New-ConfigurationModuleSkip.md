@@ -11,7 +11,7 @@ Provides a way to ignore certain commands or modules during build process and co
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationModuleSkip [-IgnoreModuleName <string[]>] [-IgnoreFunctionName <string[]>] [-Force] [<CommonParameters>]
+New-ConfigurationModuleSkip [-IgnoreModuleName <string[]>] [-IgnoreFunctionName <string[]>] [-Force] [-FailOnMissingCommands] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -33,6 +33,21 @@ PS>New-ConfigurationModuleSkip -IgnoreModuleName 'Microsoft.PowerShell.Security'
 ```
 
 ## PARAMETERS
+
+### -FailOnMissingCommands
+Fail build when unresolved commands are detected during merge.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
 
 ### -Force
 Force build process to continue even if the module or command is not available.

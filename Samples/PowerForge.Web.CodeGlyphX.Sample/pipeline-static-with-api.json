@@ -1,0 +1,79 @@
+{
+  "$schema": "../Schemas/powerforge.web.pipelinespec.schema.json",
+  "steps": [
+    {
+      "task": "build",
+      "config": "./site.json",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "clean": true
+    },
+    {
+      "task": "apidocs",
+      "xml": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.xml",
+      "assembly": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.dll",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api",
+      "baseUrl": "/api",
+      "format": "hybrid",
+      "css": "/css/api-docs.css",
+      "headerHtml": "./static/api-fragments/header.html",
+      "footerHtml": "./static/api-fragments/footer.html",
+      "nav": "./site.json",
+      "includeNamespace": "CodeGlyphX",
+      "excludeType": "CodeGlyphX.Rendering.Gif.BarcodeGifRenderer,CodeGlyphX.Rendering.Gif.GifAnimationFrame,CodeGlyphX.Rendering.Gif.GifAnimationOptions,CodeGlyphX.Rendering.Gif.GifDisposal,CodeGlyphX.Rendering.Gif.GifWriter,CodeGlyphX.Rendering.Gif.MatrixGifRenderer,CodeGlyphX.Rendering.Gif.QrGifRenderer,CodeGlyphX.Rendering.Pdf.PdfReader,CodeGlyphX.Rendering.Psd.PsdReader,CodeGlyphX.Rendering.Tiff.BarcodeTiffRenderer,CodeGlyphX.Rendering.Tiff.MatrixTiffRenderer,CodeGlyphX.Rendering.Tiff.QrTiffRenderer,CodeGlyphX.Rendering.Tiff.TiffCompression,CodeGlyphX.Rendering.Tiff.TiffRgba32Page,CodeGlyphX.Rendering.Tiff.TiffWriter,CodeGlyphX.Rendering.Jpeg.JpegEncodeOptions,CodeGlyphX.Rendering.Jpeg.JpegMetadata,CodeGlyphX.Rendering.Jpeg.JpegSubsampling"
+    },
+    {
+      "task": "apidocs",
+      "xml": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.xml",
+      "assembly": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/generated/CodeGlyphX.dll",
+      "out": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/docs/api",
+      "title": "API Reference - CodeGlyphX",
+      "baseUrl": "/docs/api",
+      "format": "hybrid",
+      "css": "/css/api.css",
+      "template": "docs",
+      "headerHtml": "./static/api-fragments/header.html",
+      "footerHtml": "./static/api-fragments/footer.html",
+      "nav": "./site.json",
+      "includeNamespace": "CodeGlyphX",
+      "excludeType": "CodeGlyphX.Rendering.Gif.BarcodeGifRenderer,CodeGlyphX.Rendering.Gif.GifAnimationFrame,CodeGlyphX.Rendering.Gif.GifAnimationOptions,CodeGlyphX.Rendering.Gif.GifDisposal,CodeGlyphX.Rendering.Gif.GifWriter,CodeGlyphX.Rendering.Gif.MatrixGifRenderer,CodeGlyphX.Rendering.Gif.QrGifRenderer,CodeGlyphX.Rendering.Pdf.PdfReader,CodeGlyphX.Rendering.Psd.PsdReader,CodeGlyphX.Rendering.Tiff.BarcodeTiffRenderer,CodeGlyphX.Rendering.Tiff.MatrixTiffRenderer,CodeGlyphX.Rendering.Tiff.QrTiffRenderer,CodeGlyphX.Rendering.Tiff.TiffCompression,CodeGlyphX.Rendering.Tiff.TiffRgba32Page,CodeGlyphX.Rendering.Tiff.TiffWriter,CodeGlyphX.Rendering.Jpeg.JpegEncodeOptions,CodeGlyphX.Rendering.Jpeg.JpegMetadata,CodeGlyphX.Rendering.Jpeg.JpegSubsampling"
+    },
+    {
+      "task": "sitemap",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "baseUrl": "https://codeglyphx.com",
+      "apiSitemap": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site/api/sitemap.xml",
+      "html": true,
+      "htmlTitle": "CodeGlyphX Sitemap",
+      "entries": [
+        { "path": "/", "priority": "1.0", "changefreq": "weekly" },
+        { "path": "/playground/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/docs/", "priority": "0.9", "changefreq": "weekly" },
+        { "path": "/benchmarks/", "priority": "0.8", "changefreq": "monthly" },
+        { "path": "/faq/", "priority": "0.8", "changefreq": "monthly" },
+        { "path": "/showcase/", "priority": "0.7", "changefreq": "monthly" },
+        { "path": "/pricing/", "priority": "0.7", "changefreq": "monthly" },
+        { "path": "/api/", "priority": "0.8", "changefreq": "weekly" }
+      ]
+    },
+    {
+      "task": "optimize",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "minifyHtml": false,
+      "minifyCss": true,
+      "minifyJs": true
+    },
+    {
+      "task": "audit",
+      "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
+      "exclude": "**/*.scripts.html,**/*.head.html,**/api-fragments/**,api-fragments/**",
+      "ignoreNav": "playground/**,**/404.html,**/404/index.html,sitemap/**",
+      "navSelector": "header nav.nav",
+      "rendered": true,
+      "renderedEnsureInstalled": true,
+      "renderedMaxPages": 8,
+      "renderedInclude": "index.html,docs/**,benchmarks/**,faq/**,pricing/**,showcase/**",
+      "renderedExclude": "api/**,docs/api/**,api-docs/**",
+      "summary": true
+    }
+  ]
+}

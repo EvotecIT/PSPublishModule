@@ -1,0 +1,40 @@
+{
+  "$schema": "../../Schemas/powerforge.web.themespec.schema.json",
+  "name": "base-scriban",
+  "engine": "scriban",
+  "layoutsPath": "layouts",
+  "partialsPath": "partials",
+  "assetsPath": "assets",
+  "layouts": {
+    "docs-hero": "layouts/docs-hero.html"
+  },
+  "tokens": {
+    "color": {
+      "bg0": "#0b0f14",
+      "bg1": "#0f1d25",
+      "bg2": "#0b2a2e",
+      "panel": "rgba(15, 23, 42, 0.65)",
+      "panelStrong": "rgba(15, 23, 42, 0.85)",
+      "ink": "#e2e8f0",
+      "muted": "#94a3b8",
+      "accent": "#22d3ee",
+      "accent2": "#f59e0b",
+      "border": "rgba(148, 163, 184, 0.18)"
+    },
+    "radius": {
+      "base": "18px",
+      "sm": "12px"
+    },
+    "shadow": {
+      "base": "0 30px 60px rgba(2, 6, 23, 0.45)"
+    },
+    "font": {
+      "body": "\"Work Sans\", \"Segoe UI\", sans-serif",
+      "display": "\"Space Grotesk\", \"Segoe UI\", sans-serif",
+      "mono": "\"JetBrains Mono\", \"Cascadia Mono\", monospace"
+    },
+    "layout": {
+      "maxWidth": "1080px"
+    }
+  }
+}

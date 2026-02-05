@@ -29,6 +29,7 @@
 - `Module/Build/Build-ModuleSelf.ps1` self-builds by building `PowerForge.Cli` and running the JSON pipeline (`powerforge.json`) so PSPublishModule can self-build without file locking.
 - PowerShell compatibility analysis no longer depends on PowerShell helper functions (moved to C# analyzer).
 - PSResourceGet is used internally (out-of-proc wrapper for find/publish/install) and is not exposed as standalone cmdlets.
+- Repository-wide .NET package release flow is now available in C# (discover projects, resolve version, pack, publish).
 
 **Replacement roadmap (priority order)**
 - (done) Configuration is typed end-to-end: configuration “segments” are typed models + enums in `PowerForge`, with legacy DSL supported via adapters/translation.
@@ -180,6 +181,21 @@
   - [x] `Invoke-ModuleBuild` → `PowerForge.ModuleScaffoldService` + `PowerForge.LegacySegmentAdapter` (cmdlet only maps params and invokes the PowerForge pipeline)
   - [x] `Invoke-DotNetReleaseBuild` → `PowerForge.DotNetReleaseBuildService` (cmdlet only handles `ShouldProcess` + optional `Register-Certificate` hook)
   - [x] `Get-PowerShellCompatibility` → `PowerForge.PowerShellCompatibilityAnalyzer` (typed report + C# CSV export; cmdlet only handles host/progress output)
+- [x] Add repository-wide .NET package release workflow (discover, X-pattern versioning via NuGet, pack, publish).
+- **Deliberate exclusions (do not reintroduce)**
+  - Legacy public helper functions are intentionally removed from PSPublishModule (moved to PSMaintenance or deprecated):
+    - `Convert-ProjectEncoding`, `Convert-ProjectLineEnding`
+    - `Get-ProjectEncoding`, `Get-ProjectLineEnding`
+    - `Initialize-PortableModule`, `Initialize-PortableScript`, `Initialize-ProjectManager`
+    - `Install-ProjectDocumentation`, `Show-ProjectDocumentation`
+  - Hashtable-based DSL configuration is intentionally not supported; use typed cmdlets / JSON segments only.
+- [x] Close remaining DSL parity gaps in C# pipeline:
+  - [x] Wire `ImportModules` segment (self/required module import).
+  - [x] Wire `Command` segment (manifest `CommandModuleDependencies`).
+  - [x] Apply `PlaceHolder` + `PlaceHolderOption` segments during build.
+  - [x] Execute `TestsAfterMerge` segment (`New-ConfigurationTest`).
+- [x] Add opt-in auto-install of missing modules during build (PSResourceGet/PowerShellGet fallback).
+- [x] Add regression test for `Remove-Comments` script-level param block behavior (comment-based help preservation).
 - [x] Define stable JSON output contract (schema/versioning, no-color/no-logs mixing, exit codes).
   - [x] Include `schemaVersion` in all CLI JSON outputs.
   - [x] Serialize enums as strings in CLI JSON output.
@@ -187,7 +203,7 @@
   - [x] Add `--quiet` and `--diagnostics` (keep stdout pure when `--output json` is used).
   - [x] Add `--view auto|standard|ansi` (auto disables live UI in CI).
   - [x] Add interactive Spectre.Console progress for `docs`/`pack`/`pipeline` in Standard view (auto disables in CI and when `--output json`/`--no-color`/`--quiet`).
-  - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `schemas/`.
+  - [x] Document the JSON schema (VSCode extension baseline): `JSON_SCHEMA.md` + `Schemas/`.
 - [x] Finish docs engine MVP and remove PlatyPS/HelpOut.
 - [x] Add GitHub composite actions calling the CLI.
 - [ ] Validate AOT publish for CLI (code is AOT/trim-friendly; verify end-to-end publish in CI with a native toolchain on Windows runners).

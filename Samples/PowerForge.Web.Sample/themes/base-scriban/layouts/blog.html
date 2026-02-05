@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }}</title>
+  {{ description_meta_html }}
+  {{ canonical_html }}
+  {{ assets.preloads_html }}
+  {{ assets.critical_css_html }}
+  {{ include "theme-tokens" }}
+  {{ assets.css_html }}
+</head>
+<body>
+  <div class="pf-shell">
+    {{ include "header" }}
+
+    <main class="pf-main">
+      <div class="pf-container">
+        <section class="pf-section">
+          <div class="pf-section-title">
+            <div class="pf-section-eyebrow">Blog</div>
+            <h2>{{ page.title }}</h2>
+            {{ if page.description != "" }}<p>{{ page.description }}</p>{{ end }}
+          </div>
+          <div class="pf-blog-grid">
+            {{ if items && items.size > 0 }}
+              {{ for post in items }}
+              <a class="pf-blog-card" href="{{ post.output_path }}">
+                {{ if post.date }}<div class="pf-blog-meta">{{ post.date }}</div>{{ end }}
+                <h3>{{ post.title }}</h3>
+                {{ if post.description != "" }}<p>{{ post.description }}</p>{{ end }}
+                {{ if post.tags && post.tags.size > 0 }}
+                  <div class="pf-blog-tags">
+                    {{ for tag in post.tags }}
+                    <span class="pf-chip">{{ tag }}</span>
+                    {{ end }}
+                  </div>
+                {{ end }}
+              </a>
+              {{ end }}
+            {{ else if data.blog }}
+              {{ for post in data.blog }}
+              <a class="pf-blog-card" href="{{ post.link }}">
+                <div class="pf-blog-meta">{{ post.date }}</div>
+                <h3>{{ post.title }}</h3>
+                <p>{{ post.summary }}</p>
+                <div class="pf-blog-tags">
+                  {{ for tag in post.tags }}
+                  <span class="pf-chip">{{ tag }}</span>
+                  {{ end }}
+                </div>
+              </a>
+              {{ end }}
+            {{ end }}
+          </div>
+        </section>
+      </div>
+    </main>
+
+    {{ include "footer" }}
+  </div>
+  {{ assets.js_html }}
+</body>
+</html>

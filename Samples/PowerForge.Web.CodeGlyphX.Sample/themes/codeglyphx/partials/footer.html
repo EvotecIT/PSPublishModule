@@ -1,0 +1,61 @@
+<footer class="footer">
+    <div class="footer-content">
+        <div class="footer-brand">
+            <div class="footer-logo">
+                <img src="/codeglyphx-qr-icon.png" alt="{{ site.name }} logo" width="28" height="28" />
+                <span>{{ site.name }}</span>
+            </div>
+            <p>Zero-dependency QR &amp; barcode toolkit for .NET</p>
+        </div>
+        <div class="footer-links">
+      <div class="footer-section">
+        <h3>Product</h3>
+        {{~ for menu in navigation.menus ~}}
+        {{~ if menu.name == "footer-product" ~}}
+        {{~ for item in menu.items ~}}
+        {{~ if item.url ~}}
+        <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+      </div>
+      <div class="footer-section">
+        <h3>Resources</h3>
+        {{~ for menu in navigation.menus ~}}
+        {{~ if menu.name == "footer-resources" ~}}
+        {{~ for item in menu.items ~}}
+        {{~ if item.url ~}}
+        <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+      </div>
+      <div class="footer-section">
+        <h3>Company</h3>
+        {{~ for menu in navigation.menus ~}}
+        {{~ if menu.name == "footer-company" ~}}
+        {{~ for item in menu.items ~}}
+        {{~ if item.url ~}}
+        <a href="{{ item.url }}"{{ if item.target }} target="{{ item.target }}"{{ end }}{{ if item.rel }} rel="{{ item.rel }}"{{ end }}>{{ item.title }}</a>
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+        {{~ end ~}}
+      </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="footer-badges">
+                <a href="https://github.com/EvotecIT/CodeGlyphX" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/github/stars/EvotecIT/CodeGlyphX?style=social" alt="GitHub stars" width="100" height="20" loading="lazy" />
+                </a>
+                <a href="https://www.nuget.org/packages/CodeGlyphX" target="_blank" rel="noopener">
+                    <img src="https://img.shields.io/nuget/dt/CodeGlyphX" alt="NuGet downloads" width="100" height="20" loading="lazy" />
+                </a>
+            </div>
+            <p>Apache 2.0 License &bull; &copy; 2026 Evotec Services sp. z o.o.</p>
+        </div>
+    </div>
+</footer>
+<script src="/js/site.js"></script>
