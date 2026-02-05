@@ -40,6 +40,17 @@ if (-not (Get-Command Invoke-ModuleBuild -ErrorAction SilentlyContinue)) {
     $runtimesText = (dotnet --list-runtimes 2>$null) -join "`n"
     $tfm = if ($runtimesText -match '(?m)^Microsoft\\.NETCore\\.App\\s+10\\.') { 'net10.0' } else { 'net8.0' }
     $binaryModule = Join-Path -Path $PSScriptRoot -ChildPath ("..\..\PSPublishModule\bin\{0}\{1}\PSPublishModule.dll" -f $Configuration, $tfm)
+    if (-not (Test-Path -LiteralPath $binaryModule)) {
+        $csproj = Join-Path -Path $PSScriptRoot -ChildPath '..\..\PSPublishModule\PSPublishModule.csproj'
+        if (Test-Path -LiteralPath $csproj) {
+            Write-Host "ℹ️ Building PSPublishModule ($Configuration)" -ForegroundColor DarkGray
+            $buildOutput = & dotnet build $csproj -c $Configuration --nologo --verbosity quiet 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $buildOutput | Out-Host
+                throw "dotnet build failed (exit $LASTEXITCODE)."
+            }
+        }
+    }
     if (Test-Path -LiteralPath $binaryModule) {
         Import-Module $binaryModule -Force
     }
