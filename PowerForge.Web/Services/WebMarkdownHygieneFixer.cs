@@ -40,6 +40,9 @@ public sealed class WebMarkdownFixResult
 public static class WebMarkdownHygieneFixer
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
     private static readonly Regex FenceRegex = new("^```", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HeadingRegex = new("<h([1-6])>(.*?)</h\\1>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StrongRegex = new("<strong>(.*?)</strong>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -58,7 +61,7 @@ public static class WebMarkdownHygieneFixer
         if (string.IsNullOrWhiteSpace(options.RootPath))
             throw new ArgumentException("RootPath is required.", nameof(options));
 
-        var rootPath = Path.GetFullPath(options.RootPath);
+        var rootPath = NormalizeRootPath(options.RootPath);
         if (!Directory.Exists(rootPath))
             throw new DirectoryNotFoundException($"Root path not found: {rootPath}");
 
@@ -131,7 +134,7 @@ public static class WebMarkdownHygieneFixer
                     continue;
                 var resolved = Path.IsPathRooted(file) ? file : Path.Combine(rootPath, file);
                 var full = Path.GetFullPath(resolved);
-                if (!full.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+                if (!IsPathWithinRoot(rootPath, full))
                 {
                     warnings.Add($"Skipping file outside root: {file}");
                     continue;
@@ -309,5 +312,18 @@ public static class WebMarkdownHygieneFixer
     private static string ToRelative(string root, string path)
     {
         return Path.GetRelativePath(root, path).Replace('\\', '/');
+    }
+
+    private static string NormalizeRootPath(string rootPath)
+    {
+        var full = Path.GetFullPath(rootPath);
+        var trimmed = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return trimmed + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string rootPath, string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.StartsWith(rootPath, PathComparison);
     }
 }

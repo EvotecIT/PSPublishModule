@@ -117,8 +117,8 @@ public static class WebAssetOptimizer
         Dictionary<string, string>? hashMap = null;
         if (hashSpec.Enabled)
         {
-            hashMap = HashAssets(siteRoot, hashSpec, MarkUpdated);
-            result.HashedAssetCount = hashMap.Count;
+            hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, MarkUpdated);
+            result.HashedAssetCount = hashedAssetCount;
             if (hashMap.Count > 0)
             {
                 var rewrites = RewriteHashedReferences(siteRoot, htmlFiles, hashMap, MarkUpdated);
@@ -307,9 +307,10 @@ public static class WebAssetOptimizer
         return url;
     }
 
-    private static Dictionary<string, string> HashAssets(string siteRoot, AssetHashSpec spec, Action<string>? onUpdated = null)
+    private static Dictionary<string, string> HashAssets(string siteRoot, AssetHashSpec spec, out int hashedAssetCount, Action<string>? onUpdated = null)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        hashedAssetCount = 0;
         var extensions = (spec.Extensions?.Length ?? 0) == 0 ? new[] { ".css", ".js" } : spec.Extensions!;
         var files = Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
             .Where(path => extensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
@@ -330,6 +331,7 @@ public static class WebAssetOptimizer
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Move(file, target, overwrite: true);
             onUpdated?.Invoke(target);
+            hashedAssetCount++;
 
             map[$"/{relative}"] = $"/{hashedName}";
             map[relative] = hashedName;

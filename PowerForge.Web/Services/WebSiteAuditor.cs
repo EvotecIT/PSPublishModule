@@ -108,6 +108,10 @@ public static class WebSiteAuditor
 {
     private static readonly string[] DefaultHtmlExtensions = { ".html", ".htm" };
     private static readonly string[] IgnoreLinkPrefixes = { "#", "mailto:", "tel:", "javascript:", "data:", "blob:" };
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+    private const long MaxAuditDataFileSizeBytes = 10 * 1024 * 1024;
     private const int RenderedDetailLimit = 3;
     private static readonly string[] DefaultExcludePatterns =
     {
@@ -848,8 +852,8 @@ public static class WebSiteAuditor
         if (!normalized.StartsWith("/", StringComparison.Ordinal))
             normalized = "/" + normalized;
 
-        if (normalized.Length > 1 && !normalized.EndsWith("/", StringComparison.Ordinal) && !Path.HasExtension(normalized))
-            normalized += "/";
+        if (normalized.Length > 1 && normalized.EndsWith("/", StringComparison.Ordinal))
+            normalized = normalized.TrimEnd('/');
 
         return normalized;
     }
@@ -1017,11 +1021,27 @@ public static class WebSiteAuditor
 
     private static string ResolveSummaryPath(string siteRoot, string summaryPath)
     {
+        var normalizedRoot = NormalizeRootPath(siteRoot);
         var trimmed = summaryPath.Trim();
         var full = Path.IsPathRooted(trimmed)
             ? trimmed
             : Path.Combine(siteRoot, trimmed);
-        return Path.GetFullPath(full);
+        var resolved = Path.GetFullPath(full);
+        if (!IsPathWithinRoot(normalizedRoot, resolved))
+            throw new InvalidOperationException($"Path must resolve under site root: {summaryPath}");
+        return resolved;
+    }
+
+    private static string NormalizeRootPath(string siteRoot)
+    {
+        var full = Path.GetFullPath(siteRoot);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
     private static string BuildIssueKey(string severity, string category, string? path, string hint)
@@ -1061,9 +1081,17 @@ public static class WebSiteAuditor
             return keys;
         }
 
+        var info = new FileInfo(baselinePath);
+        if (info.Length > MaxAuditDataFileSizeBytes)
+        {
+            addIssue("warning", "baseline", null, $"Baseline file is too large ({info.Length} bytes).", "baseline-too-large");
+            return keys;
+        }
+
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(baselinePath));
+            using var stream = File.OpenRead(baselinePath);
+            using var doc = JsonDocument.Parse(stream);
             var root = doc.RootElement;
             if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
             {
@@ -1135,7 +1163,8 @@ public static class WebSiteAuditor
         }
         catch (DecoderFallbackException ex)
         {
-            addIssue("error", "utf8", relativePath, $"invalid UTF-8 byte sequence ({ex.Message}).", "utf8-invalid");
+            var offset = ex.Index >= 0 ? $" at byte offset {ex.Index}" : string.Empty;
+            addIssue("error", "utf8", relativePath, $"invalid UTF-8 byte sequence{offset} ({ex.Message}).", "utf8-invalid");
             return Encoding.UTF8.GetString(bytes);
         }
     }

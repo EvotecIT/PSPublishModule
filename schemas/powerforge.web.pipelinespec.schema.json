@@ -46,7 +46,10 @@
         "config": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
-        "clean": { "type": "boolean" }
+        "clean": {
+          "type": "boolean",
+          "description": "When true, delete existing output contents before writing new build artifacts."
+        }
       },
       "required": ["task", "config", "out"]
     },
@@ -238,8 +241,14 @@
         "navRequired": { "type": "boolean" },
         "navOptional": { "type": "boolean" },
         "navIgnorePrefixes": { "type": "string" },
-        "navRequiredLinks": { "type": "string" },
-        "navRequiredLink": { "type": "string" },
+        "navRequiredLinks": {
+          "type": "string",
+          "description": "Comma-separated list of links that must exist in each audited nav."
+        },
+        "navRequiredLink": {
+          "type": "string",
+          "description": "Deprecated alias for navRequiredLinks."
+        },
         "checkLinks": { "type": "boolean" },
         "checkAssets": { "type": "boolean" },
         "checkNav": { "type": "boolean" },
@@ -313,7 +322,10 @@
         "configuration": { "type": "string" },
         "framework": { "type": "string" },
         "runtime": { "type": "string" },
-        "clean": { "type": "boolean" },
+        "clean": {
+          "type": "boolean",
+          "description": "When true, clear dotnet publish output to prevent stale files from previous runs."
+        },
         "selfContained": { "type": "boolean" },
         "noBuild": { "type": "boolean" },
         "noRestore": { "type": "boolean" },

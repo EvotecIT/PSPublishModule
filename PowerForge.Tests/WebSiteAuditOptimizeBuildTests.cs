@@ -1,5 +1,7 @@
 using PowerForge.Web;
 
+namespace PowerForge.Tests;
+
 public class WebSiteAuditOptimizeBuildTests
 {
     [Fact]
@@ -100,11 +102,46 @@ public class WebSiteAuditOptimizeBuildTests
                 MinifyJs = true
             });
 
-            Assert.True(result.UpdatedCount >= 1);
+            Assert.Equal(3, result.UpdatedCount);
             Assert.Equal(1, result.HtmlFileCount);
-            Assert.True(result.HtmlMinifiedCount >= 1);
-            Assert.True(result.CssMinifiedCount >= 1);
-            Assert.True(result.JsMinifiedCount >= 1);
+            Assert.Equal(1, result.HtmlMinifiedCount);
+            Assert.Equal(1, result.CssMinifiedCount);
+            Assert.Equal(1, result.JsMinifiedCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_HashedAssetCount_TracksFilesNotAliasMapEntries()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-hash-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                  <head><link rel="stylesheet" href="/app.css" /></head>
+                  <body><script src="/site.js"></script></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "app.css"), "body { color: red; }");
+            File.WriteAllText(Path.Combine(root, "site.js"), "console.log('ok');");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                HashAssets = true,
+                HashExtensions = new[] { ".css", ".js" }
+            });
+
+            Assert.Equal(2, result.HashedAssetCount);
         }
         finally
         {
@@ -170,6 +207,61 @@ public class WebSiteAuditOptimizeBuildTests
 
             Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
             Assert.False(File.Exists(Path.Combine(outputRoot, "404", "index.html")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_NotFoundBundleResources_AreCopiedNextToRoot404Page()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-build-404-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentRoot = Path.Combine(root, "content", "pages", "404");
+            Directory.CreateDirectory(contentRoot);
+            File.WriteAllText(Path.Combine(contentRoot, "index.md"),
+                """
+                ---
+                title: Page not found
+                ---
+
+                ![Missing page](./notfound.png)
+                """);
+            File.WriteAllBytes(Path.Combine(contentRoot, "notfound.png"), new byte[] { 1, 2, 3, 4 });
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "404.html")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "notfound.png")));
+            Assert.False(File.Exists(Path.Combine(outputRoot, "404", "notfound.png")));
         }
         finally
         {
@@ -270,6 +362,32 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_BaselinePathOutsideRoot_Throws()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-baseline-path-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
+            var outsideBaselinePath = Path.Combine(Path.GetTempPath(), "pf-web-audit-outside-" + Guid.NewGuid().ToString("N") + ".json");
+
+            Assert.Throws<InvalidOperationException>(() => WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                BaselinePath = outsideBaselinePath
+            }));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_UsesCanonicalNavPathForConsistency()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-canonical-nav-" + Guid.NewGuid().ToString("N"));
@@ -341,6 +459,7 @@ public class WebSiteAuditOptimizeBuildTests
 
             Assert.False(result.Success);
             Assert.Contains(result.Errors, error => error.Contains("invalid UTF-8", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Errors, error => error.Contains("byte offset", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Issues, issue => issue.Category.Equals("utf8", StringComparison.OrdinalIgnoreCase));
         }
         finally

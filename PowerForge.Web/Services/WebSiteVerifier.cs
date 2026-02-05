@@ -448,7 +448,7 @@ public static class WebSiteVerifier
 
         if (hasMenus)
         {
-            var menus = nav.Menus ?? Array.Empty<MenuSpec>();
+            var menus = nav.Menus!;
             var mainMenu = menus.FirstOrDefault(menu => string.Equals(menu.Name, "main", StringComparison.OrdinalIgnoreCase));
             if (mainMenu?.Items is { Length: > 0 })
             {

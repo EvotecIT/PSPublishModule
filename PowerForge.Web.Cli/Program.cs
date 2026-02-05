@@ -215,7 +215,7 @@ try
                         policy.CacheHeaders.HtmlCacheControl = publishSpec.Optimize.CacheHeadersHtml;
                     if (!string.IsNullOrWhiteSpace(publishSpec.Optimize.CacheHeadersAssets))
                         policy.CacheHeaders.ImmutableCacheControl = publishSpec.Optimize.CacheHeadersAssets;
-                    if (publishSpec.Optimize.CacheHeadersPaths.Length > 0)
+                    if (publishSpec.Optimize.CacheHeadersPaths is { Length: > 0 })
                         policy.CacheHeaders.ImmutablePaths = publishSpec.Optimize.CacheHeadersPaths;
                 }
 
@@ -229,8 +229,8 @@ try
                     MinifyCss = publishSpec.Optimize.MinifyCss,
                     MinifyJs = publishSpec.Optimize.MinifyJs,
                     HashAssets = publishSpec.Optimize.HashAssets,
-                    HashExtensions = publishSpec.Optimize.HashExtensions.Length > 0 ? publishSpec.Optimize.HashExtensions : new[] { ".css", ".js" },
-                    HashExclude = publishSpec.Optimize.HashExclude,
+                    HashExtensions = publishSpec.Optimize.HashExtensions is { Length: > 0 } ? publishSpec.Optimize.HashExtensions : new[] { ".css", ".js" },
+                    HashExclude = publishSpec.Optimize.HashExclude ?? Array.Empty<string>(),
                     HashManifestPath = publishSpec.Optimize.HashManifest,
                     AssetPolicy = policy
                 };
@@ -1610,6 +1610,11 @@ internal static class CliPatternHelper
 
 internal static class WebAuditBaselineStore
 {
+    private const long MaxBaselineFileSizeBytes = 10 * 1024 * 1024;
+    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+
     internal static string Write(
         string siteRoot,
         string? baselinePath,
@@ -1669,9 +1674,13 @@ internal static class WebAuditBaselineStore
     internal static string ResolveBaselinePath(string siteRoot, string? baselinePath)
     {
         var candidate = string.IsNullOrWhiteSpace(baselinePath) ? "audit-baseline.json" : baselinePath.Trim();
-        if (Path.IsPathRooted(candidate))
-            return Path.GetFullPath(candidate);
-        return Path.GetFullPath(Path.Combine(siteRoot, candidate));
+        var normalizedRoot = NormalizeDirectoryPath(siteRoot);
+        var resolvedPath = Path.IsPathRooted(candidate)
+            ? Path.GetFullPath(candidate)
+            : Path.GetFullPath(Path.Combine(normalizedRoot, candidate));
+        if (!IsWithinRoot(normalizedRoot, resolvedPath))
+            throw new InvalidOperationException($"Baseline path must resolve under site root: {candidate}");
+        return resolvedPath;
     }
 
     private static IEnumerable<string> LoadIssueKeys(string path)
@@ -1679,10 +1688,15 @@ internal static class WebAuditBaselineStore
         if (!File.Exists(path))
             return Array.Empty<string>();
 
+        var info = new FileInfo(path);
+        if (info.Length > MaxBaselineFileSizeBytes)
+            return Array.Empty<string>();
+
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
             var root = doc.RootElement;
             if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
             {
@@ -1715,6 +1729,18 @@ internal static class WebAuditBaselineStore
         return keys.ToArray();
     }
 
+    private static string NormalizeDirectoryPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsWithinRoot(string rootPath, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(rootPath, PathComparison);
+    }
+
     private static bool TryGetPropertyIgnoreCase(JsonElement element, string propertyName, out JsonElement value)
     {
         if (element.ValueKind == JsonValueKind.Object)
@@ -1739,6 +1765,11 @@ internal static class WebAuditBaselineStore
 
 internal static class WebPipelineRunner
 {
+    private const long MaxStateFileSizeBytes = 10 * 1024 * 1024;
+    private const int MaxStampFileCount = 1000;
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
     private static readonly HashSet<string> FingerprintPathKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "config", "siteRoot", "site-root", "project", "solution", "path",
@@ -1791,12 +1822,11 @@ internal static class WebPipelineRunner
 
         var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
         var profileEnabled = (GetBool(root, "profile") ?? false) || forceProfile;
-        var profilePath = ResolvePath(baseDir, GetString(root, "profilePath") ?? GetString(root, "profile-path"));
-        if (profileEnabled && string.IsNullOrWhiteSpace(profilePath))
-            profilePath = Path.Combine(baseDir, ".powerforge", "pipeline-profile.json");
+        var profilePath = profileEnabled
+            ? ResolvePathWithinRoot(baseDir, GetString(root, "profilePath") ?? GetString(root, "profile-path"), Path.Combine(".powerforge", "pipeline-profile.json"))
+            : null;
         var cacheEnabled = GetBool(root, "cache") ?? false;
-        var cachePath = ResolvePath(baseDir, GetString(root, "cachePath") ?? GetString(root, "cache-path")) ??
-                        Path.Combine(baseDir, ".powerforge", "pipeline-cache.json");
+        var cachePath = ResolvePathWithinRoot(baseDir, GetString(root, "cachePath") ?? GetString(root, "cache-path"), Path.Combine(".powerforge", "pipeline-cache.json"));
         var cacheState = cacheEnabled ? LoadPipelineCache(cachePath, logger) : null;
         var cacheUpdated = false;
         var runStopwatch = Stopwatch.StartNew();
@@ -2337,7 +2367,7 @@ internal static class WebPipelineRunner
 
                         stepResult.Success = audit.Success;
                         stepResult.Message = audit.Success
-                            ? $"Audit ok pages {audit.PageCount}, links {audit.LinkCount} (broken {audit.BrokenLinkCount}), assets {audit.AssetCount} (missing {audit.MissingAssetCount}), nav mismatches {audit.NavMismatchCount}, warnings {audit.WarningCount}, new {audit.NewIssueCount}"
+                            ? BuildAuditSummary(audit)
                             : $"Audit failed ({audit.Errors.Length} errors)";
                         if (!string.IsNullOrWhiteSpace(baselineWrittenPath))
                             stepResult.Message += $", baseline {baselineWrittenPath}";
@@ -2597,14 +2627,16 @@ internal static class WebPipelineRunner
 
     private static string BuildOptimizeSummary(WebOptimizeResult result)
     {
-        var parts = new List<string>
-        {
-            $"updated {result.UpdatedCount}",
-            $"critical-css {result.CriticalCssInlinedCount}",
-            $"html {result.HtmlMinifiedCount}",
-            $"css {result.CssMinifiedCount}",
-            $"js {result.JsMinifiedCount}"
-        };
+        var parts = new List<string> { $"updated {result.UpdatedCount}" };
+
+        if (result.CriticalCssInlinedCount > 0)
+            parts.Add($"critical-css {result.CriticalCssInlinedCount}");
+        if (result.HtmlMinifiedCount > 0)
+            parts.Add($"html {result.HtmlMinifiedCount}");
+        if (result.CssMinifiedCount > 0)
+            parts.Add($"css {result.CssMinifiedCount}");
+        if (result.JsMinifiedCount > 0)
+            parts.Add($"js {result.JsMinifiedCount}");
 
         if (result.HashedAssetCount > 0)
             parts.Add($"hashed {result.HashedAssetCount}");
@@ -2614,6 +2646,29 @@ internal static class WebPipelineRunner
         return $"Optimize {string.Join(", ", parts)}";
     }
 
+    private static string BuildAuditSummary(WebAuditResult result)
+    {
+        var parts = new List<string>
+        {
+            $"pages {result.PageCount}",
+            $"links {result.LinkCount}",
+            $"assets {result.AssetCount}"
+        };
+
+        if (result.BrokenLinkCount > 0)
+            parts.Add($"broken-links {result.BrokenLinkCount}");
+        if (result.MissingAssetCount > 0)
+            parts.Add($"missing-assets {result.MissingAssetCount}");
+        if (result.NavMismatchCount > 0)
+            parts.Add($"nav-mismatches {result.NavMismatchCount}");
+        if (result.WarningCount > 0)
+            parts.Add($"warnings {result.WarningCount}");
+        if (result.NewIssueCount > 0)
+            parts.Add($"new {result.NewIssueCount}");
+
+        return $"Audit ok {string.Join(", ", parts)}";
+    }
+
     private static WebPipelineCacheState LoadPipelineCache(string cachePath, WebConsoleLogger? logger)
     {
         try
@@ -2621,8 +2676,15 @@ internal static class WebPipelineRunner
             if (!File.Exists(cachePath))
                 return new WebPipelineCacheState();
 
-            var json = File.ReadAllText(cachePath);
-            var state = JsonSerializer.Deserialize<WebPipelineCacheState>(json, new JsonSerializerOptions
+            var fileInfo = new FileInfo(cachePath);
+            if (fileInfo.Length > MaxStateFileSizeBytes)
+            {
+                logger?.Warn($"Pipeline cache file too large ({fileInfo.Length} bytes), ignoring cache.");
+                return new WebPipelineCacheState();
+            }
+
+            using var stream = File.OpenRead(cachePath);
+            var state = JsonSerializer.Deserialize<WebPipelineCacheState>(stream, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -2740,14 +2802,24 @@ internal static class WebPipelineRunner
         {
             var maxTicks = Directory.GetLastWriteTimeUtc(path).Ticks;
             var fileCount = 0;
+            var truncated = false;
             foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
             {
+                if (fileCount >= MaxStampFileCount)
+                {
+                    truncated = true;
+                    break;
+                }
+
                 fileCount++;
                 var ticks = File.GetLastWriteTimeUtc(file).Ticks;
                 if (ticks > maxTicks)
                     maxTicks = ticks;
             }
-            return $"d|{path}|{fileCount}|{maxTicks}";
+
+            return truncated
+                ? $"d|{path}|{fileCount}|{maxTicks}|truncated"
+                : $"d|{path}|{fileCount}|{maxTicks}";
         }
         catch
         {
@@ -2919,6 +2991,30 @@ internal static class WebPipelineRunner
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         return Path.IsPathRooted(value) ? value : Path.Combine(baseDir, value);
+    }
+
+    private static string ResolvePathWithinRoot(string baseDir, string? value, string defaultRelativePath)
+    {
+        var normalizedRoot = NormalizeRootPath(baseDir);
+        var candidate = string.IsNullOrWhiteSpace(value)
+            ? Path.Combine(baseDir, defaultRelativePath)
+            : ResolvePath(baseDir, value);
+        var resolved = Path.GetFullPath(candidate ?? Path.Combine(baseDir, defaultRelativePath));
+        if (!IsPathWithinRoot(normalizedRoot, resolved))
+            throw new InvalidOperationException($"Path must resolve under pipeline root: {value}");
+        return resolved;
+    }
+
+    private static string NormalizeRootPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
     private static string[] BuildIgnoreNavPatternsForPipeline(List<string> userPatterns, bool useDefaults)

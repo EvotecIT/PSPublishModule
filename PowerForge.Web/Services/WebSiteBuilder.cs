@@ -2040,7 +2040,6 @@ public static class WebSiteBuilder
         if (item.Draft) return;
 
         var targetDir = ResolveOutputDirectory(outputRoot, item.OutputPath);
-        Directory.CreateDirectory(targetDir);
         var isNotFoundRoute = string.Equals(NormalizePath(item.OutputPath), "404", StringComparison.OrdinalIgnoreCase);
 
         var effectiveData = ResolveDataForProject(data, item.ProjectSlug);
@@ -2051,10 +2050,13 @@ public static class WebSiteBuilder
             var outputFile = isNotFoundRoute && string.Equals(outputFileName, "index.html", StringComparison.OrdinalIgnoreCase)
                 ? Path.Combine(outputRoot, "404.html")
                 : Path.Combine(targetDir, outputFileName);
+            var outputDirectory = Path.GetDirectoryName(outputFile);
+            if (!string.IsNullOrWhiteSpace(outputDirectory))
+                Directory.CreateDirectory(outputDirectory);
             var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format);
             File.WriteAllText(outputFile, content);
         }
-        CopyPageResources(item, targetDir);
+        CopyPageResources(item, isNotFoundRoute ? outputRoot : targetDir);
     }
 
     private static string RenderHtmlPage(

@@ -44,6 +44,38 @@ public class WebMarkdownHygieneFixerTests
     }
 
     [Fact]
+    public void Fix_ExplicitFileOutsideRoot_IsSkipped()
+    {
+        var baseRoot = Path.Combine(Path.GetTempPath(), "pf-md-fix-root-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(baseRoot, "root");
+        var sibling = Path.Combine(baseRoot, "root2");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(sibling);
+
+        try
+        {
+            var outsideFile = Path.Combine(sibling, "outside.md");
+            File.WriteAllText(outsideFile, "<h1>Outside</h1>");
+
+            var result = WebMarkdownHygieneFixer.Fix(new WebMarkdownFixOptions
+            {
+                RootPath = root,
+                Files = new[] { outsideFile },
+                ApplyChanges = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(0, result.FileCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("outside root", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(baseRoot))
+                Directory.Delete(baseRoot, true);
+        }
+    }
+
+    [Fact]
     public void Fix_Apply_WritesConvertedMarkdown()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-md-fix-apply-" + Guid.NewGuid().ToString("N"));
@@ -79,4 +111,3 @@ public class WebMarkdownHygieneFixerTests
         }
     }
 }
-
