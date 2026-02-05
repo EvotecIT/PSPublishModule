@@ -2235,10 +2235,11 @@ public static class WebApiDocsGenerator
         foreach (var type in types)
         {
             var memberHtml = new StringBuilder();
-            AppendMembers(memberHtml, "Methods", type.Methods);
-            AppendMembers(memberHtml, "Properties", type.Properties);
-            AppendMembers(memberHtml, "Fields", type.Fields);
-            AppendMembers(memberHtml, "Events", type.Events);
+            var codeLanguage = GetDefaultCodeLanguage(options);
+            AppendMembers(memberHtml, "Methods", type.Methods, codeLanguage);
+            AppendMembers(memberHtml, "Properties", type.Properties, codeLanguage);
+            AppendMembers(memberHtml, "Fields", type.Fields, codeLanguage);
+            AppendMembers(memberHtml, "Events", type.Events, codeLanguage);
 
             var summaryHtml = string.IsNullOrWhiteSpace(type.Summary)
                 ? string.Empty
@@ -2310,7 +2311,7 @@ public static class WebApiDocsGenerator
         {
             var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug, docsHomeUrl);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, GetDefaultCodeLanguage(options));
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{type.Name} - {options.Title}";
           var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
@@ -2338,7 +2339,7 @@ public static class WebApiDocsGenerator
         GenerateDocsSitemap(sitemapPath, baseUrl, types);
     }
 
-    private static void AppendMembers(StringBuilder sb, string label, List<ApiMemberModel> members)
+    private static void AppendMembers(StringBuilder sb, string label, List<ApiMemberModel> members, string codeLanguage)
     {
         if (members.Count == 0) return;
         sb.AppendLine($"    <section class=\"pf-api-section\">");
@@ -2602,7 +2603,8 @@ public static class WebApiDocsGenerator
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
         IReadOnlyDictionary<string, ApiTypeModel> typeIndex,
-        IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap)
+        IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap,
+        string codeLanguage)
     {
         var sb = new StringBuilder();
         var inheritanceChain = BuildInheritanceChain(type, typeIndex);
@@ -2767,7 +2769,7 @@ public static class WebApiDocsGenerator
         {
             sb.AppendLine("      <section class=\"type-examples\" id=\"examples\">");
             sb.AppendLine("        <h2>Examples</h2>");
-            AppendExamples(sb, type.Examples, baseUrl, slugMap);
+            AppendExamples(sb, type.Examples, baseUrl, slugMap, codeLanguage);
             sb.AppendLine("      </section>");
         }
 
@@ -3011,7 +3013,7 @@ public static class WebApiDocsGenerator
         if (member.Examples.Count > 0)
         {
             sb.AppendLine("          <h4>Examples</h4>");
-            AppendExamples(sb, member.Examples, baseUrl, slugMap);
+            AppendExamples(sb, member.Examples, baseUrl, slugMap, codeLanguage);
         }
         if (member.SeeAlso.Count > 0)
         {
@@ -3030,14 +3032,16 @@ public static class WebApiDocsGenerator
         StringBuilder sb,
         List<ApiExampleModel> examples,
         string baseUrl,
-        IReadOnlyDictionary<string, string> slugMap)
+        IReadOnlyDictionary<string, string> slugMap,
+        string codeLanguage)
     {
         foreach (var example in examples)
         {
             if (string.IsNullOrWhiteSpace(example.Text)) continue;
             if (string.Equals(example.Kind, "code", StringComparison.OrdinalIgnoreCase))
             {
-                sb.AppendLine("        <pre><code>");
+                var languageClass = string.IsNullOrWhiteSpace(codeLanguage) ? string.Empty : $" class=\"language-{codeLanguage}\"";
+                sb.AppendLine($"        <pre{languageClass}><code{languageClass}>");
                 sb.AppendLine(System.Web.HttpUtility.HtmlEncode(example.Text));
                 sb.AppendLine("        </code></pre>");
             }
@@ -3046,6 +3050,16 @@ public static class WebApiDocsGenerator
                 sb.AppendLine($"        <p>{RenderLinkedText(example.Text, baseUrl, slugMap)}</p>");
             }
         }
+    }
+
+    private static string GetDefaultCodeLanguage(WebApiDocsOptions options)
+    {
+        return options.Type switch
+        {
+            ApiDocsType.PowerShell => "powershell",
+            ApiDocsType.CSharp => "csharp",
+            _ => string.Empty
+        };
     }
 
     private static string BuildSignature(ApiMemberModel member, string section)
