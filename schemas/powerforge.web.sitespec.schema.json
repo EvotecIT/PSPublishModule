@@ -177,18 +177,19 @@
       },
       "required": ["Match", "Replace"]
     },
-    "PrismSpec": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "Mode": { "type": "string", "enum": ["auto", "always", "off"] },
-        "Source": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
-        "ThemeLight": { "type": "string" },
-        "ThemeDark": { "type": "string" },
-        "CdnBase": { "type": "string" },
-        "Local": { "$ref": "#/$defs/PrismLocalSpec" }
-      }
-    },
+      "PrismSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "Mode": { "type": "string", "enum": ["auto", "always", "off"] },
+          "Source": { "type": "string", "enum": ["local", "cdn", "hybrid"] },
+          "ThemeLight": { "type": "string" },
+          "ThemeDark": { "type": "string" },
+          "CdnBase": { "type": "string" },
+          "DefaultLanguage": { "type": "string" },
+          "Local": { "$ref": "#/$defs/PrismLocalSpec" }
+        }
+      },
     "PrismLocalSpec": {
       "type": "object",
       "additionalProperties": false,
