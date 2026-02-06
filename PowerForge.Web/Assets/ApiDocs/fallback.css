@@ -63,6 +63,9 @@ body.pf-api-docs a:hover{color:var(--pf-accent,#a78bfa)}
 .type-header{margin-bottom:10px}
 .type-title-row{display:flex;align-items:center;gap:10px}
 .type-badge{background:#111827;border:1px solid rgba(148,163,184,.2);border-radius:999px;padding:4px 10px;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:#cbd5f5}
+.type-actions{margin-top:10px}
+.type-source-action{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(167,139,250,.5);background:rgba(167,139,250,.14);color:#ddd6fe;font-size:.75rem;font-weight:600}
+.type-source-action:hover{border-color:#a78bfa;background:rgba(167,139,250,.22);color:#f5f3ff}
 .type-meta{display:grid;gap:6px;margin:12px 0 16px}
 .type-meta-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.85rem;color:#cbd5f5}
 .type-meta-label{min-width:90px;color:#94a3b8}
@@ -88,7 +91,10 @@ body.pf-api-docs a:hover{color:var(--pf-accent,#a78bfa)}
 .member-kind{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.75rem;cursor:pointer}
 .member-kind.active{background:#1f2937;border-color:#a78bfa;color:#e6e9f3}
 .member-toggle{display:flex;align-items:center;gap:6px;font-size:.75rem;color:#94a3b8}
-.member-toggle input{accent-color:#a78bfa;width:14px;height:14px;cursor:pointer}
+.member-toggle input{-webkit-appearance:none;appearance:none;width:14px;height:14px;border:1px solid rgba(148,163,184,.35);border-radius:3px;background:#0b1220;cursor:pointer;position:relative;transition:border-color .15s ease,background .15s ease}
+.member-toggle input:hover{border-color:#a78bfa}
+.member-toggle input:checked{background:#a78bfa;border-color:#a78bfa}
+.member-toggle input:checked::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #0b1220;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .member-actions{display:flex;gap:8px;flex-wrap:wrap}
 .member-actions button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.7rem;cursor:pointer}
 .member-actions button:hover{border-color:#a78bfa;color:#e6e9f3}

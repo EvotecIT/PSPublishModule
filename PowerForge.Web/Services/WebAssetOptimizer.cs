@@ -73,6 +73,8 @@ public static class WebAssetOptimizer
     private static readonly Regex ImgSrcAttrRegex = new("\\bsrc\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgSrcSetAttrRegex = new("\\bsrcset\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgSizesAttrRegex = new("\\bsizes\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgWidthAttrRegex = new("\\bwidth\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgHeightAttrRegex = new("\\bheight\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgLoadingAttrRegex = new("\\bloading\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex ImgDecodingAttrRegex = new("\\bdecoding\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 
@@ -87,6 +89,7 @@ public static class WebAssetOptimizer
         public string SourceRelativePath { get; init; } = string.Empty;
         public string PreferredRelativePath { get; set; } = string.Empty;
         public int OriginalWidth { get; set; }
+        public int OriginalHeight { get; set; }
         public List<ImageVariantPlan> ResponsiveVariants { get; } = new();
     }
     /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
@@ -565,12 +568,14 @@ public static class WebAssetOptimizer
             var originalBytes = new FileInfo(file).Length;
             var finalBytes = originalBytes;
             var imageWidth = 0;
+            var imageHeight = 0;
             result.ImageBytesBefore += originalBytes;
 
             try
             {
                 using var image = new MagickImage(file);
                 imageWidth = (int)image.Width;
+                imageHeight = (int)image.Height;
                 if (options.ImageStripMetadata)
                     image.Strip();
                 if (SupportsQualitySetting(image.Format))
@@ -602,7 +607,8 @@ public static class WebAssetOptimizer
                 {
                     SourceRelativePath = relative,
                     PreferredRelativePath = relative,
-                    OriginalWidth = imageWidth
+                    OriginalWidth = imageWidth,
+                    OriginalHeight = imageHeight
                 };
                 var preferredBytes = finalBytes;
 
@@ -781,6 +787,18 @@ public static class WebAssetOptimizer
 
                 if (options.EnhanceImageTags)
                 {
+                    if (plan.OriginalWidth > 0 && !ImgWidthAttrRegex.IsMatch(attrsUpdated))
+                    {
+                        attrsUpdated += $" width=\"{plan.OriginalWidth}\"";
+                        hintedInFile++;
+                        changed = true;
+                    }
+                    if (plan.OriginalHeight > 0 && !ImgHeightAttrRegex.IsMatch(attrsUpdated))
+                    {
+                        attrsUpdated += $" height=\"{plan.OriginalHeight}\"";
+                        hintedInFile++;
+                        changed = true;
+                    }
                     if (!ImgLoadingAttrRegex.IsMatch(attrsUpdated))
                     {
                         attrsUpdated += " loading=\"lazy\"";

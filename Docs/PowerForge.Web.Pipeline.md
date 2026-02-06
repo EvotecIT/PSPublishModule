@@ -283,7 +283,7 @@ Notes:
 - `imageGenerateWebp` / `imageGenerateAvif` can create next-gen variants when they are smaller than source output.
 - `imagePreferNextGen` rewrites `<img src>` to next-gen output when available.
 - `imageWidths` generates responsive variants and `srcset` entries.
-- `imageEnhanceTags` injects `loading=\"lazy\"` + `decoding=\"async\"` on rewritten image tags.
+- `imageEnhanceTags` injects `loading=\"lazy\"`, `decoding=\"async\"`, and intrinsic `width`/`height` (when known) on rewritten image tags.
 - `imageMaxBytesPerFile` / `imageMaxTotalBytes` define budgets; `imageFailOnBudget` fails the step if budgets are exceeded.
 
 #### audit

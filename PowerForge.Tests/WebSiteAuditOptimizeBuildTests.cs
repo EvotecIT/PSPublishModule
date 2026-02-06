@@ -419,6 +419,8 @@ public class WebSiteAuditOptimizeBuildTests
 
             var html = File.ReadAllText(Path.Combine(root, "index.html"));
             Assert.Contains("srcset=", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("width=\"1400\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("height=\"700\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
         }
