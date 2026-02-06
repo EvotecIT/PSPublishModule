@@ -865,11 +865,9 @@ public static class WebSiteVerifier
         var selected = new List<AssetBundleSpec>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var mapping in assets.RouteBundles ?? Array.Empty<RouteBundleSpec>())
+        foreach (var mapping in (assets.RouteBundles ?? Array.Empty<RouteBundleSpec>())
+                     .Where(mapping => GlobMatch(mapping.Match, routeValue)))
         {
-            if (!GlobMatch(mapping.Match, routeValue))
-                continue;
-
             foreach (var name in mapping.Bundles ?? Array.Empty<string>())
             {
                 if (string.IsNullOrWhiteSpace(name))
