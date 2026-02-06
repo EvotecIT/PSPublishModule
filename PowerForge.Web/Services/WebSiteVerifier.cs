@@ -546,7 +546,7 @@ public static class WebSiteVerifier
             return;
 
         warnings.Add($"Route '{notFoundRoute}' does not match any AssetRegistry.RouteBundles entry. " +
-                     "404 pages may render without full CSS/JS. Add '/**' or '/404/**' mapping to your global bundle.");
+                     "404 pages may render without full CSS/JS. Add '/**' or '/404' mapping to your global bundle.");
     }
 
     private static HashSet<string> CollectLayoutNames(SiteSpec spec, ThemeManifest manifest)
@@ -852,9 +852,16 @@ public static class WebSiteVerifier
     private static List<AssetBundleSpec> ResolveBundlesForRoute(AssetRegistrySpec assets, string route)
     {
         var routeValue = string.IsNullOrWhiteSpace(route) ? "/" : route.Trim();
-        var bundleMap = assets.Bundles
-            .Where(bundle => !string.IsNullOrWhiteSpace(bundle.Name))
-            .ToDictionary(bundle => bundle.Name, StringComparer.OrdinalIgnoreCase);
+        var bundleMap = new Dictionary<string, AssetBundleSpec>(StringComparer.OrdinalIgnoreCase);
+        foreach (var bundle in assets.Bundles ?? Array.Empty<AssetBundleSpec>())
+        {
+            var name = bundle.Name;
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            if (bundleMap.ContainsKey(name))
+                continue;
+            bundleMap[name] = bundle;
+        }
         var selected = new List<AssetBundleSpec>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
