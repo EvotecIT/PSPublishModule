@@ -26,6 +26,12 @@ public sealed class WebAuditOptions
     public bool CheckLinks { get; set; } = true;
     /// <summary>When true, validate local assets (CSS/JS/images).</summary>
     public bool CheckAssets { get; set; } = true;
+    /// <summary>When true, validate external origin hints (preconnect/dns-prefetch).</summary>
+    public bool CheckNetworkHints { get; set; } = true;
+    /// <summary>When true, warn when too many render-blocking resources are in document head.</summary>
+    public bool CheckRenderBlockingResources { get; set; } = true;
+    /// <summary>Maximum allowed render-blocking resources in head before warning.</summary>
+    public int MaxHeadBlockingResources { get; set; } = 6;
     /// <summary>When true, check nav consistency across pages.</summary>
     public bool CheckNavConsistency { get; set; } = true;
     /// <summary>CSS selector used to identify the nav container.</summary>
@@ -352,6 +358,15 @@ public static class WebSiteAuditor
                     AddIssue("warning", "structure", relativePath, "missing <head> section.", "head");
                 if (doc.Body is null)
                     AddIssue("warning", "structure", relativePath, "missing <body> section.", "body");
+            }
+
+            if (options.CheckNetworkHints)
+                ValidateNetworkHints(doc, relativePath, AddIssue);
+
+            if (options.CheckRenderBlockingResources)
+            {
+                var maxHeadBlockingResources = Math.Max(0, options.MaxHeadBlockingResources);
+                ValidateHeadRenderBlocking(doc, relativePath, maxHeadBlockingResources, AddIssue);
             }
 
             if (options.CheckTitles)
@@ -988,6 +1003,147 @@ public static class WebSiteAuditor
             ? "nav"
             : selector.Trim();
         return profileMatch + "|" + navSelector;
+    }
+
+    private static void ValidateNetworkHints(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        var head = doc.Head;
+        if (head is null)
+            return;
+
+        var requiredOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var link in head.QuerySelectorAll("link[href]"))
+        {
+            var rel = (link.GetAttribute("rel") ?? string.Empty).Trim();
+            if (!ContainsRelToken(rel, "stylesheet"))
+                continue;
+
+            var href = link.GetAttribute("href");
+            if (TryGetExternalOrigin(href, out var origin))
+                requiredOrigins.Add(origin);
+        }
+
+        foreach (var script in head.QuerySelectorAll("script[src]"))
+        {
+            var src = script.GetAttribute("src");
+            if (TryGetExternalOrigin(src, out var origin))
+                requiredOrigins.Add(origin);
+        }
+
+        if (requiredOrigins.Contains("https://fonts.googleapis.com"))
+            requiredOrigins.Add("https://fonts.gstatic.com");
+
+        if (requiredOrigins.Count == 0)
+            return;
+
+        var hintedOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var link in head.QuerySelectorAll("link[rel][href]"))
+        {
+            var rel = (link.GetAttribute("rel") ?? string.Empty).Trim();
+            if (!ContainsRelToken(rel, "preconnect") && !ContainsRelToken(rel, "dns-prefetch"))
+                continue;
+
+            var href = link.GetAttribute("href");
+            if (TryGetExternalOrigin(href, out var origin))
+                hintedOrigins.Add(origin);
+        }
+
+        var missing = requiredOrigins
+            .Where(origin => !hintedOrigins.Contains(origin))
+            .OrderBy(origin => origin, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (missing.Length == 0)
+            return;
+
+        addIssue("warning", "network-hint", relativePath,
+            $"missing preconnect/dns-prefetch for external origins: {string.Join(", ", missing)}.",
+            "network-hints");
+    }
+
+    private static void ValidateHeadRenderBlocking(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        int maxHeadBlockingResources,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        if (maxHeadBlockingResources <= 0)
+            return;
+
+        var head = doc.Head;
+        if (head is null)
+            return;
+
+        var blockingStyles = head.QuerySelectorAll("link[rel][href]")
+            .Count(link =>
+            {
+                var rel = (link.GetAttribute("rel") ?? string.Empty).Trim();
+                if (!ContainsRelToken(rel, "stylesheet"))
+                    return false;
+
+                var media = (link.GetAttribute("media") ?? string.Empty).Trim();
+                return string.IsNullOrWhiteSpace(media) ||
+                       media.Equals("all", StringComparison.OrdinalIgnoreCase) ||
+                       media.Equals("screen", StringComparison.OrdinalIgnoreCase);
+            });
+
+        var blockingScripts = head.QuerySelectorAll("script[src]")
+            .Count(script =>
+            {
+                var hasAsync = script.HasAttribute("async");
+                var hasDefer = script.HasAttribute("defer");
+                var type = (script.GetAttribute("type") ?? string.Empty).Trim();
+                var isModule = type.Equals("module", StringComparison.OrdinalIgnoreCase);
+                return !hasAsync && !hasDefer && !isModule;
+            });
+
+        var totalBlocking = blockingStyles + blockingScripts;
+        if (totalBlocking <= maxHeadBlockingResources)
+            return;
+
+        addIssue("warning", "render-blocking", relativePath,
+            $"head includes {totalBlocking} render-blocking resources (styles {blockingStyles}, scripts {blockingScripts}); max is {maxHeadBlockingResources}.",
+            "head-render-blocking");
+    }
+
+    private static bool ContainsRelToken(string relValue, string token)
+    {
+        if (string.IsNullOrWhiteSpace(relValue) || string.IsNullOrWhiteSpace(token))
+            return false;
+
+        var parts = relValue.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            if (part.Equals(token, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetExternalOrigin(string? value, out string origin)
+    {
+        origin = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var candidate = value.Trim();
+        if (candidate.StartsWith("//", StringComparison.Ordinal))
+            candidate = "https:" + candidate;
+
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
+            return false;
+        if (string.IsNullOrWhiteSpace(uri.Host))
+            return false;
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        origin = uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+        return !string.IsNullOrWhiteSpace(origin);
     }
 
     private static string NormalizeNavHref(string? href)

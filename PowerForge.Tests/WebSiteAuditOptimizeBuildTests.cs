@@ -793,6 +793,85 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_WarnsWhenExternalOriginMissingNetworkHints()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-network-hints-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Home</title>
+                  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" />
+                </head>
+                <body><nav><a href="/">Home</a></nav></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning => warning.Contains("missing preconnect/dns-prefetch", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue => issue.Category.Equals("network-hint", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_WarnsWhenHeadRenderBlockingExceedsLimit()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-render-blocking-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Home</title>
+                  <link rel="stylesheet" href="/css/a.css" />
+                  <link rel="stylesheet" href="/css/b.css" />
+                  <script src="/js/a.js"></script>
+                </head>
+                <body><nav><a href="/">Home</a></nav></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                MaxHeadBlockingResources = 2
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning => warning.Contains("render-blocking resources", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue => issue.Category.Equals("render-blocking", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FailOnWarnings_TriggersGateError()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-gate-" + Guid.NewGuid().ToString("N"));

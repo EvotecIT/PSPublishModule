@@ -468,6 +468,9 @@ try
             var checkUtf8 = !HasOption(subArgs, "--no-utf8");
             var checkMetaCharset = !HasOption(subArgs, "--no-meta-charset");
             var checkReplacementChars = !HasOption(subArgs, "--no-replacement-char-check");
+            var checkNetworkHints = !HasOption(subArgs, "--no-network-hints");
+            var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
+            var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
 
             var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
             var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
@@ -477,6 +480,7 @@ try
             var maxErrors = ParseIntOption(maxErrorsText, -1);
             var maxWarnings = ParseIntOption(maxWarningsText, -1);
             var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
+            var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
             if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
                 baselinePathValue = "audit-baseline.json";
             var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
@@ -532,7 +536,10 @@ try
                 NavCanonicalRequired = navCanonicalRequired,
                 CheckUtf8 = checkUtf8,
                 CheckMetaCharset = checkMetaCharset,
-                CheckUnicodeReplacementChars = checkReplacementChars
+                CheckUnicodeReplacementChars = checkReplacementChars,
+                CheckNetworkHints = checkNetworkHints,
+                CheckRenderBlockingResources = checkRenderBlocking,
+                MaxHeadBlockingResources = maxHeadBlockingResources
             });
 
             string? writtenBaselinePath = null;
@@ -1454,6 +1461,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>]");
     Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
     Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
+    Console.WriteLine("                     [--no-network-hints] [--no-render-blocking] [--max-head-blocking <n>]");
     Console.WriteLine("                     [--no-default-exclude]");
     Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
     Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
@@ -2513,6 +2521,9 @@ internal static class WebPipelineRunner
                         var checkUtf8 = GetBool(step, "checkUtf8") ?? true;
                         var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
                         var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
+                        var checkNetworkHints = GetBool(step, "checkNetworkHints");
+                        var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking");
+                        var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking");
                         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
                             baselinePath = "audit-baseline.json";
                         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
@@ -2574,7 +2585,10 @@ internal static class WebPipelineRunner
                             NavCanonicalRequired = navCanonicalRequired,
                             CheckUtf8 = checkUtf8,
                             CheckMetaCharset = checkMetaCharset,
-                            CheckUnicodeReplacementChars = checkReplacement
+                            CheckUnicodeReplacementChars = checkReplacement,
+                            CheckNetworkHints = checkNetworkHints ?? true,
+                            CheckRenderBlockingResources = checkRenderBlocking ?? true,
+                            MaxHeadBlockingResources = maxHeadBlockingResources ?? new WebAuditOptions().MaxHeadBlockingResources
                         });
 
                         string? baselineWrittenPath = null;
