@@ -91,6 +91,7 @@ public static class WebApiDocsGenerator
     private static readonly Regex SlugNonAlnumRegex = new("[^a-z0-9]+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex SlugDashRegex = new("-{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>[^\\]]+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex HrefTokenRegex = new("\\[\\[href:(?<url>[^|\\]]+)\\|(?<label>[^\\]]*)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     /// <summary>Generates API documentation output.</summary>
     /// <param name="options">Generation options.</param>
     /// <returns>Result payload describing generated artifacts.</returns>
@@ -516,6 +517,16 @@ public static class WebApiDocsGenerator
         var members = docElement.Element("members");
         if (members is null) return apiDoc;
 
+        var memberLookup = new Dictionary<string, XElement>(StringComparer.Ordinal);
+        foreach (var member in members.Elements("member"))
+        {
+            var memberName = member.Attribute("name")?.Value;
+            if (string.IsNullOrWhiteSpace(memberName))
+                continue;
+            if (!memberLookup.ContainsKey(memberName))
+                memberLookup[memberName] = member;
+        }
+
         foreach (var member in members.Elements("member"))
         {
             var name = member.Attribute("name")?.Value;
@@ -527,20 +538,20 @@ public static class WebApiDocsGenerator
             switch (prefix)
             {
                 case 'T':
-                    var type = ParseType(member, fullName);
+                    var type = ParseType(member, fullName, name, memberLookup);
                     apiDoc.Types[type.FullName] = type;
                     break;
                 case 'M':
-                    AddMethod(apiDoc, member, fullName, assembly);
+                    AddMethod(apiDoc, member, fullName, name, assembly, memberLookup);
                     break;
                 case 'P':
-                    AddProperty(apiDoc, member, fullName);
+                    AddProperty(apiDoc, member, fullName, name, memberLookup);
                     break;
                 case 'F':
-                    AddField(apiDoc, member, fullName);
+                    AddField(apiDoc, member, fullName, name, memberLookup);
                     break;
                 case 'E':
-                    AddEvent(apiDoc, member, fullName);
+                    AddEvent(apiDoc, member, fullName, name, memberLookup);
                     break;
             }
         }
@@ -1549,7 +1560,11 @@ public static class WebApiDocsGenerator
         return type.Name;
     }
 
-    private static ApiTypeModel ParseType(XElement member, string fullName)
+    private static ApiTypeModel ParseType(
+        XElement member,
+        string fullName,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var lastDot = fullName.LastIndexOf('.');
         var ns = lastDot > 0 ? fullName.Substring(0, lastDot) : string.Empty;
@@ -1560,18 +1575,24 @@ public static class WebApiDocsGenerator
             Name = name,
             FullName = fullName,
             Namespace = ns,
-            Summary = GetSummary(member),
-            Remarks = GetElement(member, "remarks"),
+            Summary = GetSummary(member, memberKey, memberLookup),
+            Remarks = GetElement(member, "remarks", memberKey, memberLookup),
             Kind = InferTypeKind(name),
             Slug = Slugify(fullName)
         };
-        model.TypeParameters.AddRange(GetTypeParameters(member));
-        model.Examples.AddRange(GetExamples(member));
-        model.SeeAlso.AddRange(GetSeeAlso(member));
+        model.TypeParameters.AddRange(GetTypeParameters(member, memberKey, memberLookup));
+        model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
+        model.SeeAlso.AddRange(GetSeeAlso(member, memberKey, memberLookup));
         return model;
     }
 
-    private static void AddMethod(ApiDocModel doc, XElement member, string fullName, Assembly? assembly)
+    private static void AddMethod(
+        ApiDocModel doc,
+        XElement member,
+        string fullName,
+        string memberKey,
+        Assembly? assembly,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var typeName = ExtractTypeName(fullName);
         if (!doc.Types.TryGetValue(typeName, out var type)) return;
@@ -1581,7 +1602,7 @@ public static class WebApiDocsGenerator
 
         var parameterTypes = ParseParameterTypes(fullName);
         var parameterNames = TryResolveParameterNames(assembly, typeName, name, parameterTypes);
-        var parameters = ParseParameters(member, parameterTypes, parameterNames);
+        var parameters = ParseParameters(member, parameterTypes, parameterNames, memberKey, memberLookup);
 
         var isCtor = IsConstructorName(name);
         var displayName = isCtor ? GetShortTypeName(typeName) : name;
@@ -1589,23 +1610,28 @@ public static class WebApiDocsGenerator
         {
             Name = name,
             DisplayName = displayName,
-            Summary = GetSummary(member),
+            Summary = GetSummary(member, memberKey, memberLookup),
             Kind = isCtor ? "Constructor" : "Method",
             Parameters = parameters,
-            Returns = GetElement(member, "returns"),
+            Returns = GetElement(member, "returns", memberKey, memberLookup),
             IsConstructor = isCtor
         };
-        model.TypeParameters.AddRange(GetTypeParameters(member));
-        model.Examples.AddRange(GetExamples(member));
-        model.Exceptions.AddRange(GetExceptions(member));
-        model.SeeAlso.AddRange(GetSeeAlso(member));
+        model.TypeParameters.AddRange(GetTypeParameters(member, memberKey, memberLookup));
+        model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
+        model.Exceptions.AddRange(GetExceptions(member, memberKey, memberLookup));
+        model.SeeAlso.AddRange(GetSeeAlso(member, memberKey, memberLookup));
         if (isCtor)
             type.Constructors.Add(model);
         else
             type.Methods.Add(model);
     }
 
-    private static void AddProperty(ApiDocModel doc, XElement member, string fullName)
+    private static void AddProperty(
+        ApiDocModel doc,
+        XElement member,
+        string fullName,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var typeName = ExtractTypeName(fullName);
         if (!doc.Types.TryGetValue(typeName, out var type)) return;
@@ -1616,17 +1642,22 @@ public static class WebApiDocsGenerator
         var model = new ApiMemberModel
         {
             Name = name,
-            Summary = GetSummary(member),
+            Summary = GetSummary(member, memberKey, memberLookup),
             Kind = "Property",
-            ValueSummary = GetElement(member, "value")
+            ValueSummary = GetElement(member, "value", memberKey, memberLookup)
         };
-        model.Examples.AddRange(GetExamples(member));
-        model.Exceptions.AddRange(GetExceptions(member));
-        model.SeeAlso.AddRange(GetSeeAlso(member));
+        model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
+        model.Exceptions.AddRange(GetExceptions(member, memberKey, memberLookup));
+        model.SeeAlso.AddRange(GetSeeAlso(member, memberKey, memberLookup));
         type.Properties.Add(model);
     }
 
-    private static void AddField(ApiDocModel doc, XElement member, string fullName)
+    private static void AddField(
+        ApiDocModel doc,
+        XElement member,
+        string fullName,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var typeName = ExtractTypeName(fullName);
         if (!doc.Types.TryGetValue(typeName, out var type)) return;
@@ -1637,17 +1668,22 @@ public static class WebApiDocsGenerator
         var model = new ApiMemberModel
         {
             Name = name,
-            Summary = GetSummary(member),
+            Summary = GetSummary(member, memberKey, memberLookup),
             Kind = "Field",
-            ValueSummary = GetElement(member, "value")
+            ValueSummary = GetElement(member, "value", memberKey, memberLookup)
         };
-        model.Examples.AddRange(GetExamples(member));
-        model.Exceptions.AddRange(GetExceptions(member));
-        model.SeeAlso.AddRange(GetSeeAlso(member));
+        model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
+        model.Exceptions.AddRange(GetExceptions(member, memberKey, memberLookup));
+        model.SeeAlso.AddRange(GetSeeAlso(member, memberKey, memberLookup));
         type.Fields.Add(model);
     }
 
-    private static void AddEvent(ApiDocModel doc, XElement member, string fullName)
+    private static void AddEvent(
+        ApiDocModel doc,
+        XElement member,
+        string fullName,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var typeName = ExtractTypeName(fullName);
         if (!doc.Types.TryGetValue(typeName, out var type)) return;
@@ -1658,12 +1694,12 @@ public static class WebApiDocsGenerator
         var model = new ApiMemberModel
         {
             Name = name,
-            Summary = GetSummary(member),
+            Summary = GetSummary(member, memberKey, memberLookup),
             Kind = "Event"
         };
-        model.Examples.AddRange(GetExamples(member));
-        model.Exceptions.AddRange(GetExceptions(member));
-        model.SeeAlso.AddRange(GetSeeAlso(member));
+        model.Examples.AddRange(GetExamples(member, memberKey, memberLookup));
+        model.Exceptions.AddRange(GetExceptions(member, memberKey, memberLookup));
+        model.SeeAlso.AddRange(GetSeeAlso(member, memberKey, memberLookup));
         type.Events.Add(model);
     }
 
@@ -1687,19 +1723,30 @@ public static class WebApiDocsGenerator
         return lastDot > 0 ? trimmed.Substring(lastDot + 1) : trimmed;
     }
 
-    private static List<ApiParameterModel> ParseParameters(XElement member, IReadOnlyList<string> parameterTypes, IReadOnlyList<string>? parameterNames)
+    private static List<ApiParameterModel> ParseParameters(
+        XElement member,
+        IReadOnlyList<string> parameterTypes,
+        IReadOnlyList<string>? parameterNames,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var results = new List<ApiParameterModel>();
-        var paramElements = member.Elements("param").ToList();
-        var count = Math.Max(paramElements.Count, parameterTypes.Count);
+        var ownParamElements = member.Elements("param").ToList();
+        var inheritedParamElements = ownParamElements.Count > 0
+            ? new List<XElement>()
+            : GetInheritedElements(member, memberKey, "param", memberLookup);
+        var count = Math.Max(Math.Max(ownParamElements.Count, inheritedParamElements.Count), parameterTypes.Count);
         for (var i = 0; i < count; i++)
         {
-            var paramName = i < paramElements.Count
-                ? paramElements[i].Attribute("name")?.Value ?? $"arg{i + 1}"
+            var paramElement = i < ownParamElements.Count
+                ? ownParamElements[i]
+                : (i < inheritedParamElements.Count ? inheritedParamElements[i] : null);
+            var paramName = paramElement is not null
+                ? paramElement.Attribute("name")?.Value ?? $"arg{i + 1}"
                 : (parameterNames != null && i < parameterNames.Count && !string.IsNullOrWhiteSpace(parameterNames[i])
                     ? parameterNames[i]
                     : $"arg{i + 1}");
-            var summary = i < paramElements.Count ? NormalizeXmlText(paramElements[i]) : null;
+            var summary = paramElement is null ? null : NormalizeXmlText(paramElement);
             var type = i < parameterTypes.Count ? parameterTypes[i] : string.Empty;
             results.Add(new ApiParameterModel
             {
@@ -1989,55 +2036,76 @@ public static class WebApiDocsGenerator
         return results;
     }
 
-    private static string? GetSummary(XElement member)
+    private static string? GetSummary(
+        XElement member,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var summary = member.Element("summary");
-        return summary is null ? null : NormalizeXmlText(summary);
+        if (summary is not null)
+            return NormalizeXmlText(summary);
+        return GetInheritedElement(member, memberKey, "summary", memberLookup);
     }
 
-    private static string? GetElement(XElement member, string name)
+    private static string? GetElement(
+        XElement member,
+        string name,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var element = member.Element(name);
-        return element is null ? null : NormalizeXmlText(element);
+        if (element is not null)
+            return NormalizeXmlText(element);
+        return GetInheritedElement(member, memberKey, name, memberLookup);
     }
 
-    private static List<ApiTypeParameterModel> GetTypeParameters(XElement member)
+    private static List<ApiTypeParameterModel> GetTypeParameters(
+        XElement member,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
-        var results = new List<ApiTypeParameterModel>();
-        foreach (var tp in member.Elements("typeparam"))
-        {
-            var name = tp.Attribute("name")?.Value;
-            if (string.IsNullOrWhiteSpace(name)) continue;
-            results.Add(new ApiTypeParameterModel
-            {
-                Name = name,
-                Summary = NormalizeXmlText(tp)
-            });
-        }
-        return results;
+        var results = ParseTypeParameters(member);
+        if (results.Count > 0)
+            return results;
+
+        var inheritedTypeParams = GetInheritedElements(member, memberKey, "typeparam", memberLookup);
+        if (inheritedTypeParams.Count == 0)
+            return results;
+
+        return ParseTypeParameters(inheritedTypeParams);
     }
 
-    private static List<ApiExceptionModel> GetExceptions(XElement member)
+    private static List<ApiExceptionModel> GetExceptions(
+        XElement member,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
-        var results = new List<ApiExceptionModel>();
-        foreach (var ex in member.Elements("exception"))
-        {
-            var cref = ex.Attribute("cref")?.Value;
-            var typeName = CleanCref(cref);
-            if (string.IsNullOrWhiteSpace(typeName)) continue;
-            results.Add(new ApiExceptionModel
-            {
-                Type = typeName,
-                Summary = NormalizeXmlText(ex)
-            });
-        }
-        return results;
+        var results = ParseExceptions(member);
+        if (results.Count > 0)
+            return results;
+
+        var inheritedExceptions = GetInheritedElements(member, memberKey, "exception", memberLookup);
+        if (inheritedExceptions.Count == 0)
+            return results;
+
+        return ParseExceptions(inheritedExceptions);
     }
 
-    private static List<ApiExampleModel> GetExamples(XElement member)
+    private static List<ApiExampleModel> GetExamples(
+        XElement member,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var results = new List<ApiExampleModel>();
         foreach (var example in member.Elements("example"))
+        {
+            results.AddRange(ParseExampleBlocks(example));
+        }
+        if (results.Count > 0)
+            return results;
+
+        var inheritedExamples = GetInheritedElements(member, memberKey, "example", memberLookup);
+        foreach (var example in inheritedExamples)
         {
             results.AddRange(ParseExampleBlocks(example));
         }
@@ -2084,16 +2152,181 @@ public static class WebApiDocsGenerator
         return results;
     }
 
-    private static List<string> GetSeeAlso(XElement member)
+    private static List<string> GetSeeAlso(
+        XElement member,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
     {
         var results = new List<string>();
-        foreach (var see in member.Elements("seealso"))
+        var ownSeeAlso = member.Elements("seealso").ToList();
+        foreach (var see in ownSeeAlso)
         {
-            var text = NormalizeXmlText(see);
+            var text = NormalizeSeeAlsoElement(see);
+            if (!string.IsNullOrWhiteSpace(text))
+                results.Add(text);
+        }
+        if (results.Count > 0)
+            return results;
+
+        var inheritedSeeAlso = GetInheritedElements(member, memberKey, "seealso", memberLookup);
+        foreach (var see in inheritedSeeAlso)
+        {
+            var text = NormalizeSeeAlsoElement(see);
             if (!string.IsNullOrWhiteSpace(text))
                 results.Add(text);
         }
         return results;
+    }
+
+    private static string? NormalizeSeeAlsoElement(XElement see)
+    {
+        var href = NormalizeInlineHref(see.Attribute("href")?.Value);
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            var label = Normalize(see.Value);
+            if (string.IsNullOrWhiteSpace(label))
+                label = href;
+            return BuildHrefToken(href, label);
+        }
+        return NormalizeXmlText(see);
+    }
+
+    private static List<ApiTypeParameterModel> ParseTypeParameters(XElement member)
+        => ParseTypeParameters(member.Elements("typeparam"));
+
+    private static List<ApiTypeParameterModel> ParseTypeParameters(IEnumerable<XElement> typeParameters)
+    {
+        var results = new List<ApiTypeParameterModel>();
+        foreach (var tp in typeParameters)
+        {
+            var name = tp.Attribute("name")?.Value;
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            results.Add(new ApiTypeParameterModel
+            {
+                Name = name,
+                Summary = NormalizeXmlText(tp)
+            });
+        }
+        return results;
+    }
+
+    private static List<ApiExceptionModel> ParseExceptions(XElement member)
+        => ParseExceptions(member.Elements("exception"));
+
+    private static List<ApiExceptionModel> ParseExceptions(IEnumerable<XElement> exceptions)
+    {
+        var results = new List<ApiExceptionModel>();
+        foreach (var ex in exceptions)
+        {
+            var cref = ex.Attribute("cref")?.Value;
+            var typeName = CleanCref(cref);
+            if (string.IsNullOrWhiteSpace(typeName))
+                continue;
+            results.Add(new ApiExceptionModel
+            {
+                Type = typeName,
+                Summary = NormalizeXmlText(ex)
+            });
+        }
+        return results;
+    }
+
+    private static string? GetInheritedElement(
+        XElement member,
+        string memberKey,
+        string elementName,
+        IReadOnlyDictionary<string, XElement> memberLookup)
+    {
+        foreach (var inherited in EnumerateInheritedMembers(member, memberKey, memberLookup))
+        {
+            var value = inherited.Element(elementName);
+            if (value is null)
+                continue;
+            var normalized = NormalizeXmlText(value);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                return normalized;
+        }
+        return null;
+    }
+
+    private static List<XElement> GetInheritedElements(
+        XElement member,
+        string memberKey,
+        string elementName,
+        IReadOnlyDictionary<string, XElement> memberLookup)
+    {
+        foreach (var inherited in EnumerateInheritedMembers(member, memberKey, memberLookup))
+        {
+            var values = inherited.Elements(elementName).ToList();
+            if (values.Count > 0)
+                return values;
+        }
+        return new List<XElement>();
+    }
+
+    private static IEnumerable<XElement> EnumerateInheritedMembers(
+        XElement member,
+        string memberKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
+    {
+        var current = member;
+        var currentKey = memberKey;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var depth = 0; depth < 8; depth++)
+        {
+            if (!visited.Add(currentKey))
+                yield break;
+
+            var inheritDoc = current.Element("inheritdoc");
+            if (inheritDoc is null)
+                yield break;
+
+            var cref = inheritDoc.Attribute("cref")?.Value;
+            if (string.IsNullOrWhiteSpace(cref))
+                yield break;
+
+            var targetKey = ResolveInheritDocKey(cref, currentKey, memberLookup);
+            if (string.IsNullOrWhiteSpace(targetKey))
+                yield break;
+
+            if (!memberLookup.TryGetValue(targetKey, out var inherited))
+                yield break;
+
+            yield return inherited;
+            current = inherited;
+            currentKey = targetKey;
+        }
+    }
+
+    private static string? ResolveInheritDocKey(
+        string cref,
+        string currentKey,
+        IReadOnlyDictionary<string, XElement> memberLookup)
+    {
+        var trimmed = cref.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return null;
+
+        if (memberLookup.ContainsKey(trimmed))
+            return trimmed;
+
+        var currentPrefix = currentKey.Length > 1 && currentKey[1] == ':' ? currentKey[0] : '\0';
+        if (trimmed.Length > 2 && trimmed[1] == ':')
+            return trimmed;
+
+        if (currentPrefix != '\0')
+        {
+            var samePrefix = $"{currentPrefix}:{trimmed}";
+            if (memberLookup.ContainsKey(samePrefix))
+                return samePrefix;
+        }
+
+        var typeKey = $"T:{trimmed}";
+        if (memberLookup.ContainsKey(typeKey))
+            return typeKey;
+
+        return null;
     }
 
     private static string Dedent(string code)
@@ -2157,8 +2390,9 @@ public static class WebApiDocsGenerator
             {
                 return el.Name.LocalName switch
                 {
-                    "see" => RenderCref(el),
-                    "seealso" => RenderCref(el),
+                    "see" => RenderSeeLikeElement(el),
+                    "seealso" => RenderSeeLikeElement(el),
+                    "a" => RenderAnchorElement(el),
                     "paramref" => el.Attribute("name")?.Value ?? el.Value,
                     "typeparamref" => el.Attribute("name")?.Value ?? el.Value,
                     "c" => el.Value,
@@ -2171,6 +2405,31 @@ public static class WebApiDocsGenerator
         }));
 
         return string.IsNullOrWhiteSpace(text) ? null : Normalize(text);
+    }
+
+    private static string RenderSeeLikeElement(XElement el)
+    {
+        var href = NormalizeInlineHref(el.Attribute("href")?.Value);
+        if (!string.IsNullOrWhiteSpace(href))
+        {
+            var label = Normalize(el.Value);
+            if (string.IsNullOrWhiteSpace(label))
+                label = href;
+            return BuildHrefToken(href, label);
+        }
+        return RenderCref(el);
+    }
+
+    private static string RenderAnchorElement(XElement el)
+    {
+        var href = NormalizeInlineHref(el.Attribute("href")?.Value);
+        if (string.IsNullOrWhiteSpace(href))
+            return Normalize(el.Value);
+
+        var label = Normalize(el.Value);
+        if (string.IsNullOrWhiteSpace(label))
+            label = href;
+        return BuildHrefToken(href, label);
     }
 
     private static string RenderCref(XElement el)
@@ -2190,6 +2449,26 @@ public static class WebApiDocsGenerator
             return langword;
 
         return el.Value;
+    }
+
+    private static string BuildHrefToken(string href, string label)
+    {
+        var encodedHref = Uri.EscapeDataString(href);
+        var encodedLabel = Uri.EscapeDataString(label);
+        return $"[[href:{encodedHref}|{encodedLabel}]]";
+    }
+
+    private static string NormalizeInlineHref(string? href)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+            return string.Empty;
+
+        var trimmed = href.Trim();
+        if (trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        return trimmed;
     }
 
     private static string InferTypeKind(string name)
@@ -3295,21 +3574,58 @@ public static class WebApiDocsGenerator
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
         var encoded = System.Web.HttpUtility.HtmlEncode(text);
-        return CrefTokenRegex.Replace(encoded, match =>
+        var linked = CrefTokenRegex.Replace(encoded, match =>
         {
             var name = match.Groups["name"].Value;
             return LinkifyType(name, baseUrl, slugMap);
         });
+        linked = HrefTokenRegex.Replace(linked, match =>
+        {
+            var href = TryDecodeHrefToken(match.Groups["url"].Value);
+            var label = TryDecodeHrefToken(match.Groups["label"].Value);
+            if (string.IsNullOrWhiteSpace(href))
+                return System.Web.HttpUtility.HtmlEncode(label);
+
+            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
+            var safeLabel = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(label) ? href : label);
+            if (IsExternal(href))
+                return $"<a href=\"{safeHref}\" target=\"_blank\" rel=\"noopener\">{safeLabel}</a>";
+            return $"<a href=\"{safeHref}\">{safeLabel}</a>";
+        });
+        return linked;
     }
 
     private static string StripCrefTokens(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        return CrefTokenRegex.Replace(text, match =>
+        var cleaned = CrefTokenRegex.Replace(text, match =>
         {
             var name = match.Groups["name"].Value;
             return GetDisplayTypeName(name);
         });
+        cleaned = HrefTokenRegex.Replace(cleaned, match =>
+        {
+            var href = TryDecodeHrefToken(match.Groups["url"].Value);
+            var label = TryDecodeHrefToken(match.Groups["label"].Value);
+            if (!string.IsNullOrWhiteSpace(label))
+                return label;
+            return href;
+        });
+        return cleaned;
+    }
+
+    private static string TryDecodeHrefToken(string encoded)
+    {
+        if (string.IsNullOrWhiteSpace(encoded))
+            return string.Empty;
+        try
+        {
+            return Uri.UnescapeDataString(encoded);
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private static string LinkifyType(string? name, string baseUrl, IReadOnlyDictionary<string, string> slugMap)

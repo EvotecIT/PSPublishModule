@@ -5,6 +5,7 @@ Short, high-signal list to keep parity and stability work visible.
 ## Recently completed
 - API docs: sidebar filters + counts + reset + URL state.
 - API docs: sidebar position option + body class hook.
+- API docs: XML `inheritdoc cref` fallback + hyperlink rendering for `see/seealso href` and `<a href>`.
 - Audit: navRequired / navIgnorePrefixes options (CLI + pipeline).
 - Prism: auto-init highlight + local asset warnings.
 - CodeGlyphX sample: apply Prism highlighting and unified code-block styling to docs pages.
