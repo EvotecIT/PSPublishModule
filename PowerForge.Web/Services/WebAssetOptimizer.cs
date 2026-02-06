@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlTinkerX;
+using ImageMagick;
 
 namespace PowerForge.Web;
 
@@ -21,6 +22,18 @@ public sealed class WebAssetOptimizerOptions
     public bool MinifyCss { get; set; } = false;
     /// <summary>When true, minify JavaScript files.</summary>
     public bool MinifyJs { get; set; } = false;
+    /// <summary>When true, optimize image files.</summary>
+    public bool OptimizeImages { get; set; } = false;
+    /// <summary>File extensions considered for image optimization.</summary>
+    public string[] ImageExtensions { get; set; } = new[] { ".png", ".jpg", ".jpeg", ".webp" };
+    /// <summary>Glob-style include patterns for image optimization.</summary>
+    public string[] ImageInclude { get; set; } = Array.Empty<string>();
+    /// <summary>Glob-style exclude patterns for image optimization.</summary>
+    public string[] ImageExclude { get; set; } = Array.Empty<string>();
+    /// <summary>Image quality target in range 1-100.</summary>
+    public int ImageQuality { get; set; } = 82;
+    /// <summary>When true, strip metadata from optimized images.</summary>
+    public bool ImageStripMetadata { get; set; } = true;
     /// <summary>Enable asset hashing (fingerprinting).</summary>
     public bool HashAssets { get; set; }
     /// <summary>File extensions to hash.</summary>
@@ -119,6 +132,12 @@ public static class WebAssetOptimizer
                     MarkUpdated(htmlFile);
                 }
             }
+        }
+
+        // Optimize images before hashing so hashed filenames always match final image bytes.
+        if (options.OptimizeImages)
+        {
+            OptimizeImages(siteRoot, options, result, MarkUpdated);
         }
 
         var hashSpec = ResolveHashSpec(options, policy);
@@ -478,6 +497,116 @@ public static class WebAssetOptimizer
             return mapped + suffix;
         }
         return url;
+    }
+
+    private static void OptimizeImages(
+        string siteRoot,
+        WebAssetOptimizerOptions options,
+        WebOptimizeResult result,
+        Action<string>? onUpdated = null)
+    {
+        var extensionSet = NormalizeExtensions(options.ImageExtensions, new[] { ".png", ".jpg", ".jpeg", ".webp" });
+        var allImageFiles = Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
+            .Where(path => extensionSet.Contains(Path.GetExtension(path)))
+            .ToList();
+        var optimizedImages = new List<WebOptimizeImageEntry>();
+        var quality = Math.Clamp(options.ImageQuality, 1, 100);
+
+        foreach (var file in allImageFiles)
+        {
+            var relative = ToRelative(siteRoot, file);
+            if (options.ImageInclude is { Length: > 0 } && !IsIncluded(relative, options.ImageInclude))
+                continue;
+            if (IsExcluded(relative, options.ImageExclude))
+                continue;
+
+            result.ImageFileCount++;
+            var originalBytes = new FileInfo(file).Length;
+            var finalBytes = originalBytes;
+            result.ImageBytesBefore += originalBytes;
+
+            try
+            {
+                using var image = new MagickImage(file);
+                if (options.ImageStripMetadata)
+                    image.Strip();
+                if (SupportsQualitySetting(image.Format))
+                    image.Quality = (uint)quality;
+
+                using var stream = new MemoryStream();
+                image.Write(stream);
+                var optimizedBytes = stream.Length;
+                if (optimizedBytes > 0 && optimizedBytes < originalBytes)
+                {
+                    File.WriteAllBytes(file, stream.ToArray());
+                    finalBytes = optimizedBytes;
+                    var savedBytes = originalBytes - optimizedBytes;
+                    result.ImageOptimizedCount++;
+                    result.ImageBytesSaved += savedBytes;
+                    optimizedImages.Add(new WebOptimizeImageEntry
+                    {
+                        Path = relative,
+                        BytesBefore = originalBytes,
+                        BytesAfter = optimizedBytes,
+                        BytesSaved = savedBytes
+                    });
+                    onUpdated?.Invoke(file);
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning($"Image optimize failed for {file}: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            result.ImageBytesAfter += finalBytes;
+        }
+
+        result.OptimizedImages = optimizedImages
+            .OrderByDescending(entry => entry.BytesSaved)
+            .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static HashSet<string> NormalizeExtensions(string[]? extensions, string[] defaults)
+    {
+        var source = (extensions?.Length ?? 0) == 0 ? defaults : extensions!;
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ext in source)
+        {
+            if (string.IsNullOrWhiteSpace(ext))
+                continue;
+            var normalized = ext.Trim();
+            if (!normalized.StartsWith(".", StringComparison.Ordinal))
+                normalized = "." + normalized;
+            set.Add(normalized);
+        }
+        return set;
+    }
+
+    private static bool SupportsQualitySetting(MagickFormat format)
+    {
+        var name = format.ToString();
+        return name.Contains("Jpeg", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Jpg", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("WebP", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Heic", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Heif", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("Avif", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsIncluded(string relativePath, string[] patterns)
+    {
+        if (patterns is null || patterns.Length == 0) return true;
+        var normalized = relativePath.Replace('\\', '/');
+        var withLeadingSlash = "/" + normalized;
+        foreach (var pattern in patterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            var normalizedPattern = pattern.Replace('\\', '/');
+            if (GlobMatch(normalizedPattern, normalized) || GlobMatch(normalizedPattern, withLeadingSlash))
+                return true;
+        }
+        return false;
     }
 
     private static bool IsExcluded(string relativePath, string[] patterns)
