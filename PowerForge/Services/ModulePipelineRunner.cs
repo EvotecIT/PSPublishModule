@@ -522,6 +522,12 @@ public sealed class ModulePipelineRunner
             _logger.Info($"MergeMissing not explicitly set; enabling because approved modules are configured {context}.");
         }
 
+        if (mergeMissing && approved.Length > 0)
+        {
+            requiredModules = FilterRequiredModules(requiredModules, approved);
+            requiredModulesForPackaging = FilterRequiredModules(requiredModulesForPackaging, approved);
+        }
+
         ModuleSkipConfiguration? moduleSkip = null;
         if (moduleSkipForce || moduleSkipFailOnMissingCommands || moduleSkipIgnoreModules.Count > 0 || moduleSkipIgnoreFunctions.Count > 0)
         {
