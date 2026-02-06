@@ -110,7 +110,28 @@ internal static class EditLinkResolver
     }
 
     private static string NormalizePath(string path)
-        => path.Replace('\\', '/');
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var parts = path.Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var stack = new List<string>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (part == ".")
+                continue;
+            if (part == "..")
+            {
+                if (stack.Count > 0)
+                    stack.RemoveAt(stack.Count - 1);
+                continue;
+            }
+            stack.Add(part);
+        }
+
+        return string.Join("/", stack);
+    }
 
     private static bool IsAbsoluteUrl(string value)
         => value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||

@@ -2650,6 +2650,13 @@ public static class WebApiDocsGenerator
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
         sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(type.Name)}</h1>");
         sb.AppendLine("        </div>");
+        var sourceAction = RenderTypeSourceAction(type.Source);
+        if (!string.IsNullOrWhiteSpace(sourceAction))
+        {
+            sb.AppendLine("        <div class=\"type-actions\">");
+            sb.AppendLine($"          {sourceAction}");
+            sb.AppendLine("        </div>");
+        }
         sb.AppendLine("      </header>");
 
         var flags = new List<string>();
@@ -3336,6 +3343,44 @@ public static class WebApiDocsGenerator
             return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
         }
         return $"<code>{label}</code>";
+    }
+
+    private static string? RenderTypeSourceAction(ApiSourceLink? link)
+    {
+        if (link is null || string.IsNullOrWhiteSpace(link.Url))
+            return null;
+
+        if (TryBuildGitHubEditUrl(link.Url, out var editUrl))
+        {
+            var href = System.Web.HttpUtility.HtmlAttributeEncode(editUrl);
+            return $"<a class=\"type-source-action\" href=\"{href}\" target=\"_blank\" rel=\"noopener\">Edit on GitHub</a>";
+        }
+
+        var sourceHref = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
+        return $"<a class=\"type-source-action\" href=\"{sourceHref}\" target=\"_blank\" rel=\"noopener\">View source</a>";
+    }
+
+    private static bool TryBuildGitHubEditUrl(string sourceUrl, out string editUrl)
+    {
+        editUrl = string.Empty;
+        if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri))
+            return false;
+        if (!string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var path = uri.AbsolutePath;
+        var blobMarker = "/blob/";
+        var blobIndex = path.IndexOf(blobMarker, StringComparison.OrdinalIgnoreCase);
+        if (blobIndex < 0)
+            return false;
+
+        var repoPath = path.Substring(0, blobIndex);
+        var filePath = path.Substring(blobIndex + blobMarker.Length);
+        if (string.IsNullOrWhiteSpace(repoPath) || string.IsNullOrWhiteSpace(filePath))
+            return false;
+
+        editUrl = $"{uri.Scheme}://{uri.Host}{repoPath}/edit/{filePath}";
+        return true;
     }
 
     private static Dictionary<string, object?>? BuildSourceJson(ApiSourceLink? source)
