@@ -97,6 +97,19 @@
           "JsonPointer.Net": "3.0.3"
         }
       },
+      "Magick.NET-Q8-AnyCPU": {
+        "type": "Transitive",
+        "resolved": "14.10.2",
+        "contentHash": "vKhZZ5hmeej2fGQI77IxY4dlcfBFKAWi6sAmiQmKmRZqh4XMGnk+NfxGHyWrkhVDr2oerIonrFmHJ83EkJLcmg==",
+        "dependencies": {
+          "Magick.NET.Core": "14.10.2"
+        }
+      },
+      "Magick.NET.Core": {
+        "type": "Transitive",
+        "resolved": "14.10.2",
+        "contentHash": "22zhy2QO7GrMPFZZEN5X+oAoBi7IWhq8fqH0dQy/d6jzScLeTfZV0a69CRzmf7LbiRPwPSeguHvpfgrNaAGmeQ=="
+      },
       "Markdig.Signed": {
         "type": "Transitive",
         "resolved": "0.33.0",
@@ -732,6 +745,7 @@
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
+          "Magick.NET-Q8-AnyCPU": "[14.10.2, )",
           "OfficeIMO.Markdown": "[0.5.2, )",
           "PowerForge": "[1.0.0, )",
           "Scriban": "[5.11.0, )",
@@ -834,6 +848,19 @@
           "Json.More.Net": "1.9.0",
           "JsonPointer.Net": "3.0.3"
         }
+      },
+      "Magick.NET-Q8-AnyCPU": {
+        "type": "Transitive",
+        "resolved": "14.10.2",
+        "contentHash": "vKhZZ5hmeej2fGQI77IxY4dlcfBFKAWi6sAmiQmKmRZqh4XMGnk+NfxGHyWrkhVDr2oerIonrFmHJ83EkJLcmg==",
+        "dependencies": {
+          "Magick.NET.Core": "14.10.2"
+        }
+      },
+      "Magick.NET.Core": {
+        "type": "Transitive",
+        "resolved": "14.10.2",
+        "contentHash": "22zhy2QO7GrMPFZZEN5X+oAoBi7IWhq8fqH0dQy/d6jzScLeTfZV0a69CRzmf7LbiRPwPSeguHvpfgrNaAGmeQ=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -1471,6 +1498,7 @@
         "type": "Project",
         "dependencies": {
           "HtmlTinkerX": "[2.0.6, )",
+          "Magick.NET-Q8-AnyCPU": "[14.10.2, )",
           "OfficeIMO.Markdown": "[0.5.2, )",
           "PowerForge": "[1.0.0, )",
           "Scriban": "[5.11.0, )",

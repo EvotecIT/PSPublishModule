@@ -228,6 +228,14 @@ try
                     MinifyHtml = publishSpec.Optimize.MinifyHtml,
                     MinifyCss = publishSpec.Optimize.MinifyCss,
                     MinifyJs = publishSpec.Optimize.MinifyJs,
+                    OptimizeImages = publishSpec.Optimize.OptimizeImages,
+                    ImageExtensions = publishSpec.Optimize.ImageExtensions is { Length: > 0 }
+                        ? publishSpec.Optimize.ImageExtensions
+                        : new[] { ".png", ".jpg", ".jpeg", ".webp" },
+                    ImageInclude = publishSpec.Optimize.ImageInclude ?? Array.Empty<string>(),
+                    ImageExclude = publishSpec.Optimize.ImageExclude ?? Array.Empty<string>(),
+                    ImageQuality = publishSpec.Optimize.ImageQuality ?? 82,
+                    ImageStripMetadata = publishSpec.Optimize.ImageStripMetadata ?? true,
                     HashAssets = publishSpec.Optimize.HashAssets,
                     HashExtensions = publishSpec.Optimize.HashExtensions is { Length: > 0 } ? publishSpec.Optimize.HashExtensions : new[] { ".css", ".js" },
                     HashExclude = publishSpec.Optimize.HashExclude ?? Array.Empty<string>(),
@@ -917,6 +925,12 @@ try
             var minifyHtml = subArgs.Any(a => a.Equals("--minify-html", StringComparison.OrdinalIgnoreCase));
             var minifyCss = subArgs.Any(a => a.Equals("--minify-css", StringComparison.OrdinalIgnoreCase));
             var minifyJs = subArgs.Any(a => a.Equals("--minify-js", StringComparison.OrdinalIgnoreCase));
+            var optimizeImages = HasOption(subArgs, "--optimize-images") || HasOption(subArgs, "--images");
+            var imageExtensions = ReadOptionList(subArgs, "--image-ext", "--image-extensions");
+            var imageInclude = ReadOptionList(subArgs, "--image-include");
+            var imageExclude = ReadOptionList(subArgs, "--image-exclude");
+            var imageQuality = ParseIntOption(TryGetOptionValue(subArgs, "--image-quality"), 82);
+            var imageStripMetadata = !HasOption(subArgs, "--image-keep-metadata");
             var hashAssets = HasOption(subArgs, "--hash-assets");
             var hashExtensions = ReadOptionList(subArgs, "--hash-ext", "--hash-extensions");
             var hashExclude = ReadOptionList(subArgs, "--hash-exclude");
@@ -959,6 +973,12 @@ try
                 MinifyHtml = minifyHtml,
                 MinifyCss = minifyCss,
                 MinifyJs = minifyJs,
+                OptimizeImages = optimizeImages,
+                ImageExtensions = imageExtensions.Count > 0 ? imageExtensions.ToArray() : new[] { ".png", ".jpg", ".jpeg", ".webp" },
+                ImageInclude = imageInclude.Count > 0 ? imageInclude.ToArray() : Array.Empty<string>(),
+                ImageExclude = imageExclude.Count > 0 ? imageExclude.ToArray() : Array.Empty<string>(),
+                ImageQuality = imageQuality,
+                ImageStripMetadata = imageStripMetadata,
                 HashAssets = hashAssets,
                 HashExtensions = hashExtensions.Count > 0 ? hashExtensions.ToArray() : new[] { ".css", ".js" },
                 HashExclude = hashExclude.Count > 0 ? hashExclude.ToArray() : Array.Empty<string>(),
@@ -989,6 +1009,11 @@ try
             logger.Info($"CSS bytes saved: {optimizeResult.CssBytesSaved}");
             logger.Info($"Minified JS: {optimizeResult.JsMinifiedCount}");
             logger.Info($"JS bytes saved: {optimizeResult.JsBytesSaved}");
+            logger.Info($"Image files: {optimizeResult.ImageFileCount}");
+            logger.Info($"Optimized images: {optimizeResult.ImageOptimizedCount}");
+            logger.Info($"Image bytes before: {optimizeResult.ImageBytesBefore}");
+            logger.Info($"Image bytes after: {optimizeResult.ImageBytesAfter}");
+            logger.Info($"Image bytes saved: {optimizeResult.ImageBytesSaved}");
             if (optimizeResult.HashedAssetCount > 0)
             {
                 logger.Info($"Hashed assets: {optimizeResult.HashedAssetCount}");
@@ -1399,6 +1424,8 @@ static void PrintUsage()
     Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
+    Console.WriteLine("                     [--optimize-images] [--image-ext <.png,.jpg,.jpeg,.webp>] [--image-include <glob[,glob]>] [--image-exclude <glob[,glob]>]");
+    Console.WriteLine("                     [--image-quality <1-100>] [--image-keep-metadata]");
     Console.WriteLine("                     [--hash-assets] [--hash-ext <.css,.js>] [--hash-exclude <glob[,glob]>] [--hash-manifest <file>]");
     Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>] [--report-path <file>]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
@@ -2211,6 +2238,12 @@ internal static class WebPipelineRunner
                         var minifyHtml = GetBool(step, "minifyHtml") ?? false;
                         var minifyCss = GetBool(step, "minifyCss") ?? false;
                         var minifyJs = GetBool(step, "minifyJs") ?? false;
+                        var optimizeImages = GetBool(step, "optimizeImages") ?? GetBool(step, "images") ?? false;
+                        var imageExtensions = GetArrayOfStrings(step, "imageExtensions") ?? GetArrayOfStrings(step, "image-ext");
+                        var imageInclude = GetArrayOfStrings(step, "imageInclude") ?? GetArrayOfStrings(step, "image-include");
+                        var imageExclude = GetArrayOfStrings(step, "imageExclude") ?? GetArrayOfStrings(step, "image-exclude");
+                        var imageQuality = GetInt(step, "imageQuality") ?? GetInt(step, "image-quality") ?? 82;
+                        var imageStripMetadata = GetBool(step, "imageStripMetadata") ?? GetBool(step, "image-strip-metadata") ?? true;
                         var hashAssets = GetBool(step, "hashAssets") ?? false;
                         var hashExtensions = GetArrayOfStrings(step, "hashExtensions") ?? GetArrayOfStrings(step, "hash-ext");
                         var hashExclude = GetArrayOfStrings(step, "hashExclude") ?? GetArrayOfStrings(step, "hash-exclude");
@@ -2251,6 +2284,12 @@ internal static class WebPipelineRunner
                             MinifyHtml = minifyHtml,
                             MinifyCss = minifyCss,
                             MinifyJs = minifyJs,
+                            OptimizeImages = optimizeImages,
+                            ImageExtensions = imageExtensions ?? new[] { ".png", ".jpg", ".jpeg", ".webp" },
+                            ImageInclude = imageInclude ?? Array.Empty<string>(),
+                            ImageExclude = imageExclude ?? Array.Empty<string>(),
+                            ImageQuality = imageQuality,
+                            ImageStripMetadata = imageStripMetadata,
                             HashAssets = hashAssets,
                             HashExtensions = hashExtensions ?? new[] { ".css", ".js" },
                             HashExclude = hashExclude ?? Array.Empty<string>(),
@@ -2664,6 +2703,10 @@ internal static class WebPipelineRunner
             parts.Add($"css-saved {result.CssBytesSaved}B");
         if (result.JsBytesSaved > 0)
             parts.Add($"js-saved {result.JsBytesSaved}B");
+        if (result.ImageOptimizedCount > 0)
+            parts.Add($"images {result.ImageOptimizedCount}");
+        if (result.ImageBytesSaved > 0)
+            parts.Add($"images-saved {result.ImageBytesSaved}B");
 
         if (result.HashedAssetCount > 0)
             parts.Add($"hashed {result.HashedAssetCount}");

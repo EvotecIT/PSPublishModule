@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="HtmlTinkerX" Version="2.0.6" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.10.2" />
     <PackageReference Include="OfficeIMO.Markdown" Version="0.5.2" />
     <PackageReference Include="Scriban" Version="5.11.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />

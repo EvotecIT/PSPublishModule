@@ -109,6 +109,8 @@ public sealed class WebOptimizeResult
     public int CssFileCount { get; set; }
     /// <summary>Total JavaScript files discovered under site root.</summary>
     public int JsFileCount { get; set; }
+    /// <summary>Total image files considered for optimization.</summary>
+    public int ImageFileCount { get; set; }
     /// <summary>Number of HTML files updated by critical CSS inlining.</summary>
     public int CriticalCssInlinedCount { get; set; }
     /// <summary>Number of HTML files minified.</summary>
@@ -123,6 +125,16 @@ public sealed class WebOptimizeResult
     public int JsMinifiedCount { get; set; }
     /// <summary>Total UTF-8 bytes saved while minifying JavaScript files.</summary>
     public long JsBytesSaved { get; set; }
+    /// <summary>Number of image files optimized.</summary>
+    public int ImageOptimizedCount { get; set; }
+    /// <summary>Total bytes of image files before optimization.</summary>
+    public long ImageBytesBefore { get; set; }
+    /// <summary>Total bytes of image files after optimization.</summary>
+    public long ImageBytesAfter { get; set; }
+    /// <summary>Total bytes saved while optimizing images.</summary>
+    public long ImageBytesSaved { get; set; }
+    /// <summary>Detailed image optimization entries for files that changed.</summary>
+    public WebOptimizeImageEntry[] OptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
     /// <summary>Number of assets renamed during hashing.</summary>
     public int HashedAssetCount { get; set; }
     /// <summary>Detailed original-to-hashed asset mapping.</summary>
@@ -139,6 +151,19 @@ public sealed class WebOptimizeResult
     public string? CacheHeadersPath { get; set; }
     /// <summary>Optional path to the optimization report JSON file.</summary>
     public string? ReportPath { get; set; }
+}
+
+/// <summary>Detailed optimization stats for a single image file.</summary>
+public sealed class WebOptimizeImageEntry
+{
+    /// <summary>Image path relative to site root.</summary>
+    public string Path { get; set; } = string.Empty;
+    /// <summary>Original file size in bytes.</summary>
+    public long BytesBefore { get; set; }
+    /// <summary>Optimized file size in bytes.</summary>
+    public long BytesAfter { get; set; }
+    /// <summary>Bytes saved by optimization.</summary>
+    public long BytesSaved { get; set; }
 }
 
 /// <summary>Maps an original asset path to its hashed output path.</summary>

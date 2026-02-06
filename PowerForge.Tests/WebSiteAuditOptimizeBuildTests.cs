@@ -1,4 +1,5 @@
 using PowerForge.Web;
+using ImageMagick;
 
 namespace PowerForge.Tests;
 
@@ -326,6 +327,46 @@ public class WebSiteAuditOptimizeBuildTests
             Assert.True(result.HtmlBytesSaved >= 0);
             Assert.True(result.CssBytesSaved >= 0);
             Assert.True(result.JsBytesSaved >= 0);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_OptimizesImagesAndTracksSavings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-images-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var imagePath = Path.Combine(root, "hero.png");
+            using (var image = new MagickImage(MagickColors.DeepSkyBlue, 512, 256))
+            {
+                image.Comment = new string('x', 40000);
+                image.Write(imagePath, MagickFormat.Png);
+            }
+
+            var originalBytes = new FileInfo(imagePath).Length;
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                OptimizeImages = true,
+                ImageExtensions = new[] { ".png" },
+                ImageStripMetadata = true
+            });
+
+            Assert.Equal(1, result.ImageFileCount);
+            Assert.Equal(1, result.ImageOptimizedCount);
+            Assert.True(result.ImageBytesBefore >= originalBytes);
+            Assert.True(result.ImageBytesSaved > 0);
+            Assert.True(result.ImageBytesAfter < result.ImageBytesBefore);
+            Assert.Single(result.OptimizedImages);
+            Assert.Contains(result.UpdatedFiles, path => path.Equals("hero.png", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

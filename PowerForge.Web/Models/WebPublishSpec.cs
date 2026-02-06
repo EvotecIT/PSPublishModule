@@ -83,6 +83,18 @@ public sealed class WebPublishOptimizeSpec
     public bool MinifyCss { get; set; }
     /// <summary>When true, minify JavaScript output.</summary>
     public bool MinifyJs { get; set; }
+    /// <summary>When true, optimize image assets.</summary>
+    public bool OptimizeImages { get; set; }
+    /// <summary>File extensions considered for image optimization.</summary>
+    public string[] ImageExtensions { get; set; } = Array.Empty<string>();
+    /// <summary>Optional include patterns for image optimization.</summary>
+    public string[] ImageInclude { get; set; } = Array.Empty<string>();
+    /// <summary>Optional exclude patterns for image optimization.</summary>
+    public string[] ImageExclude { get; set; } = Array.Empty<string>();
+    /// <summary>Image quality target (1-100).</summary>
+    public int? ImageQuality { get; set; }
+    /// <summary>When true, strip image metadata while optimizing.</summary>
+    public bool? ImageStripMetadata { get; set; }
     /// <summary>When true, hash static assets.</summary>
     public bool HashAssets { get; set; }
     /// <summary>File extensions to hash.</summary>
