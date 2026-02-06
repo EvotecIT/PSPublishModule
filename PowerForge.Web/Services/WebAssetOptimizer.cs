@@ -25,7 +25,7 @@ public sealed class WebAssetOptimizerOptions
     /// <summary>When true, optimize image files.</summary>
     public bool OptimizeImages { get; set; } = false;
     /// <summary>File extensions considered for image optimization.</summary>
-    public string[] ImageExtensions { get; set; } = new[] { ".png", ".jpg", ".jpeg", ".webp", ".gif" };
+    public string[] ImageExtensions { get; set; } = new[] { ".png", ".jpg", ".jpeg", ".webp" };
     /// <summary>Glob-style include patterns for image optimization.</summary>
     public string[] ImageInclude { get; set; } = Array.Empty<string>();
     /// <summary>Glob-style exclude patterns for image optimization.</summary>
