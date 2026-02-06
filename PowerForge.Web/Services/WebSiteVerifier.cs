@@ -97,6 +97,7 @@ public static class WebSiteVerifier
 
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
+        ValidateThemeContract(spec, plan, warnings);
         ValidateLayoutHooks(spec, plan, warnings);
         ValidateThemeTokens(spec, plan, warnings);
         ValidatePrismAssets(spec, plan, warnings);
@@ -326,6 +327,73 @@ public static class WebSiteVerifier
 
         ValidateAssetRegistryPaths(manifest.Assets, themeRoot, $"theme:{manifest.Name}", warnings);
         ValidateAssetRegistryPaths(spec.AssetRegistry, plan.RootPath, "site", warnings);
+    }
+
+    private static void ValidateThemeContract(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme)) return;
+
+        var themeRoot = ResolveThemeRoot(spec, plan.RootPath, plan.ThemesRoot);
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return;
+
+        var manifestPath = Path.Combine(themeRoot, "theme.json");
+        if (!File.Exists(manifestPath))
+        {
+            warnings.Add($"Theme '{spec.DefaultTheme}' does not define 'theme.json'. Add an explicit manifest to make theme behavior portable.");
+            return;
+        }
+
+        var loader = new ThemeLoader();
+        ThemeManifest? manifest = null;
+        try
+        {
+            manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, plan.RootPath, plan.ThemesRoot));
+        }
+        catch
+        {
+            return;
+        }
+
+        if (manifest is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(manifest.Engine))
+        {
+            warnings.Add($"Theme '{manifest.Name}' does not set 'engine' in theme.json. Set 'simple' or 'scriban' explicitly.");
+        }
+        else if (!manifest.Engine.Equals("simple", StringComparison.OrdinalIgnoreCase) &&
+                 !manifest.Engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add($"Theme '{manifest.Name}' uses unsupported engine '{manifest.Engine}'. Supported values: simple, scriban.");
+        }
+
+        ValidateThemeManifestPath(manifest.LayoutsPath, $"theme:{manifest.Name} layoutsPath", warnings);
+        ValidateThemeManifestPath(manifest.PartialsPath, $"theme:{manifest.Name} partialsPath", warnings);
+        ValidateThemeManifestPath(manifest.AssetsPath, $"theme:{manifest.Name} assetsPath", warnings);
+
+        ValidateThemeMappedPaths(manifest.Layouts, $"theme:{manifest.Name} layouts", warnings);
+        ValidateThemeMappedPaths(manifest.Partials, $"theme:{manifest.Name} partials", warnings);
+        ValidateThemeAssetPortability(manifest, warnings);
+
+        if (!string.IsNullOrWhiteSpace(manifest.DefaultLayout))
+        {
+            var defaultLayoutPath = loader.ResolveLayoutPath(themeRoot, manifest, manifest.DefaultLayout);
+            if (string.IsNullOrWhiteSpace(defaultLayoutPath) || !File.Exists(defaultLayoutPath))
+            {
+                warnings.Add($"Theme '{manifest.Name}' defaultLayout '{manifest.DefaultLayout}' does not resolve to a layout file.");
+            }
+        }
+
+        if (manifest.Tokens is { Count: > 0 })
+        {
+            var tokensPartialPath = loader.ResolvePartialPath(themeRoot, manifest, "theme-tokens");
+            if (string.IsNullOrWhiteSpace(tokensPartialPath) || !File.Exists(tokensPartialPath))
+            {
+                warnings.Add($"Theme '{manifest.Name}' defines tokens but does not provide partial 'theme-tokens'. Tokens will not be emitted unless layouts render them manually.");
+            }
+        }
     }
 
     private static void ValidateLayoutHooks(SiteSpec spec, WebSitePlan plan, List<string> warnings)
@@ -936,6 +1004,116 @@ public static class WebSiteVerifier
         var fullPath = Path.IsPathRooted(path) ? path : Path.Combine(rootPath, path);
         if (!File.Exists(fullPath))
             warnings.Add($"Missing {label} asset: {path}");
+    }
+
+    private static void ValidateThemeManifestPath(string? path, string label, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        if (IsExternalPath(path))
+        {
+            warnings.Add($"{label} should be a local relative folder path, not an external URL: {path}");
+            return;
+        }
+        if (!IsPortableRelativePath(path))
+            warnings.Add($"{label} should be a portable relative path (no rooted paths, no '..'): {path}");
+    }
+
+    private static void ValidateThemeMappedPaths(Dictionary<string, string>? map, string label, List<string> warnings)
+    {
+        if (map is null || map.Count == 0)
+            return;
+
+        foreach (var kvp in map)
+        {
+            var key = kvp.Key ?? string.Empty;
+            var value = kvp.Value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                warnings.Add($"{label} contains an empty mapping key.");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                warnings.Add($"{label} mapping '{key}' is empty.");
+                continue;
+            }
+            if (!IsPortableRelativePath(value))
+            {
+                warnings.Add($"{label} mapping '{key}' should be a portable relative path (no rooted paths, no '..'): {value}");
+            }
+        }
+    }
+
+    private static void ValidateThemeAssetPortability(ThemeManifest manifest, List<string> warnings)
+    {
+        if (manifest.Assets is null)
+            return;
+
+        var label = $"theme:{manifest.Name} assets";
+        foreach (var bundle in manifest.Assets.Bundles ?? Array.Empty<AssetBundleSpec>())
+        {
+            foreach (var css in bundle.Css ?? Array.Empty<string>())
+                ValidateThemeBundleAssetPath(css, $"{label} bundle '{bundle.Name}' css", warnings);
+            foreach (var js in bundle.Js ?? Array.Empty<string>())
+                ValidateThemeBundleAssetPath(js, $"{label} bundle '{bundle.Name}' js", warnings);
+        }
+
+        foreach (var preload in manifest.Assets.Preloads ?? Array.Empty<PreloadSpec>())
+        {
+            if (string.IsNullOrWhiteSpace(preload.Href))
+                continue;
+            if (!IsPortableRelativePath(preload.Href) &&
+                !preload.Href.StartsWith("/", StringComparison.Ordinal) &&
+                !IsExternalPath(preload.Href))
+            {
+                warnings.Add($"{label} preload href should be relative, absolute web URL, or root-relative URL: {preload.Href}");
+            }
+
+            if (preload.Href.StartsWith("/themes/", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"{label} preload href hard-codes '/themes/...'. Prefer relative paths in theme assets for portability: {preload.Href}");
+            }
+        }
+
+        foreach (var critical in manifest.Assets.CriticalCss ?? Array.Empty<CriticalCssSpec>())
+        {
+            if (string.IsNullOrWhiteSpace(critical.Path))
+                continue;
+            if (!IsPortableRelativePath(critical.Path))
+            {
+                warnings.Add($"{label} criticalCss '{critical.Name}' should be a portable relative path: {critical.Path}");
+            }
+        }
+    }
+
+    private static void ValidateThemeBundleAssetPath(string? path, string label, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        if (IsExternalPath(path))
+        {
+            warnings.Add($"{label} should use local relative paths in theme.json. Move external URLs to site-level overrides when possible: {path}");
+            return;
+        }
+        if (!IsPortableRelativePath(path))
+            warnings.Add($"{label} should be a portable relative path (no rooted paths, no '..'): {path}");
+        if (path.StartsWith("/themes/", StringComparison.OrdinalIgnoreCase))
+            warnings.Add($"{label} hard-codes '/themes/...'. Use relative paths and let the engine normalize them: {path}");
+    }
+
+    private static bool IsPortableRelativePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+        if (Path.IsPathRooted(path))
+            return false;
+        if (path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith("\\", StringComparison.Ordinal))
+            return false;
+
+        var normalized = path.Replace('\\', '/');
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.All(segment => !string.Equals(segment, "..", StringComparison.Ordinal));
     }
 
     private static string? ResolveThemeRoot(SiteSpec spec, string rootPath, string? planThemesRoot)

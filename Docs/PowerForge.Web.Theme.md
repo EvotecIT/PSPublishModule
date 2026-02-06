@@ -1,8 +1,13 @@
-# PowerForge.Web Theme System (Draft)
+# PowerForge.Web Theme System (Contract v1)
 
 This document defines the theme system as a reusable, product-grade layer for PowerForge.Web.
 Goals are consistency, performance, and ease of reuse across many projects.
 See also: `Docs/PowerForge.Web.Assets.md` for asset policy, hashing, and cache headers.
+
+Contract status:
+- `theme.json` is the canonical theme contract.
+- Relative paths in `theme.json` are required for portability.
+- Theme assets should be declared in theme-local form and normalized by the engine.
 
 ## Goals
 - Themes are portable across projects and repos.
@@ -96,6 +101,8 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 - `assets` is merged: bundles with same name are replaced by child.
 - `tokens` are merged with child values winning.
 - `defaultLayout` applies when content has no layout.
+- `engine` should always be explicit (`simple` or `scriban`) to avoid ambiguous rendering.
+- `layoutsPath`, `partialsPath`, `assetsPath`, mapped `layouts`/`partials`, and theme `assets` bundle paths should be relative (not rooted paths, no `..`).
 
 ## Asset copying + output paths
 PowerForge.Web copies theme assets during `build`:
@@ -138,6 +145,8 @@ During build, these resolve to:
 ```
 /themes/<themeName>/assets/site.css
 ```
+
+Do not hard-code `/themes/<theme>/...` inside `theme.json` bundle paths. Keep those paths relative and let the engine normalize output URLs.
 
 Critical CSS paths are also relative to the theme root:
 ```
@@ -183,8 +192,9 @@ Two engines are supported:
 - **scriban**: full templates with includes and data.
 
 Engine selection order:
-1) Theme `theme.json` `engine`
-2) Site `site.json` `ThemeEngine` override (optional)
+1) Site `site.json` `ThemeEngine` override (if set)
+2) Theme `theme.json` `engine`
+3) Default fallback: `simple`
 
 ## Layout resolution
 When rendering a page:
