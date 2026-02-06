@@ -8,7 +8,7 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineApprovedModulesTests
 {
     [Fact]
-    public void Plan_RemovesApprovedModulesFromRequired_WhenMergeMissingEnabled()
+    public void Plan_KeepsApprovedModulesInRequired_WhenMergeMissingEnabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -25,6 +25,31 @@ public sealed class ModulePipelineApprovedModulesTests
                 .ToArray();
 
             Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_RemovesApprovedModulesFromManifest_WhenMergeMissingEnabled()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = BuildSpec(root.FullName, moduleName, mergeMissing: true);
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
+
+            Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
@@ -34,7 +59,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Plan_KeepsApprovedModulesInRequired_WhenMergeMissingDisabled()
+    public void Run_KeepsApprovedModulesInManifest_WhenMergeMissingDisabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -43,12 +68,11 @@ public sealed class ModulePipelineApprovedModulesTests
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
             var spec = BuildSpec(root.FullName, moduleName, mergeMissing: false);
-            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
 
-            var requiredNames = plan.RequiredModules
-                .Select(m => m.ModuleName)
-                .Where(n => !string.IsNullOrWhiteSpace(n))
-                .ToArray();
+            var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
             Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
             Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
@@ -68,7 +92,8 @@ public sealed class ModulePipelineApprovedModulesTests
                 Name = moduleName,
                 SourcePath = sourcePath,
                 Version = "1.0.0",
-                CsprojPath = null
+                CsprojPath = null,
+                KeepStaging = true
             },
             Install = new ModulePipelineInstallOptions { Enabled = false },
             Segments = new IConfigurationSegment[]
@@ -129,5 +154,15 @@ public sealed class ModulePipelineApprovedModulesTests
         }) + Environment.NewLine;
 
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static string[] ReadRequiredModuleNames(string manifestPath)
+    {
+        Assert.True(ManifestEditor.TryGetRequiredModules(manifestPath, out var required));
+        return (required ?? Array.Empty<ManifestEditor.RequiredModule>())
+            .Select(m => m.ModuleName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!.Trim())
+            .ToArray();
     }
 }
