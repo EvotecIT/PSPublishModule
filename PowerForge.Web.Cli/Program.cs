@@ -2199,7 +2199,8 @@ internal static class WebPipelineRunner
         "xml", "help", "helpPath", "assembly",
         "changelog", "changelogPath",
         "apiIndex", "apiSitemap", "criticalCss", "hashManifest", "reportPath", "report-path",
-        "summaryPath", "baselinePath", "navCanonicalPath",
+        "summaryPath", "sarifPath", "baselinePath", "navCanonicalPath", "navProfiles",
+        "summary-path", "sarif-path", "baseline-path", "nav-canonical-path", "nav-profiles",
         "templateRoot", "templateIndex", "templateType",
         "templateDocsIndex", "templateDocsType",
         "docsScript", "searchScript",
@@ -2846,6 +2847,140 @@ internal static class WebPipelineRunner
                             throw new InvalidOperationException(stepResult.Message);
                         break;
                     }
+                    case "doctor":
+                    {
+                        var config = ResolvePath(baseDir, GetString(step, "config"));
+                        if (string.IsNullOrWhiteSpace(config))
+                            throw new InvalidOperationException("doctor requires config.");
+
+                        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                        var runBuild = GetBool(step, "build");
+                        var runVerify = GetBool(step, "verify");
+                        var runAudit = GetBool(step, "audit");
+                        var noBuild = GetBool(step, "noBuild") ?? false;
+                        var noVerify = GetBool(step, "noVerify") ?? false;
+                        var noAudit = GetBool(step, "noAudit") ?? false;
+                        var executeBuild = runBuild ?? !noBuild;
+                        var executeVerify = runVerify ?? !noVerify;
+                        var executeAudit = runAudit ?? !noAudit;
+
+                        var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+                        var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                        if (string.IsNullOrWhiteSpace(outPath))
+                            outPath = Path.Combine(Path.GetDirectoryName(config) ?? ".", "_site");
+                        var effectiveSiteRoot = string.IsNullOrWhiteSpace(siteRoot) ? outPath : siteRoot;
+
+                        if (executeBuild)
+                        {
+                            WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
+                            effectiveSiteRoot = outPath;
+                        }
+
+                        if (executeAudit && (string.IsNullOrWhiteSpace(effectiveSiteRoot) || !Directory.Exists(effectiveSiteRoot)))
+                            throw new InvalidOperationException("doctor audit requires existing siteRoot. Provide siteRoot or enable build.");
+
+                        WebVerifyResult? verify = null;
+                        if (executeVerify)
+                        {
+                            verify = WebSiteVerifier.Verify(spec, plan);
+                            if (!verify.Success)
+                            {
+                                var firstError = verify.Errors.Length > 0 ? verify.Errors[0] : "Web verify failed.";
+                                throw new InvalidOperationException(firstError);
+                            }
+                        }
+
+                        WebAuditResult? audit = null;
+                        if (executeAudit)
+                        {
+                            var include = GetString(step, "include");
+                            var exclude = GetString(step, "exclude");
+                            var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
+                            var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
+                                                    GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
+                            var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
+                                                   GetString(step, "navRequiredLink") ?? GetString(step, "nav-required-link");
+                            var navProfilesPath = GetString(step, "navProfiles") ?? GetString(step, "nav-profiles");
+                            var requiredRoutes = GetString(step, "requiredRoutes") ?? GetString(step, "required-routes") ??
+                                                 GetString(step, "requiredRoute") ?? GetString(step, "required-route");
+                            var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
+                            var navRequired = GetBool(step, "navRequired");
+                            var navOptional = GetBool(step, "navOptional");
+                            var minNavCoveragePercent = GetInt(step, "minNavCoveragePercent") ?? GetInt(step, "min-nav-coverage") ?? 0;
+                            var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
+                            var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
+                            var summary = GetBool(step, "summary") ?? false;
+                            var summaryPath = GetString(step, "summaryPath");
+                            var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                            var sarif = GetBool(step, "sarif") ?? false;
+                            var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
+                            var navCanonicalPath = GetString(step, "navCanonicalPath") ?? GetString(step, "navCanonical");
+                            var navCanonicalSelector = GetString(step, "navCanonicalSelector");
+                            var navCanonicalRequired = GetBool(step, "navCanonicalRequired") ?? false;
+                            var checkUtf8 = GetBool(step, "checkUtf8") ?? true;
+                            var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
+                            var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
+                            var checkNetworkHints = GetBool(step, "checkNetworkHints") ?? true;
+                            var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking") ?? true;
+                            var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking") ?? new WebAuditOptions().MaxHeadBlockingResources;
+
+                            var requiredRouteList = CliPatternHelper.SplitPatterns(requiredRoutes).ToList();
+                            if (requiredRouteList.Count == 0)
+                                requiredRouteList.Add("/404.html");
+                            var navRequiredLinksList = CliPatternHelper.SplitPatterns(navRequiredLinks).ToList();
+                            if (navRequiredLinksList.Count == 0)
+                                navRequiredLinksList.Add("/");
+
+                            var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
+                            var ignoreNavPatterns = BuildIgnoreNavPatternsForPipeline(ignoreNavList, useDefaultIgnoreNav);
+                            var navRequiredValue = navRequired ?? !(navOptional ?? false);
+                            var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
+                            var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+                            var resolvedSarifPath = ResolveSarifPathForPipeline(sarif, sarifPath);
+
+                            audit = WebSiteAuditor.Audit(new WebAuditOptions
+                            {
+                                SiteRoot = effectiveSiteRoot!,
+                                Include = CliPatternHelper.SplitPatterns(include),
+                                Exclude = CliPatternHelper.SplitPatterns(exclude),
+                                UseDefaultExcludes = useDefaultExclude,
+                                IgnoreNavFor = ignoreNavPatterns,
+                                NavSelector = navSelector,
+                                NavRequired = navRequiredValue,
+                                NavIgnorePrefixes = navIgnorePrefixList,
+                                NavRequiredLinks = navRequiredLinksList.ToArray(),
+                                NavProfiles = navProfiles,
+                                MinNavCoveragePercent = minNavCoveragePercent,
+                                RequiredRoutes = requiredRouteList.ToArray(),
+                                CheckLinks = GetBool(step, "checkLinks") ?? true,
+                                CheckAssets = GetBool(step, "checkAssets") ?? true,
+                                CheckNavConsistency = GetBool(step, "checkNav") ?? true,
+                                CheckTitles = GetBool(step, "checkTitles") ?? true,
+                                CheckDuplicateIds = GetBool(step, "checkDuplicateIds") ?? true,
+                                CheckHtmlStructure = GetBool(step, "checkHtmlStructure") ?? true,
+                                SummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath),
+                                SarifPath = resolvedSarifPath,
+                                SummaryMaxIssues = summaryMax,
+                                NavCanonicalPath = navCanonicalPath,
+                                NavCanonicalSelector = navCanonicalSelector,
+                                NavCanonicalRequired = navCanonicalRequired,
+                                CheckUtf8 = checkUtf8,
+                                CheckMetaCharset = checkMetaCharset,
+                                CheckUnicodeReplacementChars = checkReplacement,
+                                CheckNetworkHints = checkNetworkHints,
+                                CheckRenderBlockingResources = checkRenderBlocking,
+                                MaxHeadBlockingResources = maxHeadBlockingResources
+                            });
+
+                            if (!audit.Success)
+                                throw new InvalidOperationException(BuildAuditFailureSummary(audit, GetInt(step, "errorPreviewCount") ?? 5));
+                        }
+
+                        stepResult.Success = true;
+                        stepResult.Message = BuildDoctorSummary(verify, audit, executeBuild, executeVerify, executeAudit);
+                        break;
+                    }
                     case "dotnet-build":
                     {
                         var project = ResolvePath(baseDir, GetString(step, "project") ?? GetString(step, "solution") ?? GetString(step, "path"));
@@ -3175,6 +3310,30 @@ internal static class WebPipelineRunner
         return $"Audit ok {string.Join(", ", parts)}";
     }
 
+    private static string BuildDoctorSummary(
+        WebVerifyResult? verify,
+        WebAuditResult? audit,
+        bool buildExecuted,
+        bool verifyExecuted,
+        bool auditExecuted)
+    {
+        var parts = new List<string>();
+        parts.Add(buildExecuted ? "build" : "no-build");
+        parts.Add(verifyExecuted ? "verify" : "no-verify");
+        parts.Add(auditExecuted ? "audit" : "no-audit");
+
+        if (verify is not null)
+            parts.Add($"verify {verify.Errors.Length}e/{verify.Warnings.Length}w");
+        if (audit is not null)
+            parts.Add($"audit {audit.ErrorCount}e/{audit.WarningCount}w");
+        if (audit is not null && !string.IsNullOrWhiteSpace(audit.SummaryPath))
+            parts.Add("summary");
+        if (audit is not null && !string.IsNullOrWhiteSpace(audit.SarifPath))
+            parts.Add("sarif");
+
+        return $"Doctor ok {string.Join(", ", parts)}";
+    }
+
     private static string BuildAuditFailureSummary(WebAuditResult result, int previewCount)
     {
         var safePreviewCount = Math.Clamp(previewCount, 0, 50);
@@ -3500,17 +3659,81 @@ internal static class WebPipelineRunner
             }
             case "audit":
             {
+                var outputs = new List<string>();
                 var summaryEnabled = GetBool(step, "summary") ?? false;
                 var summaryPath = GetString(step, "summaryPath");
-                if (!summaryEnabled && string.IsNullOrWhiteSpace(summaryPath))
-                    return Array.Empty<string>();
-
                 var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
-                if (string.IsNullOrWhiteSpace(summaryPath))
-                    summaryPath = "audit-summary.json";
-                if (!string.IsNullOrWhiteSpace(siteRoot) && !Path.IsPathRooted(summaryPath))
-                    summaryPath = Path.Combine(siteRoot, summaryPath);
-                return ResolveOutputCandidates(baseDir, summaryPath);
+                if (summaryEnabled || !string.IsNullOrWhiteSpace(summaryPath))
+                {
+                    if (string.IsNullOrWhiteSpace(summaryPath))
+                        summaryPath = "audit-summary.json";
+                    if (!string.IsNullOrWhiteSpace(siteRoot) && !Path.IsPathRooted(summaryPath))
+                        summaryPath = Path.Combine(siteRoot, summaryPath);
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, summaryPath));
+                }
+
+                var sarifEnabled = GetBool(step, "sarif") ?? false;
+                var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
+                if (sarifEnabled || !string.IsNullOrWhiteSpace(sarifPath))
+                {
+                    if (string.IsNullOrWhiteSpace(sarifPath))
+                        sarifPath = "audit.sarif.json";
+                    if (!string.IsNullOrWhiteSpace(siteRoot) && !Path.IsPathRooted(sarifPath))
+                        sarifPath = Path.Combine(siteRoot, sarifPath);
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, sarifPath));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "doctor":
+            {
+                var outputs = new List<string>();
+                var configPath = ResolvePath(baseDir, GetString(step, "config"));
+                var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                var runBuild = GetBool(step, "build");
+                var noBuild = GetBool(step, "noBuild") ?? false;
+                var executeBuild = runBuild ?? !noBuild;
+                if (string.IsNullOrWhiteSpace(outPath) && !string.IsNullOrWhiteSpace(configPath))
+                    outPath = Path.Combine(Path.GetDirectoryName(configPath) ?? ".", "_site");
+                var effectiveSiteRoot = string.IsNullOrWhiteSpace(siteRoot) ? outPath : siteRoot;
+
+                if (executeBuild && !string.IsNullOrWhiteSpace(outPath))
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, outPath));
+
+                var runAudit = GetBool(step, "audit");
+                var noAudit = GetBool(step, "noAudit") ?? false;
+                var executeAudit = runAudit ?? !noAudit;
+                if (executeAudit && !string.IsNullOrWhiteSpace(effectiveSiteRoot))
+                {
+                    var summaryEnabled = GetBool(step, "summary") ?? false;
+                    var summaryPath = GetString(step, "summaryPath");
+                    if (summaryEnabled || !string.IsNullOrWhiteSpace(summaryPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(summaryPath))
+                            summaryPath = "audit-summary.json";
+                        if (!Path.IsPathRooted(summaryPath))
+                            summaryPath = Path.Combine(effectiveSiteRoot, summaryPath);
+                        outputs.AddRange(ResolveOutputCandidates(baseDir, summaryPath));
+                    }
+
+                    var sarifEnabled = GetBool(step, "sarif") ?? false;
+                    var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
+                    if (sarifEnabled || !string.IsNullOrWhiteSpace(sarifPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(sarifPath))
+                            sarifPath = "audit.sarif.json";
+                        if (!Path.IsPathRooted(sarifPath))
+                            sarifPath = Path.Combine(effectiveSiteRoot, sarifPath);
+                        outputs.AddRange(ResolveOutputCandidates(baseDir, sarifPath));
+                    }
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
             }
             default:
                 return Array.Empty<string>();
