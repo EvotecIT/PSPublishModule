@@ -26,6 +26,7 @@ if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
 var subCommand = argv[0].ToLowerInvariant();
 var subArgs = argv.Skip(1).ToArray();
 var outputJson = IsJsonOutput(subArgs);
+EnsureUtf8ConsoleEncoding();
 var logger = new WebConsoleLogger();
 
 try
@@ -1671,12 +1672,51 @@ static bool IsJsonOutput(string[] argv)
     return string.Equals(output, "json", StringComparison.OrdinalIgnoreCase);
 }
 
+static void EnsureUtf8ConsoleEncoding()
+{
+    var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    try
+    {
+        if (Console.OutputEncoding.CodePage != Encoding.UTF8.CodePage)
+            Console.OutputEncoding = utf8NoBom;
+    }
+    catch
+    {
+        // Best effort only.
+    }
+
+    try
+    {
+        if (Console.InputEncoding.CodePage != Encoding.UTF8.CodePage)
+            Console.InputEncoding = utf8NoBom;
+    }
+    catch
+    {
+        // Best effort only.
+    }
+}
+
 internal sealed class WebConsoleLogger
 {
-    public void Info(string message) => Console.WriteLine($"ℹ  {message}");
-    public void Success(string message) => Console.WriteLine($"✅ {message}");
-    public void Warn(string message) => Console.WriteLine($"⚠️ {message}");
-    public void Error(string message) => Console.WriteLine($"❌ {message}");
+    private readonly bool _useUnicodePrefixes = ShouldUseUnicodePrefixes();
+
+    public void Info(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "ℹ " : "[INFO]")} {message}");
+    public void Success(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "✅" : "[OK]")} {message}");
+    public void Warn(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "⚠️" : "[WARN]")} {message}");
+    public void Error(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "❌" : "[ERROR]")} {message}");
+
+    private static bool ShouldUseUnicodePrefixes()
+    {
+        var forceAscii = Environment.GetEnvironmentVariable("POWERFORGE_WEB_ASCII_LOGS");
+        if (string.Equals(forceAscii, "1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(forceAscii, "true", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var codePage = Console.OutputEncoding.CodePage;
+        return codePage == Encoding.UTF8.CodePage ||
+               codePage == Encoding.Unicode.CodePage ||
+               codePage == Encoding.BigEndianUnicode.CodePage;
+    }
 }
 
 internal static class WebCliFileSystem
@@ -2507,7 +2547,7 @@ internal static class WebPipelineRunner
                         stepResult.Success = audit.Success;
                         stepResult.Message = audit.Success
                             ? BuildAuditSummary(audit)
-                            : $"Audit failed ({audit.Errors.Length} errors)";
+                            : BuildAuditFailureSummary(audit, GetInt(step, "errorPreviewCount") ?? 5);
                         if (!string.IsNullOrWhiteSpace(baselineWrittenPath))
                             stepResult.Message += $", baseline {baselineWrittenPath}";
                         if (!audit.Success)
@@ -2839,6 +2879,101 @@ internal static class WebPipelineRunner
             parts.Add($"new {result.NewIssueCount}");
 
         return $"Audit ok {string.Join(", ", parts)}";
+    }
+
+    private static string BuildAuditFailureSummary(WebAuditResult result, int previewCount)
+    {
+        var safePreviewCount = Math.Clamp(previewCount, 0, 50);
+        var parts = new List<string>
+        {
+            $"Audit failed ({result.Errors.Length} errors)"
+        };
+
+        if (!string.IsNullOrWhiteSpace(result.SummaryPath))
+            parts.Add($"summary {result.SummaryPath}");
+
+        if (safePreviewCount <= 0 || result.Errors.Length == 0)
+            return string.Join(", ", parts);
+
+        var preview = result.Errors
+            .Where(static error => !string.IsNullOrWhiteSpace(error))
+            .Take(safePreviewCount)
+            .Select(error => TruncateForLog(error, 220))
+            .ToArray();
+
+        if (preview.Length == 0)
+            return string.Join(", ", parts);
+
+        var previewText = string.Join(" | ", preview);
+        var remaining = result.Errors.Length - preview.Length;
+        if (remaining > 0)
+            previewText += $" | +{remaining} more";
+
+        parts.Add($"sample: {previewText}");
+
+        if (result.Issues.Length > 0)
+        {
+            var issuePreviewCount = Math.Min(safePreviewCount, 5);
+            if (issuePreviewCount > 0)
+            {
+                var candidateIssues = result.Issues
+                    .Where(static issue => !IsGateIssue(issue))
+                    .ToArray();
+                if (candidateIssues.Length == 0)
+                    candidateIssues = result.Issues;
+
+                var issueSample = candidateIssues
+                    .Where(static issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Take(issuePreviewCount)
+                    .ToArray();
+
+                if (issueSample.Length == 0)
+                {
+                    issueSample = candidateIssues
+                        .Where(static issue => !string.IsNullOrWhiteSpace(issue.Message))
+                        .Take(issuePreviewCount)
+                        .ToArray();
+                }
+
+                if (issueSample.Length > 0)
+                {
+                    var issueText = string.Join(" | ", issueSample.Select(FormatIssueForLog));
+                    var issueRemaining = result.Issues.Length - issueSample.Length;
+                    if (issueRemaining > 0)
+                        issueText += $" | +{issueRemaining} more issues";
+
+                    parts.Add($"issues: {issueText}");
+                }
+            }
+        }
+
+        return string.Join(", ", parts);
+    }
+
+    private static bool IsGateIssue(WebAuditIssue issue)
+    {
+        if (string.Equals(issue.Category, "gate", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return issue.Message.StartsWith("Audit gate failed", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string FormatIssueForLog(WebAuditIssue issue)
+    {
+        var severity = string.IsNullOrWhiteSpace(issue.Severity) ? "warning" : issue.Severity;
+        var category = string.IsNullOrWhiteSpace(issue.Category) ? "general" : issue.Category;
+        var location = string.IsNullOrWhiteSpace(issue.Path) ? string.Empty : $" {issue.Path}";
+        var message = string.IsNullOrWhiteSpace(issue.Message) ? "issue reported" : issue.Message;
+        return TruncateForLog($"[{severity}] [{category}]{location} {message}", 220);
+    }
+
+    private static string TruncateForLog(string text, int maxLength)
+    {
+        var normalized = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (normalized.Length <= maxLength)
+            return normalized;
+
+        return normalized[..Math.Max(0, maxLength - 3)] + "...";
     }
 
     private static WebPipelineCacheState LoadPipelineCache(string cachePath, WebConsoleLogger? logger)
