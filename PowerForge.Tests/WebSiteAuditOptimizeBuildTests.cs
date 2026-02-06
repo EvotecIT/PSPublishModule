@@ -265,6 +265,59 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_WritesNoJekyllMarkerAtSiteRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-build-nojekyll-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentRoot = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(contentRoot);
+            File.WriteAllText(Path.Combine(contentRoot, "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, ".nojekyll")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_NotFoundBundleResources_AreCopiedNextToRoot404Page()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-build-404-assets-" + Guid.NewGuid().ToString("N"));

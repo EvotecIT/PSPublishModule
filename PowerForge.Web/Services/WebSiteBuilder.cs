@@ -87,6 +87,7 @@ public static class WebSiteBuilder
         };
         File.WriteAllText(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
         WriteRedirectOutputs(outDir, redirects);
+        EnsureNoJekyllFile(outDir);
 
         return new WebBuildResult
         {
@@ -96,6 +97,13 @@ public static class WebSiteBuilder
             RedirectsPath = redirectsPath,
             GeneratedAtUtc = DateTime.UtcNow
         };
+    }
+
+    private static void EnsureNoJekyllFile(string outputRoot)
+    {
+        var markerPath = Path.Combine(outputRoot, ".nojekyll");
+        if (!File.Exists(markerPath))
+            File.WriteAllText(markerPath, string.Empty);
     }
 
     private static void CopyThemeAssets(SiteSpec spec, string rootPath, string outputRoot)
