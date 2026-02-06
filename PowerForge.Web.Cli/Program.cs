@@ -543,11 +543,10 @@ try
             logger.Info($"Pages: {result.PageCount}");
             logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
             logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");
+            logger.Info($"Navigation: checked {result.NavCheckedCount}, ignored {result.NavIgnoredCount}, mismatches {result.NavMismatchCount}");
             logger.Info($"Issues: {result.ErrorCount} errors, {result.WarningCount} warnings");
             if (result.NewIssueCount > 0 || !string.IsNullOrWhiteSpace(result.BaselinePath))
                 logger.Info($"New issues: {result.NewIssueCount} (errors {result.NewErrorCount}, warnings {result.NewWarningCount})");
-            if (result.NavMismatchCount > 0)
-                logger.Info($"Nav mismatches: {result.NavMismatchCount}");
             if (result.DuplicateIdCount > 0)
                 logger.Info($"Duplicate IDs: {result.DuplicateIdCount}");
             if (result.RenderedPageCount > 0)
@@ -2659,6 +2658,9 @@ internal static class WebPipelineRunner
             parts.Add($"broken-links {result.BrokenLinkCount}");
         if (result.MissingAssetCount > 0)
             parts.Add($"missing-assets {result.MissingAssetCount}");
+        parts.Add($"nav-checked {result.NavCheckedCount}");
+        if (result.NavIgnoredCount > 0)
+            parts.Add($"nav-ignored {result.NavIgnoredCount}");
         if (result.NavMismatchCount > 0)
             parts.Add($"nav-mismatches {result.NavMismatchCount}");
         if (result.WarningCount > 0)

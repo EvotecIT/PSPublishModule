@@ -190,6 +190,8 @@ public static class WebSiteAuditor
         var assetCount = 0;
         var missingAssetCount = 0;
         var navMismatchCount = 0;
+        var navCheckedCount = 0;
+        var navIgnoredCount = 0;
         var duplicateIdCount = 0;
         var renderedPageCount = 0;
         var renderedConsoleErrorCount = 0;
@@ -338,8 +340,11 @@ public static class WebSiteAuditor
                              MatchesAny(options.IgnoreNavFor, relativePath);
             var prefixIgnored = navIgnorePrefixes.Length > 0 &&
                                 navIgnorePrefixes.Any(prefix => relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            if (options.CheckNavConsistency && (navIgnored || prefixIgnored))
+                navIgnoredCount++;
             if (options.CheckNavConsistency && !navIgnored && !prefixIgnored)
             {
+                navCheckedCount++;
                 var navElement = doc.QuerySelector(options.NavSelector);
                 if (navElement is null)
                 {
@@ -618,6 +623,8 @@ public static class WebSiteAuditor
             AssetCount = assetCount,
             MissingAssetCount = missingAssetCount,
             NavMismatchCount = navMismatchCount,
+            NavCheckedCount = navCheckedCount,
+            NavIgnoredCount = navIgnoredCount,
             DuplicateIdCount = duplicateIdCount,
             RenderedPageCount = renderedPageCount,
             RenderedConsoleErrorCount = renderedConsoleErrorCount,
@@ -647,6 +654,8 @@ public static class WebSiteAuditor
                 AssetCount = result.AssetCount,
                 MissingAssetCount = result.MissingAssetCount,
                 NavMismatchCount = result.NavMismatchCount,
+                NavCheckedCount = result.NavCheckedCount,
+                NavIgnoredCount = result.NavIgnoredCount,
                 DuplicateIdCount = result.DuplicateIdCount,
                 RenderedPageCount = result.RenderedPageCount,
                 RenderedConsoleErrorCount = result.RenderedConsoleErrorCount,

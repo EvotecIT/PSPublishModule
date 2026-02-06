@@ -19,6 +19,10 @@ public sealed class WebAuditSummary
     public int MissingAssetCount { get; set; }
     /// <summary>Total nav mismatches detected.</summary>
     public int NavMismatchCount { get; set; }
+    /// <summary>Total pages where nav was checked.</summary>
+    public int NavCheckedCount { get; set; }
+    /// <summary>Total pages skipped from nav checks by ignore patterns.</summary>
+    public int NavIgnoredCount { get; set; }
     /// <summary>Total duplicate IDs detected.</summary>
     public int DuplicateIdCount { get; set; }
     /// <summary>Total rendered pages checked.</summary>
