@@ -409,6 +409,8 @@ try
             var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
             var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
             var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
+            var minNavCoverageText = TryGetOptionValue(subArgs, "--min-nav-coverage");
+            var requiredRoutes = ReadOptionList(subArgs, "--required-route", "--required-routes");
             var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
             var navSelector = TryGetOptionValue(subArgs, "--nav-selector") ?? "nav";
             var navRequired = !HasOption(subArgs, "--nav-optional");
@@ -453,6 +455,7 @@ try
             var summaryMax = ParseIntOption(summaryMaxText, 10);
             var maxErrors = ParseIntOption(maxErrorsText, -1);
             var maxWarnings = ParseIntOption(maxWarningsText, -1);
+            var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
             if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
                 baselinePathValue = "audit-baseline.json";
             var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
@@ -468,6 +471,8 @@ try
                 NavRequired = navRequired,
                 NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
                 NavRequiredLinks = navRequiredLinks.ToArray(),
+                MinNavCoveragePercent = minNavCoveragePercent,
+                RequiredRoutes = requiredRoutes.ToArray(),
                 CheckLinks = !HasOption(subArgs, "--no-links"),
                 CheckAssets = !HasOption(subArgs, "--no-assets"),
                 CheckNavConsistency = !HasOption(subArgs, "--no-nav"),
@@ -543,7 +548,9 @@ try
             logger.Info($"Pages: {result.PageCount}");
             logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
             logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");
-            logger.Info($"Navigation: checked {result.NavCheckedCount}, ignored {result.NavIgnoredCount}, mismatches {result.NavMismatchCount}");
+            logger.Info($"Navigation: checked {result.NavCheckedCount}, ignored {result.NavIgnoredCount}, coverage {result.NavCoveragePercent:0.0}%, mismatches {result.NavMismatchCount}");
+            if (result.RequiredRouteCount > 0)
+                logger.Info($"Required routes: {result.RequiredRouteCount} (missing {result.MissingRequiredRouteCount})");
             logger.Info($"Issues: {result.ErrorCount} errors, {result.WarningCount} warnings");
             if (result.NewIssueCount > 0 || !string.IsNullOrWhiteSpace(result.BaselinePath))
                 logger.Info($"New issues: {result.NewIssueCount} (errors {result.NewErrorCount}, warnings {result.NewWarningCount})");
@@ -914,6 +921,7 @@ try
             var hashExtensions = ReadOptionList(subArgs, "--hash-ext", "--hash-extensions");
             var hashExclude = ReadOptionList(subArgs, "--hash-exclude");
             var hashManifest = TryGetOptionValue(subArgs, "--hash-manifest");
+            var reportPath = TryGetOptionValue(subArgs, "--report-path");
             var headersEnabled = HasOption(subArgs, "--headers");
             var headersOut = TryGetOptionValue(subArgs, "--headers-out");
             var headersHtml = TryGetOptionValue(subArgs, "--headers-html");
@@ -955,6 +963,7 @@ try
                 HashExtensions = hashExtensions.Count > 0 ? hashExtensions.ToArray() : new[] { ".css", ".js" },
                 HashExclude = hashExclude.Count > 0 ? hashExclude.ToArray() : Array.Empty<string>(),
                 HashManifestPath = hashManifest,
+                ReportPath = reportPath,
                 AssetPolicy = policy
             });
 
@@ -975,8 +984,11 @@ try
             logger.Info($"HTML files: {optimizeResult.HtmlFileCount}");
             logger.Info($"Critical CSS inlined: {optimizeResult.CriticalCssInlinedCount}");
             logger.Info($"Minified HTML: {optimizeResult.HtmlMinifiedCount}");
+            logger.Info($"HTML bytes saved: {optimizeResult.HtmlBytesSaved}");
             logger.Info($"Minified CSS: {optimizeResult.CssMinifiedCount}");
+            logger.Info($"CSS bytes saved: {optimizeResult.CssBytesSaved}");
             logger.Info($"Minified JS: {optimizeResult.JsMinifiedCount}");
+            logger.Info($"JS bytes saved: {optimizeResult.JsBytesSaved}");
             if (optimizeResult.HashedAssetCount > 0)
             {
                 logger.Info($"Hashed assets: {optimizeResult.HashedAssetCount}");
@@ -984,6 +996,8 @@ try
             }
             if (optimizeResult.CacheHeadersWritten)
                 logger.Info($"Cache headers: {optimizeResult.CacheHeadersPath}");
+            if (!string.IsNullOrWhiteSpace(optimizeResult.ReportPath))
+                logger.Info($"Optimize report: {optimizeResult.ReportPath}");
             return 0;
         }
         case "pipeline":
@@ -1363,6 +1377,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
     Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
     Console.WriteLine("                     [--nav-required-link <path[,path]>]");
+    Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
     Console.WriteLine("                     [--nav-optional]");
     Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>]");
     Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
@@ -1385,7 +1400,7 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
     Console.WriteLine("                     [--hash-assets] [--hash-ext <.css,.js>] [--hash-exclude <glob[,glob]>] [--hash-manifest <file>]");
-    Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>]");
+    Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>] [--report-path <file>]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
     Console.WriteLine("  powerforge-web dotnet-publish --project <path> --out <dir> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--define-constants <list>]");
     Console.WriteLine("                     [--clean]");
@@ -1775,7 +1790,7 @@ internal static class WebPipelineRunner
         "out", "output", "source", "destination", "dest",
         "xml", "help", "helpPath", "assembly",
         "changelog", "changelogPath",
-        "apiIndex", "apiSitemap", "criticalCss", "hashManifest",
+        "apiIndex", "apiSitemap", "criticalCss", "hashManifest", "reportPath", "report-path",
         "summaryPath", "baselinePath", "navCanonicalPath",
         "templateRoot", "templateIndex", "templateType",
         "templateDocsIndex", "templateDocsType",
@@ -2200,6 +2215,7 @@ internal static class WebPipelineRunner
                         var hashExtensions = GetArrayOfStrings(step, "hashExtensions") ?? GetArrayOfStrings(step, "hash-ext");
                         var hashExclude = GetArrayOfStrings(step, "hashExclude") ?? GetArrayOfStrings(step, "hash-exclude");
                         var hashManifest = GetString(step, "hashManifest") ?? GetString(step, "hash-manifest");
+                        var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
                         var cacheHeaders = GetBool(step, "cacheHeaders") ?? GetBool(step, "headers") ?? false;
                         var cacheHeadersOut = GetString(step, "cacheHeadersOut") ?? GetString(step, "headersOut") ?? GetString(step, "headers-out");
                         var cacheHeadersHtml = GetString(step, "cacheHeadersHtml") ?? GetString(step, "headersHtml");
@@ -2239,6 +2255,7 @@ internal static class WebPipelineRunner
                             HashExtensions = hashExtensions ?? new[] { ".css", ".js" },
                             HashExclude = hashExclude ?? Array.Empty<string>(),
                             HashManifestPath = hashManifest,
+                            ReportPath = reportPath,
                             AssetPolicy = policy
                         });
                         stepResult.Success = true;
@@ -2258,6 +2275,9 @@ internal static class WebPipelineRunner
                                                 GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
                         var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
                                                GetString(step, "navRequiredLink") ?? GetString(step, "nav-required-link");
+                        var minNavCoveragePercent = GetInt(step, "minNavCoveragePercent") ?? GetInt(step, "min-nav-coverage") ?? 0;
+                        var requiredRoutes = GetString(step, "requiredRoutes") ?? GetString(step, "required-routes") ??
+                                             GetString(step, "requiredRoute") ?? GetString(step, "required-route");
                         var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
                         var navRequired = GetBool(step, "navRequired");
                         var navOptional = GetBool(step, "navOptional");
@@ -2320,6 +2340,8 @@ internal static class WebPipelineRunner
                             NavRequired = navRequiredValue,
                             NavIgnorePrefixes = navIgnorePrefixList,
                             NavRequiredLinks = CliPatternHelper.SplitPatterns(navRequiredLinks),
+                            MinNavCoveragePercent = minNavCoveragePercent,
+                            RequiredRoutes = CliPatternHelper.SplitPatterns(requiredRoutes),
                             CheckLinks = checkLinks,
                             CheckAssets = checkAssets,
                             CheckNavConsistency = checkNav,
@@ -2636,11 +2658,19 @@ internal static class WebPipelineRunner
             parts.Add($"css {result.CssMinifiedCount}");
         if (result.JsMinifiedCount > 0)
             parts.Add($"js {result.JsMinifiedCount}");
+        if (result.HtmlBytesSaved > 0)
+            parts.Add($"html-saved {result.HtmlBytesSaved}B");
+        if (result.CssBytesSaved > 0)
+            parts.Add($"css-saved {result.CssBytesSaved}B");
+        if (result.JsBytesSaved > 0)
+            parts.Add($"js-saved {result.JsBytesSaved}B");
 
         if (result.HashedAssetCount > 0)
             parts.Add($"hashed {result.HashedAssetCount}");
         if (result.CacheHeadersWritten)
             parts.Add("headers");
+        if (!string.IsNullOrWhiteSpace(result.ReportPath))
+            parts.Add("report");
 
         return $"Optimize {string.Join(", ", parts)}";
     }
@@ -2661,8 +2691,13 @@ internal static class WebPipelineRunner
         parts.Add($"nav-checked {result.NavCheckedCount}");
         if (result.NavIgnoredCount > 0)
             parts.Add($"nav-ignored {result.NavIgnoredCount}");
+        parts.Add($"nav-coverage {result.NavCoveragePercent:0.0}%");
         if (result.NavMismatchCount > 0)
             parts.Add($"nav-mismatches {result.NavMismatchCount}");
+        if (result.RequiredRouteCount > 0)
+            parts.Add($"required-routes {result.RequiredRouteCount}");
+        if (result.MissingRequiredRouteCount > 0)
+            parts.Add($"missing-required-routes {result.MissingRequiredRouteCount}");
         if (result.WarningCount > 0)
             parts.Add($"warnings {result.WarningCount}");
         if (result.NewIssueCount > 0)
@@ -2870,6 +2905,32 @@ internal static class WebPipelineRunner
                 if (string.IsNullOrWhiteSpace(outPath) && !string.IsNullOrWhiteSpace(siteRoot))
                     outPath = Path.Combine(siteRoot, "sitemap.xml");
                 return ResolveOutputCandidates(baseDir, outPath);
+            }
+            case "optimize":
+            {
+                var outputs = new List<string>();
+                var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
+                var hashManifest = GetString(step, "hashManifest") ?? GetString(step, "hash-manifest");
+                var cacheHeaders = GetBool(step, "cacheHeaders") ?? GetBool(step, "headers") ?? false;
+                var cacheHeadersOut = GetString(step, "cacheHeadersOut") ?? GetString(step, "headersOut") ?? GetString(step, "headers-out");
+
+                if (!string.IsNullOrWhiteSpace(siteRoot))
+                {
+                    if (!string.IsNullOrWhiteSpace(reportPath))
+                        outputs.AddRange(ResolveOutputCandidates(siteRoot, reportPath));
+                    if (!string.IsNullOrWhiteSpace(hashManifest))
+                        outputs.AddRange(ResolveOutputCandidates(siteRoot, hashManifest));
+                    if (cacheHeaders)
+                    {
+                        var headersPath = string.IsNullOrWhiteSpace(cacheHeadersOut) ? "_headers" : cacheHeadersOut;
+                        outputs.AddRange(ResolveOutputCandidates(siteRoot, headersPath));
+                    }
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
             }
             case "audit":
             {

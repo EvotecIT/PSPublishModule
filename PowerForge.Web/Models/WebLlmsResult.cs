@@ -101,26 +101,53 @@ public sealed class WebOptimizeResult
 {
     /// <summary>Total number of unique files updated.</summary>
     public int UpdatedCount { get; set; }
+    /// <summary>Relative paths for files updated during optimization.</summary>
+    public string[] UpdatedFiles { get; set; } = Array.Empty<string>();
     /// <summary>Total HTML files discovered under site root.</summary>
     public int HtmlFileCount { get; set; }
+    /// <summary>Total CSS files discovered under site root.</summary>
+    public int CssFileCount { get; set; }
+    /// <summary>Total JavaScript files discovered under site root.</summary>
+    public int JsFileCount { get; set; }
     /// <summary>Number of HTML files updated by critical CSS inlining.</summary>
     public int CriticalCssInlinedCount { get; set; }
     /// <summary>Number of HTML files minified.</summary>
     public int HtmlMinifiedCount { get; set; }
+    /// <summary>Total UTF-8 bytes saved while minifying HTML files.</summary>
+    public long HtmlBytesSaved { get; set; }
     /// <summary>Number of CSS files minified.</summary>
     public int CssMinifiedCount { get; set; }
+    /// <summary>Total UTF-8 bytes saved while minifying CSS files.</summary>
+    public long CssBytesSaved { get; set; }
     /// <summary>Number of JavaScript files minified.</summary>
     public int JsMinifiedCount { get; set; }
+    /// <summary>Total UTF-8 bytes saved while minifying JavaScript files.</summary>
+    public long JsBytesSaved { get; set; }
     /// <summary>Number of assets renamed during hashing.</summary>
     public int HashedAssetCount { get; set; }
+    /// <summary>Detailed original-to-hashed asset mapping.</summary>
+    public WebOptimizeHashedAssetEntry[] HashedAssets { get; set; } = Array.Empty<WebOptimizeHashedAssetEntry>();
     /// <summary>Number of HTML files with rewritten references after hashing.</summary>
     public int HtmlHashRewriteCount { get; set; }
     /// <summary>Number of CSS files with rewritten references after hashing.</summary>
     public int CssHashRewriteCount { get; set; }
+    /// <summary>Resolved path to the generated hash manifest (if written).</summary>
+    public string? HashManifestPath { get; set; }
     /// <summary>True when cache headers file was written.</summary>
     public bool CacheHeadersWritten { get; set; }
     /// <summary>Optional path to generated cache headers file.</summary>
     public string? CacheHeadersPath { get; set; }
+    /// <summary>Optional path to the optimization report JSON file.</summary>
+    public string? ReportPath { get; set; }
+}
+
+/// <summary>Maps an original asset path to its hashed output path.</summary>
+public sealed class WebOptimizeHashedAssetEntry
+{
+    /// <summary>Original asset path.</summary>
+    public string OriginalPath { get; set; } = string.Empty;
+    /// <summary>Hashed asset path.</summary>
+    public string HashedPath { get; set; } = string.Empty;
 }
 
 /// <summary>Result payload for dotnet build.</summary>

@@ -105,6 +105,99 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_FailsWhenNavCoverageIsBelowThreshold()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-nav-coverage-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+
+            var apiRoot = Path.Combine(root, "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Api</title></head>
+                <body><header><nav><a href="/api/">API</a></nav></header></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                IgnoreNavFor = new[] { "api/**" },
+                MinNavCoveragePercent = 80,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.False(result.Success);
+            Assert.Equal(50.0, result.NavCoveragePercent, 2);
+            Assert.Contains(result.Errors, error => error.Contains("min-nav-coverage", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_FailsWhenRequiredRouteIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-required-routes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "404.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Not found</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                RequiredRoutes = new[] { "/", "/404.html", "/api/" },
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.False(result.Success);
+            Assert.Equal(3, result.RequiredRouteCount);
+            Assert.Equal(1, result.MissingRequiredRouteCount);
+            Assert.Contains(result.Errors, error => error.Contains("required route '/api/' is missing", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void OptimizeDetailed_ReturnsPerStageCounters()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-" + Guid.NewGuid().ToString("N"));
@@ -191,6 +284,48 @@ public class WebSiteAuditOptimizeBuildTests
             });
 
             Assert.Equal(2, result.HashedAssetCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_WritesReportWithUpdatedFilesAndByteSavings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-report-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                  <head><title>Test</title><link rel="stylesheet" href="/app.css" /></head>
+                  <body><script src="/site.js"></script><h1> Hello </h1></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "app.css"), "body { color: red; margin: 0; }");
+            File.WriteAllText(Path.Combine(root, "site.js"), "function x(){ console.log('ok'); } x();");
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                MinifyHtml = true,
+                MinifyCss = true,
+                MinifyJs = true,
+                ReportPath = "_reports/optimize-report.json"
+            });
+
+            Assert.False(string.IsNullOrWhiteSpace(result.ReportPath));
+            Assert.True(File.Exists(result.ReportPath!));
+            Assert.NotEmpty(result.UpdatedFiles);
+            Assert.True(result.HtmlBytesSaved >= 0);
+            Assert.True(result.CssBytesSaved >= 0);
+            Assert.True(result.JsBytesSaved >= 0);
         }
         finally
         {
