@@ -30,10 +30,10 @@ public class WebSiteVerifierTests
                 {
                   "name": "portable-test",
                   "engine": "scriban",
-                  "layouts": { "home": "/layouts/home.html" },
+                  "layouts": { "home": "C:\\layouts\\home.html" },
                   "assets": {
                     "bundles": [
-                      { "name": "global", "css": ["/themes/portable-test/assets/app.css"] }
+                      { "name": "global", "css": ["file://portable-test/assets/app.css"] }
                     ]
                   }
                 }
@@ -64,7 +64,9 @@ public class WebSiteVerifierTests
 
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, warning =>
-                warning.Contains("portable relative path", StringComparison.OrdinalIgnoreCase));
+                warning.Contains("C:\\layouts\\home.html", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("file://portable-test/assets/app.css", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
