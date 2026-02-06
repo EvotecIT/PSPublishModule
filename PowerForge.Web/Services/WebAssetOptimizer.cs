@@ -34,6 +34,20 @@ public sealed class WebAssetOptimizerOptions
     public int ImageQuality { get; set; } = 82;
     /// <summary>When true, strip metadata from optimized images.</summary>
     public bool ImageStripMetadata { get; set; } = true;
+    /// <summary>When true, generate WebP variants for supported images.</summary>
+    public bool ImageGenerateWebp { get; set; } = false;
+    /// <summary>When true, generate AVIF variants for supported images.</summary>
+    public bool ImageGenerateAvif { get; set; } = false;
+    /// <summary>When true, rewrite image src URLs to preferred next-gen variants when available.</summary>
+    public bool ImagePreferNextGen { get; set; } = false;
+    /// <summary>Responsive image widths (pixels) used to generate srcset variants.</summary>
+    public int[] ResponsiveImageWidths { get; set; } = Array.Empty<int>();
+    /// <summary>When true, add lazy-loading and decoding hints to image tags.</summary>
+    public bool EnhanceImageTags { get; set; } = false;
+    /// <summary>Maximum allowed final bytes per image (0 disables).</summary>
+    public long ImageMaxBytesPerFile { get; set; } = 0;
+    /// <summary>Maximum allowed total final image bytes (0 disables).</summary>
+    public long ImageMaxTotalBytes { get; set; } = 0;
     /// <summary>Enable asset hashing (fingerprinting).</summary>
     public bool HashAssets { get; set; }
     /// <summary>File extensions to hash.</summary>
@@ -55,6 +69,26 @@ public static class WebAssetOptimizer
     private static readonly Regex HtmlAttrRegex = new("(?<attr>href|src)=\"(?<url>[^\"]+)\"", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CssUrlRegex = new("url\\((?<quote>['\"]?)(?<url>[^'\")]+)\\k<quote>\\)", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StylesheetLinkRegex = new("<link\\s+rel=\"stylesheet\"\\s+href=\"([^\"]+)\"\\s*/?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgTagRegex = new("<img\\b(?<attrs>[^>]*?)>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgSrcAttrRegex = new("\\bsrc\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgSrcSetAttrRegex = new("\\bsrcset\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgSizesAttrRegex = new("\\bsizes\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgLoadingAttrRegex = new("\\bloading\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ImgDecodingAttrRegex = new("\\bdecoding\\s*=\\s*(?<quote>['\"])(?<value>[^'\"]+)\\k<quote>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+
+    private sealed class ImageVariantPlan
+    {
+        public string RelativePath { get; init; } = string.Empty;
+        public int? Width { get; init; }
+    }
+
+    private sealed class ImageRewritePlan
+    {
+        public string SourceRelativePath { get; init; } = string.Empty;
+        public string PreferredRelativePath { get; set; } = string.Empty;
+        public int OriginalWidth { get; set; }
+        public List<ImageVariantPlan> ResponsiveVariants { get; } = new();
+    }
     /// <summary>Runs asset optimization and returns the count of updated HTML files.</summary>
     /// <param name="options">Optimization options.</param>
     /// <returns>Number of HTML files updated with critical CSS.</returns>
@@ -137,7 +171,7 @@ public static class WebAssetOptimizer
         // Optimize images before hashing so hashed filenames always match final image bytes.
         if (options.OptimizeImages)
         {
-            OptimizeImages(siteRoot, options, result, MarkUpdated);
+            OptimizeImages(siteRoot, htmlFiles, options, result, MarkUpdated);
         }
 
         var hashSpec = ResolveHashSpec(options, policy);
@@ -501,18 +535,25 @@ public static class WebAssetOptimizer
 
     private static void OptimizeImages(
         string siteRoot,
+        string[] htmlFiles,
         WebAssetOptimizerOptions options,
         WebOptimizeResult result,
         Action<string>? onUpdated = null)
     {
         var extensionSet = NormalizeExtensions(options.ImageExtensions, new[] { ".png", ".jpg", ".jpeg", ".webp" });
-        var allImageFiles = Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
-            .Where(path => extensionSet.Contains(Path.GetExtension(path)))
-            .ToList();
-        var optimizedImages = new List<WebOptimizeImageEntry>();
         var quality = Math.Clamp(options.ImageQuality, 1, 100);
+        var responsiveWidths = (options.ResponsiveImageWidths ?? Array.Empty<int>())
+            .Where(width => width > 0)
+            .Distinct()
+            .OrderBy(width => width)
+            .ToArray();
+        var optimizedImages = new List<WebOptimizeImageEntry>();
+        var generatedVariants = new List<WebOptimizeImageVariantEntry>();
+        var budgetWarnings = new List<string>();
+        var rewritePlans = new Dictionary<string, ImageRewritePlan>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var file in allImageFiles)
+        foreach (var file in Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
+                     .Where(path => extensionSet.Contains(Path.GetExtension(path))))
         {
             var relative = ToRelative(siteRoot, file);
             if (options.ImageInclude is { Length: > 0 } && !IsIncluded(relative, options.ImageInclude))
@@ -523,22 +564,26 @@ public static class WebAssetOptimizer
             result.ImageFileCount++;
             var originalBytes = new FileInfo(file).Length;
             var finalBytes = originalBytes;
+            var imageWidth = 0;
             result.ImageBytesBefore += originalBytes;
 
             try
             {
                 using var image = new MagickImage(file);
+                imageWidth = (int)image.Width;
                 if (options.ImageStripMetadata)
                     image.Strip();
                 if (SupportsQualitySetting(image.Format))
                     image.Quality = (uint)quality;
 
-                using var stream = new MemoryStream();
-                image.Write(stream);
-                var optimizedBytes = stream.Length;
+                using var optimizedStream = new MemoryStream();
+                image.Write(optimizedStream);
+                var optimizedBytes = optimizedStream.Length;
                 if (optimizedBytes > 0 && optimizedBytes < originalBytes)
                 {
-                    File.WriteAllBytes(file, stream.ToArray());
+                    optimizedStream.Position = 0;
+                    using var fileStream = new FileStream(file, FileMode.Create, FileAccess.Write, FileShare.None);
+                    optimizedStream.CopyTo(fileStream);
                     finalBytes = optimizedBytes;
                     var savedBytes = originalBytes - optimizedBytes;
                     result.ImageOptimizedCount++;
@@ -552,6 +597,90 @@ public static class WebAssetOptimizer
                     });
                     onUpdated?.Invoke(file);
                 }
+
+                var plan = new ImageRewritePlan
+                {
+                    SourceRelativePath = relative,
+                    PreferredRelativePath = relative,
+                    OriginalWidth = imageWidth
+                };
+                var preferredBytes = finalBytes;
+
+                if (options.ImageGenerateWebp && TryEncodeVariant(image, null, MagickFormat.WebP, quality, out var webpBytes))
+                {
+                    if (webpBytes.LongLength > 0 && webpBytes.LongLength < finalBytes &&
+                        TryWriteVariant(siteRoot, relative, null, "webp", webpBytes, out var webpRelative, onUpdated))
+                    {
+                        generatedVariants.Add(new WebOptimizeImageVariantEntry
+                        {
+                            SourcePath = relative,
+                            VariantPath = webpRelative,
+                            Format = "webp",
+                            Width = null,
+                            Bytes = webpBytes.LongLength
+                        });
+                        if (options.ImagePreferNextGen && webpBytes.LongLength < preferredBytes)
+                        {
+                            preferredBytes = webpBytes.LongLength;
+                            plan.PreferredRelativePath = webpRelative;
+                        }
+                    }
+                }
+
+                if (options.ImageGenerateAvif && TryEncodeVariant(image, null, MagickFormat.Avif, quality, out var avifBytes))
+                {
+                    if (avifBytes.LongLength > 0 && avifBytes.LongLength < finalBytes &&
+                        TryWriteVariant(siteRoot, relative, null, "avif", avifBytes, out var avifRelative, onUpdated))
+                    {
+                        generatedVariants.Add(new WebOptimizeImageVariantEntry
+                        {
+                            SourcePath = relative,
+                            VariantPath = avifRelative,
+                            Format = "avif",
+                            Width = null,
+                            Bytes = avifBytes.LongLength
+                        });
+                        if (options.ImagePreferNextGen && avifBytes.LongLength < preferredBytes)
+                        {
+                            preferredBytes = avifBytes.LongLength;
+                            plan.PreferredRelativePath = avifRelative;
+                        }
+                    }
+                }
+
+                if (responsiveWidths.Length > 0 && imageWidth > 0)
+                {
+                    var responsiveExtension = Path.GetExtension(plan.PreferredRelativePath).Trim('.').ToLowerInvariant();
+                    var responsiveFormat = ResolveMagickFormatForExtension(responsiveExtension);
+                    foreach (var width in responsiveWidths)
+                    {
+                        if (width >= imageWidth)
+                            continue;
+                        if (!TryEncodeVariant(image, width, responsiveFormat, quality, out var responsiveBytes))
+                            continue;
+                        if (responsiveBytes.LongLength <= 0 || responsiveBytes.LongLength >= preferredBytes)
+                            continue;
+                        if (!TryWriteVariant(siteRoot, plan.PreferredRelativePath, width, responsiveExtension, responsiveBytes, out var variantRelative, onUpdated))
+                            continue;
+
+                        plan.ResponsiveVariants.Add(new ImageVariantPlan
+                        {
+                            RelativePath = variantRelative,
+                            Width = width
+                        });
+                        generatedVariants.Add(new WebOptimizeImageVariantEntry
+                        {
+                            SourcePath = relative,
+                            VariantPath = variantRelative,
+                            Format = responsiveExtension,
+                            Width = width,
+                            Bytes = responsiveBytes.LongLength
+                        });
+                    }
+                }
+
+                if (options.ImagePreferNextGen || options.EnhanceImageTags || plan.ResponsiveVariants.Count > 0)
+                    rewritePlans[relative] = plan;
             }
             catch (Exception ex)
             {
@@ -559,12 +688,274 @@ public static class WebAssetOptimizer
             }
 
             result.ImageBytesAfter += finalBytes;
+            if (options.ImageMaxBytesPerFile > 0 && finalBytes > options.ImageMaxBytesPerFile)
+                budgetWarnings.Add($"Image '{relative}' exceeds max-bytes-per-file ({finalBytes} > {options.ImageMaxBytesPerFile}).");
         }
+
+        if (options.ImageMaxTotalBytes > 0 && result.ImageBytesAfter > options.ImageMaxTotalBytes)
+            budgetWarnings.Add($"Total image bytes exceed max-total-bytes ({result.ImageBytesAfter} > {options.ImageMaxTotalBytes}).");
+
+        if (rewritePlans.Count > 0)
+            RewriteHtmlImageTags(siteRoot, htmlFiles, rewritePlans, options, result, onUpdated);
 
         result.OptimizedImages = optimizedImages
             .OrderByDescending(entry => entry.BytesSaved)
             .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        result.GeneratedImageVariants = generatedVariants
+            .OrderBy(entry => entry.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Width ?? int.MaxValue)
+            .ThenBy(entry => entry.VariantPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        result.ImageVariantCount = result.GeneratedImageVariants.Length;
+        result.ImageBudgetWarnings = budgetWarnings.ToArray();
+        result.ImageBudgetExceeded = budgetWarnings.Count > 0;
+    }
+
+    private static void RewriteHtmlImageTags(
+        string siteRoot,
+        string[] htmlFiles,
+        Dictionary<string, ImageRewritePlan> rewritePlans,
+        WebAssetOptimizerOptions options,
+        WebOptimizeResult result,
+        Action<string>? onUpdated)
+    {
+        foreach (var htmlFile in htmlFiles)
+        {
+            var html = File.ReadAllText(htmlFile);
+            if (string.IsNullOrWhiteSpace(html))
+                continue;
+
+            var fileChanged = false;
+            var hintedInFile = 0;
+            var rewritten = ImgTagRegex.Replace(html, match =>
+            {
+                var attrs = match.Groups["attrs"].Value;
+                var srcMatch = ImgSrcAttrRegex.Match(attrs);
+                if (!srcMatch.Success)
+                    return match.Value;
+
+                var srcValue = srcMatch.Groups["value"].Value;
+                if (!TryResolveImageReference(siteRoot, htmlFile, srcValue, out var resolvedRelative))
+                    return match.Value;
+                if (!rewritePlans.TryGetValue(resolvedRelative, out var plan))
+                    return match.Value;
+
+                var changed = false;
+                var attrsUpdated = attrs;
+                var preferredSrc = BuildUrlForReference(siteRoot, htmlFile, srcValue, plan.PreferredRelativePath);
+
+                if (options.ImagePreferNextGen &&
+                    !string.Equals(plan.PreferredRelativePath, resolvedRelative, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(preferredSrc, srcValue, StringComparison.Ordinal))
+                {
+                    attrsUpdated = ImgSrcAttrRegex.Replace(attrsUpdated, m => $"src={m.Groups["quote"].Value}{preferredSrc}{m.Groups["quote"].Value}", 1);
+                    changed = true;
+                }
+
+                if (plan.ResponsiveVariants.Count > 0 && !ImgSrcSetAttrRegex.IsMatch(attrsUpdated))
+                {
+                    var srcsetEntries = plan.ResponsiveVariants
+                        .OrderBy(variant => variant.Width ?? int.MaxValue)
+                        .Select(variant =>
+                        {
+                            var url = BuildUrlForReference(siteRoot, htmlFile, srcValue, variant.RelativePath);
+                            return $"{url} {variant.Width}w";
+                        })
+                        .ToList();
+
+                    if (plan.OriginalWidth > 0)
+                    {
+                        var baseSrc = BuildUrlForReference(siteRoot, htmlFile, srcValue, plan.PreferredRelativePath);
+                        srcsetEntries.Add($"{baseSrc} {plan.OriginalWidth}w");
+                    }
+
+                    if (srcsetEntries.Count > 0)
+                    {
+                        attrsUpdated += $" srcset=\"{string.Join(", ", srcsetEntries)}\"";
+                        if (!ImgSizesAttrRegex.IsMatch(attrsUpdated))
+                            attrsUpdated += " sizes=\"100vw\"";
+                        changed = true;
+                    }
+                }
+
+                if (options.EnhanceImageTags)
+                {
+                    if (!ImgLoadingAttrRegex.IsMatch(attrsUpdated))
+                    {
+                        attrsUpdated += " loading=\"lazy\"";
+                        hintedInFile++;
+                        changed = true;
+                    }
+                    if (!ImgDecodingAttrRegex.IsMatch(attrsUpdated))
+                    {
+                        attrsUpdated += " decoding=\"async\"";
+                        hintedInFile++;
+                        changed = true;
+                    }
+                }
+
+                if (!changed)
+                    return match.Value;
+
+                fileChanged = true;
+                return $"<img{attrsUpdated}>";
+            });
+
+            if (!fileChanged || string.Equals(rewritten, html, StringComparison.Ordinal))
+                continue;
+
+            File.WriteAllText(htmlFile, rewritten);
+            result.ImageHtmlRewriteCount++;
+            result.ImageHintedCount += hintedInFile;
+            onUpdated?.Invoke(htmlFile);
+        }
+    }
+
+    private static bool TryResolveImageReference(string siteRoot, string htmlFile, string sourceUrl, out string relativePath)
+    {
+        relativePath = string.Empty;
+        if (string.IsNullOrWhiteSpace(sourceUrl))
+            return false;
+
+        var baseUrl = SplitUrlPath(sourceUrl, out _);
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return false;
+        if (baseUrl.StartsWith("#", StringComparison.Ordinal) ||
+            baseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            baseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            baseUrl.StartsWith("//", StringComparison.OrdinalIgnoreCase) ||
+            baseUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+            baseUrl.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (baseUrl.StartsWith("/", StringComparison.Ordinal))
+        {
+            relativePath = baseUrl.TrimStart('/').Replace('\\', '/');
+            return !string.IsNullOrWhiteSpace(relativePath);
+        }
+
+        var htmlDir = Path.GetDirectoryName(htmlFile) ?? siteRoot;
+        var candidate = Path.GetFullPath(Path.Combine(htmlDir, baseUrl.Replace('/', Path.DirectorySeparatorChar)));
+        if (!IsUnderRoot(candidate, siteRoot))
+            return false;
+
+        relativePath = ToRelative(siteRoot, candidate);
+        return !string.IsNullOrWhiteSpace(relativePath);
+    }
+
+    private static string BuildUrlForReference(string siteRoot, string htmlFile, string originalUrl, string targetRelativePath)
+    {
+        var baseUrl = SplitUrlPath(originalUrl, out var suffix);
+        var targetRelative = targetRelativePath.Replace('\\', '/');
+        string rewritten;
+        if (baseUrl.StartsWith("/", StringComparison.Ordinal))
+        {
+            rewritten = "/" + targetRelative;
+        }
+        else
+        {
+            var htmlDir = Path.GetDirectoryName(htmlFile) ?? siteRoot;
+            var targetFull = Path.GetFullPath(Path.Combine(siteRoot, targetRelative.Replace('/', Path.DirectorySeparatorChar)));
+            var relative = Path.GetRelativePath(htmlDir, targetFull).Replace('\\', '/');
+            rewritten = string.IsNullOrWhiteSpace(relative) ? "./" : relative;
+        }
+
+        return rewritten + suffix;
+    }
+
+    private static string SplitUrlPath(string url, out string suffix)
+    {
+        suffix = string.Empty;
+        if (string.IsNullOrWhiteSpace(url))
+            return string.Empty;
+
+        var q = url.IndexOf('?');
+        var h = url.IndexOf('#');
+        var splitIndex = q >= 0 && h >= 0 ? Math.Min(q, h) : Math.Max(q, h);
+        if (splitIndex < 0)
+            return url;
+        suffix = url.Substring(splitIndex);
+        return url.Substring(0, splitIndex);
+    }
+
+    private static bool TryEncodeVariant(MagickImage sourceImage, int? width, MagickFormat format, int quality, out byte[] bytes)
+    {
+        bytes = Array.Empty<byte>();
+        if (sourceImage is null)
+            return false;
+
+        try
+        {
+            using var variant = sourceImage.Clone();
+            if (width.HasValue && width.Value > 0 && width.Value < variant.Width)
+                variant.Resize((uint)width.Value, 0);
+            if (SupportsQualitySetting(format))
+                variant.Quality = (uint)quality;
+            variant.Format = format;
+            using var stream = new MemoryStream();
+            variant.Write(stream);
+            bytes = stream.ToArray();
+            return bytes.Length > 0;
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Image variant encode failed ({format}, width {width}): {ex.GetType().Name}: {ex.Message}");
+            bytes = Array.Empty<byte>();
+            return false;
+        }
+    }
+
+    private static bool TryWriteVariant(
+        string siteRoot,
+        string sourceRelativePath,
+        int? width,
+        string formatExtension,
+        byte[] bytes,
+        out string variantRelativePath,
+        Action<string>? onUpdated = null)
+    {
+        variantRelativePath = string.Empty;
+        if (bytes is null || bytes.Length == 0)
+            return false;
+
+        var ext = formatExtension.Trim().TrimStart('.').ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(ext))
+            return false;
+
+        var sourceExt = Path.GetExtension(sourceRelativePath).TrimStart('.').ToLowerInvariant();
+        if (!width.HasValue && string.Equals(sourceExt, ext, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var relativeNoExt = Path.Combine(
+            Path.GetDirectoryName(sourceRelativePath) ?? string.Empty,
+            Path.GetFileNameWithoutExtension(sourceRelativePath))
+            .Replace('\\', '/');
+
+        var variantName = width.HasValue
+            ? $"{relativeNoExt}.w{width.Value}.{ext}"
+            : $"{relativeNoExt}.{ext}";
+
+        var variantPath = Path.Combine(siteRoot, variantName.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(variantPath)!);
+        File.WriteAllBytes(variantPath, bytes);
+        onUpdated?.Invoke(variantPath);
+        variantRelativePath = ToRelative(siteRoot, variantPath);
+        return true;
+    }
+
+    private static MagickFormat ResolveMagickFormatForExtension(string extension)
+    {
+        return extension.ToLowerInvariant() switch
+        {
+            "jpg" => MagickFormat.Jpeg,
+            "jpeg" => MagickFormat.Jpeg,
+            "png" => MagickFormat.Png,
+            "gif" => MagickFormat.Gif,
+            "avif" => MagickFormat.Avif,
+            "webp" => MagickFormat.WebP,
+            _ => MagickFormat.WebP
+        };
     }
 
     private static HashSet<string> NormalizeExtensions(string[]? extensions, string[] defaults)
@@ -585,13 +976,7 @@ public static class WebAssetOptimizer
 
     private static bool SupportsQualitySetting(MagickFormat format)
     {
-        var name = format.ToString();
-        return name.Contains("Jpeg", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Jpg", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("WebP", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Heic", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Heif", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Avif", StringComparison.OrdinalIgnoreCase);
+        return format is MagickFormat.Jpeg or MagickFormat.Jpg or MagickFormat.WebP or MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Avif;
     }
 
     private static bool IsIncluded(string relativePath, string[] patterns)

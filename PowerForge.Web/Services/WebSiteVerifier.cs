@@ -359,6 +359,10 @@ public static class WebSiteVerifier
         if (manifest is null)
             return;
 
+        var contractVersion = manifest.ContractVersion ?? 1;
+        if (contractVersion != 1 && contractVersion != 2)
+            warnings.Add($"Theme '{manifest.Name}' uses unsupported contractVersion '{contractVersion}'. Supported values: 1, 2.");
+
         if (string.IsNullOrWhiteSpace(manifest.Engine))
         {
             warnings.Add($"Theme '{manifest.Name}' does not set 'engine' in theme.json. Set 'simple' or 'scriban' explicitly.");
@@ -375,7 +379,18 @@ public static class WebSiteVerifier
 
         ValidateThemeMappedPaths(manifest.Layouts, $"theme:{manifest.Name} layouts", warnings);
         ValidateThemeMappedPaths(manifest.Partials, $"theme:{manifest.Name} partials", warnings);
+        ValidateThemeMappedPaths(manifest.Slots, $"theme:{manifest.Name} slots", warnings);
         ValidateThemeAssetPortability(manifest, warnings);
+        ValidateThemeSlots(loader, themeRoot, manifest, warnings);
+
+        if (contractVersion >= 2)
+        {
+            if (string.IsNullOrWhiteSpace(manifest.DefaultLayout))
+                warnings.Add($"Theme '{manifest.Name}' contractVersion 2 should set 'defaultLayout'.");
+
+            if (manifest.Slots is null || manifest.Slots.Count == 0)
+                warnings.Add($"Theme '{manifest.Name}' contractVersion 2 should define 'slots' for portable hook points.");
+        }
 
         if (!string.IsNullOrWhiteSpace(manifest.DefaultLayout))
         {
@@ -393,6 +408,35 @@ public static class WebSiteVerifier
             {
                 warnings.Add($"Theme '{manifest.Name}' defines tokens but does not provide partial 'theme-tokens'. Tokens will not be emitted unless layouts render them manually.");
             }
+        }
+    }
+
+    private static void ValidateThemeSlots(ThemeLoader loader, string themeRoot, ThemeManifest manifest, List<string> warnings)
+    {
+        if (loader is null || string.IsNullOrWhiteSpace(themeRoot) || manifest is null || warnings is null)
+            return;
+        if (manifest.Slots is null || manifest.Slots.Count == 0)
+            return;
+
+        foreach (var slot in manifest.Slots)
+        {
+            var key = slot.Key ?? string.Empty;
+            var partialName = slot.Value ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                warnings.Add($"Theme '{manifest.Name}' contains an empty slot name.");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(partialName))
+            {
+                warnings.Add($"Theme '{manifest.Name}' slot '{key}' has an empty partial mapping.");
+                continue;
+            }
+
+            var path = loader.ResolvePartialPath(themeRoot, manifest, partialName);
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                warnings.Add($"Theme '{manifest.Name}' slot '{key}' maps to missing partial '{partialName}'.");
         }
     }
 

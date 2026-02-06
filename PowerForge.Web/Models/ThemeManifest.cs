@@ -7,6 +7,8 @@ public sealed class ThemeManifest
 {
     /// <summary>Theme name.</summary>
     public string Name { get; set; } = string.Empty;
+    /// <summary>Theme contract version. Use 2 for the portable v2 contract.</summary>
+    public int? ContractVersion { get; set; }
     /// <summary>Optional theme version.</summary>
     public string? Version { get; set; }
     /// <summary>Optional author name.</summary>
@@ -27,6 +29,8 @@ public sealed class ThemeManifest
     public Dictionary<string, string>? Layouts { get; set; }
     /// <summary>Named partial mapping.</summary>
     public Dictionary<string, string>? Partials { get; set; }
+    /// <summary>Named slot mapping used by layouts to inject reusable sections.</summary>
+    public Dictionary<string, string>? Slots { get; set; }
     /// <summary>Asset registry configuration.</summary>
     public AssetRegistrySpec? Assets { get; set; }
     /// <summary>Theme token values.</summary>

@@ -133,6 +133,7 @@ public sealed class ThemeLoader
         var merged = new ThemeManifest
         {
             Name = string.IsNullOrWhiteSpace(child.Name) ? parent.Name : child.Name,
+            ContractVersion = child.ContractVersion ?? parent.ContractVersion,
             Version = child.Version ?? parent.Version,
             Author = child.Author ?? parent.Author,
             Engine = child.Engine ?? parent.Engine,
@@ -143,6 +144,7 @@ public sealed class ThemeLoader
             AssetsPath = child.AssetsPath ?? parent.AssetsPath,
             Layouts = MergeDictionary(parent.Layouts, child.Layouts),
             Partials = MergeDictionary(parent.Partials, child.Partials),
+            Slots = MergeDictionary(parent.Slots, child.Slots),
             Tokens = MergeTokens(parent.Tokens, child.Tokens),
             Assets = child.Assets ?? parent.Assets
         };

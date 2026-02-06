@@ -135,6 +135,18 @@ public sealed class WebOptimizeResult
     public long ImageBytesSaved { get; set; }
     /// <summary>Detailed image optimization entries for files that changed.</summary>
     public WebOptimizeImageEntry[] OptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
+    /// <summary>Number of generated image variants (responsive or next-gen).</summary>
+    public int ImageVariantCount { get; set; }
+    /// <summary>Generated image variant entries.</summary>
+    public WebOptimizeImageVariantEntry[] GeneratedImageVariants { get; set; } = Array.Empty<WebOptimizeImageVariantEntry>();
+    /// <summary>Number of HTML files where image tags were rewritten.</summary>
+    public int ImageHtmlRewriteCount { get; set; }
+    /// <summary>Total number of image tags that received loading/decoding hints.</summary>
+    public int ImageHintedCount { get; set; }
+    /// <summary>True when configured image budgets were exceeded.</summary>
+    public bool ImageBudgetExceeded { get; set; }
+    /// <summary>Image budget warnings emitted during optimization.</summary>
+    public string[] ImageBudgetWarnings { get; set; } = Array.Empty<string>();
     /// <summary>Number of assets renamed during hashing.</summary>
     public int HashedAssetCount { get; set; }
     /// <summary>Detailed original-to-hashed asset mapping.</summary>
@@ -164,6 +176,21 @@ public sealed class WebOptimizeImageEntry
     public long BytesAfter { get; set; }
     /// <summary>Bytes saved by optimization.</summary>
     public long BytesSaved { get; set; }
+}
+
+/// <summary>Describes a generated image variant.</summary>
+public sealed class WebOptimizeImageVariantEntry
+{
+    /// <summary>Source image path relative to site root.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+    /// <summary>Generated variant path relative to site root.</summary>
+    public string VariantPath { get; set; } = string.Empty;
+    /// <summary>Variant format extension (for example webp or avif).</summary>
+    public string Format { get; set; } = string.Empty;
+    /// <summary>Variant width in pixels when responsive variant was generated.</summary>
+    public int? Width { get; set; }
+    /// <summary>Variant file size in bytes.</summary>
+    public long Bytes { get; set; }
 }
 
 /// <summary>Maps an original asset path to its hashed output path.</summary>
