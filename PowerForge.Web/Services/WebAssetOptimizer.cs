@@ -134,6 +134,12 @@ public static class WebAssetOptimizer
             }
         }
 
+        // Optimize images before hashing so hashed filenames always match final image bytes.
+        if (options.OptimizeImages)
+        {
+            OptimizeImages(siteRoot, options, result, MarkUpdated);
+        }
+
         var hashSpec = ResolveHashSpec(options, policy);
         Dictionary<string, string>? hashMap = null;
         if (hashSpec.Enabled)
@@ -237,11 +243,6 @@ public static class WebAssetOptimizer
                     MarkUpdated(jsFile);
                 }
             }
-        }
-
-        if (options.OptimizeImages)
-        {
-            OptimizeImages(siteRoot, options, result, MarkUpdated);
         }
 
         if (policy?.CacheHeaders?.Enabled == true)
