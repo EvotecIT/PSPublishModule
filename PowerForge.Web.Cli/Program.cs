@@ -335,6 +335,114 @@ try
 
             return verify.Success ? 0 : 1;
         }
+        case "doctor":
+        {
+            var configPath = TryGetOptionValue(subArgs, "--config");
+            if (string.IsNullOrWhiteSpace(configPath))
+                return Fail("Missing required --config.", outputJson, logger, "web.doctor");
+
+            var siteRootArg = TryGetOptionValue(subArgs, "--site-root") ??
+                              TryGetOptionValue(subArgs, "--root") ??
+                              TryGetOptionValue(subArgs, "--path");
+            var outPath = TryGetOptionValue(subArgs, "--out") ??
+                          TryGetOptionValue(subArgs, "--out-path") ??
+                          TryGetOptionValue(subArgs, "--output-path");
+            var runBuild = !HasOption(subArgs, "--no-build");
+            var runVerify = !HasOption(subArgs, "--no-verify");
+            var runAudit = !HasOption(subArgs, "--no-audit");
+
+            var fullConfigPath = ResolveExistingFilePath(configPath);
+            var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+            var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+
+            if (string.IsNullOrWhiteSpace(outPath))
+                outPath = Path.Combine(Path.GetDirectoryName(fullConfigPath) ?? ".", "_site");
+            var siteRoot = string.IsNullOrWhiteSpace(siteRootArg) ? outPath : siteRootArg;
+
+            if (runBuild)
+            {
+                WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
+                siteRoot = outPath;
+            }
+
+            if (runAudit && (string.IsNullOrWhiteSpace(siteRoot) || !Directory.Exists(siteRoot)))
+                return Fail("Doctor audit requires an existing site root. Use --out with --build or pass --site-root.", outputJson, logger, "web.doctor");
+
+            var verify = runVerify ? WebSiteVerifier.Verify(spec, plan) : null;
+            var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs) : null;
+            var recommendations = BuildDoctorRecommendations(verify, audit);
+            var success = (verify?.Success ?? true) && (audit?.Success ?? true);
+
+            var doctorResult = new WebDoctorResult
+            {
+                Success = success,
+                ConfigPath = specPath,
+                SiteRoot = siteRoot ?? string.Empty,
+                BuildExecuted = runBuild,
+                VerifyExecuted = runVerify,
+                AuditExecuted = runAudit,
+                Verify = verify,
+                Audit = audit,
+                Recommendations = recommendations
+            };
+
+            if (outputJson)
+            {
+                WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "web.doctor",
+                    Success = doctorResult.Success,
+                    ExitCode = doctorResult.Success ? 0 : 1,
+                    Config = "web",
+                    ConfigPath = specPath,
+                    Spec = WebCliJson.SerializeToElement(spec, WebCliJson.Context.SiteSpec),
+                    Plan = WebCliJson.SerializeToElement(plan, WebCliJson.Context.WebSitePlan),
+                    Result = WebCliJson.SerializeToElement(doctorResult, WebCliJson.Context.WebDoctorResult)
+                });
+                return doctorResult.Success ? 0 : 1;
+            }
+
+            if (runVerify && verify is not null)
+            {
+                foreach (var warning in verify.Warnings)
+                    logger.Warn($"verify: {warning}");
+                foreach (var error in verify.Errors)
+                    logger.Error($"verify: {error}");
+            }
+
+            if (runAudit && audit is not null)
+            {
+                foreach (var warning in audit.Warnings)
+                    logger.Warn($"audit: {warning}");
+                foreach (var error in audit.Errors)
+                    logger.Error($"audit: {error}");
+            }
+
+            if (doctorResult.Success)
+                logger.Success("Web doctor passed.");
+
+            logger.Info($"Build executed: {doctorResult.BuildExecuted}");
+            logger.Info($"Verify executed: {doctorResult.VerifyExecuted}");
+            logger.Info($"Audit executed: {doctorResult.AuditExecuted}");
+            if (verify is not null)
+                logger.Info($"Verify: {verify.Errors.Length} errors, {verify.Warnings.Length} warnings");
+            if (audit is not null)
+            {
+                logger.Info($"Audit: {audit.ErrorCount} errors, {audit.WarningCount} warnings");
+                if (!string.IsNullOrWhiteSpace(audit.SummaryPath))
+                    logger.Info($"Audit summary: {audit.SummaryPath}");
+                if (!string.IsNullOrWhiteSpace(audit.SarifPath))
+                    logger.Info($"Audit SARIF: {audit.SarifPath}");
+            }
+            if (recommendations.Length > 0)
+            {
+                foreach (var recommendation in recommendations)
+                    logger.Info($"Recommendation: {recommendation}");
+            }
+
+            return doctorResult.Success ? 0 : 1;
+        }
         case "markdown-fix":
         {
             var rootPath = TryGetOptionValue(subArgs, "--root") ??
@@ -1442,6 +1550,9 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
     Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
     Console.WriteLine("  powerforge-web verify --config <site.json> [--output json]");
+    Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
+    Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
+    Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>] [--output json]");
     Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
     Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
     Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
@@ -1633,6 +1744,133 @@ static WebAuditNavProfile[] LoadAuditNavProfiles(string? navProfilesPath)
                    ?? Array.Empty<WebAuditNavProfile>();
     return profiles
         .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+        .ToArray();
+}
+
+static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
+{
+    var include = ReadOptionList(argv, "--include");
+    var exclude = ReadOptionList(argv, "--exclude");
+    var ignoreNav = ReadOptionList(argv, "--ignore-nav", "--ignore-nav-path");
+    var navIgnorePrefixes = ReadOptionList(argv, "--nav-ignore-prefix", "--nav-ignore-prefixes");
+    var navRequiredLinks = ReadOptionList(argv, "--nav-required-link", "--nav-required-links");
+    var navProfilesPath = TryGetOptionValue(argv, "--nav-profiles");
+    var requiredRoutes = ReadOptionList(argv, "--required-route", "--required-routes");
+    var minNavCoverageText = TryGetOptionValue(argv, "--min-nav-coverage");
+    var navSelector = TryGetOptionValue(argv, "--nav-selector") ?? "nav";
+    var navRequired = !HasOption(argv, "--nav-optional");
+    var useDefaultIgnoreNav = !HasOption(argv, "--no-default-ignore-nav");
+    var useDefaultExclude = !HasOption(argv, "--no-default-exclude");
+    var summaryEnabled = HasOption(argv, "--summary");
+    var summaryPath = TryGetOptionValue(argv, "--summary-path");
+    var summaryMaxText = TryGetOptionValue(argv, "--summary-max");
+    var sarifEnabled = HasOption(argv, "--sarif");
+    var sarifPath = TryGetOptionValue(argv, "--sarif-path");
+    var navCanonical = TryGetOptionValue(argv, "--nav-canonical");
+    var navCanonicalSelector = TryGetOptionValue(argv, "--nav-canonical-selector");
+    var navCanonicalRequired = HasOption(argv, "--nav-canonical-required");
+    var checkUtf8 = !HasOption(argv, "--no-utf8");
+    var checkMetaCharset = !HasOption(argv, "--no-meta-charset");
+    var checkReplacementChars = !HasOption(argv, "--no-replacement-char-check");
+    var checkNetworkHints = !HasOption(argv, "--no-network-hints");
+    var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
+    var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
+
+    if (requiredRoutes.Count == 0)
+        requiredRoutes.Add("/404.html");
+    if (navRequiredLinks.Count == 0)
+        navRequiredLinks.Add("/");
+
+    var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
+    var summaryMax = ParseIntOption(summaryMaxText, 10);
+    var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
+    var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
+    var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
+    var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
+    var navProfiles = LoadAuditNavProfiles(navProfilesPath);
+
+    return WebSiteAuditor.Audit(new WebAuditOptions
+    {
+        SiteRoot = siteRoot,
+        Include = include.ToArray(),
+        Exclude = exclude.ToArray(),
+        UseDefaultExcludes = useDefaultExclude,
+        IgnoreNavFor = ignoreNavPatterns,
+        NavSelector = navSelector,
+        NavRequired = navRequired,
+        NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
+        NavRequiredLinks = navRequiredLinks.ToArray(),
+        NavProfiles = navProfiles,
+        MinNavCoveragePercent = minNavCoveragePercent,
+        RequiredRoutes = requiredRoutes.ToArray(),
+        CheckLinks = !HasOption(argv, "--no-links"),
+        CheckAssets = !HasOption(argv, "--no-assets"),
+        CheckNavConsistency = !HasOption(argv, "--no-nav"),
+        CheckTitles = !(HasOption(argv, "--no-titles") || HasOption(argv, "--no-title")),
+        CheckDuplicateIds = !HasOption(argv, "--no-ids"),
+        CheckHtmlStructure = !HasOption(argv, "--no-structure"),
+        SummaryPath = resolvedSummaryPath,
+        SarifPath = resolvedSarifPath,
+        SummaryMaxIssues = summaryMax,
+        NavCanonicalPath = navCanonical,
+        NavCanonicalSelector = navCanonicalSelector,
+        NavCanonicalRequired = navCanonicalRequired,
+        CheckUtf8 = checkUtf8,
+        CheckMetaCharset = checkMetaCharset,
+        CheckUnicodeReplacementChars = checkReplacementChars,
+        CheckNetworkHints = checkNetworkHints,
+        CheckRenderBlockingResources = checkRenderBlocking,
+        MaxHeadBlockingResources = maxHeadBlockingResources
+    });
+}
+
+static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResult? audit)
+{
+    var recommendations = new List<string>();
+
+    static bool ContainsText(IEnumerable<string> source, string text) =>
+        source.Any(line => line.Contains(text, StringComparison.OrdinalIgnoreCase));
+
+    static bool ContainsCategory(WebAuditResult result, string category) =>
+        result.Issues.Any(issue => issue.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
+
+    if (verify is not null)
+    {
+        if (verify.Errors.Length > 0)
+            recommendations.Add("Fix `verify` errors first; they indicate broken site configuration or portability contracts.");
+        if (ContainsText(verify.Warnings, "theme manifest"))
+            recommendations.Add("Standardize themes on `theme.manifest.json` contract v2 (including `scriptsPath`) for portable reusable themes.");
+        if (ContainsText(verify.Warnings, "Markdown hygiene"))
+            recommendations.Add("Convert raw HTML-heavy docs to native Markdown to reduce styling drift and simplify maintenance.");
+        if (ContainsText(verify.Warnings, "portable relative path"))
+            recommendations.Add("Replace rooted/OS-specific paths in theme mappings with portable relative paths.");
+    }
+
+    if (audit is not null)
+    {
+        if (audit.BrokenLinkCount > 0)
+            recommendations.Add("Fix broken internal links before publish (`audit` link errors).");
+        if (audit.MissingAssetCount > 0)
+            recommendations.Add("Fix missing CSS/JS/image assets to avoid runtime regressions.");
+        if (audit.MissingRequiredRouteCount > 0)
+            recommendations.Add("Ensure required routes like `/404.html` are generated and published.");
+        if (audit.NavMismatchCount > 0 || ContainsCategory(audit, "nav"))
+            recommendations.Add("Unify navigation templates/components so all page families (docs/api/404) share a consistent nav contract.");
+        if (ContainsCategory(audit, "network-hint"))
+            recommendations.Add("Add `preconnect`/`dns-prefetch` hints for external origins (for example Google Fonts) to reduce critical path latency.");
+        if (ContainsCategory(audit, "render-blocking"))
+            recommendations.Add("Reduce render-blocking head resources: defer non-critical scripts and consolidate CSS.");
+        if (ContainsCategory(audit, "utf8"))
+            recommendations.Add("Enforce UTF-8 output and meta charset declarations to avoid encoding regressions.");
+        if (ContainsCategory(audit, "duplicate-id"))
+            recommendations.Add("Remove duplicate HTML IDs to improve accessibility and scripting reliability.");
+    }
+
+    if (recommendations.Count == 0)
+        recommendations.Add("No major engine findings detected by doctor. Keep running verify+audit in CI.");
+
+    return recommendations
+        .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToArray();
 }
 
