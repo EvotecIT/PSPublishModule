@@ -43,6 +43,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("extra_css_html", context.ExtraCssHtml);
         globals.Add("extra_scripts_html", context.ExtraScriptsHtml);
         globals.Add("body_class", context.BodyClass);
+        globals.Add("edit_url", context.Page.EditUrl ?? string.Empty);
         globals.Add("data", ToScriptValue(context.Data));
         globals.Add("canonical_html", context.CanonicalHtml);
         globals.Add("description_meta_html", context.DescriptionMetaHtml);
