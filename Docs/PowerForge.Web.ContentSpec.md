@@ -380,7 +380,13 @@ Shortcodes can be implemented as:
 - theme partials `partials/shortcodes/<name>.html`
 
 ## Navigation
-Navigation lives in `site.json` under `Navigation.Menus` with optional `Navigation.Actions`.
+Navigation lives in `site.json` under `Navigation`:
+- `Navigation.Menus` (primary structures)
+- `Navigation.Actions` (header CTA/icon links)
+- `Navigation.Regions` (named slots like `header.left`, `header.right`, `mobile.drawer`)
+- `Navigation.Footer` (columns + legal links)
+- `Navigation.Profiles` (path/layout/collection/project scoped overrides)
+
 Templates receive a computed `navigation` object with active states.
 
 ### Default auto navigation
@@ -394,7 +400,7 @@ To disable this default behavior, define `Navigation` and set:
 ```
 
 `Navigation.Actions` is for header buttons/icons (theme toggles, GitHub, CTA).
-These items can be links or buttons and are exposed as `navigation.actions`.
+These items are exposed as `navigation.actions`.
 
 ### Auto navigation (folder‑driven)
 You can also generate navigation from folder structure:
@@ -426,6 +432,84 @@ Example actions (link + button):
       { "Title": "GitHub", "Url": "https://github.com/org/repo", "External": true, "CssClass": "nav-icon" }
     ]
   }
+}
+```
+
+### Visibility rules (per menu/per item)
+Use visibility filters to scope nav elements:
+```json
+{
+  "Navigation": {
+    "Menus": [
+      {
+        "Name": "main",
+        "Visibility": { "Paths": ["/docs/**"] },
+        "Items": [
+          { "Title": "Docs", "Url": "/docs/" },
+          {
+            "Title": "API",
+            "Url": "/api/",
+            "Visibility": { "Projects": ["core"] }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Regions + footer + profiles
+Use regions for complex headers and profiles for route-specific nav variants:
+```json
+{
+  "Navigation": {
+    "Regions": [
+      { "Name": "header.left", "Menus": ["main"] },
+      { "Name": "header.right", "IncludeActions": true }
+    ],
+    "Footer": {
+      "Label": "default",
+      "Menus": ["footer-product", "footer-company"],
+      "Legal": [
+        { "Title": "Privacy", "Url": "/privacy/" },
+        { "Title": "Terms", "Url": "/terms/" }
+      ]
+    },
+    "Profiles": [
+      {
+        "Name": "api",
+        "Paths": ["/api/**"],
+        "Priority": 20,
+        "InheritMenus": false,
+        "Menus": [
+          {
+            "Name": "main",
+            "Items": [
+              { "Title": "API Home", "Url": "/api/" },
+              { "Title": "Docs", "Url": "/docs/" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Mega menu sections
+Each menu item can optionally define `Sections`/`Columns` for richer dropdowns:
+```json
+{
+  "Title": "Products",
+  "Sections": [
+    {
+      "Title": "SDK",
+      "Items": [
+        { "Title": ".NET", "Url": "/docs/library/overview/" },
+        { "Title": "PowerShell", "Url": "/docs/powershell/overview/" }
+      ]
+    }
+  ]
 }
 ```
 

@@ -421,31 +421,41 @@
         "Mode": { "type": "string", "enum": ["contenthash", "mtime"] }
       }
     },
-      "NavigationSpec": {
-        "type": "object",
-        "additionalProperties": false,
-          "properties": {
-            "AutoDefaults": { "type": "boolean", "default": true },
-            "Menus": {
-              "type": "array",
-              "items": { "$ref": "#/$defs/MenuSpec" }
-            },
-          "Actions": {
-            "type": "array",
-            "items": { "$ref": "#/$defs/MenuItemSpec" }
-          },
-          "Auto": {
-            "type": "array",
-            "items": { "$ref": "#/$defs/NavigationAutoSpec" }
-          }
+    "NavigationSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "AutoDefaults": { "type": "boolean", "default": true },
+        "Menus": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuSpec" }
+        },
+        "Actions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        },
+        "Regions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NavigationRegionSpec" }
+        },
+        "Footer": { "$ref": "#/$defs/NavigationFooterSpec" },
+        "Profiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NavigationProfileSpec" }
+        },
+        "Auto": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NavigationAutoSpec" }
         }
-      },
+      }
+    },
     "MenuSpec": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "Name": { "type": "string" },
         "Label": { "type": "string" },
+        "Visibility": { "$ref": "#/$defs/NavigationVisibilitySpec" },
         "Items": {
           "type": "array",
           "items": { "$ref": "#/$defs/MenuItemSpec" }
@@ -453,31 +463,141 @@
       },
       "required": ["Name"]
     },
-      "MenuItemSpec": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "Title": { "type": "string" },
-          "Text": { "type": "string" },
-          "Url": { "type": "string" },
-          "Icon": { "type": "string" },
-          "IconHtml": { "type": "string" },
-          "Kind": { "type": "string" },
-          "CssClass": { "type": "string" },
-          "AriaLabel": { "type": "string" },
-          "Badge": { "type": "string" },
-          "Description": { "type": "string" },
-          "Target": { "type": "string" },
+    "MenuItemSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Id": { "type": "string" },
+        "Title": { "type": "string" },
+        "Text": { "type": "string" },
+        "Url": { "type": "string" },
+        "Icon": { "type": "string" },
+        "IconHtml": { "type": "string" },
+        "Kind": { "type": "string" },
+        "Slot": { "type": "string" },
+        "Template": { "type": "string" },
+        "CssClass": { "type": "string" },
+        "AriaLabel": { "type": "string" },
+        "Badge": { "type": "string" },
+        "Description": { "type": "string" },
+        "Target": { "type": "string" },
         "Rel": { "type": "string" },
         "External": { "type": "boolean" },
         "Weight": { "type": "number" },
         "Match": { "type": "string" },
+        "Visibility": { "$ref": "#/$defs/NavigationVisibilitySpec" },
+        "Sections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuSectionSpec" }
+        },
+        "Meta": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "Items": {
           "type": "array",
           "items": { "$ref": "#/$defs/MenuItemSpec" }
         }
       },
       "required": ["Title"]
+    },
+    "NavigationRegionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Title": { "type": "string" },
+        "Menus": { "type": "array", "items": { "type": "string" } },
+        "Items": { "type": "array", "items": { "$ref": "#/$defs/MenuItemSpec" } },
+        "IncludeActions": { "type": "boolean" },
+        "CssClass": { "type": "string" }
+      },
+      "required": ["Name"]
+    },
+    "NavigationFooterSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Label": { "type": "string" },
+        "Columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NavigationFooterColumnSpec" }
+        },
+        "Menus": { "type": "array", "items": { "type": "string" } },
+        "Legal": { "type": "array", "items": { "$ref": "#/$defs/MenuItemSpec" } }
+      }
+    },
+    "NavigationFooterColumnSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Title": { "type": "string" },
+        "Items": { "type": "array", "items": { "$ref": "#/$defs/MenuItemSpec" } }
+      },
+      "required": ["Name"]
+    },
+    "NavigationProfileSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Paths": { "type": "array", "items": { "type": "string" } },
+        "Collections": { "type": "array", "items": { "type": "string" } },
+        "Layouts": { "type": "array", "items": { "type": "string" } },
+        "Projects": { "type": "array", "items": { "type": "string" } },
+        "Priority": { "type": "integer" },
+        "InheritMenus": { "type": "boolean", "default": true },
+        "InheritActions": { "type": "boolean", "default": true },
+        "InheritRegions": { "type": "boolean", "default": true },
+        "InheritFooter": { "type": "boolean", "default": true },
+        "Menus": { "type": "array", "items": { "$ref": "#/$defs/MenuSpec" } },
+        "Actions": { "type": "array", "items": { "$ref": "#/$defs/MenuItemSpec" } },
+        "Regions": { "type": "array", "items": { "$ref": "#/$defs/NavigationRegionSpec" } },
+        "Footer": { "$ref": "#/$defs/NavigationFooterSpec" }
+      },
+      "required": ["Name"]
+    },
+    "NavigationVisibilitySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Paths": { "type": "array", "items": { "type": "string" } },
+        "ExcludePaths": { "type": "array", "items": { "type": "string" } },
+        "Collections": { "type": "array", "items": { "type": "string" } },
+        "Layouts": { "type": "array", "items": { "type": "string" } },
+        "Projects": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "MenuSectionSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Title": { "type": "string" },
+        "Description": { "type": "string" },
+        "CssClass": { "type": "string" },
+        "Items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        },
+        "Columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuColumnSpec" }
+        }
+      }
+    },
+    "MenuColumnSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Title": { "type": "string" },
+        "Items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MenuItemSpec" }
+        }
+      }
     },
     "NavigationAutoSpec": {
       "type": "object",

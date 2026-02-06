@@ -8,6 +8,15 @@ public sealed class NavigationRuntime
 
     /// <summary>Resolved navigation action items (buttons/links).</summary>
     public NavigationItem[] Actions { get; set; } = Array.Empty<NavigationItem>();
+
+    /// <summary>Resolved named regions for advanced header/footer/mobile layouts.</summary>
+    public NavigationRegion[] Regions { get; set; } = Array.Empty<NavigationRegion>();
+
+    /// <summary>Resolved footer model.</summary>
+    public NavigationFooter? Footer { get; set; }
+
+    /// <summary>Selected navigation profile name (if any).</summary>
+    public string? ActiveProfile { get; set; }
 }
 
 /// <summary>Resolved menu with navigation items.</summary>
@@ -26,6 +35,9 @@ public sealed class NavigationMenu
 /// <summary>Resolved navigation item with active state.</summary>
 public sealed class NavigationItem
 {
+    /// <summary>Optional stable identifier.</summary>
+    public string? Id { get; set; }
+
     /// <summary>Display title.</summary>
     public string Title { get; set; } = string.Empty;
 
@@ -43,6 +55,12 @@ public sealed class NavigationItem
 
     /// <summary>Optional item kind.</summary>
     public string? Kind { get; set; }
+
+    /// <summary>Optional slot name (for example nav/start/nav/end).</summary>
+    public string? Slot { get; set; }
+
+    /// <summary>Optional template key for custom component rendering.</summary>
+    public string? Template { get; set; }
 
     /// <summary>Optional CSS class.</summary>
     public string? CssClass { get; set; }
@@ -77,7 +95,90 @@ public sealed class NavigationItem
     /// <summary>Optional match override.</summary>
     public string? Match { get; set; }
 
+    /// <summary>Optional mega-menu sections.</summary>
+    public NavigationSection[] Sections { get; set; } = Array.Empty<NavigationSection>();
+
+    /// <summary>Optional custom metadata exposed to templates.</summary>
+    public Dictionary<string, object?>? Meta { get; set; }
+
     /// <summary>Child menu items.</summary>
+    public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
+}
+
+/// <summary>Resolved named region.</summary>
+public sealed class NavigationRegion
+{
+    /// <summary>Region identifier.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Optional title.</summary>
+    public string? Title { get; set; }
+
+    /// <summary>Optional CSS class.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Resolved items for the region.</summary>
+    public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
+}
+
+/// <summary>Resolved footer with columns and legal links.</summary>
+public sealed class NavigationFooter
+{
+    /// <summary>Optional footer label.</summary>
+    public string? Label { get; set; }
+
+    /// <summary>Footer columns.</summary>
+    public NavigationFooterColumn[] Columns { get; set; } = Array.Empty<NavigationFooterColumn>();
+
+    /// <summary>Footer legal/support links.</summary>
+    public NavigationItem[] Legal { get; set; } = Array.Empty<NavigationItem>();
+}
+
+/// <summary>Resolved footer column.</summary>
+public sealed class NavigationFooterColumn
+{
+    /// <summary>Column identifier.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Column title.</summary>
+    public string? Title { get; set; }
+
+    /// <summary>Column links/items.</summary>
+    public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
+}
+
+/// <summary>Mega menu section runtime model.</summary>
+public sealed class NavigationSection
+{
+    /// <summary>Section identifier.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Section title.</summary>
+    public string? Title { get; set; }
+
+    /// <summary>Section description.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Optional CSS class.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Section links/items.</summary>
+    public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
+
+    /// <summary>Nested section columns.</summary>
+    public NavigationColumn[] Columns { get; set; } = Array.Empty<NavigationColumn>();
+}
+
+/// <summary>Navigation column runtime model.</summary>
+public sealed class NavigationColumn
+{
+    /// <summary>Column identifier.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Column title.</summary>
+    public string? Title { get; set; }
+
+    /// <summary>Column links/items.</summary>
     public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
 }
 

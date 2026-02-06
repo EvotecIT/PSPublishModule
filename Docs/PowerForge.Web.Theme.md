@@ -300,6 +300,9 @@ Projects can provide:
 Navigation and breadcrumbs are computed at render time:
 - `navigation.menus` (active/ancestor flags included)
 - `navigation.actions` (header buttons/icons)
+- `navigation.regions` (named slots with resolved items)
+- `navigation.footer` (columns + legal links)
+- `navigation.active_profile` (selected profile name, when applicable)
 - `breadcrumbs` (array of `{ title, url, is_current }`)
 
 Example:
@@ -324,6 +327,37 @@ Header actions example:
     {{ end }}
   {{ end }}
 </div>
+```
+
+Regions example:
+```html
+{{ for region in navigation.regions }}
+  {{ if region.name == "header.right" }}
+    <div class="nav-right">
+      {{ for item in region.items }}
+        <a href="{{ item.url }}">{{ item.title }}</a>
+      {{ end }}
+    </div>
+  {{ end }}
+{{ end }}
+```
+
+Footer example:
+```html
+{{ if navigation.footer }}
+  <footer>
+    {{ for column in navigation.footer.columns }}
+      <section>
+        <h3>{{ column.title || column.name }}</h3>
+        <ul>
+          {{ for link in column.items }}
+            <li><a href="{{ link.url }}">{{ link.title }}</a></li>
+          {{ end }}
+        </ul>
+      </section>
+    {{ end }}
+  </footer>
+{{ end }}
 ```
 
 ## List pages + taxonomies

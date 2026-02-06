@@ -237,7 +237,10 @@ public static class WebSiteBuilder
             primary,
             menus,
             footer = footer.Count > 0 ? footer : null,
-            actions = MapMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>())
+            actions = MapMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>()),
+            regions = MapRegions(spec.Navigation?.Regions ?? Array.Empty<NavigationRegionSpec>()),
+            footerModel = MapFooter(spec.Navigation?.Footer),
+            profiles = MapProfiles(spec.Navigation?.Profiles ?? Array.Empty<NavigationProfileSpec>())
         };
 
         File.WriteAllText(outputPath, JsonSerializer.Serialize(payload, WebJson.Options));
@@ -259,10 +262,141 @@ public static class WebSiteBuilder
             @class = item.CssClass,
             ariaLabel = item.AriaLabel,
             iconHtml = item.IconHtml,
+            id = item.Id,
+            slot = item.Slot,
+            template = item.Template,
             badge = item.Badge,
             description = item.Description,
+            visibility = MapVisibility(item.Visibility),
+            sections = MapSections(item.Sections),
+            meta = item.Meta,
             items = MapMenuItems(item.Items)
         }).ToArray();
+    }
+
+    private static object[] MapRegions(NavigationRegionSpec[] regions)
+    {
+        if (regions is null || regions.Length == 0) return Array.Empty<object>();
+        return regions
+            .Where(region => region is not null && !string.IsNullOrWhiteSpace(region.Name))
+            .Select(region => new
+            {
+                name = region.Name,
+                title = region.Title,
+                menus = region.Menus,
+                includeActions = region.IncludeActions,
+                @class = region.CssClass,
+                items = MapMenuItems(region.Items)
+            })
+            .ToArray();
+    }
+
+    private static object? MapFooter(NavigationFooterSpec? footer)
+    {
+        if (footer is null)
+            return null;
+
+        return new
+        {
+            label = footer.Label,
+            menus = footer.Menus,
+            columns = MapFooterColumns(footer.Columns),
+            legal = MapMenuItems(footer.Legal)
+        };
+    }
+
+    private static object[] MapFooterColumns(NavigationFooterColumnSpec[] columns)
+    {
+        if (columns is null || columns.Length == 0) return Array.Empty<object>();
+        return columns
+            .Where(column => column is not null && !string.IsNullOrWhiteSpace(column.Name))
+            .Select(column => new
+            {
+                name = column.Name,
+                title = column.Title,
+                items = MapMenuItems(column.Items)
+            })
+            .ToArray();
+    }
+
+    private static object[] MapProfiles(NavigationProfileSpec[] profiles)
+    {
+        if (profiles is null || profiles.Length == 0) return Array.Empty<object>();
+        return profiles
+            .Where(profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
+            .Select(profile => new
+            {
+                name = profile.Name,
+                priority = profile.Priority,
+                paths = profile.Paths,
+                collections = profile.Collections,
+                layouts = profile.Layouts,
+                projects = profile.Projects,
+                inheritMenus = profile.InheritMenus,
+                inheritActions = profile.InheritActions,
+                inheritRegions = profile.InheritRegions,
+                inheritFooter = profile.InheritFooter,
+                menus = (profile.Menus ?? Array.Empty<MenuSpec>())
+                    .Where(menu => menu is not null && !string.IsNullOrWhiteSpace(menu.Name))
+                    .Select(menu => new
+                    {
+                        name = menu.Name,
+                        label = menu.Label,
+                        visibility = MapVisibility(menu.Visibility),
+                        items = MapMenuItems(menu.Items)
+                    })
+                    .ToArray(),
+                actions = MapMenuItems(profile.Actions ?? Array.Empty<MenuItemSpec>()),
+                regions = MapRegions(profile.Regions ?? Array.Empty<NavigationRegionSpec>()),
+                footer = MapFooter(profile.Footer)
+            })
+            .ToArray();
+    }
+
+    private static object? MapVisibility(NavigationVisibilitySpec? visibility)
+    {
+        if (visibility is null)
+            return null;
+
+        return new
+        {
+            paths = visibility.Paths,
+            excludePaths = visibility.ExcludePaths,
+            collections = visibility.Collections,
+            layouts = visibility.Layouts,
+            projects = visibility.Projects
+        };
+    }
+
+    private static object[] MapSections(MenuSectionSpec[] sections)
+    {
+        if (sections is null || sections.Length == 0) return Array.Empty<object>();
+        return sections
+            .Where(section => section is not null)
+            .Select(section => new
+            {
+                name = section.Name,
+                title = section.Title,
+                description = section.Description,
+                @class = section.CssClass,
+                items = MapMenuItems(section.Items),
+                columns = MapColumns(section.Columns)
+            })
+            .ToArray();
+    }
+
+    private static object[] MapColumns(MenuColumnSpec[] columns)
+    {
+        if (columns is null || columns.Length == 0) return Array.Empty<object>();
+        return columns
+            .Where(column => column is not null)
+            .Select(column => new
+            {
+                name = column.Name,
+                title = column.Title,
+                items = MapMenuItems(column.Items)
+            })
+            .ToArray();
     }
 
     private static IReadOnlyDictionary<string, object?> LoadData(SiteSpec spec, WebSitePlan plan, IReadOnlyList<ProjectSpec> projects)
@@ -2145,7 +2279,7 @@ public static class WebSiteBuilder
             Items = listItems,
             Data = data,
             Project = projectSpec,
-            Navigation = BuildNavigation(spec, item.OutputPath, menuSpecs),
+            Navigation = BuildNavigation(spec, item, menuSpecs),
             Breadcrumbs = breadcrumbs,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
@@ -2758,6 +2892,7 @@ public static class WebSiteBuilder
         {
             Name = menu.Name,
             Label = menu.Label,
+            Visibility = CloneVisibility(menu.Visibility),
             Items = CloneMenuItems(menu.Items)
         };
     }
@@ -2767,12 +2902,15 @@ public static class WebSiteBuilder
         if (items is null || items.Length == 0) return Array.Empty<MenuItemSpec>();
         return items.Select(i => new MenuItemSpec
         {
+            Id = i.Id,
             Title = i.Title,
             Text = i.Text,
             Url = i.Url,
             Icon = i.Icon,
             IconHtml = i.IconHtml,
             Kind = i.Kind,
+            Slot = i.Slot,
+            Template = i.Template,
             CssClass = i.CssClass,
             AriaLabel = i.AriaLabel,
             Badge = i.Badge,
@@ -2782,26 +2920,460 @@ public static class WebSiteBuilder
             External = i.External,
             Weight = i.Weight,
             Match = i.Match,
+            Visibility = CloneVisibility(i.Visibility),
+            Sections = CloneSections(i.Sections),
+            Meta = CloneMeta(i.Meta),
             Items = CloneMenuItems(i.Items)
         }).ToArray();
     }
 
-    private static NavigationRuntime BuildNavigation(SiteSpec spec, string currentPath, MenuSpec[] menuSpecs)
+    private static NavigationRuntime BuildNavigation(SiteSpec spec, ContentItem currentItem, MenuSpec[] menuSpecs)
     {
-        var nav = new NavigationRuntime();
-        if (menuSpecs.Length > 0)
+        var navSpec = spec.Navigation ?? new NavigationSpec();
+        var currentPath = NormalizeRouteForMatch(currentItem.OutputPath);
+        var context = new NavRenderContext(
+            currentPath,
+            currentItem.Collection ?? string.Empty,
+            currentItem.Layout ?? string.Empty,
+            currentItem.ProjectSlug ?? string.Empty);
+
+        var activeProfile = ResolveNavigationProfile(navSpec, context);
+
+        var effectiveMenus = MergeMenus(
+            menuSpecs,
+            activeProfile?.Menus ?? Array.Empty<MenuSpec>(),
+            activeProfile?.InheritMenus ?? true);
+
+        var effectiveActions = MergeItems(
+            navSpec.Actions,
+            activeProfile?.Actions ?? Array.Empty<MenuItemSpec>(),
+            activeProfile?.InheritActions ?? true);
+
+        var effectiveRegions = MergeRegions(
+            navSpec.Regions,
+            activeProfile?.Regions ?? Array.Empty<NavigationRegionSpec>(),
+            activeProfile?.InheritRegions ?? true);
+
+        var effectiveFooter = MergeFooter(
+            navSpec.Footer,
+            activeProfile?.Footer,
+            activeProfile?.InheritFooter ?? true);
+
+        var nav = new NavigationRuntime
         {
-            nav.Menus = menuSpecs
-                .Select(m => new NavigationMenu
+            ActiveProfile = activeProfile?.Name
+        };
+
+        if (effectiveMenus.Length > 0)
+        {
+            nav.Menus = effectiveMenus
+                .Where(menu => IsVisible(menu.Visibility, context))
+                .Select(menu => new NavigationMenu
                 {
-                    Name = m.Name,
-                    Label = m.Label,
-                    Items = BuildMenuItems(m.Items, currentPath, spec.LinkRules)
+                    Name = menu.Name,
+                    Label = menu.Label,
+                    Items = BuildMenuItems(menu.Items, context, spec.LinkRules)
                 })
                 .ToArray();
         }
-        nav.Actions = BuildMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>(), currentPath, spec.LinkRules);
+
+        nav.Actions = BuildMenuItems(effectiveActions, context, spec.LinkRules);
+        nav.Regions = BuildRegions(effectiveRegions, nav.Menus, nav.Actions, context, spec.LinkRules);
+        nav.Footer = BuildFooter(effectiveFooter, nav.Menus, context, spec.LinkRules);
+
         return nav;
+    }
+
+    private static NavigationVisibilitySpec? CloneVisibility(NavigationVisibilitySpec? visibility)
+    {
+        if (visibility is null)
+            return null;
+        return new NavigationVisibilitySpec
+        {
+            Paths = visibility.Paths?.ToArray() ?? Array.Empty<string>(),
+            ExcludePaths = visibility.ExcludePaths?.ToArray() ?? Array.Empty<string>(),
+            Collections = visibility.Collections?.ToArray() ?? Array.Empty<string>(),
+            Layouts = visibility.Layouts?.ToArray() ?? Array.Empty<string>(),
+            Projects = visibility.Projects?.ToArray() ?? Array.Empty<string>()
+        };
+    }
+
+    private static MenuSectionSpec[] CloneSections(MenuSectionSpec[]? sections)
+    {
+        if (sections is null || sections.Length == 0)
+            return Array.Empty<MenuSectionSpec>();
+        return sections.Select(section => new MenuSectionSpec
+        {
+            Name = section.Name,
+            Title = section.Title,
+            Description = section.Description,
+            CssClass = section.CssClass,
+            Items = CloneMenuItems(section.Items),
+            Columns = CloneColumns(section.Columns)
+        }).ToArray();
+    }
+
+    private static MenuColumnSpec[] CloneColumns(MenuColumnSpec[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return Array.Empty<MenuColumnSpec>();
+        return columns.Select(column => new MenuColumnSpec
+        {
+            Name = column.Name,
+            Title = column.Title,
+            Items = CloneMenuItems(column.Items)
+        }).ToArray();
+    }
+
+    private static Dictionary<string, object?>? CloneMeta(Dictionary<string, object?>? meta)
+    {
+        if (meta is null || meta.Count == 0)
+            return null;
+        return meta.ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static NavigationRegionSpec[] CloneRegions(NavigationRegionSpec[]? regions)
+    {
+        if (regions is null || regions.Length == 0)
+            return Array.Empty<NavigationRegionSpec>();
+        return regions.Select(region => new NavigationRegionSpec
+        {
+            Name = region.Name,
+            Title = region.Title,
+            Menus = region.Menus?.ToArray() ?? Array.Empty<string>(),
+            Items = CloneMenuItems(region.Items),
+            IncludeActions = region.IncludeActions,
+            CssClass = region.CssClass
+        }).ToArray();
+    }
+
+    private static NavigationFooterSpec? CloneFooter(NavigationFooterSpec? footer)
+    {
+        if (footer is null)
+            return null;
+        return new NavigationFooterSpec
+        {
+            Label = footer.Label,
+            Columns = CloneFooterColumns(footer.Columns),
+            Menus = footer.Menus?.ToArray() ?? Array.Empty<string>(),
+            Legal = CloneMenuItems(footer.Legal)
+        };
+    }
+
+    private static NavigationFooterColumnSpec[] CloneFooterColumns(NavigationFooterColumnSpec[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return Array.Empty<NavigationFooterColumnSpec>();
+        return columns.Select(column => new NavigationFooterColumnSpec
+        {
+            Name = column.Name,
+            Title = column.Title,
+            Items = CloneMenuItems(column.Items)
+        }).ToArray();
+    }
+
+    private static NavigationProfileSpec? ResolveNavigationProfile(NavigationSpec navSpec, NavRenderContext context)
+    {
+        if (navSpec.Profiles is null || navSpec.Profiles.Length == 0)
+            return null;
+
+        NavigationProfileSpec? best = null;
+        var bestScore = int.MinValue;
+        foreach (var profile in navSpec.Profiles)
+        {
+            if (profile is null)
+                continue;
+            if (!MatchesProfile(profile, context))
+                continue;
+
+            var score = (profile.Priority ?? 0) * 100;
+            score += profile.Paths?.Length ?? 0;
+            score += profile.Collections?.Length ?? 0;
+            score += profile.Layouts?.Length ?? 0;
+            score += profile.Projects?.Length ?? 0;
+
+            if (best is null || score > bestScore)
+            {
+                best = profile;
+                bestScore = score;
+            }
+        }
+
+        return best;
+    }
+
+    private static bool MatchesProfile(NavigationProfileSpec profile, NavRenderContext context)
+    {
+        if (profile.Paths is { Length: > 0 } && !AnyPathMatches(profile.Paths, context.Path))
+            return false;
+
+        if (profile.Collections is { Length: > 0 } &&
+            !profile.Collections.Any(value => value.Equals(context.Collection, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (profile.Layouts is { Length: > 0 } &&
+            !profile.Layouts.Any(value => value.Equals(context.Layout, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (profile.Projects is { Length: > 0 } &&
+            !profile.Projects.Any(value => value.Equals(context.Project, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        return true;
+    }
+
+    private static MenuSpec[] MergeMenus(MenuSpec[] baseMenus, MenuSpec[] profileMenus, bool inherit)
+    {
+        var map = new Dictionary<string, MenuSpec>(StringComparer.OrdinalIgnoreCase);
+        if (inherit)
+        {
+            foreach (var menu in baseMenus ?? Array.Empty<MenuSpec>())
+            {
+                if (menu is null || string.IsNullOrWhiteSpace(menu.Name))
+                    continue;
+                map[menu.Name] = CloneMenu(menu);
+            }
+        }
+
+        foreach (var menu in profileMenus ?? Array.Empty<MenuSpec>())
+        {
+            if (menu is null || string.IsNullOrWhiteSpace(menu.Name))
+                continue;
+            map[menu.Name] = CloneMenu(menu);
+        }
+
+        return map.Values.ToArray();
+    }
+
+    private static MenuItemSpec[] MergeItems(MenuItemSpec[] baseItems, MenuItemSpec[] profileItems, bool inherit)
+    {
+        if (!inherit)
+            return CloneMenuItems(profileItems ?? Array.Empty<MenuItemSpec>());
+
+        return CloneMenuItems((baseItems ?? Array.Empty<MenuItemSpec>())
+            .Concat(profileItems ?? Array.Empty<MenuItemSpec>())
+            .ToArray());
+    }
+
+    private static NavigationRegionSpec[] MergeRegions(NavigationRegionSpec[] baseRegions, NavigationRegionSpec[] profileRegions, bool inherit)
+    {
+        var map = new Dictionary<string, NavigationRegionSpec>(StringComparer.OrdinalIgnoreCase);
+        if (inherit)
+        {
+            foreach (var region in CloneRegions(baseRegions))
+            {
+                if (string.IsNullOrWhiteSpace(region.Name))
+                    continue;
+                map[region.Name] = region;
+            }
+        }
+
+        foreach (var region in CloneRegions(profileRegions))
+        {
+            if (string.IsNullOrWhiteSpace(region.Name))
+                continue;
+            map[region.Name] = region;
+        }
+
+        return map.Values.ToArray();
+    }
+
+    private static NavigationFooterSpec? MergeFooter(NavigationFooterSpec? baseFooter, NavigationFooterSpec? profileFooter, bool inherit)
+    {
+        if (!inherit)
+            return CloneFooter(profileFooter);
+
+        var baseClone = CloneFooter(baseFooter);
+        var profileClone = CloneFooter(profileFooter);
+        if (baseClone is null)
+            return profileClone;
+        if (profileClone is null)
+            return baseClone;
+
+        var merged = new NavigationFooterSpec
+        {
+            Label = string.IsNullOrWhiteSpace(profileClone.Label) ? baseClone.Label : profileClone.Label,
+            Menus = baseClone.Menus
+                .Concat(profileClone.Menus)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            Legal = CloneMenuItems(baseClone.Legal.Concat(profileClone.Legal).ToArray())
+        };
+
+        var columnMap = new Dictionary<string, NavigationFooterColumnSpec>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in baseClone.Columns)
+        {
+            if (string.IsNullOrWhiteSpace(column.Name))
+                continue;
+            columnMap[column.Name] = new NavigationFooterColumnSpec
+            {
+                Name = column.Name,
+                Title = column.Title,
+                Items = CloneMenuItems(column.Items)
+            };
+        }
+        foreach (var column in profileClone.Columns)
+        {
+            if (string.IsNullOrWhiteSpace(column.Name))
+                continue;
+            columnMap[column.Name] = new NavigationFooterColumnSpec
+            {
+                Name = column.Name,
+                Title = column.Title,
+                Items = CloneMenuItems(column.Items)
+            };
+        }
+
+        merged.Columns = columnMap.Values.ToArray();
+        return merged;
+    }
+
+    private static NavigationRegion[] BuildRegions(
+        NavigationRegionSpec[] regions,
+        NavigationMenu[] menus,
+        NavigationItem[] actions,
+        NavRenderContext context,
+        LinkRulesSpec? linkRules)
+    {
+        if (regions is null || regions.Length == 0)
+            return Array.Empty<NavigationRegion>();
+
+        var menuMap = menus.ToDictionary(menu => menu.Name, StringComparer.OrdinalIgnoreCase);
+        var result = new List<NavigationRegion>();
+        foreach (var region in regions)
+        {
+            if (region is null || string.IsNullOrWhiteSpace(region.Name))
+                continue;
+
+            var items = new List<NavigationItem>();
+            foreach (var menuName in region.Menus ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(menuName))
+                    continue;
+                if (!menuMap.TryGetValue(menuName, out var menu))
+                    continue;
+                items.AddRange(menu.Items);
+            }
+
+            if (region.IncludeActions && actions.Length > 0)
+                items.AddRange(actions);
+
+            var custom = BuildMenuItems(region.Items, context, linkRules);
+            if (custom.Length > 0)
+                items.AddRange(custom);
+
+            result.Add(new NavigationRegion
+            {
+                Name = region.Name,
+                Title = region.Title,
+                CssClass = region.CssClass,
+                Items = items.ToArray()
+            });
+        }
+
+        return result.ToArray();
+    }
+
+    private static NavigationFooter? BuildFooter(
+        NavigationFooterSpec? footer,
+        NavigationMenu[] menus,
+        NavRenderContext context,
+        LinkRulesSpec? linkRules)
+    {
+        if (footer is null)
+            return null;
+
+        var menuMap = menus.ToDictionary(menu => menu.Name, StringComparer.OrdinalIgnoreCase);
+        var columns = new List<NavigationFooterColumn>();
+        foreach (var column in footer.Columns ?? Array.Empty<NavigationFooterColumnSpec>())
+        {
+            if (column is null)
+                continue;
+            var items = BuildMenuItems(column.Items, context, linkRules);
+            columns.Add(new NavigationFooterColumn
+            {
+                Name = column.Name,
+                Title = column.Title,
+                Items = items
+            });
+        }
+
+        foreach (var menuName in footer.Menus ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(menuName))
+                continue;
+            if (!menuMap.TryGetValue(menuName, out var menu))
+                continue;
+            columns.Add(new NavigationFooterColumn
+            {
+                Name = menu.Name,
+                Title = menu.Label ?? menu.Name,
+                Items = menu.Items
+            });
+        }
+
+        return new NavigationFooter
+        {
+            Label = footer.Label,
+            Columns = columns.ToArray(),
+            Legal = BuildMenuItems(footer.Legal, context, linkRules)
+        };
+    }
+
+    private static bool IsVisible(NavigationVisibilitySpec? visibility, NavRenderContext context)
+    {
+        if (visibility is null)
+            return true;
+
+        if (visibility.Paths is { Length: > 0 } && !AnyPathMatches(visibility.Paths, context.Path))
+            return false;
+
+        if (visibility.ExcludePaths is { Length: > 0 } && AnyPathMatches(visibility.ExcludePaths, context.Path))
+            return false;
+
+        if (visibility.Collections is { Length: > 0 } &&
+            !visibility.Collections.Any(value => value.Equals(context.Collection, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (visibility.Layouts is { Length: > 0 } &&
+            !visibility.Layouts.Any(value => value.Equals(context.Layout, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (visibility.Projects is { Length: > 0 } &&
+            !visibility.Projects.Any(value => value.Equals(context.Project, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        return true;
+    }
+
+    private static bool AnyPathMatches(IEnumerable<string> patterns, string path)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+            var normalized = pattern.StartsWith("/", StringComparison.Ordinal) ? pattern : "/" + pattern;
+            if (GlobMatch(normalized, path))
+                return true;
+        }
+        return false;
+    }
+
+    private readonly struct NavRenderContext
+    {
+        public NavRenderContext(string path, string collection, string layout, string project)
+        {
+            Path = path;
+            Collection = collection ?? string.Empty;
+            Layout = layout ?? string.Empty;
+            Project = project ?? string.Empty;
+        }
+
+        public string Path { get; }
+        public string Collection { get; }
+        public string Layout { get; }
+        public string Project { get; }
     }
 
     private sealed class NavNode
@@ -2830,7 +3402,7 @@ public static class WebSiteBuilder
         public TocItem[]? Items { get; set; }
     }
 
-    private static NavigationItem[] BuildMenuItems(MenuItemSpec[] items, string currentPath, LinkRulesSpec? linkRules)
+    private static NavigationItem[] BuildMenuItems(MenuItemSpec[] items, NavRenderContext context, LinkRulesSpec? linkRules)
     {
         if (items is null || items.Length == 0) return Array.Empty<NavigationItem>();
 
@@ -2838,11 +3410,14 @@ public static class WebSiteBuilder
         var result = new List<NavigationItem>();
         foreach (var item in ordered)
         {
+            if (!IsVisible(item.Visibility, context))
+                continue;
+
             var url = item.Url ?? string.Empty;
             var normalized = NormalizeRouteForMatch(url);
             var isExternal = item.External ?? IsExternalUrl(url);
-            var isActive = !isExternal && MatchesMenuItem(item, currentPath, normalized, exactOnly: true);
-            var isAncestor = !isExternal && !isActive && MatchesMenuItem(item, currentPath, normalized, exactOnly: false);
+            var isActive = !isExternal && MatchesMenuItem(item, context.Path, normalized, exactOnly: true);
+            var isAncestor = !isExternal && !isActive && MatchesMenuItem(item, context.Path, normalized, exactOnly: false);
 
             var target = item.Target;
             var rel = item.Rel;
@@ -2851,18 +3426,27 @@ public static class WebSiteBuilder
             if (isExternal && string.IsNullOrWhiteSpace(rel) && !string.IsNullOrWhiteSpace(linkRules?.ExternalRel))
                 rel = linkRules.ExternalRel;
 
-            var children = BuildMenuItems(item.Items, currentPath, linkRules);
+            var children = BuildMenuItems(item.Items, context, linkRules);
             if (children.Any(c => c.IsActive || c.IsAncestor))
+                isAncestor = true;
+
+            var sections = BuildSections(item.Sections, context, linkRules);
+            if (sections.Any(section =>
+                    section.Items.Any(child => child.IsActive || child.IsAncestor) ||
+                    section.Columns.Any(column => column.Items.Any(child => child.IsActive || child.IsAncestor))))
                 isAncestor = true;
 
             result.Add(new NavigationItem
             {
+                Id = item.Id,
                 Title = item.Title,
                 Text = item.Text,
                 Url = item.Url,
                 Icon = item.Icon,
                 IconHtml = item.IconHtml,
                 Kind = item.Kind,
+                Slot = item.Slot,
+                Template = item.Template,
                 CssClass = item.CssClass,
                 AriaLabel = item.AriaLabel,
                 Badge = item.Badge,
@@ -2874,11 +3458,69 @@ public static class WebSiteBuilder
                 Match = item.Match,
                 IsActive = isActive,
                 IsAncestor = isAncestor,
+                Sections = sections,
+                Meta = CloneMeta(item.Meta),
                 Items = children
             });
         }
 
         return result.ToArray();
+    }
+
+    private static NavigationSection[] BuildSections(MenuSectionSpec[] sections, NavRenderContext context, LinkRulesSpec? linkRules)
+    {
+        if (sections is null || sections.Length == 0)
+            return Array.Empty<NavigationSection>();
+
+        var list = new List<NavigationSection>();
+        foreach (var section in sections)
+        {
+            if (section is null)
+                continue;
+
+            var sectionItems = BuildMenuItems(section.Items, context, linkRules);
+            var sectionColumns = BuildColumns(section.Columns, context, linkRules);
+            if (sectionItems.Length == 0 && sectionColumns.Length == 0 && string.IsNullOrWhiteSpace(section.Title) && string.IsNullOrWhiteSpace(section.Name))
+                continue;
+
+            list.Add(new NavigationSection
+            {
+                Name = section.Name,
+                Title = section.Title,
+                Description = section.Description,
+                CssClass = section.CssClass,
+                Items = sectionItems,
+                Columns = sectionColumns
+            });
+        }
+
+        return list.ToArray();
+    }
+
+    private static NavigationColumn[] BuildColumns(MenuColumnSpec[] columns, NavRenderContext context, LinkRulesSpec? linkRules)
+    {
+        if (columns is null || columns.Length == 0)
+            return Array.Empty<NavigationColumn>();
+
+        var list = new List<NavigationColumn>();
+        foreach (var column in columns)
+        {
+            if (column is null)
+                continue;
+
+            var items = BuildMenuItems(column.Items, context, linkRules);
+            if (items.Length == 0 && string.IsNullOrWhiteSpace(column.Title) && string.IsNullOrWhiteSpace(column.Name))
+                continue;
+
+            list.Add(new NavigationColumn
+            {
+                Name = column.Name,
+                Title = column.Title,
+                Items = items
+            });
+        }
+
+        return list.ToArray();
     }
 
     private static IEnumerable<MenuItemSpec> OrderMenuItems(IEnumerable<MenuItemSpec> items)
@@ -2994,7 +3636,7 @@ public static class WebSiteBuilder
     {
         var current = NormalizeRouteForMatch(item.OutputPath);
         var crumbs = new List<BreadcrumbItem>();
-        var nav = BuildNavigation(spec, item.OutputPath, menuSpecs);
+        var nav = BuildNavigation(spec, item, menuSpecs);
 
         var homeTitle = FindNavTitle(nav, "/") ?? "Home";
         crumbs.Add(new BreadcrumbItem { Title = homeTitle, Url = "/", IsCurrent = current == "/" });
@@ -3033,6 +3675,31 @@ public static class WebSiteBuilder
                 return title;
         }
 
+        var actionTitle = FindNavTitle(nav.Actions, route);
+        if (!string.IsNullOrWhiteSpace(actionTitle))
+            return actionTitle;
+
+        foreach (var region in nav.Regions)
+        {
+            var title = FindNavTitle(region.Items, route);
+            if (!string.IsNullOrWhiteSpace(title))
+                return title;
+        }
+
+        if (nav.Footer is not null)
+        {
+            foreach (var column in nav.Footer.Columns)
+            {
+                var title = FindNavTitle(column.Items, route);
+                if (!string.IsNullOrWhiteSpace(title))
+                    return title;
+            }
+
+            var legalTitle = FindNavTitle(nav.Footer.Legal, route);
+            if (!string.IsNullOrWhiteSpace(legalTitle))
+                return legalTitle;
+        }
+
         return null;
     }
 
@@ -3043,11 +3710,35 @@ public static class WebSiteBuilder
             if (!string.IsNullOrWhiteSpace(item.Url) &&
                 string.Equals(NormalizeRouteForMatch(item.Url), NormalizeRouteForMatch(route), StringComparison.OrdinalIgnoreCase))
                 return item.Title;
+
+            var sectionTitle = FindNavTitle(item.Sections, route);
+            if (!string.IsNullOrWhiteSpace(sectionTitle))
+                return sectionTitle;
+
             if (item.Items.Length == 0) continue;
             var child = FindNavTitle(item.Items, route);
             if (!string.IsNullOrWhiteSpace(child))
                 return child;
         }
+        return null;
+    }
+
+    private static string? FindNavTitle(IEnumerable<NavigationSection> sections, string route)
+    {
+        foreach (var section in sections)
+        {
+            var sectionItemsTitle = FindNavTitle(section.Items, route);
+            if (!string.IsNullOrWhiteSpace(sectionItemsTitle))
+                return sectionItemsTitle;
+
+            foreach (var column in section.Columns)
+            {
+                var columnTitle = FindNavTitle(column.Items, route);
+                if (!string.IsNullOrWhiteSpace(columnTitle))
+                    return columnTitle;
+            }
+        }
+
         return null;
     }
 

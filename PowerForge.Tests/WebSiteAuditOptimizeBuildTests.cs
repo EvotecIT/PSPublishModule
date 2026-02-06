@@ -691,6 +691,181 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_SiteNavExport_ContainsRegionsFooterProfilesAndSections()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-build-nav-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var contentRoot = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(contentRoot);
+            File.WriteAllText(Path.Combine(contentRoot, "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec
+                                {
+                                    Title = "Products",
+                                    Url = "/products/",
+                                    Sections = new[]
+                                    {
+                                        new MenuSectionSpec
+                                        {
+                                            Title = "SDK",
+                                            Items = new[]
+                                            {
+                                                new MenuItemSpec { Title = ".NET", Url = "/docs/library/overview/" }
+                                            },
+                                            Columns = new[]
+                                            {
+                                                new MenuColumnSpec
+                                                {
+                                                    Name = "quick",
+                                                    Title = "Quick links",
+                                                    Items = new[]
+                                                    {
+                                                        new MenuItemSpec { Title = "CLI", Url = "/docs/cli/overview/" }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        new MenuSpec
+                        {
+                            Name = "footer-product",
+                            Label = "Product",
+                            Items = new[] { new MenuItemSpec { Title = "Docs", Url = "/docs/" } }
+                        }
+                    },
+                    Actions = new[]
+                    {
+                        new MenuItemSpec
+                        {
+                            Title = "Get Started",
+                            Url = "/docs/getting-started/",
+                            Kind = "button",
+                            Slot = "header.cta"
+                        }
+                    },
+                    Regions = new[]
+                    {
+                        new NavigationRegionSpec
+                        {
+                            Name = "header.right",
+                            Menus = new[] { "main" },
+                            IncludeActions = true,
+                            Items = new[] { new MenuItemSpec { Title = "Status", Url = "/status/" } }
+                        }
+                    },
+                    Footer = new NavigationFooterSpec
+                    {
+                        Label = "default",
+                        Menus = new[] { "footer-product" },
+                        Columns = new[]
+                        {
+                            new NavigationFooterColumnSpec
+                            {
+                                Name = "resources",
+                                Title = "Resources",
+                                Items = new[] { new MenuItemSpec { Title = "FAQ", Url = "/faq/" } }
+                            }
+                        },
+                        Legal = new[] { new MenuItemSpec { Title = "Privacy", Url = "/privacy/" } }
+                    },
+                    Profiles = new[]
+                    {
+                        new NavigationProfileSpec
+                        {
+                            Name = "docs",
+                            Paths = new[] { "/docs/**" },
+                            Priority = 20,
+                            InheritMenus = true,
+                            Menus = new[]
+                            {
+                                new MenuSpec
+                                {
+                                    Name = "docs-extra",
+                                    Items = new[] { new MenuItemSpec { Title = "API", Url = "/api/" } }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(root, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            var siteNavPath = Path.Combine(outputRoot, "data", "site-nav.json");
+            Assert.True(File.Exists(siteNavPath));
+            var siteNav = File.ReadAllText(siteNavPath);
+            using var doc = System.Text.Json.JsonDocument.Parse(siteNav);
+            var rootElement = doc.RootElement;
+            Assert.True(rootElement.TryGetProperty("regions", out var regions));
+            Assert.True(rootElement.TryGetProperty("footerModel", out var footerModel));
+            Assert.True(rootElement.TryGetProperty("profiles", out var profiles));
+
+            var actions = rootElement.GetProperty("actions");
+            Assert.Contains(actions.EnumerateArray(), action =>
+                action.TryGetProperty("slot", out var slot) &&
+                string.Equals(slot.GetString(), "header.cta", StringComparison.Ordinal));
+
+            var mainMenu = rootElement.GetProperty("menus").GetProperty("main");
+            Assert.Contains(mainMenu.EnumerateArray(), item =>
+                item.TryGetProperty("sections", out var sections) &&
+                sections.ValueKind == System.Text.Json.JsonValueKind.Array &&
+                sections.GetArrayLength() > 0);
+
+            Assert.Contains(profiles.EnumerateArray(), profile =>
+                profile.TryGetProperty("name", out var name) &&
+                string.Equals(name.GetString(), "docs", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_NavProfilesAllowDifferentNavScopes()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-nav-profiles-" + Guid.NewGuid().ToString("N"));
