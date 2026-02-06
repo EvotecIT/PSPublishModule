@@ -872,6 +872,124 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_WarnsWhenHeadingOrderSkipsLevels()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-heading-order-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <h1>Home</h1>
+                    <h3>Documentation</h3>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning => warning.Contains("heading order skips levels", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue => issue.Category.Equals("heading-order", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_WarnsWhenSameLinkLabelPointsToMultipleDestinations()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <a href="/docs/reviewer/overview/">Learn more</a>
+                    <a href="/docs/cli/overview/">Learn more</a>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning => warning.Contains("points to multiple destinations", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue => issue.Category.Equals("link-purpose", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_LinkPurposeCheckCanBeDisabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <a href="/docs/a/">Learn more</a>
+                  <a href="/docs/b/">Learn more</a>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                CheckLinkPurposeConsistency = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("link-purpose", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FailOnWarnings_TriggersGateError()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-gate-" + Guid.NewGuid().ToString("N"));

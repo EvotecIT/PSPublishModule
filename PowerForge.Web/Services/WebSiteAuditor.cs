@@ -22,6 +22,10 @@ public sealed class WebAuditOptions
     public bool CheckTitles { get; set; } = true;
     /// <summary>When true, detect duplicate element IDs.</summary>
     public bool CheckDuplicateIds { get; set; } = true;
+    /// <summary>When true, detect heading level skips (for example h2 -> h4).</summary>
+    public bool CheckHeadingOrder { get; set; } = true;
+    /// <summary>When true, warn when the same link label points to multiple destinations.</summary>
+    public bool CheckLinkPurposeConsistency { get; set; } = true;
     /// <summary>When true, validate internal links.</summary>
     public bool CheckLinks { get; set; } = true;
     /// <summary>When true, validate local assets (CSS/JS/images).</summary>
@@ -392,6 +396,12 @@ public static class WebSiteAuditor
                     AddIssue("warning", "duplicate-id", relativePath, $"duplicate id(s) detected: {string.Join(", ", duplicateIds)}.", string.Join('|', duplicateIds));
                 }
             }
+
+            if (options.CheckHeadingOrder)
+                ValidateHeadingOrder(doc, relativePath, AddIssue);
+
+            if (options.CheckLinkPurposeConsistency)
+                ValidateLinkPurposeConsistency(doc, relativePath, AddIssue);
 
             var navProfile = ResolveNavProfile(relativePath, navProfiles);
             var navSelector = !string.IsNullOrWhiteSpace(navProfile?.Selector)
@@ -1005,6 +1015,168 @@ public static class WebSiteAuditor
         return profileMatch + "|" + navSelector;
     }
 
+    private static void ValidateHeadingOrder(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        var headings = doc.QuerySelectorAll("h1,h2,h3,h4,h5,h6")
+            .Select(heading => new
+            {
+                Element = heading,
+                Level = ParseHeadingLevel(heading.TagName)
+            })
+            .Where(entry => entry.Level > 0 && !IsElementHidden(entry.Element))
+            .ToList();
+
+        if (headings.Count < 2)
+            return;
+
+        var previousLevel = headings[0].Level;
+        for (var index = 1; index < headings.Count; index++)
+        {
+            var current = headings[index];
+            if (current.Level <= previousLevel + 1)
+            {
+                previousLevel = current.Level;
+                continue;
+            }
+
+            var text = NormalizeHeadingText(current.Element.TextContent);
+            var label = string.IsNullOrWhiteSpace(text)
+                ? $"h{current.Level}"
+                : $"h{current.Level} \"{text}\"";
+            addIssue("warning", "heading-order", relativePath,
+                $"heading order skips levels (h{previousLevel} -> h{current.Level}) near {label}.",
+                $"heading-order:{index}:{previousLevel}:{current.Level}");
+            previousLevel = current.Level;
+        }
+    }
+
+    private static void ValidateLinkPurposeConsistency(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        var labelTargets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var labelDisplay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var anchor in doc.QuerySelectorAll("a[href]"))
+        {
+            var href = anchor.GetAttribute("href");
+            if (string.IsNullOrWhiteSpace(href) || ShouldSkipLink(href))
+                continue;
+
+            var label = GetAccessibleLinkLabel(anchor);
+            if (string.IsNullOrWhiteSpace(label))
+                continue;
+
+            var destination = NormalizeLinkPurposeDestination(href);
+            if (string.IsNullOrWhiteSpace(destination))
+                continue;
+
+            var normalizedLabel = label.Trim();
+            if (!labelTargets.TryGetValue(normalizedLabel, out var targets))
+            {
+                targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                labelTargets[normalizedLabel] = targets;
+                labelDisplay[normalizedLabel] = normalizedLabel;
+            }
+            targets.Add(destination);
+        }
+
+        foreach (var pair in labelTargets)
+        {
+            if (pair.Value.Count <= 1)
+                continue;
+
+            var targets = pair.Value
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var label = labelDisplay.TryGetValue(pair.Key, out var value)
+                ? value
+                : pair.Key;
+
+            addIssue("warning", "link-purpose", relativePath,
+                $"link label '{label}' points to multiple destinations: {string.Join(", ", targets)}.",
+                $"link-purpose:{label}:{string.Join("|", targets)}");
+        }
+    }
+
+    private static int ParseHeadingLevel(string? tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName) || tagName.Length != 2)
+            return 0;
+        if (tagName[0] != 'H' && tagName[0] != 'h')
+            return 0;
+        return tagName[1] switch
+        {
+            '1' => 1,
+            '2' => 2,
+            '3' => 3,
+            '4' => 4,
+            '5' => 5,
+            '6' => 6,
+            _ => 0
+        };
+    }
+
+    private static bool IsElementHidden(AngleSharp.Dom.IElement element)
+    {
+        if (element.HasAttribute("hidden"))
+            return true;
+
+        var ariaHidden = element.GetAttribute("aria-hidden");
+        return !string.IsNullOrWhiteSpace(ariaHidden) &&
+               ariaHidden.Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeHeadingText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return Regex.Replace(value, "\\s+", " ").Trim();
+    }
+
+    private static string GetAccessibleLinkLabel(AngleSharp.Dom.IElement anchor)
+    {
+        var ariaLabel = anchor.GetAttribute("aria-label");
+        if (!string.IsNullOrWhiteSpace(ariaLabel))
+            return Regex.Replace(ariaLabel, "\\s+", " ").Trim();
+
+        var text = anchor.TextContent;
+        if (!string.IsNullOrWhiteSpace(text))
+            return Regex.Replace(text, "\\s+", " ").Trim();
+
+        var title = anchor.GetAttribute("title");
+        if (!string.IsNullOrWhiteSpace(title))
+            return Regex.Replace(title, "\\s+", " ").Trim();
+
+        return string.Empty;
+    }
+
+    private static string NormalizeLinkPurposeDestination(string href)
+    {
+        var normalized = StripQueryAndFragment(href).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        if (normalized.StartsWith("//", StringComparison.Ordinal))
+            normalized = "https:" + normalized;
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            var path = string.IsNullOrWhiteSpace(absolute.AbsolutePath) ? "/" : absolute.AbsolutePath;
+            if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
+                path = path.TrimEnd('/');
+            return $"{absolute.Scheme}://{absolute.Host}{(absolute.IsDefaultPort ? string.Empty : ":" + absolute.Port)}{path}";
+        }
+
+        return NormalizeNavHref(normalized);
+    }
+
     private static void ValidateNetworkHints(
         AngleSharp.Dom.IDocument doc,
         string relativePath,
@@ -1031,6 +1203,33 @@ public static class WebSiteAuditor
             var src = script.GetAttribute("src");
             if (TryGetExternalOrigin(src, out var origin))
                 requiredOrigins.Add(origin);
+        }
+
+        var externalImageOriginCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var img in doc.QuerySelectorAll("img[src]"))
+        {
+            var src = img.GetAttribute("src");
+            if (!TryGetExternalOrigin(src, out var origin))
+                continue;
+            externalImageOriginCounts.TryGetValue(origin, out var count);
+            externalImageOriginCounts[origin] = count + 1;
+        }
+        foreach (var srcset in doc.QuerySelectorAll("img[srcset],source[srcset]")
+                     .Select(element => element.GetAttribute("srcset"))
+                     .Where(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            foreach (var candidate in ParseSrcSet(srcset!))
+            {
+                if (!TryGetExternalOrigin(candidate, out var origin))
+                    continue;
+                externalImageOriginCounts.TryGetValue(origin, out var count);
+                externalImageOriginCounts[origin] = count + 1;
+            }
+        }
+        foreach (var pair in externalImageOriginCounts)
+        {
+            if (pair.Value >= 2 || pair.Key.Contains("img.shields.io", StringComparison.OrdinalIgnoreCase))
+                requiredOrigins.Add(pair.Key);
         }
 
         if (requiredOrigins.Contains("https://fonts.googleapis.com"))

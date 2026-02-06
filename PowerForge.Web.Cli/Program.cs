@@ -576,6 +576,8 @@ try
             var checkUtf8 = !HasOption(subArgs, "--no-utf8");
             var checkMetaCharset = !HasOption(subArgs, "--no-meta-charset");
             var checkReplacementChars = !HasOption(subArgs, "--no-replacement-char-check");
+            var checkHeadingOrder = !HasOption(subArgs, "--no-heading-order");
+            var checkLinkPurpose = !HasOption(subArgs, "--no-link-purpose");
             var checkNetworkHints = !HasOption(subArgs, "--no-network-hints");
             var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
             var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
@@ -645,6 +647,8 @@ try
                 CheckUtf8 = checkUtf8,
                 CheckMetaCharset = checkMetaCharset,
                 CheckUnicodeReplacementChars = checkReplacementChars,
+                CheckHeadingOrder = checkHeadingOrder,
+                CheckLinkPurposeConsistency = checkLinkPurpose,
                 CheckNetworkHints = checkNetworkHints,
                 CheckRenderBlockingResources = checkRenderBlocking,
                 MaxHeadBlockingResources = maxHeadBlockingResources
@@ -1558,6 +1562,7 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
     Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
     Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
+    Console.WriteLine("                     [--no-heading-order] [--no-link-purpose]");
     Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
     Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
     Console.WriteLine("                     [--rendered-no-install]");
@@ -1772,6 +1777,8 @@ static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
     var checkUtf8 = !HasOption(argv, "--no-utf8");
     var checkMetaCharset = !HasOption(argv, "--no-meta-charset");
     var checkReplacementChars = !HasOption(argv, "--no-replacement-char-check");
+    var checkHeadingOrder = !HasOption(argv, "--no-heading-order");
+    var checkLinkPurpose = !HasOption(argv, "--no-link-purpose");
     var checkNetworkHints = !HasOption(argv, "--no-network-hints");
     var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
     var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
@@ -1818,6 +1825,8 @@ static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
         CheckUtf8 = checkUtf8,
         CheckMetaCharset = checkMetaCharset,
         CheckUnicodeReplacementChars = checkReplacementChars,
+        CheckHeadingOrder = checkHeadingOrder,
+        CheckLinkPurposeConsistency = checkLinkPurpose,
         CheckNetworkHints = checkNetworkHints,
         CheckRenderBlockingResources = checkRenderBlocking,
         MaxHeadBlockingResources = maxHeadBlockingResources
@@ -1860,6 +1869,10 @@ static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResu
             recommendations.Add("Add `preconnect`/`dns-prefetch` hints for external origins (for example Google Fonts) to reduce critical path latency.");
         if (ContainsCategory(audit, "render-blocking"))
             recommendations.Add("Reduce render-blocking head resources: defer non-critical scripts and consolidate CSS.");
+        if (ContainsCategory(audit, "heading-order"))
+            recommendations.Add("Fix heading hierarchy so content does not skip levels (for example h2 -> h4) to improve accessibility.");
+        if (ContainsCategory(audit, "link-purpose"))
+            recommendations.Add("Use destination-specific link labels (avoid repeated generic labels like 'Learn more').");
         if (ContainsCategory(audit, "utf8"))
             recommendations.Add("Enforce UTF-8 output and meta charset declarations to avoid encoding regressions.");
         if (ContainsCategory(audit, "duplicate-id"))
@@ -2725,6 +2738,8 @@ internal static class WebPipelineRunner
                         var checkNav = GetBool(step, "checkNav") ?? true;
                         var checkTitles = GetBool(step, "checkTitles") ?? true;
                         var checkIds = GetBool(step, "checkDuplicateIds") ?? true;
+                        var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
+                        var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
                         var checkStructure = GetBool(step, "checkHtmlStructure") ?? true;
                         var rendered = GetBool(step, "rendered") ?? false;
                         var renderedEngine = GetString(step, "renderedEngine");
@@ -2794,6 +2809,8 @@ internal static class WebPipelineRunner
                             CheckNavConsistency = checkNav,
                             CheckTitles = checkTitles,
                             CheckDuplicateIds = checkIds,
+                            CheckHeadingOrder = checkHeadingOrder,
+                            CheckLinkPurposeConsistency = checkLinkPurpose,
                             CheckHtmlStructure = checkStructure,
                             CheckRendered = rendered,
                             RenderedEngine = renderedEngine ?? "Chromium",
@@ -2921,6 +2938,8 @@ internal static class WebPipelineRunner
                             var checkUtf8 = GetBool(step, "checkUtf8") ?? true;
                             var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
                             var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
+                            var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
+                            var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
                             var checkNetworkHints = GetBool(step, "checkNetworkHints") ?? true;
                             var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking") ?? true;
                             var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking") ?? new WebAuditOptions().MaxHeadBlockingResources;
@@ -2968,6 +2987,8 @@ internal static class WebPipelineRunner
                                 CheckUtf8 = checkUtf8,
                                 CheckMetaCharset = checkMetaCharset,
                                 CheckUnicodeReplacementChars = checkReplacement,
+                                CheckHeadingOrder = checkHeadingOrder,
+                                CheckLinkPurposeConsistency = checkLinkPurpose,
                                 CheckNetworkHints = checkNetworkHints,
                                 CheckRenderBlockingResources = checkRenderBlocking,
                                 MaxHeadBlockingResources = maxHeadBlockingResources
