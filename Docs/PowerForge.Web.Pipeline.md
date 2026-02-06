@@ -250,7 +250,7 @@ Notes:
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 
 #### optimize
-Applies critical CSS, minifies HTML/CSS/JS, and can hash assets + generate cache headers.
+Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash assets + generate cache headers.
 ```json
 {
   "task": "optimize",
@@ -261,6 +261,15 @@ Applies critical CSS, minifies HTML/CSS/JS, and can hash assets + generate cache
   "minifyHtml": true,
   "minifyCss": true,
   "minifyJs": true,
+  "optimizeImages": true,
+  "imageExtensions": [".png", ".jpg", ".jpeg", ".webp"],
+  "imageQuality": 82,
+  "imageGenerateWebp": true,
+  "imagePreferNextGen": true,
+  "imageWidths": [480, 960, 1440],
+  "imageEnhanceTags": true,
+  "imageMaxTotalBytes": 50000000,
+  "imageFailOnBudget": true,
   "hashAssets": true,
   "hashExtensions": [".css", ".js"],
   "hashExclude": ["**/nohash/**"],
@@ -271,6 +280,11 @@ Notes:
 - `config` loads `AssetPolicy` from `site.json` (rewrites, hashing defaults, cache headers).
 - `hashAssets` fingerprints files and rewrites references (HTML + CSS).
 - `cacheHeaders` writes `_headers` with cache-control rules (Netlify/Cloudflare Pages compatible).
+- `imageGenerateWebp` / `imageGenerateAvif` can create next-gen variants when they are smaller than source output.
+- `imagePreferNextGen` rewrites `<img src>` to next-gen output when available.
+- `imageWidths` generates responsive variants and `srcset` entries.
+- `imageEnhanceTags` injects `loading=\"lazy\"` + `decoding=\"async\"` on rewritten image tags.
+- `imageMaxBytesPerFile` / `imageMaxTotalBytes` define budgets; `imageFailOnBudget` fails the step if budgets are exceeded.
 
 #### audit
 Runs static (and optional rendered) checks against generated HTML.

@@ -7,6 +7,7 @@
   "properties": {
     "$schema": { "type": "string" },
     "name": { "type": "string" },
+    "contractVersion": { "type": "integer", "enum": [1, 2] },
     "version": { "type": "string" },
     "author": { "type": "string" },
     "engine": { "type": "string", "enum": ["simple", "scriban"] },
@@ -20,6 +21,10 @@
       "additionalProperties": { "type": "string" }
     },
     "partials": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "slots": {
       "type": "object",
       "additionalProperties": { "type": "string" }
     },

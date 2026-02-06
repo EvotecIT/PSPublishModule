@@ -236,6 +236,13 @@ try
                     ImageExclude = publishSpec.Optimize.ImageExclude ?? Array.Empty<string>(),
                     ImageQuality = publishSpec.Optimize.ImageQuality ?? 82,
                     ImageStripMetadata = publishSpec.Optimize.ImageStripMetadata ?? true,
+                    ImageGenerateWebp = publishSpec.Optimize.ImageGenerateWebp,
+                    ImageGenerateAvif = publishSpec.Optimize.ImageGenerateAvif,
+                    ImagePreferNextGen = publishSpec.Optimize.ImagePreferNextGen,
+                    ResponsiveImageWidths = publishSpec.Optimize.ResponsiveImageWidths ?? Array.Empty<int>(),
+                    EnhanceImageTags = publishSpec.Optimize.EnhanceImageTags,
+                    ImageMaxBytesPerFile = publishSpec.Optimize.ImageMaxBytesPerFile ?? 0,
+                    ImageMaxTotalBytes = publishSpec.Optimize.ImageMaxTotalBytes ?? 0,
                     HashAssets = publishSpec.Optimize.HashAssets,
                     HashExtensions = publishSpec.Optimize.HashExtensions is { Length: > 0 } ? publishSpec.Optimize.HashExtensions : new[] { ".css", ".js" },
                     HashExclude = publishSpec.Optimize.HashExclude ?? Array.Empty<string>(),
@@ -246,6 +253,8 @@ try
                     optimizerOptions.CssLinkPattern = publishSpec.Optimize.CssPattern;
 
                 var optimizeResult = WebAssetOptimizer.OptimizeDetailed(optimizerOptions);
+                if (publishSpec.Optimize.ImageFailOnBudget && optimizeResult.ImageBudgetExceeded)
+                    throw new InvalidOperationException($"Image budget exceeded: {string.Join(" | ", optimizeResult.ImageBudgetWarnings)}");
                 optimizeUpdated = optimizeResult.UpdatedCount;
             }
 
@@ -931,6 +940,14 @@ try
             var imageExclude = ReadOptionList(subArgs, "--image-exclude");
             var imageQuality = ParseIntOption(TryGetOptionValue(subArgs, "--image-quality"), 82);
             var imageStripMetadata = !HasOption(subArgs, "--image-keep-metadata");
+            var imageGenerateWebp = HasOption(subArgs, "--image-generate-webp");
+            var imageGenerateAvif = HasOption(subArgs, "--image-generate-avif");
+            var imagePreferNextGen = HasOption(subArgs, "--image-prefer-nextgen");
+            var imageWidths = ParseIntListOption(TryGetOptionValue(subArgs, "--image-widths"));
+            var imageEnhanceTags = HasOption(subArgs, "--image-enhance-tags");
+            var imageMaxBytesPerFile = ParseLongOption(TryGetOptionValue(subArgs, "--image-max-bytes"), 0);
+            var imageMaxTotalBytes = ParseLongOption(TryGetOptionValue(subArgs, "--image-max-total-bytes"), 0);
+            var imageFailOnBudget = HasOption(subArgs, "--image-fail-on-budget");
             var hashAssets = HasOption(subArgs, "--hash-assets");
             var hashExtensions = ReadOptionList(subArgs, "--hash-ext", "--hash-extensions");
             var hashExclude = ReadOptionList(subArgs, "--hash-exclude");
@@ -979,6 +996,13 @@ try
                 ImageExclude = imageExclude.Count > 0 ? imageExclude.ToArray() : Array.Empty<string>(),
                 ImageQuality = imageQuality,
                 ImageStripMetadata = imageStripMetadata,
+                ImageGenerateWebp = imageGenerateWebp,
+                ImageGenerateAvif = imageGenerateAvif,
+                ImagePreferNextGen = imagePreferNextGen,
+                ResponsiveImageWidths = imageWidths.Length > 0 ? imageWidths : Array.Empty<int>(),
+                EnhanceImageTags = imageEnhanceTags,
+                ImageMaxBytesPerFile = imageMaxBytesPerFile,
+                ImageMaxTotalBytes = imageMaxTotalBytes,
                 HashAssets = hashAssets,
                 HashExtensions = hashExtensions.Count > 0 ? hashExtensions.ToArray() : new[] { ".css", ".js" },
                 HashExclude = hashExclude.Count > 0 ? hashExclude.ToArray() : Array.Empty<string>(),
@@ -986,6 +1010,8 @@ try
                 ReportPath = reportPath,
                 AssetPolicy = policy
             });
+            if (imageFailOnBudget && optimizeResult.ImageBudgetExceeded)
+                return Fail($"Image budget exceeded: {string.Join(" | ", optimizeResult.ImageBudgetWarnings)}", outputJson, logger, "web.optimize");
 
             if (outputJson)
             {
@@ -1014,6 +1040,16 @@ try
             logger.Info($"Image bytes before: {optimizeResult.ImageBytesBefore}");
             logger.Info($"Image bytes after: {optimizeResult.ImageBytesAfter}");
             logger.Info($"Image bytes saved: {optimizeResult.ImageBytesSaved}");
+            logger.Info($"Generated image variants: {optimizeResult.ImageVariantCount}");
+            logger.Info($"Image HTML rewrites: {optimizeResult.ImageHtmlRewriteCount}");
+            logger.Info($"Image hints added: {optimizeResult.ImageHintedCount}");
+            foreach (var entry in optimizeResult.OptimizedImages.Take(5))
+                logger.Info($"Image saved: {entry.Path} (-{entry.BytesSaved}B)");
+            if (optimizeResult.ImageBudgetExceeded)
+            {
+                foreach (var warning in optimizeResult.ImageBudgetWarnings)
+                    logger.Warn($"Image budget: {warning}");
+            }
             if (optimizeResult.HashedAssetCount > 0)
             {
                 logger.Info($"Hashed assets: {optimizeResult.HashedAssetCount}");
@@ -1425,7 +1461,9 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
     Console.WriteLine("                     [--minify-html] [--minify-css] [--minify-js]");
     Console.WriteLine("                     [--optimize-images] [--image-ext <.png,.jpg,.jpeg,.webp>] [--image-include <glob[,glob]>] [--image-exclude <glob[,glob]>]");
-    Console.WriteLine("                     [--image-quality <1-100>] [--image-keep-metadata]");
+    Console.WriteLine("                     [--image-quality <1-100>] [--image-keep-metadata] [--image-generate-webp] [--image-generate-avif]");
+    Console.WriteLine("                     [--image-prefer-nextgen] [--image-widths <320,640,1024>] [--image-enhance-tags]");
+    Console.WriteLine("                     [--image-max-bytes <n>] [--image-max-total-bytes <n>] [--image-fail-on-budget]");
     Console.WriteLine("                     [--hash-assets] [--hash-ext <.css,.js>] [--hash-exclude <glob[,glob]>] [--hash-manifest <file>]");
     Console.WriteLine("                     [--headers] [--headers-out <file>] [--headers-html <value>] [--headers-assets <value>] [--report-path <file>]");
     Console.WriteLine("  powerforge-web dotnet-build --project <path> [--configuration <cfg>] [--framework <tfm>] [--runtime <rid>] [--no-restore]");
@@ -1522,6 +1560,30 @@ static int ParseIntOption(string? value, int fallback)
 {
     if (string.IsNullOrWhiteSpace(value)) return fallback;
     return int.TryParse(value, out var parsed) ? parsed : fallback;
+}
+
+static long ParseLongOption(string? value, long fallback)
+{
+    if (string.IsNullOrWhiteSpace(value)) return fallback;
+    return long.TryParse(value, out var parsed) ? parsed : fallback;
+}
+
+static int[] ParseIntListOption(string? value)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        return Array.Empty<int>();
+
+    var values = new List<int>();
+    foreach (var token in value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+    {
+        if (int.TryParse(token.Trim(), out var parsed) && parsed > 0)
+            values.Add(parsed);
+    }
+
+    return values
+        .Distinct()
+        .OrderBy(v => v)
+        .ToArray();
 }
 
 static string? ResolveSummaryPath(bool summaryEnabled, string? summaryPath)
@@ -2244,6 +2306,14 @@ internal static class WebPipelineRunner
                         var imageExclude = GetArrayOfStrings(step, "imageExclude") ?? GetArrayOfStrings(step, "image-exclude");
                         var imageQuality = GetInt(step, "imageQuality") ?? GetInt(step, "image-quality") ?? 82;
                         var imageStripMetadata = GetBool(step, "imageStripMetadata") ?? GetBool(step, "image-strip-metadata") ?? true;
+                        var imageGenerateWebp = GetBool(step, "imageGenerateWebp") ?? GetBool(step, "image-generate-webp") ?? false;
+                        var imageGenerateAvif = GetBool(step, "imageGenerateAvif") ?? GetBool(step, "image-generate-avif") ?? false;
+                        var imagePreferNextGen = GetBool(step, "imagePreferNextGen") ?? GetBool(step, "image-prefer-nextgen") ?? false;
+                        var imageWidths = GetArrayOfStrings(step, "imageWidths") ?? GetArrayOfStrings(step, "image-widths");
+                        var imageEnhanceTags = GetBool(step, "imageEnhanceTags") ?? GetBool(step, "image-enhance-tags") ?? false;
+                        var imageMaxBytes = GetLong(step, "imageMaxBytesPerFile") ?? GetLong(step, "image-max-bytes") ?? 0;
+                        var imageMaxTotalBytes = GetLong(step, "imageMaxTotalBytes") ?? GetLong(step, "image-max-total-bytes") ?? 0;
+                        var imageFailOnBudget = GetBool(step, "imageFailOnBudget") ?? GetBool(step, "image-fail-on-budget") ?? false;
                         var hashAssets = GetBool(step, "hashAssets") ?? false;
                         var hashExtensions = GetArrayOfStrings(step, "hashExtensions") ?? GetArrayOfStrings(step, "hash-ext");
                         var hashExclude = GetArrayOfStrings(step, "hashExclude") ?? GetArrayOfStrings(step, "hash-exclude");
@@ -2290,6 +2360,13 @@ internal static class WebPipelineRunner
                             ImageExclude = imageExclude ?? Array.Empty<string>(),
                             ImageQuality = imageQuality,
                             ImageStripMetadata = imageStripMetadata,
+                            ImageGenerateWebp = imageGenerateWebp,
+                            ImageGenerateAvif = imageGenerateAvif,
+                            ImagePreferNextGen = imagePreferNextGen,
+                            ResponsiveImageWidths = ParseIntList(imageWidths),
+                            EnhanceImageTags = imageEnhanceTags,
+                            ImageMaxBytesPerFile = imageMaxBytes,
+                            ImageMaxTotalBytes = imageMaxTotalBytes,
                             HashAssets = hashAssets,
                             HashExtensions = hashExtensions ?? new[] { ".css", ".js" },
                             HashExclude = hashExclude ?? Array.Empty<string>(),
@@ -2297,6 +2374,8 @@ internal static class WebPipelineRunner
                             ReportPath = reportPath,
                             AssetPolicy = policy
                         });
+                        if (imageFailOnBudget && optimize.ImageBudgetExceeded)
+                            throw new InvalidOperationException($"Image budget exceeded: {string.Join(" | ", optimize.ImageBudgetWarnings)}");
                         stepResult.Success = true;
                         stepResult.Message = BuildOptimizeSummary(optimize);
                         break;
@@ -2707,6 +2786,19 @@ internal static class WebPipelineRunner
             parts.Add($"images {result.ImageOptimizedCount}");
         if (result.ImageBytesSaved > 0)
             parts.Add($"images-saved {result.ImageBytesSaved}B");
+        if (result.ImageVariantCount > 0)
+            parts.Add($"image-variants {result.ImageVariantCount}");
+        if (result.ImageHtmlRewriteCount > 0)
+            parts.Add($"image-rewrites {result.ImageHtmlRewriteCount}");
+        if (result.ImageHintedCount > 0)
+            parts.Add($"image-hints {result.ImageHintedCount}");
+        if (result.OptimizedImages.Length > 0)
+        {
+            var top = result.OptimizedImages[0];
+            parts.Add($"top-image {top.Path}(-{top.BytesSaved}B)");
+        }
+        if (result.ImageBudgetExceeded)
+            parts.Add("image-budget-exceeded");
 
         if (result.HashedAssetCount > 0)
             parts.Add($"hashed {result.HashedAssetCount}");
@@ -3045,6 +3137,38 @@ internal static class WebPipelineRunner
         if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var num)) return num;
         if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed)) return parsed;
         return null;
+    }
+
+    private static long? GetLong(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(name, out var value)) return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var num)) return num;
+        if (value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(), out var parsed)) return parsed;
+        return null;
+    }
+
+    private static int[] ParseIntList(string[]? values)
+    {
+        if (values is null || values.Length == 0)
+            return Array.Empty<int>();
+
+        var list = new List<int>();
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+            foreach (var token in value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(token.Trim(), out var parsed) && parsed > 0)
+                    list.Add(parsed);
+            }
+        }
+
+        return list
+            .Distinct()
+            .OrderBy(v => v)
+            .ToArray();
     }
 
     private static WebApiDetailLevel ParseApiDetailLevel(string? value)

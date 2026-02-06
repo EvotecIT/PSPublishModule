@@ -145,6 +145,76 @@ public class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenThemeContractV2SlotsAreInvalid()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-contract-v2-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "contract-v2-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "contract-v2-test",
+                  "contractVersion": 2,
+                  "engine": "scriban",
+                  "slots": {
+                    "hero": "partials/missing-slot"
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Theme Contract v2 Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "contract-v2-test",
+                ThemesRoot = "themes",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning => warning.Contains("contractVersion 2 should set 'defaultLayout'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("slot 'hero' maps to missing partial", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsOnMarkdownRawHtmlHygiene()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-" + Guid.NewGuid().ToString("N"));

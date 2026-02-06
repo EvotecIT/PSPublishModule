@@ -376,6 +376,93 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_GeneratesNextGenAndResponsiveVariantsWithHtmlHints()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-img-variants-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                  <head><title>Images</title></head>
+                  <body>
+                    <img src="/hero.png" alt="Hero" />
+                  </body>
+                </html>
+                """);
+
+            var imagePath = Path.Combine(root, "hero.png");
+            using (var image = new MagickImage(MagickColors.DeepSkyBlue, 1400, 700))
+            {
+                image.Comment = new string('x', 50000);
+                image.Write(imagePath, MagickFormat.Png);
+            }
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                OptimizeImages = true,
+                ImageExtensions = new[] { ".png" },
+                ImageGenerateWebp = true,
+                ImagePreferNextGen = true,
+                ResponsiveImageWidths = new[] { 480, 960 },
+                EnhanceImageTags = true
+            });
+
+            Assert.True(result.ImageVariantCount > 0);
+            Assert.True(result.ImageHtmlRewriteCount > 0);
+            Assert.True(result.ImageHintedCount > 0);
+            Assert.Contains(result.GeneratedImageVariants, entry => entry.Width.HasValue);
+
+            var html = File.ReadAllText(Path.Combine(root, "index.html"));
+            Assert.Contains("srcset=", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_FlagsImageBudgetExceeded()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-img-budget-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var imagePath = Path.Combine(root, "budget.png");
+            using (var image = new MagickImage(MagickColors.Gold, 1024, 1024))
+            {
+                image.Write(imagePath, MagickFormat.Png);
+            }
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                OptimizeImages = true,
+                ImageExtensions = new[] { ".png" },
+                ImageMaxBytesPerFile = 100,
+                ImageMaxTotalBytes = 100
+            });
+
+            Assert.True(result.ImageBudgetExceeded);
+            Assert.NotEmpty(result.ImageBudgetWarnings);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_WritesRoot404HtmlForNotFoundSlug()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-build-" + Guid.NewGuid().ToString("N"));

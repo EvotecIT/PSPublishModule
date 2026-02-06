@@ -1,4 +1,4 @@
-# PowerForge.Web Theme System (Contract v1)
+# PowerForge.Web Theme System (Contract v2)
 
 This document defines the theme system as a reusable, product-grade layer for PowerForge.Web.
 Goals are consistency, performance, and ease of reuse across many projects.
@@ -8,6 +8,7 @@ Contract status:
 - `theme.json` is the canonical theme contract.
 - Relative paths in `theme.json` are required for portability.
 - Theme assets should be declared in theme-local form and normalized by the engine.
+- `contractVersion: 2` enables stricter, reusable theme checks (recommended for new themes).
 
 ## Goals
 - Themes are portable across projects and repos.
@@ -56,6 +57,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 ```json
 {
   "name": "codeglyphx",
+  "contractVersion": 2,
   "version": "1.0.0",
   "author": "Evotec",
   "engine": "scriban",
@@ -70,6 +72,11 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
     "header": "partials/header.html",
     "footer": "partials/footer.html",
     "theme-tokens": "partials/theme-tokens.html"
+  },
+  "slots": {
+    "hero": "partials/slots/hero.html",
+    "cta": "partials/slots/cta.html",
+    "footer-extra": "partials/slots/footer-extra.html"
   },
   "assets": {
     "bundles": [
@@ -96,6 +103,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 ```
 
 ### Manifest rules
+- `contractVersion` defaults to `1`; use `2` for strict portable contract validation.
 - `extends` is optional. If set, theme inherits layouts/partials/assets/tokens from base.
 - Child theme overrides anything it redefines.
 - `assets` is merged: bundles with same name are replaced by child.
@@ -103,6 +111,8 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 - `defaultLayout` applies when content has no layout.
 - `engine` should always be explicit (`simple` or `scriban`) to avoid ambiguous rendering.
 - `layoutsPath`, `partialsPath`, `assetsPath`, mapped `layouts`/`partials`, and theme `assets` bundle paths should be relative (not rooted paths, no `..`).
+- `slots` map named hook points to partial files. Layouts can render these hooks consistently across themes.
+- For `contractVersion: 2`, set `defaultLayout` and keep `slots` explicit to maximize theme portability.
 
 ## Asset copying + output paths
 PowerForge.Web copies theme assets during `build`:
