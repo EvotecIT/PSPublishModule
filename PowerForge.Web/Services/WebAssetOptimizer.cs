@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlTinkerX;
 
@@ -27,6 +29,8 @@ public sealed class WebAssetOptimizerOptions
     public string[] HashExclude { get; set; } = Array.Empty<string>();
     /// <summary>Optional manifest path for hashed assets.</summary>
     public string? HashManifestPath { get; set; }
+    /// <summary>Optional optimization report output path (relative to site root).</summary>
+    public string? ReportPath { get; set; }
     /// <summary>Optional asset policy for rewrites and headers.</summary>
     public AssetPolicySpec? AssetPolicy { get; set; }
 }
@@ -67,7 +71,11 @@ public static class WebAssetOptimizer
         }
 
         var htmlFiles = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories).ToArray();
+        var cssFiles = Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories).ToArray();
+        var jsFiles = Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories).ToArray();
         result.HtmlFileCount = htmlFiles.Length;
+        result.CssFileCount = cssFiles.Length;
+        result.JsFileCount = jsFiles.Length;
         var policy = options.AssetPolicy;
         if (policy?.Rewrites is { Length: > 0 })
         {
@@ -117,14 +125,20 @@ public static class WebAssetOptimizer
         Dictionary<string, string>? hashMap = null;
         if (hashSpec.Enabled)
         {
-            hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, MarkUpdated);
+            hashMap = HashAssets(siteRoot, hashSpec, out var hashedAssetCount, out var hashedAssets, MarkUpdated);
             result.HashedAssetCount = hashedAssetCount;
+            result.HashedAssets = hashedAssets.ToArray();
             if (hashMap.Count > 0)
             {
                 var rewrites = RewriteHashedReferences(siteRoot, htmlFiles, hashMap, MarkUpdated);
                 result.HtmlHashRewriteCount = rewrites.HtmlFilesRewritten;
                 result.CssHashRewriteCount = rewrites.CssFilesRewritten;
-                WriteHashManifest(siteRoot, hashSpec, hashMap);
+                var manifestPath = WriteHashManifest(siteRoot, hashSpec, hashMap);
+                if (!string.IsNullOrWhiteSpace(manifestPath))
+                {
+                    result.HashManifestPath = manifestPath;
+                    MarkUpdated(manifestPath);
+                }
             }
         }
 
@@ -146,8 +160,11 @@ public static class WebAssetOptimizer
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(html, minified, StringComparison.Ordinal))
                 {
+                    var beforeBytes = Encoding.UTF8.GetByteCount(html);
+                    var afterBytes = Encoding.UTF8.GetByteCount(minified);
                     File.WriteAllText(htmlFile, minified);
                     result.HtmlMinifiedCount++;
+                    result.HtmlBytesSaved += Math.Max(0, beforeBytes - afterBytes);
                     MarkUpdated(htmlFile);
                 }
             }
@@ -171,8 +188,11 @@ public static class WebAssetOptimizer
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(css, minified, StringComparison.Ordinal))
                 {
+                    var beforeBytes = Encoding.UTF8.GetByteCount(css);
+                    var afterBytes = Encoding.UTF8.GetByteCount(minified);
                     File.WriteAllText(cssFile, minified);
                     result.CssMinifiedCount++;
+                    result.CssBytesSaved += Math.Max(0, beforeBytes - afterBytes);
                     MarkUpdated(cssFile);
                 }
             }
@@ -196,8 +216,11 @@ public static class WebAssetOptimizer
                 }
                 if (!string.IsNullOrWhiteSpace(minified) && !string.Equals(js, minified, StringComparison.Ordinal))
                 {
+                    var beforeBytes = Encoding.UTF8.GetByteCount(js);
+                    var afterBytes = Encoding.UTF8.GetByteCount(minified);
                     File.WriteAllText(jsFile, minified);
                     result.JsMinifiedCount++;
+                    result.JsBytesSaved += Math.Max(0, beforeBytes - afterBytes);
                     MarkUpdated(jsFile);
                 }
             }
@@ -211,6 +234,38 @@ public static class WebAssetOptimizer
                 result.CacheHeadersWritten = true;
                 result.CacheHeadersPath = headersPath;
                 MarkUpdated(headersPath);
+            }
+        }
+
+        result.UpdatedFiles = updatedFiles
+            .Select(path => ToRelative(siteRoot, path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (!string.IsNullOrWhiteSpace(options.ReportPath))
+        {
+            if (TryResolveUnderRoot(siteRoot, options.ReportPath.TrimStart('/', '\\'), out var reportPath))
+            {
+                result.ReportPath = reportPath;
+                var json = JsonSerializer.Serialize(result, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+                var write = true;
+                if (File.Exists(reportPath))
+                {
+                    var existing = File.ReadAllText(reportPath);
+                    write = !string.Equals(existing, json, StringComparison.Ordinal);
+                }
+                if (write)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
+                    File.WriteAllText(reportPath, json);
+                }
+            }
+            else
+            {
+                Trace.TraceWarning($"Optimize report path outside site root: {options.ReportPath}");
             }
         }
 
@@ -307,9 +362,15 @@ public static class WebAssetOptimizer
         return url;
     }
 
-    private static Dictionary<string, string> HashAssets(string siteRoot, AssetHashSpec spec, out int hashedAssetCount, Action<string>? onUpdated = null)
+    private static Dictionary<string, string> HashAssets(
+        string siteRoot,
+        AssetHashSpec spec,
+        out int hashedAssetCount,
+        out List<WebOptimizeHashedAssetEntry> hashedAssets,
+        Action<string>? onUpdated = null)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        hashedAssets = new List<WebOptimizeHashedAssetEntry>();
         hashedAssetCount = 0;
         var extensions = (spec.Extensions?.Length ?? 0) == 0 ? new[] { ".css", ".js" } : spec.Extensions!;
         var files = Directory.EnumerateFiles(siteRoot, "*.*", SearchOption.AllDirectories)
@@ -335,6 +396,11 @@ public static class WebAssetOptimizer
 
             map[$"/{relative}"] = $"/{hashedName}";
             map[relative] = hashedName;
+            hashedAssets.Add(new WebOptimizeHashedAssetEntry
+            {
+                OriginalPath = "/" + relative,
+                HashedPath = "/" + hashedName
+            });
         }
 
         return map;
@@ -436,22 +502,23 @@ public static class WebAssetOptimizer
         return Convert.ToHexString(hash).Substring(0, 8).ToLowerInvariant();
     }
 
-    private static void WriteHashManifest(string siteRoot, AssetHashSpec spec, Dictionary<string, string> map)
+    private static string? WriteHashManifest(string siteRoot, AssetHashSpec spec, Dictionary<string, string> map)
     {
-        if (map.Count == 0) return;
+        if (map.Count == 0) return null;
         var manifestRelative = string.IsNullOrWhiteSpace(spec.ManifestPath)
             ? "asset-manifest.json"
             : spec.ManifestPath.TrimStart('/', '\\');
         if (!TryResolveUnderRoot(siteRoot, manifestRelative, out var path))
         {
             Trace.TraceWarning($"Hash manifest path outside site root: {spec.ManifestPath}");
-            return;
+            return null;
         }
         var json = System.Text.Json.JsonSerializer.Serialize(map, new System.Text.Json.JsonSerializerOptions
         {
             WriteIndented = true
         });
         File.WriteAllText(path, json);
+        return path;
     }
 
     private static string? WriteCacheHeaders(string siteRoot, CacheHeadersSpec headers, Dictionary<string, string>? map)
@@ -563,6 +630,15 @@ public static class WebAssetOptimizer
             return true;
         normalizedRoot += Path.DirectorySeparatorChar;
         return path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ToRelative(string root, string path)
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var fullPath = Path.GetFullPath(path);
+        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+            return fullPath;
+        return Path.GetRelativePath(fullRoot, fullPath).Replace('\\', '/');
     }
 
 }

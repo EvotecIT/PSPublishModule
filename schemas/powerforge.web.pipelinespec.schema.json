@@ -216,6 +216,8 @@
         "hashExtensions": { "type": "array", "items": { "type": "string" } },
         "hashExclude": { "type": "array", "items": { "type": "string" } },
         "hashManifest": { "type": "string" },
+        "reportPath": { "type": "string" },
+        "report-path": { "type": "string" },
         "cacheHeaders": { "type": "boolean" },
         "cacheHeadersOut": { "type": "string" },
         "cacheHeadersHtml": { "type": "string" },
@@ -248,6 +250,32 @@
         "navRequiredLink": {
           "type": "string",
           "description": "Deprecated alias for navRequiredLinks."
+        },
+        "minNavCoveragePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "min-nav-coverage": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "requiredRoutes": {
+          "type": "string",
+          "description": "Comma-separated list of routes that must resolve in generated output."
+        },
+        "required-routes": {
+          "type": "string",
+          "description": "Deprecated alias for requiredRoutes."
+        },
+        "requiredRoute": {
+          "type": "string",
+          "description": "Deprecated alias for requiredRoutes."
+        },
+        "required-route": {
+          "type": "string",
+          "description": "Deprecated alias for requiredRoutes."
         },
         "checkLinks": { "type": "boolean" },
         "checkAssets": { "type": "boolean" },

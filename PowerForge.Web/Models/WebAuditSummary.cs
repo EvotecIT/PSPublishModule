@@ -23,8 +23,16 @@ public sealed class WebAuditSummary
     public int NavCheckedCount { get; set; }
     /// <summary>Total pages skipped from nav checks by ignore patterns.</summary>
     public int NavIgnoredCount { get; set; }
+    /// <summary>Total pages considered for nav checks (checked + ignored).</summary>
+    public int NavTotalCount { get; set; }
+    /// <summary>Percentage of nav-covered pages among nav-considered pages.</summary>
+    public double NavCoveragePercent { get; set; }
     /// <summary>Total duplicate IDs detected.</summary>
     public int DuplicateIdCount { get; set; }
+    /// <summary>Total required routes requested by audit options.</summary>
+    public int RequiredRouteCount { get; set; }
+    /// <summary>Total required routes missing from generated output.</summary>
+    public int MissingRequiredRouteCount { get; set; }
     /// <summary>Total rendered pages checked.</summary>
     public int RenderedPageCount { get; set; }
     /// <summary>Total console errors detected during rendered checks.</summary>

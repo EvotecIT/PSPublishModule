@@ -43,6 +43,10 @@ public sealed class WebAuditOptions
     public string[] NavIgnorePrefixes { get; set; } = Array.Empty<string>();
     /// <summary>Optional list of links that must be present in the nav (for example "/").</summary>
     public string[] NavRequiredLinks { get; set; } = Array.Empty<string>();
+    /// <summary>Minimum allowed percentage of nav-covered pages (checked / (checked + ignored)). 0 disables the gate.</summary>
+    public int MinNavCoveragePercent { get; set; }
+    /// <summary>Routes that must resolve to generated HTML output (for example "/", "/404.html", "/api/").</summary>
+    public string[] RequiredRoutes { get; set; } = Array.Empty<string>();
     /// <summary>When true, run rendered (Playwright) checks.</summary>
     public bool CheckRendered { get; set; }
     /// <summary>Maximum number of pages to render (0 = all).</summary>
@@ -150,6 +154,7 @@ public static class WebSiteAuditor
             .Where(category => !string.IsNullOrWhiteSpace(category))
             .Select(category => category.Trim().ToLowerInvariant())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var minNavCoveragePercent = Math.Clamp(options.MinNavCoveragePercent, 0, 100);
 
         void AddIssue(string severity, string category, string? path, string message, string? keyHint = null)
         {
@@ -193,6 +198,8 @@ public static class WebSiteAuditor
         var navCheckedCount = 0;
         var navIgnoredCount = 0;
         var duplicateIdCount = 0;
+        var requiredRouteCount = 0;
+        var missingRequiredRouteCount = 0;
         var renderedPageCount = 0;
         var renderedConsoleErrorCount = 0;
         var renderedConsoleWarningCount = 0;
@@ -262,6 +269,35 @@ public static class WebSiteAuditor
                 .Concat(canonicalNavLinks)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+        }
+
+        var requiredRoutes = options.RequiredRoutes
+            .Where(route => !string.IsNullOrWhiteSpace(route))
+            .Select(route => route.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        requiredRouteCount = requiredRoutes.Length;
+        if (requiredRoutes.Length > 0)
+        {
+            var htmlSet = new HashSet<string>(
+                htmlFiles.Select(path => Path.GetRelativePath(siteRoot, path).Replace('\\', '/')),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var requiredRoute in requiredRoutes)
+            {
+                var candidates = ResolveRequiredRouteCandidates(requiredRoute);
+                if (candidates.Length == 0)
+                    continue;
+
+                var exists = candidates.Any(candidate => htmlSet.Contains(candidate));
+                if (exists)
+                    continue;
+
+                missingRequiredRouteCount++;
+                var expected = string.Join(", ", candidates.Select(path => "/" + path));
+                AddIssue("error", "route", null,
+                    $"required route '{requiredRoute}' is missing. Expected one of: {expected}.",
+                    $"required-route:{requiredRoute}");
+            }
         }
 
         HashSet<string>? baselineIssueKeys = null;
@@ -559,6 +595,11 @@ public static class WebSiteAuditor
                 issue.IsNew = !baselineIssueKeys.Contains(issue.Key);
         }
 
+        var navTotalCount = navCheckedCount + navIgnoredCount;
+        var navCoveragePercent = navTotalCount == 0
+            ? 100d
+            : (double)navCheckedCount * 100d / navTotalCount;
+
         var preGateErrorCount = errors.Count;
         var preGateWarningCount = warnings.Count;
         var preGateNewIssueCount = issues.Count(issue => issue.IsNew);
@@ -586,6 +627,14 @@ public static class WebSiteAuditor
             AddIssue("error", "gate", null,
                 $"Audit gate failed: warnings {preGateWarningCount} exceed max-warnings {options.MaxWarnings}.",
                 "gate-max-warnings");
+        }
+
+        if (options.CheckNavConsistency && minNavCoveragePercent > 0 && navTotalCount > 0 &&
+            navCoveragePercent < minNavCoveragePercent)
+        {
+            AddIssue("error", "gate", null,
+                $"Audit gate failed: nav coverage {navCoveragePercent:0.0}% is below min-nav-coverage {minNavCoveragePercent}%.",
+                "gate-nav-coverage");
         }
 
         if (options.FailOnWarnings && preGateWarningCount > 0)
@@ -625,7 +674,11 @@ public static class WebSiteAuditor
             NavMismatchCount = navMismatchCount,
             NavCheckedCount = navCheckedCount,
             NavIgnoredCount = navIgnoredCount,
+            NavTotalCount = navTotalCount,
+            NavCoveragePercent = navCoveragePercent,
             DuplicateIdCount = duplicateIdCount,
+            RequiredRouteCount = requiredRouteCount,
+            MissingRequiredRouteCount = missingRequiredRouteCount,
             RenderedPageCount = renderedPageCount,
             RenderedConsoleErrorCount = renderedConsoleErrorCount,
             RenderedConsoleWarningCount = renderedConsoleWarningCount,
@@ -656,7 +709,11 @@ public static class WebSiteAuditor
                 NavMismatchCount = result.NavMismatchCount,
                 NavCheckedCount = result.NavCheckedCount,
                 NavIgnoredCount = result.NavIgnoredCount,
+                NavTotalCount = result.NavTotalCount,
+                NavCoveragePercent = result.NavCoveragePercent,
                 DuplicateIdCount = result.DuplicateIdCount,
+                RequiredRouteCount = result.RequiredRouteCount,
+                MissingRequiredRouteCount = result.MissingRequiredRouteCount,
                 RenderedPageCount = result.RenderedPageCount,
                 RenderedConsoleErrorCount = result.RenderedConsoleErrorCount,
                 RenderedConsoleWarningCount = result.RenderedConsoleWarningCount,
@@ -865,6 +922,56 @@ public static class WebSiteAuditor
             normalized = normalized.TrimEnd('/');
 
         return normalized;
+    }
+
+    private static string[] ResolveRequiredRouteCandidates(string route)
+    {
+        var normalized = StripQueryAndFragment(route).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return Array.Empty<string>();
+        if (IsExternalLink(normalized))
+            return Array.Empty<string>();
+
+        normalized = normalized.Replace('\\', '/');
+        if (normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = normalized.TrimStart('/');
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            return new[] { "index.html" };
+
+        var candidates = new List<string>();
+        if (normalized.EndsWith("/", StringComparison.Ordinal))
+        {
+            var basePath = normalized.TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(basePath))
+            {
+                candidates.Add("index.html");
+            }
+            else
+            {
+                candidates.Add(basePath + "/index.html");
+                candidates.Add(basePath + ".html");
+            }
+        }
+        else if (normalized.EndsWith("index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            candidates.Add(normalized);
+        }
+        else if (Path.HasExtension(normalized))
+        {
+            candidates.Add(normalized);
+        }
+        else
+        {
+            candidates.Add(normalized + "/index.html");
+            candidates.Add(normalized + ".html");
+        }
+
+        return candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Select(candidate => candidate.TrimStart('/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IEnumerable<string> GetAssetHrefs(AngleSharp.Dom.IDocument doc)
