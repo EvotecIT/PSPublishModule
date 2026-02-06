@@ -338,10 +338,10 @@ public static class WebSiteVerifier
         if (string.IsNullOrWhiteSpace(themeRoot))
             return;
 
-        var manifestPath = Path.Combine(themeRoot, "theme.json");
-        if (!File.Exists(manifestPath))
+        var manifestPath = ResolveThemeManifestPath(themeRoot);
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
         {
-            warnings.Add($"Theme '{spec.DefaultTheme}' does not define 'theme.json'. Add an explicit manifest to make theme behavior portable.");
+            warnings.Add($"Theme '{spec.DefaultTheme}' does not define 'theme.manifest.json' (or legacy 'theme.json'). Add an explicit manifest to make theme behavior portable.");
             return;
         }
 
@@ -365,7 +365,7 @@ public static class WebSiteVerifier
 
         if (string.IsNullOrWhiteSpace(manifest.Engine))
         {
-            warnings.Add($"Theme '{manifest.Name}' does not set 'engine' in theme.json. Set 'simple' or 'scriban' explicitly.");
+            warnings.Add($"Theme '{manifest.Name}' does not set 'engine' in theme manifest. Set 'simple' or 'scriban' explicitly.");
         }
         else if (!manifest.Engine.Equals("simple", StringComparison.OrdinalIgnoreCase) &&
                  !manifest.Engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
@@ -376,6 +376,7 @@ public static class WebSiteVerifier
         ValidateThemeManifestPath(manifest.LayoutsPath, $"theme:{manifest.Name} layoutsPath", warnings);
         ValidateThemeManifestPath(manifest.PartialsPath, $"theme:{manifest.Name} partialsPath", warnings);
         ValidateThemeManifestPath(manifest.AssetsPath, $"theme:{manifest.Name} assetsPath", warnings);
+        ValidateThemeManifestPath(manifest.ScriptsPath, $"theme:{manifest.Name} scriptsPath", warnings);
 
         ValidateThemeMappedPaths(manifest.Layouts, $"theme:{manifest.Name} layouts", warnings);
         ValidateThemeMappedPaths(manifest.Partials, $"theme:{manifest.Name} partials", warnings);
@@ -390,6 +391,9 @@ public static class WebSiteVerifier
 
             if (manifest.Slots is null || manifest.Slots.Count == 0)
                 warnings.Add($"Theme '{manifest.Name}' contractVersion 2 should define 'slots' for portable hook points.");
+
+            if (string.IsNullOrWhiteSpace(manifest.ScriptsPath))
+                warnings.Add($"Theme '{manifest.Name}' contractVersion 2 should set 'scriptsPath' for portable JS assets.");
         }
 
         if (!string.IsNullOrWhiteSpace(manifest.DefaultLayout))
@@ -1137,7 +1141,7 @@ public static class WebSiteVerifier
             return;
         if (IsExternalPath(path))
         {
-            warnings.Add($"{label} should use local relative paths in theme.json. Move external URLs to site-level overrides when possible: {path}");
+            warnings.Add($"{label} should use local relative paths in theme manifest. Move external URLs to site-level overrides when possible: {path}");
             return;
         }
         if (!IsPortableRelativePath(path))
@@ -1206,6 +1210,19 @@ public static class WebSiteVerifier
             return planThemesRoot;
         var themesRoot = string.IsNullOrWhiteSpace(spec.ThemesRoot) ? "themes" : spec.ThemesRoot;
         return Path.IsPathRooted(themesRoot) ? themesRoot : Path.Combine(rootPath, themesRoot);
+    }
+
+    private static string? ResolveThemeManifestPath(string themeRoot)
+    {
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return null;
+
+        var contractPath = Path.Combine(themeRoot, "theme.manifest.json");
+        if (File.Exists(contractPath))
+            return contractPath;
+
+        var legacyPath = Path.Combine(themeRoot, "theme.json");
+        return File.Exists(legacyPath) ? legacyPath : null;
     }
 
     private static bool GlobMatch(string pattern, string value)

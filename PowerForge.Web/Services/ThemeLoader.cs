@@ -110,8 +110,8 @@ public sealed class ThemeLoader
         if (!Directory.Exists(themeRoot))
             return null;
 
-        var manifestPath = Path.Combine(themeRoot, "theme.json");
-        if (!File.Exists(manifestPath))
+        var manifestPath = ResolveThemeManifestPath(themeRoot);
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
             return new ThemeManifest { Name = Path.GetFileName(themeRoot) };
 
         var json = File.ReadAllText(manifestPath);
@@ -142,6 +142,7 @@ public sealed class ThemeLoader
             LayoutsPath = child.LayoutsPath ?? parent.LayoutsPath,
             PartialsPath = child.PartialsPath ?? parent.PartialsPath,
             AssetsPath = child.AssetsPath ?? parent.AssetsPath,
+            ScriptsPath = child.ScriptsPath ?? parent.ScriptsPath,
             Layouts = MergeDictionary(parent.Layouts, child.Layouts),
             Partials = MergeDictionary(parent.Partials, child.Partials),
             Slots = MergeDictionary(parent.Slots, child.Slots),
@@ -260,5 +261,18 @@ public sealed class ThemeLoader
             default:
                 return null;
         }
+    }
+
+    private static string? ResolveThemeManifestPath(string themeRoot)
+    {
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return null;
+
+        var manifestPath = Path.Combine(themeRoot, "theme.manifest.json");
+        if (File.Exists(manifestPath))
+            return manifestPath;
+
+        var legacyPath = Path.Combine(themeRoot, "theme.json");
+        return File.Exists(legacyPath) ? legacyPath : null;
     }
 }

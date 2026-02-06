@@ -638,6 +638,161 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_CanUseExternalContentRoots()
+    {
+        var workspaceRoot = Path.Combine(Path.GetTempPath(), "pf-web-build-content-roots-" + Guid.NewGuid().ToString("N"));
+        var siteRoot = Path.Combine(workspaceRoot, "website");
+        var docsRoot = Path.Combine(workspaceRoot, "docs");
+        Directory.CreateDirectory(siteRoot);
+        Directory.CreateDirectory(docsRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(docsRoot, "index.md"),
+                """
+                ---
+                title: Documentation Home
+                ---
+
+                # Docs
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Test",
+                BaseUrl = "https://example.test",
+                ContentRoots = new[] { "../docs" },
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "docs",
+                        Output = "/docs"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(siteRoot, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outputRoot = Path.Combine(siteRoot, "_site");
+
+            WebSiteBuilder.Build(spec, plan, outputRoot);
+
+            Assert.True(File.Exists(Path.Combine(outputRoot, "docs", "index.html")));
+        }
+        finally
+        {
+            if (Directory.Exists(workspaceRoot))
+                Directory.Delete(workspaceRoot, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_NavProfilesAllowDifferentNavScopes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-nav-profiles-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <header><nav><a href="/">Home</a><a href="/docs/">Docs</a></nav></header>
+                </body>
+                </html>
+                """);
+
+            var apiRoot = Path.Combine(root, "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>API</title></head>
+                <body>
+                  <aside><nav><a href="/api/">API Home</a></nav></aside>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                NavSelector = "header nav",
+                IgnoreNavFor = Array.Empty<string>(),
+                NavProfiles = new[]
+                {
+                    new WebAuditNavProfile
+                    {
+                        Match = "api/**",
+                        Selector = "aside nav",
+                        RequiredLinks = new[] { "/api/" }
+                    }
+                },
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(2, result.NavCheckedCount);
+            Assert.Equal(0, result.NavMismatchCount);
+            Assert.DoesNotContain(result.Warnings, warning => warning.Contains("nav not found", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_WritesSarifOutput()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-sarif-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body><nav><a href="/">Home</a></nav></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                SarifPath = "audit.sarif.json"
+            });
+
+            Assert.True(result.Success);
+            Assert.NotNull(result.SarifPath);
+            Assert.True(File.Exists(result.SarifPath!));
+
+            var sarif = File.ReadAllText(result.SarifPath!);
+            Assert.Contains("\"$schema\"", sarif, StringComparison.Ordinal);
+            Assert.Contains("\"runs\"", sarif, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FailOnWarnings_TriggersGateError()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-gate-" + Guid.NewGuid().ToString("N"));

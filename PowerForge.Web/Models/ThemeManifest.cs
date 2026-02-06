@@ -25,6 +25,8 @@ public sealed class ThemeManifest
     public string? PartialsPath { get; set; }
     /// <summary>Relative path to assets folder.</summary>
     public string? AssetsPath { get; set; }
+    /// <summary>Relative path to scripts folder.</summary>
+    public string? ScriptsPath { get; set; }
     /// <summary>Named layout mapping.</summary>
     public Dictionary<string, string>? Layouts { get; set; }
     /// <summary>Named partial mapping.</summary>

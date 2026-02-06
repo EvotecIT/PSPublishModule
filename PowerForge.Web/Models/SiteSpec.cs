@@ -17,6 +17,8 @@ public sealed class SiteSpec
     public TrailingSlashMode TrailingSlash { get; set; } = TrailingSlashMode.Ignore;
     /// <summary>Optional content root for shared pages.</summary>
     public string? ContentRoot { get; set; }
+    /// <summary>Optional additional content roots used as source-of-truth folders.</summary>
+    public string[] ContentRoots { get; set; } = Array.Empty<string>();
     /// <summary>Optional projects root.</summary>
     public string? ProjectsRoot { get; set; }
     /// <summary>Optional themes root.</summary>

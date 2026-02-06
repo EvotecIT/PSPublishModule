@@ -13,6 +13,8 @@ public sealed class WebSitePlan
     public string RootPath { get; set; } = string.Empty;
     /// <summary>Resolved content root.</summary>
     public string? ContentRoot { get; set; }
+    /// <summary>Resolved additional content roots.</summary>
+    public string[] ContentRoots { get; set; } = Array.Empty<string>();
     /// <summary>Resolved projects root.</summary>
     public string? ProjectsRoot { get; set; }
     /// <summary>Resolved themes root.</summary>

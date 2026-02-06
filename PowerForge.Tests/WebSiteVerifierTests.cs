@@ -205,6 +205,7 @@ public class WebSiteVerifierTests
 
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, warning => warning.Contains("contractVersion 2 should set 'defaultLayout'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("contractVersion 2 should set 'scriptsPath'", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Warnings, warning => warning.Contains("slot 'hero' maps to missing partial", StringComparison.OrdinalIgnoreCase));
         }
         finally

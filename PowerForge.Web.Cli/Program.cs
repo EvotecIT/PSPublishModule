@@ -427,6 +427,7 @@ try
             var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
             var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
             var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
+            var navProfilesPath = TryGetOptionValue(subArgs, "--nav-profiles");
             var minNavCoverageText = TryGetOptionValue(subArgs, "--min-nav-coverage");
             var requiredRoutes = ReadOptionList(subArgs, "--required-route", "--required-routes");
             var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
@@ -450,6 +451,8 @@ try
             var summaryEnabled = HasOption(subArgs, "--summary");
             var summaryPath = TryGetOptionValue(subArgs, "--summary-path");
             var summaryMaxText = TryGetOptionValue(subArgs, "--summary-max");
+            var sarifEnabled = HasOption(subArgs, "--sarif");
+            var sarifPath = TryGetOptionValue(subArgs, "--sarif-path");
             var useDefaultExclude = !HasOption(subArgs, "--no-default-exclude");
             var baselineGenerate = HasOption(subArgs, "--baseline-generate");
             var baselineUpdate = HasOption(subArgs, "--baseline-update");
@@ -477,6 +480,8 @@ try
             if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
                 baselinePathValue = "audit-baseline.json";
             var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
+            var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
+            var navProfiles = LoadAuditNavProfiles(navProfilesPath);
 
             var result = WebSiteAuditor.Audit(new WebAuditOptions
             {
@@ -489,6 +494,7 @@ try
                 NavRequired = navRequired,
                 NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
                 NavRequiredLinks = navRequiredLinks.ToArray(),
+                NavProfiles = navProfiles,
                 MinNavCoveragePercent = minNavCoveragePercent,
                 RequiredRoutes = requiredRoutes.ToArray(),
                 CheckLinks = !HasOption(subArgs, "--no-links"),
@@ -513,6 +519,7 @@ try
                 RenderedInclude = renderedInclude.ToArray(),
                 RenderedExclude = renderedExclude.ToArray(),
                 SummaryPath = resolvedSummaryPath,
+                SarifPath = resolvedSarifPath,
                 SummaryMaxIssues = summaryMax,
                 BaselinePath = baselinePathValue,
                 FailOnWarnings = failOnWarnings,
@@ -590,6 +597,8 @@ try
                 logger.Info($"Baseline written: {writtenBaselinePath}");
             if (!string.IsNullOrWhiteSpace(result.SummaryPath))
                 logger.Info($"Audit summary: {result.SummaryPath}");
+            if (!string.IsNullOrWhiteSpace(result.SarifPath))
+                logger.Info($"Audit SARIF: {result.SarifPath}");
 
             return result.Success ? 0 : 1;
         }
@@ -1437,6 +1446,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
     Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
     Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
+    Console.WriteLine("                     [--nav-profiles <file.json>]");
     Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
     Console.WriteLine("                     [--nav-required-link <path[,path]>]");
     Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
@@ -1446,6 +1456,7 @@ static void PrintUsage()
     Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
     Console.WriteLine("                     [--no-default-exclude]");
     Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
+    Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
     Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
     Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
     Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
@@ -1593,6 +1604,28 @@ static string? ResolveSummaryPath(bool summaryEnabled, string? summaryPath)
         return null;
 
     return string.IsNullOrWhiteSpace(summaryPath) ? "audit-summary.json" : summaryPath;
+}
+
+static string? ResolveSarifPath(bool sarifEnabled, string? sarifPath)
+{
+    if (!sarifEnabled && string.IsNullOrWhiteSpace(sarifPath))
+        return null;
+
+    return string.IsNullOrWhiteSpace(sarifPath) ? "audit.sarif.json" : sarifPath;
+}
+
+static WebAuditNavProfile[] LoadAuditNavProfiles(string? navProfilesPath)
+{
+    if (string.IsNullOrWhiteSpace(navProfilesPath))
+        return Array.Empty<WebAuditNavProfile>();
+
+    var fullPath = ResolveExistingFilePath(navProfilesPath);
+    using var stream = File.OpenRead(fullPath);
+    var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditNavProfileArray)
+                   ?? Array.Empty<WebAuditNavProfile>();
+    return profiles
+        .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+        .ToArray();
 }
 
 static string[] BuildIgnoreNavPatterns(List<string> userPatterns, bool useDefaults)
@@ -2433,6 +2466,7 @@ internal static class WebPipelineRunner
                                                 GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
                         var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
                                                GetString(step, "navRequiredLink") ?? GetString(step, "nav-required-link");
+                        var navProfilesPath = GetString(step, "navProfiles") ?? GetString(step, "nav-profiles");
                         var minNavCoveragePercent = GetInt(step, "minNavCoveragePercent") ?? GetInt(step, "min-nav-coverage") ?? 0;
                         var requiredRoutes = GetString(step, "requiredRoutes") ?? GetString(step, "required-routes") ??
                                              GetString(step, "requiredRoute") ?? GetString(step, "required-route");
@@ -2463,6 +2497,8 @@ internal static class WebPipelineRunner
                         var summary = GetBool(step, "summary") ?? false;
                         var summaryPath = GetString(step, "summaryPath");
                         var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                        var sarif = GetBool(step, "sarif") ?? false;
+                        var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
                         var baselineGenerate = GetBool(step, "baselineGenerate") ?? false;
                         var baselineUpdate = GetBool(step, "baselineUpdate") ?? false;
                         var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline");
@@ -2485,6 +2521,8 @@ internal static class WebPipelineRunner
                         var ignoreNavPatterns = BuildIgnoreNavPatternsForPipeline(ignoreNavList, useDefaultIgnoreNav);
                         var navRequiredValue = navRequired ?? !(navOptional ?? false);
                         var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
+                        var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+                        var resolvedSarifPath = ResolveSarifPathForPipeline(sarif, sarifPath);
 
                         var ensureInstall = rendered && (renderedEnsureInstalled ?? true);
                         var audit = WebSiteAuditor.Audit(new WebAuditOptions
@@ -2498,6 +2536,7 @@ internal static class WebPipelineRunner
                             NavRequired = navRequiredValue,
                             NavIgnorePrefixes = navIgnorePrefixList,
                             NavRequiredLinks = CliPatternHelper.SplitPatterns(navRequiredLinks),
+                            NavProfiles = navProfiles,
                             MinNavCoveragePercent = minNavCoveragePercent,
                             RequiredRoutes = CliPatternHelper.SplitPatterns(requiredRoutes),
                             CheckLinks = checkLinks,
@@ -2522,6 +2561,7 @@ internal static class WebPipelineRunner
                             RenderedInclude = CliPatternHelper.SplitPatterns(renderedInclude),
                             RenderedExclude = CliPatternHelper.SplitPatterns(renderedExclude),
                             SummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath),
+                            SarifPath = resolvedSarifPath,
                             SummaryMaxIssues = summaryMax,
                             BaselinePath = baselinePath,
                             FailOnWarnings = failOnWarnings,
@@ -2877,6 +2917,8 @@ internal static class WebPipelineRunner
             parts.Add($"warnings {result.WarningCount}");
         if (result.NewIssueCount > 0)
             parts.Add($"new {result.NewIssueCount}");
+        if (!string.IsNullOrWhiteSpace(result.SarifPath))
+            parts.Add("sarif");
 
         return $"Audit ok {string.Join(", ", parts)}";
     }
@@ -2891,6 +2933,8 @@ internal static class WebPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(result.SummaryPath))
             parts.Add($"summary {result.SummaryPath}");
+        if (!string.IsNullOrWhiteSpace(result.SarifPath))
+            parts.Add($"sarif {result.SarifPath}");
 
         if (safePreviewCount <= 0 || result.Errors.Length == 0)
             return string.Join(", ", parts);
@@ -3403,5 +3447,30 @@ internal static class WebPipelineRunner
             return null;
 
         return string.IsNullOrWhiteSpace(summaryPath) ? "audit-summary.json" : summaryPath;
+    }
+
+    private static string? ResolveSarifPathForPipeline(bool sarifEnabled, string? sarifPath)
+    {
+        if (!sarifEnabled && string.IsNullOrWhiteSpace(sarifPath))
+            return null;
+
+        return string.IsNullOrWhiteSpace(sarifPath) ? "audit.sarif.json" : sarifPath;
+    }
+
+    private static WebAuditNavProfile[] LoadAuditNavProfilesForPipeline(string baseDir, string? navProfilesPath)
+    {
+        if (string.IsNullOrWhiteSpace(navProfilesPath))
+            return Array.Empty<WebAuditNavProfile>();
+
+        var resolvedPath = ResolvePath(baseDir, navProfilesPath);
+        if (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath))
+            throw new FileNotFoundException($"Nav profile file not found: {navProfilesPath}", resolvedPath ?? navProfilesPath);
+
+        using var stream = File.OpenRead(resolvedPath);
+        var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditNavProfileArray)
+                       ?? Array.Empty<WebAuditNavProfile>();
+        return profiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+            .ToArray();
     }
 }

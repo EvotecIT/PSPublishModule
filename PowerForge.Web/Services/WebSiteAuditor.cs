@@ -43,6 +43,8 @@ public sealed class WebAuditOptions
     public string[] NavIgnorePrefixes { get; set; } = Array.Empty<string>();
     /// <summary>Optional list of links that must be present in the nav (for example "/").</summary>
     public string[] NavRequiredLinks { get; set; } = Array.Empty<string>();
+    /// <summary>Optional per-path nav behavior overrides.</summary>
+    public WebAuditNavProfile[] NavProfiles { get; set; } = Array.Empty<WebAuditNavProfile>();
     /// <summary>Minimum allowed percentage of nav-covered pages (checked / (checked + ignored)). 0 disables the gate.</summary>
     public int MinNavCoveragePercent { get; set; }
     /// <summary>Routes that must resolve to generated HTML output (for example "/", "/404.html", "/api/").</summary>
@@ -79,6 +81,8 @@ public sealed class WebAuditOptions
     public bool RenderedCheckFailedRequests { get; set; } = true;
     /// <summary>Optional path to write audit summary JSON (relative to site root if not rooted).</summary>
     public string? SummaryPath { get; set; }
+    /// <summary>Optional path to write SARIF output (relative to site root if not rooted).</summary>
+    public string? SarifPath { get; set; }
     /// <summary>Maximum number of issues to include in the summary.</summary>
     public int SummaryMaxIssues { get; set; } = 10;
     /// <summary>Optional path to canonical nav HTML used as the baseline signature.</summary>
@@ -187,8 +191,8 @@ public static class WebSiteAuditor
         if (htmlFiles.Count == 0)
             AddIssue("warning", "general", null, "No HTML files found to audit.", "no-html");
 
-        var baselineNavSignature = (string?)null;
-        var baselineNavSource = (string?)null;
+        var baselineNavSignatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var baselineNavSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pageCount = 0;
         var linkCount = 0;
         var brokenLinkCount = 0;
@@ -210,6 +214,7 @@ public static class WebSiteAuditor
             .Where(link => !string.IsNullOrWhiteSpace(link))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var navProfiles = NormalizeNavProfiles(options.NavProfiles);
         var canonicalNavLinks = Array.Empty<string>();
 
         if (options.CheckNavConsistency && !string.IsNullOrWhiteSpace(options.NavCanonicalPath))
@@ -243,8 +248,9 @@ public static class WebSiteAuditor
                     }
                     else
                     {
-                        baselineNavSignature = BuildNavSignature(canonicalNav);
-                        baselineNavSource = ToRelative(siteRoot, canonicalPath);
+                        var canonicalScope = BuildNavScopeKey(null, selector);
+                        baselineNavSignatures[canonicalScope] = BuildNavSignature(canonicalNav);
+                        baselineNavSources[canonicalScope] = ToRelative(siteRoot, canonicalPath);
                         canonicalNavLinks = canonicalNav.QuerySelectorAll("a[href]")
                             .Select(anchor => NormalizeNavHref(anchor.GetAttribute("href")))
                             .Where(link => !string.IsNullOrWhiteSpace(link))
@@ -372,37 +378,46 @@ public static class WebSiteAuditor
                 }
             }
 
+            var navProfile = ResolveNavProfile(relativePath, navProfiles);
+            var navSelector = !string.IsNullOrWhiteSpace(navProfile?.Selector)
+                ? navProfile!.Selector!
+                : options.NavSelector;
+            var navRequired = navProfile?.Required ?? options.NavRequired;
+            var requiredNavLinksForPage = MergeRequiredNavLinks(requiredNavLinks, navProfile);
             var navIgnored = options.IgnoreNavFor.Length > 0 &&
                              MatchesAny(options.IgnoreNavFor, relativePath);
             var prefixIgnored = navIgnorePrefixes.Length > 0 &&
                                 navIgnorePrefixes.Any(prefix => relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-            if (options.CheckNavConsistency && (navIgnored || prefixIgnored))
+            var profileIgnored = navProfile?.Ignore ?? false;
+            if (options.CheckNavConsistency && (navIgnored || prefixIgnored || profileIgnored))
                 navIgnoredCount++;
-            if (options.CheckNavConsistency && !navIgnored && !prefixIgnored)
+            if (options.CheckNavConsistency && !navIgnored && !prefixIgnored && !profileIgnored)
             {
                 navCheckedCount++;
-                var navElement = doc.QuerySelector(options.NavSelector);
+                var navElement = doc.QuerySelector(navSelector);
                 if (navElement is null)
                 {
-                    if (options.NavRequired)
-                        AddIssue("warning", "nav", relativePath, $"nav not found using selector '{options.NavSelector}'.", "nav-missing");
+                    if (navRequired)
+                        AddIssue("warning", "nav", relativePath, $"nav not found using selector '{navSelector}'.", "nav-missing");
                 }
                 else
                 {
+                    var navScope = BuildNavScopeKey(navProfile, navSelector);
                     var signature = BuildNavSignature(navElement);
-                    if (baselineNavSignature is null)
+                    if (!baselineNavSignatures.TryGetValue(navScope, out var baselineNavSignature))
                     {
-                        baselineNavSignature = signature;
-                        baselineNavSource = relativePath;
+                        baselineNavSignatures[navScope] = signature;
+                        baselineNavSources[navScope] = relativePath;
                     }
                     else if (!string.Equals(baselineNavSignature, signature, StringComparison.Ordinal))
                     {
                         navMismatchCount++;
+                        baselineNavSources.TryGetValue(navScope, out var baselineNavSource);
                         var sourceLabel = string.IsNullOrWhiteSpace(baselineNavSource) ? "baseline" : baselineNavSource;
                         AddIssue("warning", "nav", relativePath, $"nav differs from baseline ({sourceLabel}).", "nav-mismatch");
                     }
 
-                    if (requiredNavLinks.Length > 0)
+                    if (requiredNavLinksForPage.Length > 0)
                     {
                         var navLinks = navElement.QuerySelectorAll("a[href]")
                             .Select(a => NormalizeNavHref(a.GetAttribute("href")))
@@ -410,7 +425,7 @@ public static class WebSiteAuditor
                             .Distinct(StringComparer.OrdinalIgnoreCase)
                             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                        var missing = requiredNavLinks
+                        var missing = requiredNavLinksForPage
                             .Where(required => !navLinks.Contains(required))
                             .ToArray();
 
@@ -733,6 +748,13 @@ public static class WebSiteAuditor
             result.SummaryPath = summaryPath;
         }
 
+        if (!string.IsNullOrWhiteSpace(options.SarifPath))
+        {
+            var sarifPath = ResolveSummaryPath(siteRoot, options.SarifPath);
+            WriteSarif(sarifPath, result.Issues, warnings);
+            result.SarifPath = sarifPath;
+        }
+
         return result;
     }
 
@@ -904,6 +926,68 @@ public static class WebSiteAuditor
             tokens.Add($"{href.Trim()}|{text.Trim()}");
         }
         return string.Join("||", tokens);
+    }
+
+    private static WebAuditNavProfile[] NormalizeNavProfiles(WebAuditNavProfile[]? profiles)
+    {
+        if (profiles is null || profiles.Length == 0)
+            return Array.Empty<WebAuditNavProfile>();
+
+        return profiles
+            .Where(profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Match))
+            .Select(profile => new WebAuditNavProfile
+            {
+                Match = profile.Match.Replace('\\', '/').Trim(),
+                Selector = string.IsNullOrWhiteSpace(profile.Selector) ? null : profile.Selector.Trim(),
+                Required = profile.Required,
+                RequiredLinks = (profile.RequiredLinks ?? Array.Empty<string>())
+                    .Where(link => !string.IsNullOrWhiteSpace(link))
+                    .Select(NormalizeNavHref)
+                    .Where(link => !string.IsNullOrWhiteSpace(link))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                Ignore = profile.Ignore
+            })
+            .OrderByDescending(profile => profile.Match.Length)
+            .ToArray();
+    }
+
+    private static WebAuditNavProfile? ResolveNavProfile(string relativePath, WebAuditNavProfile[] profiles)
+    {
+        if (profiles.Length == 0 || string.IsNullOrWhiteSpace(relativePath))
+            return null;
+
+        var normalizedPath = relativePath.Replace('\\', '/').TrimStart('/');
+        foreach (var profile in profiles)
+        {
+            if (GlobMatch(profile.Match, normalizedPath))
+                return profile;
+        }
+
+        return null;
+    }
+
+    private static string[] MergeRequiredNavLinks(string[] defaultRequiredLinks, WebAuditNavProfile? profile)
+    {
+        if (profile is null || profile.RequiredLinks.Length == 0)
+            return defaultRequiredLinks;
+
+        return defaultRequiredLinks
+            .Concat(profile.RequiredLinks)
+            .Where(link => !string.IsNullOrWhiteSpace(link))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string BuildNavScopeKey(WebAuditNavProfile? profile, string selector)
+    {
+        var profileMatch = profile is null || string.IsNullOrWhiteSpace(profile.Match)
+            ? "__default__"
+            : profile.Match;
+        var navSelector = string.IsNullOrWhiteSpace(selector)
+            ? "nav"
+            : selector.Trim();
+        return profileMatch + "|" + navSelector;
     }
 
     private static string NormalizeNavHref(string? href)
@@ -1339,6 +1423,103 @@ public static class WebSiteAuditor
         {
             warnings.Add($"Audit summary write failed: {ex.Message}");
         }
+    }
+
+    private static void WriteSarif(string sarifPath, IReadOnlyList<WebAuditIssue> issues, IList<string> warnings)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(sarifPath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var rules = issues
+                .Where(issue => !string.IsNullOrWhiteSpace(issue.Category))
+                .Select(issue => issue.Category.Trim().ToLowerInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(category => new
+                {
+                    id = "powerforge.web/" + category,
+                    shortDescription = new { text = "PowerForge.Web audit category: " + category }
+                })
+                .ToArray();
+
+            var results = issues.Select(issue =>
+            {
+                var ruleId = "powerforge.web/" +
+                             (string.IsNullOrWhiteSpace(issue.Category) ? "general" : issue.Category.Trim().ToLowerInvariant());
+                var location = string.IsNullOrWhiteSpace(issue.Path)
+                    ? null
+                    : new[]
+                    {
+                        new
+                        {
+                            physicalLocation = new
+                            {
+                                artifactLocation = new { uri = issue.Path.Replace('\\', '/') }
+                            }
+                        }
+                    };
+
+                return new
+                {
+                    ruleId,
+                    level = MapSarifLevel(issue.Severity),
+                    message = new { text = issue.Message },
+                    locations = location,
+                    properties = new
+                    {
+                        key = issue.Key,
+                        category = issue.Category,
+                        severity = issue.Severity,
+                        isNew = issue.IsNew
+                    }
+                };
+            }).ToArray();
+
+            var sarif = new Dictionary<string, object?>
+            {
+                ["$schema"] = "https://json.schemastore.org/sarif-2.1.0.json",
+                ["version"] = "2.1.0",
+                ["runs"] = new[]
+                {
+                    new
+                    {
+                        tool = new
+                        {
+                            driver = new
+                            {
+                                name = "PowerForge.Web",
+                                fullName = "PowerForge.Web Static Site Audit",
+                                version = typeof(WebSiteAuditor).Assembly.GetName().Version?.ToString() ?? "unknown",
+                                rules
+                            }
+                        },
+                        results
+                    }
+                }
+            };
+
+            var json = JsonSerializer.Serialize(sarif, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(sarifPath, json);
+        }
+        catch (Exception ex)
+        {
+            warnings.Add($"Audit SARIF write failed: {ex.Message}");
+        }
+    }
+
+    private static string MapSarifLevel(string? severity)
+    {
+        if (string.IsNullOrWhiteSpace(severity))
+            return "warning";
+
+        if (severity.Equals("error", StringComparison.OrdinalIgnoreCase))
+            return "error";
+        if (severity.Equals("info", StringComparison.OrdinalIgnoreCase))
+            return "note";
+
+        return "warning";
     }
 
     private static HtmlBrowserEngine ResolveEngine(string? value, IList<string> warnings)

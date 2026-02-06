@@ -55,6 +55,8 @@ public sealed class WebAuditResult
     public int BaselineIssueCount { get; set; }
     /// <summary>Optional path to the audit summary file.</summary>
     public string? SummaryPath { get; set; }
+    /// <summary>Optional path to SARIF output file.</summary>
+    public string? SarifPath { get; set; }
     /// <summary>Structured audit issues.</summary>
     public WebAuditIssue[] Issues { get; set; } = Array.Empty<WebAuditIssue>();
     /// <summary>Audit errors.</summary>
