@@ -1106,14 +1106,44 @@ public static class WebSiteVerifier
     {
         if (string.IsNullOrWhiteSpace(path))
             return false;
-        if (Path.IsPathRooted(path))
-            return false;
-        if (path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith("\\", StringComparison.Ordinal))
+        var trimmed = path.Trim();
+
+        // Explicit drive-letter guard keeps behavior consistent across OSes
+        // (e.g. C:\foo should never be treated as portable).
+        if (trimmed.Length >= 2 && char.IsLetter(trimmed[0]) && trimmed[1] == ':')
             return false;
 
-        var normalized = path.Replace('\\', '/');
+        // Guard URI-like schemes (file:, ftp:, custom:), not just http/https.
+        var colonIndex = trimmed.IndexOf(':');
+        if (colonIndex > 1 && LooksLikeUriScheme(trimmed, colonIndex))
+            return false;
+
+        if (Path.IsPathRooted(trimmed))
+            return false;
+        if (trimmed.StartsWith("/", StringComparison.Ordinal) || trimmed.StartsWith("\\", StringComparison.Ordinal))
+            return false;
+
+        var normalized = trimmed.Replace('\\', '/');
         var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
         return segments.All(segment => !string.Equals(segment, "..", StringComparison.Ordinal));
+    }
+
+    private static bool LooksLikeUriScheme(string value, int colonIndex)
+    {
+        if (string.IsNullOrWhiteSpace(value) || colonIndex <= 0 || colonIndex >= value.Length)
+            return false;
+        if (!char.IsLetter(value[0]))
+            return false;
+
+        for (var i = 1; i < colonIndex; i++)
+        {
+            var ch = value[i];
+            if (char.IsLetterOrDigit(ch) || ch == '+' || ch == '-' || ch == '.')
+                continue;
+            return false;
+        }
+
+        return true;
     }
 
     private static string? ResolveThemeRoot(SiteSpec spec, string rootPath, string? planThemesRoot)
