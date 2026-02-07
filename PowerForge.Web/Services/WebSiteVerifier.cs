@@ -26,6 +26,7 @@ public static class WebSiteVerifier
 
         var errors = new List<string>();
         var warnings = new List<string>();
+        var localization = ResolveLocalizationConfig(spec, warnings);
 
         if (spec.Collections is null || spec.Collections.Length == 0)
         {
@@ -65,10 +66,11 @@ public static class WebSiteVerifier
 
                 var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
-                var relativeDir = NormalizePath(Path.GetDirectoryName(relativePath) ?? string.Empty);
+                var resolvedLanguage = ResolveItemLanguage(spec, localization, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
+                var relativeDir = localizedRelativeDir;
                 var isSectionIndex = IsSectionIndex(file);
                 var isBundleIndex = IsLeafBundleIndex(file);
-                var slugPath = ResolveSlugPath(relativePath, relativeDir, matter?.Slug);
+                var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
                 if (isSectionIndex || isBundleIndex)
                     slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
                 if (string.IsNullOrWhiteSpace(slugPath))
@@ -80,6 +82,7 @@ public static class WebSiteVerifier
                 var projectSlug = ResolveProjectSlug(plan, file);
                 var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
                 var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                route = ApplyLanguagePrefixToRoute(spec, localization, route, resolvedLanguage);
                 if (routes.TryGetValue(route, out var existing))
                 {
                     errors.Add($"Duplicate route '{route}' from '{file}' and '{existing}'.");
@@ -94,11 +97,11 @@ public static class WebSiteVerifier
                     list = new List<CollectionRoute>();
                     collectionRoutes[collection.Name] = list;
                 }
-                list.Add(new CollectionRoute(route, file, matter?.Draft ?? false));
+                list.Add(new CollectionRoute(route, file, matter?.Draft ?? false, resolvedLanguage));
             }
         }
 
-        AddSyntheticTaxonomyRoutes(spec, routes, taxonomyTerms, warnings);
+        AddSyntheticTaxonomyRoutes(spec, localization, routes, taxonomyTerms, warnings);
 
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
@@ -108,7 +111,7 @@ public static class WebSiteVerifier
         ValidatePrismAssets(spec, plan, warnings);
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
-        ValidateBlogAndTaxonomySupport(spec, collectionRoutes, usedTaxonomyNames, warnings);
+        ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateVersioning(spec, warnings);
         ValidateNavigationLint(spec, plan, routes.Keys, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
@@ -157,6 +160,286 @@ public static class WebSiteVerifier
             return path + "/";
 
         return path;
+    }
+
+    private static ResolvedLocalizationConfig ResolveLocalizationConfig(SiteSpec spec, List<string> warnings)
+    {
+        var localizationSpec = spec.Localization;
+        var defaultLanguage = NormalizeLanguageToken(localizationSpec?.DefaultLanguage);
+        if (string.IsNullOrWhiteSpace(defaultLanguage))
+            defaultLanguage = "en";
+
+        var entries = new List<ResolvedLocalizationLanguage>();
+        var duplicateCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var duplicatePrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (localizationSpec?.Languages is { Length: > 0 })
+        {
+            foreach (var language in localizationSpec.Languages)
+            {
+                if (language is null || language.Disabled)
+                    continue;
+
+                var code = NormalizeLanguageToken(language.Code);
+                if (string.IsNullOrWhiteSpace(code))
+                    continue;
+                if (entries.Any(e => e.Code.Equals(code, StringComparison.OrdinalIgnoreCase)))
+                {
+                    duplicateCodes.Add(code);
+                    continue;
+                }
+
+                var prefix = NormalizePath(string.IsNullOrWhiteSpace(language.Prefix) ? code : language.Prefix);
+                if (string.IsNullOrWhiteSpace(prefix))
+                    prefix = code;
+
+                if (entries.Any(e => NormalizeLanguageToken(e.Prefix).Equals(NormalizeLanguageToken(prefix), StringComparison.OrdinalIgnoreCase)))
+                    duplicatePrefixes.Add(prefix);
+
+                entries.Add(new ResolvedLocalizationLanguage
+                {
+                    Code = code,
+                    Prefix = prefix,
+                    IsDefault = language.Default
+                });
+            }
+        }
+
+        if (localizationSpec?.Enabled == true && entries.Count == 0)
+            warnings.Add("Localization is enabled but no active languages are configured.");
+        foreach (var duplicateCode in duplicateCodes)
+            warnings.Add($"Localization defines duplicate language code '{duplicateCode}'.");
+        foreach (var duplicatePrefix in duplicatePrefixes)
+            warnings.Add($"Localization defines duplicate language prefix '{duplicatePrefix}'.");
+
+        if (entries.Count == 0)
+        {
+            entries.Add(new ResolvedLocalizationLanguage
+            {
+                Code = defaultLanguage,
+                Prefix = defaultLanguage,
+                IsDefault = true
+            });
+        }
+
+        var explicitDefault = entries.FirstOrDefault(e => e.IsDefault);
+        if (explicitDefault is null)
+            explicitDefault = entries.FirstOrDefault(e => e.Code.Equals(defaultLanguage, StringComparison.OrdinalIgnoreCase)) ?? entries[0];
+        foreach (var entry in entries)
+            entry.IsDefault = entry.Code.Equals(explicitDefault.Code, StringComparison.OrdinalIgnoreCase);
+
+        var byCode = new Dictionary<string, ResolvedLocalizationLanguage>(StringComparer.OrdinalIgnoreCase);
+        var byPrefix = new Dictionary<string, ResolvedLocalizationLanguage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries)
+        {
+            if (!byCode.ContainsKey(entry.Code))
+                byCode[entry.Code] = entry;
+
+            var normalizedPrefix = NormalizeLanguageToken(entry.Prefix);
+            if (!string.IsNullOrWhiteSpace(normalizedPrefix) && !byPrefix.ContainsKey(normalizedPrefix))
+                byPrefix[normalizedPrefix] = entry;
+        }
+
+        return new ResolvedLocalizationConfig
+        {
+            Enabled = localizationSpec?.Enabled == true && byCode.Count > 0,
+            DetectFromPath = localizationSpec?.DetectFromPath ?? true,
+            PrefixDefaultLanguage = localizationSpec?.PrefixDefaultLanguage == true,
+            DefaultLanguage = explicitDefault.Code,
+            Languages = entries.ToArray(),
+            ByCode = byCode,
+            ByPrefix = byPrefix
+        };
+    }
+
+    private static string ResolveItemLanguage(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string relativePath,
+        FrontMatter? matter,
+        out string localizedRelativePath,
+        out string localizedRelativeDir)
+    {
+        var normalizedRelativePath = relativePath.Replace('\\', '/').TrimStart('/');
+        localizedRelativePath = normalizedRelativePath;
+        localizedRelativeDir = NormalizePath(Path.GetDirectoryName(normalizedRelativePath) ?? string.Empty);
+
+        if (!localization.Enabled)
+            return ResolveEffectiveLanguageCode(localization, ResolveLanguageFromFrontMatter(matter));
+
+        string? pathLanguage = null;
+        if (localization.DetectFromPath && TryExtractLeadingSegment(normalizedRelativePath, out var segment, out var remainder))
+        {
+            if (TryResolveConfiguredLanguage(localization, segment, matchByPrefix: true, out var fromPath))
+            {
+                pathLanguage = fromPath;
+                localizedRelativePath = remainder;
+                localizedRelativeDir = NormalizePath(Path.GetDirectoryName(remainder) ?? string.Empty);
+            }
+        }
+
+        var frontMatterLanguage = ResolveLanguageFromFrontMatter(matter);
+        if (TryResolveConfiguredLanguage(localization, frontMatterLanguage, matchByPrefix: true, out var resolvedFrontMatterLanguage))
+            return resolvedFrontMatterLanguage;
+
+        return !string.IsNullOrWhiteSpace(pathLanguage)
+            ? pathLanguage
+            : localization.DefaultLanguage;
+    }
+
+    private static string ResolveLanguageFromFrontMatter(FrontMatter? matter)
+    {
+        if (matter?.Meta is null || matter.Meta.Count == 0)
+            return string.Empty;
+
+        if (TryGetMetaString(matter.Meta, "language", out var language))
+            return NormalizeLanguageToken(language);
+        if (TryGetMetaString(matter.Meta, "lang", out language))
+            return NormalizeLanguageToken(language);
+        if (TryGetMetaString(matter.Meta, "i18n.language", out language))
+            return NormalizeLanguageToken(language);
+        if (TryGetMetaString(matter.Meta, "i18n.lang", out language))
+            return NormalizeLanguageToken(language);
+
+        return string.Empty;
+    }
+
+    private static bool TryGetMetaString(Dictionary<string, object?> meta, string key, out string value)
+    {
+        value = string.Empty;
+        if (meta is null || string.IsNullOrWhiteSpace(key))
+            return false;
+
+        var parts = key.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        object? current = meta;
+        foreach (var part in parts)
+        {
+            if (current is IReadOnlyDictionary<string, object?> map)
+            {
+                if (!map.TryGetValue(part, out current))
+                    return false;
+                continue;
+            }
+
+            return false;
+        }
+
+        if (current is null)
+            return false;
+
+        value = current.ToString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static string ApplyLanguagePrefixToRoute(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        string route,
+        string? language)
+    {
+        if (!localization.Enabled)
+            return route;
+
+        var languageCode = ResolveEffectiveLanguageCode(localization, language);
+        if (!localization.ByCode.TryGetValue(languageCode, out var languageSpec))
+            return route;
+
+        if (languageSpec.IsDefault && !localization.PrefixDefaultLanguage)
+            return route;
+
+        var prefix = NormalizePath(languageSpec.Prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return route;
+
+        var stripped = StripLanguagePrefix(localization, route);
+        var withoutLeadingSlash = stripped.TrimStart('/');
+        var prefixed = string.IsNullOrWhiteSpace(withoutLeadingSlash)
+            ? "/" + prefix
+            : "/" + prefix + "/" + withoutLeadingSlash;
+
+        return EnsureTrailingSlash(prefixed, spec.TrailingSlash);
+    }
+
+    private static string StripLanguagePrefix(ResolvedLocalizationConfig localization, string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        var normalized = route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route;
+        if (!TryExtractLeadingSegment(normalized.TrimStart('/'), out var segment, out var remainder))
+            return normalized;
+
+        var token = NormalizeLanguageToken(segment);
+        if (string.IsNullOrWhiteSpace(token))
+            return normalized;
+
+        if (!localization.ByPrefix.ContainsKey(token))
+            return normalized;
+
+        return string.IsNullOrWhiteSpace(remainder) ? "/" : "/" + remainder;
+    }
+
+    private static string ResolveEffectiveLanguageCode(ResolvedLocalizationConfig localization, string? language)
+    {
+        if (TryResolveConfiguredLanguage(localization, language, matchByPrefix: true, out var resolved))
+            return resolved;
+        return localization.DefaultLanguage;
+    }
+
+    private static bool TryResolveConfiguredLanguage(
+        ResolvedLocalizationConfig localization,
+        string? language,
+        bool matchByPrefix,
+        out string resolved)
+    {
+        resolved = string.Empty;
+        var token = NormalizeLanguageToken(language);
+        if (string.IsNullOrWhiteSpace(token))
+            return false;
+
+        if (localization.ByCode.TryGetValue(token, out var byCode))
+        {
+            resolved = byCode.Code;
+            return true;
+        }
+
+        if (matchByPrefix && localization.ByPrefix.TryGetValue(token, out var byPrefix))
+        {
+            resolved = byPrefix.Code;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryExtractLeadingSegment(string value, out string segment, out string remainder)
+    {
+        segment = string.Empty;
+        remainder = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var normalized = value.Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        var slash = normalized.IndexOf('/');
+        if (slash < 0)
+        {
+            segment = normalized;
+            remainder = string.Empty;
+            return true;
+        }
+
+        segment = normalized.Substring(0, slash);
+        remainder = normalized[(slash + 1)..];
+        return true;
+    }
+
+    private static string NormalizeLanguageToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
     }
 
     private static string NormalizePath(string? path)
@@ -787,6 +1070,7 @@ public static class WebSiteVerifier
 
     private static void AddSyntheticTaxonomyRoutes(
         SiteSpec spec,
+        ResolvedLocalizationConfig localization,
         Dictionary<string, string> routes,
         Dictionary<string, HashSet<string>> taxonomyTerms,
         List<string> warnings)
@@ -799,41 +1083,50 @@ public static class WebSiteVerifier
             if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || string.IsNullOrWhiteSpace(taxonomy.BasePath))
                 continue;
 
-            var listRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
-            if (routes.TryGetValue(listRoute, out var existingListRoute))
+            var languages = localization.Enabled
+                ? localization.Languages.Select(language => language.Code).ToArray()
+                : new[] { localization.DefaultLanguage };
+            foreach (var language in languages)
             {
-                if (!existingListRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
-                    warnings.Add($"Taxonomy route '{listRoute}' overlaps content route '{existingListRoute}'.");
-            }
-            else
-            {
-                routes[listRoute] = $"[taxonomy:{taxonomy.Name}]";
-            }
-
-            if (!taxonomyTerms.TryGetValue(taxonomy.Name, out var terms) || terms.Count == 0)
-                continue;
-
-            foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
-            {
-                var slug = Slugify(term);
-                if (string.IsNullOrWhiteSpace(slug))
-                    continue;
-
-                var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
-                if (routes.TryGetValue(termRoute, out var existingTermRoute))
+                var listRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
+                listRoute = ApplyLanguagePrefixToRoute(spec, localization, listRoute, language);
+                if (routes.TryGetValue(listRoute, out var existingListRoute))
                 {
-                    if (!existingTermRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
-                        warnings.Add($"Taxonomy term route '{termRoute}' overlaps content route '{existingTermRoute}'.");
-                    continue;
+                    if (!existingListRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
+                        warnings.Add($"Taxonomy route '{listRoute}' overlaps content route '{existingListRoute}'.");
+                }
+                else
+                {
+                    routes[listRoute] = $"[taxonomy:{taxonomy.Name}:{language}]";
                 }
 
-                routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{term}]";
+                if (!taxonomyTerms.TryGetValue(taxonomy.Name, out var terms) || terms.Count == 0)
+                    continue;
+
+                foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+                {
+                    var slug = Slugify(term);
+                    if (string.IsNullOrWhiteSpace(slug))
+                        continue;
+
+                    var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
+                    termRoute = ApplyLanguagePrefixToRoute(spec, localization, termRoute, language);
+                    if (routes.TryGetValue(termRoute, out var existingTermRoute))
+                    {
+                        if (!existingTermRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
+                            warnings.Add($"Taxonomy term route '{termRoute}' overlaps content route '{existingTermRoute}'.");
+                        continue;
+                    }
+
+                    routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{language}:{term}]";
+                }
             }
         }
     }
 
     private static void ValidateBlogAndTaxonomySupport(
         SiteSpec spec,
+        ResolvedLocalizationConfig localization,
         IReadOnlyDictionary<string, List<CollectionRoute>> collectionRoutes,
         HashSet<string> usedTaxonomyNames,
         List<string> warnings)
@@ -858,13 +1151,24 @@ public static class WebSiteVerifier
             if (!hasNonDraftContent)
                 continue;
 
-            var expectedRoute = NormalizeRouteForNavigationMatch(BuildRoute(collection.Output, string.Empty, spec.TrailingSlash));
-            var hasLanding = routes
-                .Where(route => !route.Draft)
-                .Select(route => NormalizeRouteForNavigationMatch(route.Route))
-                .Any(route => string.Equals(route, expectedRoute, StringComparison.OrdinalIgnoreCase));
-            if (!hasLanding)
-                warnings.Add($"Collection '{collection.Name}' looks like a blog but has no landing page at '{expectedRoute}'. Add '_index.md' or a page with slug 'index'.");
+            var expectedLanguages = localization.Enabled
+                ? localization.Languages.Select(language => language.Code).ToArray()
+                : new[] { localization.DefaultLanguage };
+            foreach (var language in expectedLanguages)
+            {
+                var expectedRoute = BuildRoute(collection.Output, string.Empty, spec.TrailingSlash);
+                expectedRoute = ApplyLanguagePrefixToRoute(spec, localization, expectedRoute, language);
+                expectedRoute = NormalizeRouteForNavigationMatch(expectedRoute);
+                var hasLanding = routes
+                    .Where(route => !route.Draft)
+                    .Where(route => ResolveEffectiveLanguageCode(localization, route.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
+                    .Select(route => NormalizeRouteForNavigationMatch(route.Route))
+                    .Any(route => string.Equals(route, expectedRoute, StringComparison.OrdinalIgnoreCase));
+                if (!hasLanding)
+                {
+                    warnings.Add($"Collection '{collection.Name}' looks like a blog but has no landing page at '{expectedRoute}' for language '{language}'. Add '_index.md' or a page with slug 'index'.");
+                }
+            }
         }
 
         if (usedTaxonomyNames.Contains("tags") &&
@@ -1787,7 +2091,25 @@ public static class WebSiteVerifier
         public TocItem[]? Items { get; set; }
     }
 
-    private sealed record CollectionRoute(string Route, string File, bool Draft);
+    private sealed class ResolvedLocalizationConfig
+    {
+        public bool Enabled { get; init; }
+        public bool DetectFromPath { get; init; }
+        public bool PrefixDefaultLanguage { get; init; }
+        public string DefaultLanguage { get; init; } = "en";
+        public ResolvedLocalizationLanguage[] Languages { get; init; } = Array.Empty<ResolvedLocalizationLanguage>();
+        public Dictionary<string, ResolvedLocalizationLanguage> ByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, ResolvedLocalizationLanguage> ByPrefix { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class ResolvedLocalizationLanguage
+    {
+        public string Code { get; init; } = string.Empty;
+        public string Prefix { get; init; } = string.Empty;
+        public bool IsDefault { get; set; }
+    }
+
+    private sealed record CollectionRoute(string Route, string File, bool Draft, string Language);
 
     private static List<AssetBundleSpec> ResolveBundlesForRoute(AssetRegistrySpec assets, string route)
     {

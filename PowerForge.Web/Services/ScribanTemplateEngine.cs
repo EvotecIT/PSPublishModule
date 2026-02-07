@@ -26,6 +26,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("toc", context.Page.TocHtml);
         globals.Add("project", context.Project);
         globals.Add("navigation", context.Navigation);
+        globals.Add("localization", context.Localization);
+        globals.Add("languages", context.Localization.Languages);
+        globals.Add("current_language", context.Localization.Current);
         globals.Add("versioning", context.Versioning);
         globals.Add("versions", context.Versioning.Versions);
         globals.Add("current_version", context.Versioning.Current);

@@ -361,6 +361,30 @@ Footer example:
 {{ end }}
 ```
 
+## Localization runtime
+When `site.json` defines `Localization`, templates receive:
+- `localization` (resolved runtime object)
+- `languages` (shortcut to `localization.languages`)
+- `current_language` (shortcut to `localization.current`)
+
+Each language entry includes:
+- `code`, `label`, `prefix`
+- `is_default`, `is_current`
+- `url` (resolved URL for the current page in that language)
+
+Example:
+```html
+{{ if localization.enabled && languages.size > 1 }}
+  <nav aria-label="Language selector">
+    {{ for lang in languages }}
+      <a href="{{ lang.url }}" {{ if lang.is_current }}aria-current="page"{{ end }}>
+        {{ lang.label }}
+      </a>
+    {{ end }}
+  </nav>
+{{ end }}
+```
+
 ## Versioning runtime
 When `site.json` defines `Versioning`, templates also receive:
 - `versioning` (resolved runtime model)

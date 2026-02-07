@@ -8,6 +8,7 @@ internal sealed class ThemeRenderContext
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     public ProjectSpec? Project { get; init; }
     public NavigationRuntime Navigation { get; init; } = new();
+    public LocalizationRuntime Localization { get; init; } = new();
     public VersioningRuntime Versioning { get; init; } = new();
     public OutputRuntime[] Outputs { get; init; } = Array.Empty<OutputRuntime>();
     public string? FeedUrl { get; init; }

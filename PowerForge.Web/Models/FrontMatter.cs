@@ -44,6 +44,10 @@ public sealed class ContentItem
     public string Collection { get; set; } = string.Empty;
     /// <summary>Output route.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Resolved language code for this page (for example en/pl).</summary>
+    public string Language { get; set; } = string.Empty;
+    /// <summary>Optional translation key used to map same page across languages.</summary>
+    public string? TranslationKey { get; set; }
     /// <summary>Page title.</summary>
     public string Title { get; set; } = string.Empty;
     /// <summary>Page description.</summary>

@@ -68,6 +68,8 @@ public sealed class SiteSpec
     public AnalyticsSpec? Analytics { get; set; }
     /// <summary>Navigation menus.</summary>
     public NavigationSpec? Navigation { get; set; }
+    /// <summary>Localization and multi-language routing.</summary>
+    public LocalizationSpec? Localization { get; set; }
 
     /// <summary>Documentation versioning configuration.</summary>
     public VersioningSpec? Versioning { get; set; }

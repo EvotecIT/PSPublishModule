@@ -37,6 +37,8 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["BODY_CLASS"] = string.IsNullOrWhiteSpace(context.BodyClass) ? string.Empty : $" class=\"{context.BodyClass}\"",
             ["SITE_NAME"] = context.Site.Name ?? string.Empty,
             ["BASE_URL"] = context.Site.BaseUrl ?? string.Empty,
+            ["LANG"] = context.Localization.Current.Code ?? string.Empty,
+            ["LANGUAGE"] = context.Localization.Current.Code ?? string.Empty,
             ["VERSION_CURRENT"] = context.Versioning.Current?.Name ?? string.Empty,
             ["VERSION_CURRENT_LABEL"] = context.Versioning.Current?.Label ?? string.Empty,
             ["VERSION_CURRENT_URL"] = context.Versioning.Current?.Url ?? string.Empty,

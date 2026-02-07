@@ -84,6 +84,8 @@ Supported fields:
 - `title`, `description`, `date`
 - `tags`, `aliases`
 - `slug`, `order`, `draft`
+- `language` / `lang` (page language code when localization is enabled)
+- `translation_key` (shared key used to map the same page across languages)
 - `layout`, `template`, `collection`
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
@@ -186,6 +188,29 @@ Output:
 
 Trailing slash behavior is controlled by `site.json` → `TrailingSlash`:
 - `always` / `never` / `ignore`
+
+### Localization (multi-language routing)
+Enable multi-language URLs in `site.json`:
+```json
+{
+  "Localization": {
+    "Enabled": true,
+    "DefaultLanguage": "en",
+    "PrefixDefaultLanguage": false,
+    "DetectFromPath": true,
+    "Languages": [
+      { "Code": "en", "Label": "English", "Default": true },
+      { "Code": "pl", "Label": "Polski" }
+    ]
+  }
+}
+```
+
+When `DetectFromPath` is enabled, a leading language folder in content paths is used as language marker and removed from slug generation:
+- `content/docs/en/index.md` → `/docs/` (default language, no prefix when `PrefixDefaultLanguage=false`)
+- `content/docs/pl/index.md` → `/pl/docs/`
+
+Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
 
 ## Collections
 Collections map markdown inputs to output routes:

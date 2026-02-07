@@ -195,6 +195,110 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_ResolvesLocalizationRoutesAndRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-runtime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsEnPath = Path.Combine(root, "content", "docs", "en");
+            var docsPlPath = Path.Combine(root, "content", "docs", "pl");
+            Directory.CreateDirectory(docsEnPath);
+            Directory.CreateDirectory(docsPlPath);
+            File.WriteAllText(Path.Combine(docsEnPath, "index.md"),
+                """
+                ---
+                title: Documentation
+                ---
+
+                # Docs
+                """);
+            File.WriteAllText(Path.Combine(docsPlPath, "index.md"),
+                """
+                ---
+                title: Dokumentacja
+                ---
+
+                # Dokumentacja
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "localization-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "docs.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  <div id="current">{{ current_language.code }}</div>
+                  {{ for lang in languages }}<a class="lang" data-code="{{ lang.code }}" href="{{ lang.url }}">{{ lang.label }}</a>{{ end }}
+                  {{ content }}
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "localization-test",
+                  "engine": "scriban",
+                  "defaultLayout": "docs"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Localization Runtime Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "localization-test",
+                ThemesRoot = "themes",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    DetectFromPath = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Label = "English", Default = true },
+                        new LanguageSpec { Code = "pl", Label = "Polski" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs",
+                        DefaultLayout = "docs"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "docs", "index.html")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "pl", "docs", "index.html")));
+
+            var polishOutput = File.ReadAllText(Path.Combine(result.OutputPath, "pl", "docs", "index.html"));
+            Assert.Contains("<div id=\"current\">pl</div>", polishOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("data-code=\"en\" href=\"/docs/\"", polishOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("data-code=\"pl\" href=\"/pl/docs/\"", polishOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FlagsMissingRequiredNavLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-" + Guid.NewGuid().ToString("N"));

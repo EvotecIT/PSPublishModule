@@ -1193,14 +1193,16 @@ public static class WebSiteBuilder
                 var description = matter?.Description ?? string.Empty;
                 var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, contentRoots, collection.Input, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
-                var relativeDir = NormalizePath(Path.GetDirectoryName(relativePath) ?? string.Empty);
+                var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
+                var relativeDir = localizedRelativeDir;
                 var isSectionIndex = IsSectionIndex(file);
                 var isBundleIndex = IsLeafBundleIndex(file);
-                var slugPath = ResolveSlugPath(relativePath, relativeDir, matter?.Slug);
+                var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
                 if (isSectionIndex || isBundleIndex)
                     slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
                 var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
                 var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
                 var kind = ResolvePageKind(route, collection, isSectionIndex);
                 var layout = matter?.Layout;
                 if (string.IsNullOrWhiteSpace(layout))
@@ -1250,6 +1252,8 @@ public static class WebSiteBuilder
                     SourcePath = file,
                     Collection = collection.Name,
                     OutputPath = route,
+                    Language = resolvedLanguage,
+                    TranslationKey = ResolveTranslationKey(matter, collection.Name, localizedRelativePath),
                     Title = title,
                     Description = description,
                     Date = matter?.Date,
@@ -1285,6 +1289,7 @@ public static class WebSiteBuilder
         if (spec.Taxonomies is null || spec.Taxonomies.Length == 0)
             return results;
 
+        var localization = ResolveLocalizationConfig(spec);
         var sourceItems = items
             .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
             .Where(i => !i.Draft)
@@ -1295,53 +1300,74 @@ public static class WebSiteBuilder
             if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || string.IsNullOrWhiteSpace(taxonomy.BasePath))
                 continue;
 
-            var termMap = new Dictionary<string, List<ContentItem>>(StringComparer.OrdinalIgnoreCase);
+            var termMap = new Dictionary<string, Dictionary<string, List<ContentItem>>>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in sourceItems)
             {
+                var language = ResolveEffectiveLanguageCode(localization, item.Language);
+                if (!termMap.TryGetValue(language, out var languageMap))
+                {
+                    languageMap = new Dictionary<string, List<ContentItem>>(StringComparer.OrdinalIgnoreCase);
+                    termMap[language] = languageMap;
+                }
+
                 foreach (var term in GetTaxonomyValues(item, taxonomy))
                 {
-                    if (!termMap.TryGetValue(term, out var list))
+                    if (!languageMap.TryGetValue(term, out var list))
                     {
                         list = new List<ContentItem>();
-                        termMap[term] = list;
+                        languageMap[term] = list;
                     }
                     list.Add(item);
                 }
             }
 
-            var taxRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
-            results.Add(new ContentItem
+            foreach (var languageEntry in termMap)
             {
-                Collection = taxonomy.Name,
-                OutputPath = taxRoute,
-                Title = HumanizeSegment(taxonomy.Name),
-                Description = string.Empty,
-                Kind = PageKind.Taxonomy,
-                Layout = taxonomy.ListLayout ?? "taxonomy",
-                Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["taxonomy"] = taxonomy.Name
-                }
-            });
+                var language = languageEntry.Key;
+                var languageTerms = languageEntry.Value;
+                if (languageTerms.Count == 0)
+                    continue;
 
-            foreach (var term in termMap.Keys.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
-            {
-                var slug = Slugify(term);
-                var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
+                var taxRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
+                taxRoute = ApplyLanguagePrefixToRoute(spec, taxRoute, language);
                 results.Add(new ContentItem
                 {
                     Collection = taxonomy.Name,
-                    OutputPath = termRoute,
-                    Title = term,
+                    OutputPath = taxRoute,
+                    Language = language,
+                    TranslationKey = $"taxonomy:{taxonomy.Name}",
+                    Title = HumanizeSegment(taxonomy.Name),
                     Description = string.Empty,
-                    Kind = PageKind.Term,
-                    Layout = taxonomy.TermLayout ?? "term",
+                    Kind = PageKind.Taxonomy,
+                    Layout = taxonomy.ListLayout ?? "taxonomy",
                     Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                     {
-                        ["taxonomy"] = taxonomy.Name,
-                        ["term"] = term
+                        ["taxonomy"] = taxonomy.Name
                     }
                 });
+
+                foreach (var term in languageTerms.Keys.OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+                {
+                    var slug = Slugify(term);
+                    var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
+                    termRoute = ApplyLanguagePrefixToRoute(spec, termRoute, language);
+                    results.Add(new ContentItem
+                    {
+                        Collection = taxonomy.Name,
+                        OutputPath = termRoute,
+                        Language = language,
+                        TranslationKey = $"taxonomy:{taxonomy.Name}:term:{slug}",
+                        Title = term,
+                        Description = string.Empty,
+                        Kind = PageKind.Term,
+                        Layout = taxonomy.TermLayout ?? "term",
+                        Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["taxonomy"] = taxonomy.Name,
+                            ["term"] = term
+                        }
+                    });
+                }
             }
         }
 
@@ -2038,6 +2064,7 @@ public static class WebSiteBuilder
             Page = page,
             Data = context.Data,
             Project = context.Project,
+            Localization = BuildLocalizationRuntime(context.Site, page, Array.Empty<ContentItem>()),
             Versioning = BuildVersioningRuntime(context.Site, string.Empty)
         };
 
@@ -2285,6 +2312,7 @@ public static class WebSiteBuilder
             Data = data,
             Project = projectSpec,
             Navigation = BuildNavigation(spec, item, menuSpecs),
+            Localization = BuildLocalizationRuntime(spec, item, allItems),
             Versioning = BuildVersioningRuntime(spec, item.OutputPath),
             Outputs = outputs.ToArray(),
             FeedUrl = outputs.FirstOrDefault(o => string.Equals(o.Name, "rss", StringComparison.OrdinalIgnoreCase))?.Url,
@@ -2324,8 +2352,9 @@ public static class WebSiteBuilder
             }
         }
 
+        var htmlLang = System.Web.HttpUtility.HtmlEncode(renderContext.Localization.Current.Code ?? "en");
         return $@"<!doctype html>
-<html lang=""en"">
+<html lang=""{htmlLang}"">
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
@@ -3097,6 +3126,355 @@ public static class WebSiteBuilder
         nav.Footer = BuildFooter(effectiveFooter, nav.Menus, context, spec.LinkRules);
 
         return nav;
+    }
+
+    private static LocalizationRuntime BuildLocalizationRuntime(SiteSpec spec, ContentItem page, IReadOnlyList<ContentItem> allItems)
+    {
+        var localization = ResolveLocalizationConfig(spec);
+        var currentCode = ResolveEffectiveLanguageCode(localization, page.Language);
+        var currentPath = string.IsNullOrWhiteSpace(page.OutputPath) ? "/" : page.OutputPath;
+
+        var languages = new List<LocalizationLanguageRuntime>();
+        foreach (var language in localization.Languages)
+        {
+            var url = ResolveLocalizedPageUrl(spec, localization, page, allItems, language.Code, currentCode);
+            languages.Add(new LocalizationLanguageRuntime
+            {
+                Code = language.Code,
+                Label = language.Label,
+                Prefix = language.Prefix,
+                IsDefault = language.IsDefault,
+                IsCurrent = language.Code.Equals(currentCode, StringComparison.OrdinalIgnoreCase),
+                Url = string.IsNullOrWhiteSpace(url) ? currentPath : url
+            });
+        }
+
+        if (languages.Count == 0)
+        {
+            languages.Add(new LocalizationLanguageRuntime
+            {
+                Code = currentCode,
+                Label = currentCode,
+                Prefix = currentCode,
+                IsDefault = true,
+                IsCurrent = true,
+                Url = currentPath
+            });
+        }
+
+        var current = languages.FirstOrDefault(l => l.IsCurrent) ?? languages[0];
+        return new LocalizationRuntime
+        {
+            Enabled = localization.Enabled,
+            Current = current,
+            Languages = languages.ToArray()
+        };
+    }
+
+    private static string ResolveLocalizedPageUrl(
+        SiteSpec spec,
+        ResolvedLocalizationConfig localization,
+        ContentItem page,
+        IReadOnlyList<ContentItem> allItems,
+        string targetLanguage,
+        string currentLanguage)
+    {
+        if (allItems.Count > 0 && !string.IsNullOrWhiteSpace(page.TranslationKey))
+        {
+            var translated = allItems
+                .Where(i => !i.Draft)
+                .Where(i => !string.IsNullOrWhiteSpace(i.TranslationKey))
+                .FirstOrDefault(i =>
+                    i.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase) &&
+                    ResolveEffectiveLanguageCode(localization, i.Language).Equals(targetLanguage, StringComparison.OrdinalIgnoreCase));
+            if (translated is not null)
+                return translated.OutputPath;
+        }
+
+        var baseRoute = StripLanguagePrefix(localization, page.OutputPath);
+        if (string.IsNullOrWhiteSpace(baseRoute))
+            baseRoute = "/";
+
+        if (!ResolveEffectiveLanguageCode(localization, targetLanguage).Equals(currentLanguage, StringComparison.OrdinalIgnoreCase))
+            return ApplyLanguagePrefixToRoute(spec, baseRoute, targetLanguage);
+
+        return ApplyLanguagePrefixToRoute(spec, baseRoute, currentLanguage);
+    }
+
+    private static string ResolveItemLanguage(
+        SiteSpec spec,
+        string relativePath,
+        FrontMatter? matter,
+        out string localizedRelativePath,
+        out string localizedRelativeDir)
+    {
+        var localization = ResolveLocalizationConfig(spec);
+        var normalizedRelativePath = relativePath.Replace('\\', '/').TrimStart('/');
+        localizedRelativePath = normalizedRelativePath;
+        localizedRelativeDir = NormalizePath(Path.GetDirectoryName(normalizedRelativePath) ?? string.Empty);
+
+        if (!localization.Enabled)
+            return ResolveEffectiveLanguageCode(localization, ResolveLanguageFromFrontMatter(matter));
+
+        string? pathLanguage = null;
+        if (localization.DetectFromPath && TryExtractLeadingSegment(normalizedRelativePath, out var segment, out var remainder))
+        {
+            if (TryResolveConfiguredLanguage(localization, segment, matchByPrefix: true, out var fromPath))
+            {
+                pathLanguage = fromPath;
+                localizedRelativePath = remainder;
+                localizedRelativeDir = NormalizePath(Path.GetDirectoryName(remainder) ?? string.Empty);
+            }
+        }
+
+        var frontMatterLanguage = ResolveLanguageFromFrontMatter(matter);
+        if (TryResolveConfiguredLanguage(localization, frontMatterLanguage, matchByPrefix: true, out var resolvedFrontMatterLanguage))
+            return resolvedFrontMatterLanguage;
+
+        return !string.IsNullOrWhiteSpace(pathLanguage)
+            ? pathLanguage
+            : localization.DefaultLanguage;
+    }
+
+    private static string ResolveLanguageFromFrontMatter(FrontMatter? matter)
+    {
+        if (matter?.Meta is null || matter.Meta.Count == 0)
+            return string.Empty;
+
+        if (TryGetMetaString(matter.Meta, "language", out var language))
+            return NormalizeLanguageToken(language);
+        if (TryGetMetaString(matter.Meta, "lang", out language))
+            return NormalizeLanguageToken(language);
+        if (TryGetMetaString(matter.Meta, "i18n.language", out language))
+            return NormalizeLanguageToken(language);
+        if (TryGetMetaString(matter.Meta, "i18n.lang", out language))
+            return NormalizeLanguageToken(language);
+
+        return string.Empty;
+    }
+
+    private static string ResolveTranslationKey(FrontMatter? matter, string? collectionName, string localizedRelativePath)
+    {
+        if (matter?.Meta is not null)
+        {
+            if (TryGetMetaString(matter.Meta, "translation_key", out var translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "translation.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+        }
+
+        var collection = string.IsNullOrWhiteSpace(collectionName)
+            ? "content"
+            : collectionName.Trim().ToLowerInvariant();
+        var path = NormalizePath(Path.ChangeExtension(localizedRelativePath, null) ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(path))
+            path = "index";
+        return $"{collection}:{path.ToLowerInvariant()}";
+    }
+
+    private static string ApplyLanguagePrefixToRoute(SiteSpec spec, string route, string? language)
+    {
+        var localization = ResolveLocalizationConfig(spec);
+        if (!localization.Enabled)
+            return route;
+
+        var languageCode = ResolveEffectiveLanguageCode(localization, language);
+        if (!localization.ByCode.TryGetValue(languageCode, out var languageSpec))
+            return route;
+
+        if (languageSpec.IsDefault && !localization.PrefixDefaultLanguage)
+            return route;
+
+        var prefix = NormalizePath(languageSpec.Prefix);
+        if (string.IsNullOrWhiteSpace(prefix))
+            return route;
+
+        var stripped = StripLanguagePrefix(localization, route);
+        var withoutLeadingSlash = stripped.TrimStart('/');
+        var prefixed = string.IsNullOrWhiteSpace(withoutLeadingSlash)
+            ? "/" + prefix
+            : "/" + prefix + "/" + withoutLeadingSlash;
+
+        return EnsureTrailingSlash(prefixed, spec.TrailingSlash);
+    }
+
+    private static string StripLanguagePrefix(ResolvedLocalizationConfig localization, string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        var normalized = route.StartsWith("/", StringComparison.Ordinal) ? route : "/" + route;
+        if (!TryExtractLeadingSegment(normalized.TrimStart('/'), out var segment, out var remainder))
+            return normalized;
+
+        var token = NormalizeLanguageToken(segment);
+        if (string.IsNullOrWhiteSpace(token))
+            return normalized;
+
+        if (!localization.ByPrefix.ContainsKey(token))
+            return normalized;
+
+        return string.IsNullOrWhiteSpace(remainder) ? "/" : "/" + remainder;
+    }
+
+    private static bool TryExtractLeadingSegment(string value, out string segment, out string remainder)
+    {
+        segment = string.Empty;
+        remainder = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var normalized = value.Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        var slash = normalized.IndexOf('/');
+        if (slash < 0)
+        {
+            segment = normalized;
+            remainder = string.Empty;
+            return true;
+        }
+
+        segment = normalized.Substring(0, slash);
+        remainder = normalized[(slash + 1)..];
+        return true;
+    }
+
+    private static ResolvedLocalizationConfig ResolveLocalizationConfig(SiteSpec spec)
+    {
+        var localizationSpec = spec.Localization;
+        var defaultLanguage = NormalizeLanguageToken(localizationSpec?.DefaultLanguage);
+        if (string.IsNullOrWhiteSpace(defaultLanguage))
+            defaultLanguage = "en";
+
+        var entries = new List<ResolvedLocalizationLanguage>();
+        if (localizationSpec?.Languages is { Length: > 0 })
+        {
+            foreach (var language in localizationSpec.Languages)
+            {
+                if (language is null || language.Disabled)
+                    continue;
+
+                var code = NormalizeLanguageToken(language.Code);
+                if (string.IsNullOrWhiteSpace(code) || entries.Any(e => e.Code.Equals(code, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var prefix = NormalizePath(string.IsNullOrWhiteSpace(language.Prefix) ? code : language.Prefix);
+                if (string.IsNullOrWhiteSpace(prefix))
+                    prefix = code;
+
+                entries.Add(new ResolvedLocalizationLanguage
+                {
+                    Code = code,
+                    Label = string.IsNullOrWhiteSpace(language.Label) ? code : language.Label.Trim(),
+                    Prefix = prefix,
+                    IsDefault = language.Default
+                });
+            }
+        }
+
+        if (entries.Count == 0)
+        {
+            entries.Add(new ResolvedLocalizationLanguage
+            {
+                Code = defaultLanguage,
+                Label = defaultLanguage,
+                Prefix = defaultLanguage,
+                IsDefault = true
+            });
+        }
+
+        var explicitDefault = entries.FirstOrDefault(e => e.IsDefault);
+        if (explicitDefault is null)
+            explicitDefault = entries.FirstOrDefault(e => e.Code.Equals(defaultLanguage, StringComparison.OrdinalIgnoreCase)) ?? entries[0];
+
+        foreach (var entry in entries)
+            entry.IsDefault = entry.Code.Equals(explicitDefault.Code, StringComparison.OrdinalIgnoreCase);
+
+        var byCode = new Dictionary<string, ResolvedLocalizationLanguage>(StringComparer.OrdinalIgnoreCase);
+        var byPrefix = new Dictionary<string, ResolvedLocalizationLanguage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries)
+        {
+            if (!byCode.ContainsKey(entry.Code))
+                byCode[entry.Code] = entry;
+
+            var normalizedPrefix = NormalizeLanguageToken(entry.Prefix);
+            if (!string.IsNullOrWhiteSpace(normalizedPrefix) && !byPrefix.ContainsKey(normalizedPrefix))
+                byPrefix[normalizedPrefix] = entry;
+        }
+
+        return new ResolvedLocalizationConfig
+        {
+            Enabled = localizationSpec?.Enabled == true && byCode.Count > 0,
+            DetectFromPath = localizationSpec?.DetectFromPath ?? true,
+            PrefixDefaultLanguage = localizationSpec?.PrefixDefaultLanguage == true,
+            DefaultLanguage = explicitDefault.Code,
+            Languages = entries.ToArray(),
+            ByCode = byCode,
+            ByPrefix = byPrefix
+        };
+    }
+
+    private static string ResolveEffectiveLanguageCode(ResolvedLocalizationConfig localization, string? language)
+    {
+        if (TryResolveConfiguredLanguage(localization, language, matchByPrefix: true, out var resolved))
+            return resolved;
+        return localization.DefaultLanguage;
+    }
+
+    private static bool TryResolveConfiguredLanguage(
+        ResolvedLocalizationConfig localization,
+        string? language,
+        bool matchByPrefix,
+        out string resolved)
+    {
+        resolved = string.Empty;
+        var token = NormalizeLanguageToken(language);
+        if (string.IsNullOrWhiteSpace(token))
+            return false;
+
+        if (localization.ByCode.TryGetValue(token, out var byCode))
+        {
+            resolved = byCode.Code;
+            return true;
+        }
+
+        if (matchByPrefix && localization.ByPrefix.TryGetValue(token, out var byPrefix))
+        {
+            resolved = byPrefix.Code;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeLanguageToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
+    private sealed class ResolvedLocalizationConfig
+    {
+        public bool Enabled { get; init; }
+        public bool DetectFromPath { get; init; }
+        public bool PrefixDefaultLanguage { get; init; }
+        public string DefaultLanguage { get; init; } = "en";
+        public ResolvedLocalizationLanguage[] Languages { get; init; } = Array.Empty<ResolvedLocalizationLanguage>();
+        public Dictionary<string, ResolvedLocalizationLanguage> ByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, ResolvedLocalizationLanguage> ByPrefix { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class ResolvedLocalizationLanguage
+    {
+        public string Code { get; init; } = string.Empty;
+        public string Label { get; init; } = string.Empty;
+        public string Prefix { get; init; } = string.Empty;
+        public bool IsDefault { get; set; }
     }
 
     private static VersioningRuntime BuildVersioningRuntime(SiteSpec spec, string? currentPath)
