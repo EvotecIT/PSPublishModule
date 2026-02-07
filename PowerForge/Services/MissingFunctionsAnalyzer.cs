@@ -221,8 +221,6 @@ public sealed class MissingFunctionsAnalyzer
                 {
                     if (cmd.CommandElements.Count > 0 && cmd.CommandElements[0] is StringConstantExpressionAst s)
                         name = s.Value;
-                    else if (cmd.CommandElements.Count > 0)
-                        name = cmd.CommandElements[0].Extent?.Text;
                 }
                 catch
                 {

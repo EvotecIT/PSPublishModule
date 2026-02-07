@@ -495,13 +495,15 @@ public sealed class ModulePipelineRunner
             installMissingModulesPrerelease,
             installMissingModulesRepository,
             installMissingModulesCredential);
-        var requiredModulesForPackaging = ResolveRequiredModules(
-            requiredModulesDraftForPackaging,
-            resolveMissingModulesOnline,
-            warnIfRequiredModulesOutdated,
-            installMissingModulesPrerelease,
-            installMissingModulesRepository,
-            installMissingModulesCredential);
+        var requiredModulesForPackaging = AreRequiredModuleDraftListsEquivalent(requiredModulesDraft, requiredModulesDraftForPackaging)
+            ? requiredModules
+            : ResolveRequiredModules(
+                requiredModulesDraftForPackaging,
+                resolveMissingModulesOnline,
+                warnIfRequiredModulesOutdated,
+                installMissingModulesPrerelease,
+                installMissingModulesRepository,
+                installMissingModulesCredential);
 
         var approved = approvedModules
             .Where(m => !string.IsNullOrWhiteSpace(m))
@@ -1668,6 +1670,44 @@ public sealed class ModulePipelineRunner
                 return true;
         }
         return false;
+    }
+
+    private static bool AreRequiredModuleDraftListsEquivalent(
+        IReadOnlyList<RequiredModuleDraft> left,
+        IReadOnlyList<RequiredModuleDraft> right)
+    {
+        var leftList = (left ?? Array.Empty<RequiredModuleDraft>())
+            .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.ModuleName))
+            .ToArray();
+        var rightList = (right ?? Array.Empty<RequiredModuleDraft>())
+            .Where(d => d is not null && !string.IsNullOrWhiteSpace(d.ModuleName))
+            .ToArray();
+
+        if (leftList.Length != rightList.Length)
+            return false;
+
+        if (leftList.Length == 0)
+            return true;
+
+        var map = new Dictionary<string, RequiredModuleDraft>(StringComparer.OrdinalIgnoreCase);
+        foreach (var d in leftList)
+            map[d.ModuleName] = d;
+
+        foreach (var d in rightList)
+        {
+            if (!map.TryGetValue(d.ModuleName, out var other))
+                return false;
+
+            if (!string.Equals(d.ModuleVersion, other.ModuleVersion, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(d.MinimumVersion, other.MinimumVersion, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(d.RequiredVersion, other.RequiredVersion, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(d.Guid, other.Guid, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private ManifestEditor.RequiredModule[] ResolveRequiredModules(
