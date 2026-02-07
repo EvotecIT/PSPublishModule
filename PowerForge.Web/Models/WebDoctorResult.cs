@@ -19,6 +19,8 @@ public sealed class WebDoctorResult
     public WebVerifyResult? Verify { get; set; }
     /// <summary>Audit result payload when audit was executed.</summary>
     public WebAuditResult? Audit { get; set; }
+    /// <summary>Policy-driven verify failures (for example fail-on-nav-lint).</summary>
+    public string[] PolicyFailures { get; set; } = Array.Empty<string>();
     /// <summary>Actionable follow-up recommendations.</summary>
     public string[] Recommendations { get; set; } = Array.Empty<string>();
 }

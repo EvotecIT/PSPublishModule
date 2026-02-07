@@ -296,11 +296,19 @@ try
             var configPath = TryGetOptionValue(subArgs, "--config");
             if (string.IsNullOrWhiteSpace(configPath))
                 return Fail("Missing required --config.", outputJson, logger, "web.verify");
+            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
+            var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint");
+            var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract");
 
             var fullConfigPath = ResolveExistingFilePath(configPath);
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
             var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
             var verify = WebSiteVerifier.Verify(spec, plan);
+            var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
+                verify,
+                failOnWarnings,
+                failOnNavLint,
+                failOnThemeContract);
 
             if (outputJson)
             {
@@ -308,15 +316,15 @@ try
                 {
                     SchemaVersion = OutputSchemaVersion,
                     Command = "web.verify",
-                    Success = verify.Success,
-                    ExitCode = verify.Success ? 0 : 1,
+                    Success = verifySuccess,
+                    ExitCode = verifySuccess ? 0 : 1,
                     Config = "web",
                     ConfigPath = specPath,
                     Spec = WebCliJson.SerializeToElement(spec, WebCliJson.Context.SiteSpec),
                     Plan = WebCliJson.SerializeToElement(plan, WebCliJson.Context.WebSitePlan),
                     Result = WebCliJson.SerializeToElement(verify, WebCliJson.Context.WebVerifyResult)
                 });
-                return verify.Success ? 0 : 1;
+                return verifySuccess ? 0 : 1;
             }
 
             if (verify.Warnings.Length > 0)
@@ -330,10 +338,16 @@ try
                     logger.Error(e);
             }
 
-            if (verify.Success)
+            if (verifyPolicyFailures.Length > 0)
+            {
+                foreach (var policy in verifyPolicyFailures)
+                    logger.Error($"verify-policy: {policy}");
+            }
+
+            if (verifySuccess)
                 logger.Success("Web verify passed.");
 
-            return verify.Success ? 0 : 1;
+            return verifySuccess ? 0 : 1;
         }
         case "doctor":
         {
@@ -350,6 +364,9 @@ try
             var runBuild = !HasOption(subArgs, "--no-build");
             var runVerify = !HasOption(subArgs, "--no-verify");
             var runAudit = !HasOption(subArgs, "--no-audit");
+            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
+            var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint");
+            var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract");
 
             var fullConfigPath = ResolveExistingFilePath(configPath);
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
@@ -369,9 +386,16 @@ try
                 return Fail("Doctor audit requires an existing site root. Use --out with --build or pass --site-root.", outputJson, logger, "web.doctor");
 
             var verify = runVerify ? WebSiteVerifier.Verify(spec, plan) : null;
+            var (verifySuccess, verifyPolicyFailures) = verify is null
+                ? (true, Array.Empty<string>())
+                : WebVerifyPolicy.EvaluateOutcome(
+                    verify,
+                    failOnWarnings,
+                    failOnNavLint,
+                    failOnThemeContract);
             var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs) : null;
-            var recommendations = BuildDoctorRecommendations(verify, audit);
-            var success = (verify?.Success ?? true) && (audit?.Success ?? true);
+            var recommendations = BuildDoctorRecommendations(verify, audit, verifyPolicyFailures);
+            var success = verifySuccess && (audit?.Success ?? true);
 
             var doctorResult = new WebDoctorResult
             {
@@ -383,6 +407,7 @@ try
                 AuditExecuted = runAudit,
                 Verify = verify,
                 Audit = audit,
+                PolicyFailures = verifyPolicyFailures,
                 Recommendations = recommendations
             };
 
@@ -409,6 +434,8 @@ try
                     logger.Warn($"verify: {warning}");
                 foreach (var error in verify.Errors)
                     logger.Error($"verify: {error}");
+                foreach (var policy in verifyPolicyFailures)
+                    logger.Error($"verify-policy: {policy}");
             }
 
             if (runAudit && audit is not null)
@@ -1553,10 +1580,11 @@ static void PrintUsage()
     Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
     Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
     Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
-    Console.WriteLine("  powerforge-web verify --config <site.json> [--output json]");
+    Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--output json]");
     Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
     Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
-    Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>] [--output json]");
+    Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
+    Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--output json]");
     Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
     Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
     Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
@@ -1833,7 +1861,7 @@ static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
     });
 }
 
-static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResult? audit)
+static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResult? audit, string[]? policyFailures = null)
 {
     var recommendations = new List<string>();
 
@@ -1886,6 +1914,9 @@ static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResu
         if (ContainsCategory(audit, "duplicate-id"))
             recommendations.Add("Remove duplicate HTML IDs to improve accessibility and scripting reliability.");
     }
+
+    if (policyFailures is { Length: > 0 })
+        recommendations.Add($"Doctor strict verify policy failed: {string.Join(" | ", policyFailures)}");
 
     if (recommendations.Count == 0)
         recommendations.Add("No major engine findings detected by doctor. Keep running verify+audit in CI.");
@@ -2048,6 +2079,67 @@ internal static class CliPatternHelper
     {
         if (string.IsNullOrWhiteSpace(value)) return Array.Empty<string>();
         return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+}
+
+internal static class WebVerifyPolicy
+{
+    internal static (bool Success, string[] PolicyFailures) EvaluateOutcome(
+        WebVerifyResult verify,
+        bool failOnWarnings,
+        bool failOnNavLint,
+        bool failOnThemeContract)
+    {
+        var failures = new List<string>();
+
+        if (verify is null)
+            return (true, Array.Empty<string>());
+
+        if (!verify.Success)
+        {
+            var firstError = verify.Errors.Length > 0
+                ? verify.Errors[0]
+                : "verify reported configuration errors.";
+            failures.Add(firstError);
+        }
+
+        if (failOnWarnings && verify.Warnings.Length > 0)
+            failures.Add($"fail-on-warnings enabled and verify produced {verify.Warnings.Length} warning(s).");
+
+        if (failOnNavLint)
+        {
+            var navLintCount = verify.Warnings.Count(IsNavigationLintWarning);
+            if (navLintCount > 0)
+                failures.Add($"fail-on-nav-lint enabled and verify produced {navLintCount} navigation lint warning(s).");
+        }
+
+        if (failOnThemeContract)
+        {
+            var themeContractCount = verify.Warnings.Count(IsThemeContractWarning);
+            if (themeContractCount > 0)
+                failures.Add($"fail-on-theme-contract enabled and verify produced {themeContractCount} theme contract warning(s).");
+        }
+
+        var policyFailures = failures
+            .Where(failure => !string.IsNullOrWhiteSpace(failure))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return (policyFailures.Length == 0, policyFailures);
+    }
+
+    private static bool IsNavigationLintWarning(string warning) =>
+        !string.IsNullOrWhiteSpace(warning) &&
+        warning.StartsWith("Navigation lint:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsThemeContractWarning(string warning)
+    {
+        if (string.IsNullOrWhiteSpace(warning))
+            return false;
+
+        return warning.StartsWith("Theme contract:", StringComparison.OrdinalIgnoreCase) ||
+               warning.StartsWith("Theme '", StringComparison.OrdinalIgnoreCase) ||
+               warning.Contains("theme manifest", StringComparison.OrdinalIgnoreCase);
     }
 }
 
@@ -2354,14 +2446,24 @@ internal static class WebPipelineRunner
                         var config = ResolvePath(baseDir, GetString(step, "config"));
                         if (string.IsNullOrWhiteSpace(config))
                             throw new InvalidOperationException("verify requires config.");
+                        var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
+                        var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? false;
+                        var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? false;
 
                         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
                         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
                         var verify = WebSiteVerifier.Verify(spec, plan);
-                        if (!verify.Success)
+                        var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
+                            verify,
+                            failOnWarnings,
+                            failOnNavLint,
+                            failOnThemeContract);
+                        if (!verifySuccess)
                         {
-                            var firstError = verify.Errors.Length > 0 ? verify.Errors[0] : "Web verify failed.";
-                            throw new InvalidOperationException(firstError);
+                            var firstFailure = verifyPolicyFailures.Length > 0
+                                ? verifyPolicyFailures[0]
+                                : "Web verify failed.";
+                            throw new InvalidOperationException(firstFailure);
                         }
 
                         var warnCount = verify.Warnings.Length;
@@ -2906,13 +3008,25 @@ internal static class WebPipelineRunner
                             throw new InvalidOperationException("doctor audit requires existing siteRoot. Provide siteRoot or enable build.");
 
                         WebVerifyResult? verify = null;
+                        var verifyPolicyFailures = Array.Empty<string>();
                         if (executeVerify)
                         {
+                            var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
+                            var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? false;
+                            var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? false;
                             verify = WebSiteVerifier.Verify(spec, plan);
-                            if (!verify.Success)
+                            var (verifySuccess, policyFailures) = WebVerifyPolicy.EvaluateOutcome(
+                                verify,
+                                failOnWarnings,
+                                failOnNavLint,
+                                failOnThemeContract);
+                            verifyPolicyFailures = policyFailures;
+                            if (!verifySuccess)
                             {
-                                var firstError = verify.Errors.Length > 0 ? verify.Errors[0] : "Web verify failed.";
-                                throw new InvalidOperationException(firstError);
+                                var firstFailure = policyFailures.Length > 0
+                                    ? policyFailures[0]
+                                    : "Web verify failed.";
+                                throw new InvalidOperationException(firstFailure);
                             }
                         }
 
@@ -3007,7 +3121,7 @@ internal static class WebPipelineRunner
                         }
 
                         stepResult.Success = true;
-                        stepResult.Message = BuildDoctorSummary(verify, audit, executeBuild, executeVerify, executeAudit);
+                        stepResult.Message = BuildDoctorSummary(verify, audit, executeBuild, executeVerify, executeAudit, verifyPolicyFailures);
                         break;
                     }
                     case "dotnet-build":
@@ -3344,7 +3458,8 @@ internal static class WebPipelineRunner
         WebAuditResult? audit,
         bool buildExecuted,
         bool verifyExecuted,
-        bool auditExecuted)
+        bool auditExecuted,
+        string[]? policyFailures = null)
     {
         var parts = new List<string>();
         parts.Add(buildExecuted ? "build" : "no-build");
@@ -3359,6 +3474,8 @@ internal static class WebPipelineRunner
             parts.Add("summary");
         if (audit is not null && !string.IsNullOrWhiteSpace(audit.SarifPath))
             parts.Add("sarif");
+        if (policyFailures is { Length: > 0 })
+            parts.Add($"verify-policy {policyFailures.Length}");
 
         return $"Doctor ok {string.Join(", ", parts)}";
     }
