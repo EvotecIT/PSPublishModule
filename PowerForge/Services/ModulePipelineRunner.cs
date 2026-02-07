@@ -1729,9 +1729,15 @@ public sealed class ModulePipelineRunner
     }
 
     private static string NormalizeDraftValue(string? value)
-        => string.IsNullOrWhiteSpace(value)
+    {
+        if (value is null)
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        return trimmed.Length == 0
             ? string.Empty
-            : value.Trim().ToUpperInvariant();
+            : trimmed.ToUpperInvariant();
+    }
 
     private ManifestEditor.RequiredModule[] ResolveRequiredModules(
         IReadOnlyList<RequiredModuleDraft> drafts,
@@ -3259,7 +3265,7 @@ exit 0
             return true;
         }
 
-        var dash = name.IndexOf('-', StringComparison.Ordinal);
+        var dash = name.IndexOf("-", StringComparison.Ordinal);
         if (dash > 0 && dash < name.Length - 1)
         {
             var noun = name.Substring(dash + 1);
