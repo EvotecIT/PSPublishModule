@@ -551,6 +551,7 @@ public static class WebAssetOptimizer
             .OrderBy(width => width)
             .ToArray();
         var optimizedImages = new List<WebOptimizeImageEntry>();
+        var failures = new List<WebOptimizeImageFailureEntry>();
         var generatedVariants = new List<WebOptimizeImageVariantEntry>();
         var budgetWarnings = new List<string>();
         var rewritePlans = new Dictionary<string, ImageRewritePlan>(StringComparer.OrdinalIgnoreCase);
@@ -691,6 +692,12 @@ public static class WebAssetOptimizer
             catch (Exception ex)
             {
                 Trace.TraceWarning($"Image optimize failed for {file}: {ex.GetType().Name}: {ex.Message}");
+                result.ImageFailedCount++;
+                failures.Add(new WebOptimizeImageFailureEntry
+                {
+                    Path = relative,
+                    Error = $"{ex.GetType().Name}: {ex.Message}"
+                });
             }
 
             result.ImageBytesAfter += finalBytes;
@@ -707,6 +714,9 @@ public static class WebAssetOptimizer
         result.OptimizedImages = optimizedImages
             .OrderByDescending(entry => entry.BytesSaved)
             .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        result.ImageFailures = failures
+            .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         result.GeneratedImageVariants = generatedVariants
             .OrderBy(entry => entry.SourcePath, StringComparer.OrdinalIgnoreCase)

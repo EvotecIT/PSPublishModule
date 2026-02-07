@@ -1133,6 +1133,8 @@ internal static class WebPipelineRunner
             parts.Add($"images {result.ImageOptimizedCount}");
         if (result.ImageBytesSaved > 0)
             parts.Add($"images-saved {result.ImageBytesSaved}B");
+        if (result.ImageFailedCount > 0)
+            parts.Add($"image-fails {result.ImageFailedCount}");
         if (result.ImageVariantCount > 0)
             parts.Add($"image-variants {result.ImageVariantCount}");
         if (result.ImageHtmlRewriteCount > 0)

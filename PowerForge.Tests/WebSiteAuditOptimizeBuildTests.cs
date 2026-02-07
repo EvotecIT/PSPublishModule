@@ -1299,6 +1299,38 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void OptimizeDetailed_RecordsImageFailures()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-img-fail-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var imagePath = Path.Combine(root, "bad.png");
+            File.WriteAllBytes(imagePath, new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }); // not a valid PNG
+
+            var result = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                OptimizeImages = true,
+                ImageExtensions = new[] { ".png" }
+            });
+
+            Assert.Equal(1, result.ImageFileCount);
+            Assert.Equal(0, result.ImageOptimizedCount);
+            Assert.Equal(1, result.ImageFailedCount);
+            Assert.Single(result.ImageFailures);
+            Assert.Equal("bad.png", result.ImageFailures[0].Path, ignoreCase: true);
+            Assert.False(string.IsNullOrWhiteSpace(result.ImageFailures[0].Error));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_WritesRoot404HtmlForNotFoundSlug()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-build-" + Guid.NewGuid().ToString("N"));
