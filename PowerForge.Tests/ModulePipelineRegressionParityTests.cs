@@ -45,7 +45,7 @@ public sealed class ModulePipelineRegressionParityTests
             };
 
             var logger = new CollectingLogger();
-            _ = new ModulePipelineRunner(logger).Plan(spec);
+            var plan = new ModulePipelineRunner(logger).Plan(spec);
 
             var guidWarnings = logger.Warnings
                 .Where(w => w.Contains("RequiredModules set Guid=Auto but module not installed", StringComparison.OrdinalIgnoreCase))
@@ -53,6 +53,7 @@ public sealed class ModulePipelineRegressionParityTests
                 .ToArray();
 
             Assert.Single(guidWarnings);
+            Assert.False(ReferenceEquals(plan.RequiredModules, plan.RequiredModulesForPackaging));
         }
         finally
         {
@@ -110,9 +111,9 @@ public sealed class ModulePipelineRegressionParityTests
             var plan = runner.Plan(spec);
             var result = runner.Run(spec, plan);
 
-            Assert.True(plan.CommandModuleDependencies.ContainsKey("ActiveDirectory"));
-            Assert.Contains("Get-ADUser", plan.CommandModuleDependencies["ActiveDirectory"], StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Get-ADGroup", plan.CommandModuleDependencies["ActiveDirectory"], StringComparer.OrdinalIgnoreCase);
+            Assert.True(plan.CommandModuleDependencies.TryGetValue("ActiveDirectory", out var activeDirectoryDeps));
+            Assert.Contains("Get-ADUser", activeDirectoryDeps, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Get-ADGroup", activeDirectoryDeps, StringComparer.OrdinalIgnoreCase);
 
             var manifest = File.ReadAllText(result.BuildResult.ManifestPath);
             Assert.Contains("CommandModuleDependencies", manifest, StringComparison.OrdinalIgnoreCase);
@@ -280,6 +281,57 @@ public sealed class ModulePipelineRegressionParityTests
         }
     }
 
+    [Fact]
+    public void AreRequiredModuleDraftListsEquivalent_AllowsDuplicateEntries_WhenMultisetMatches()
+    {
+        var left = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
+        {
+            ("ModuleA", "1.0.0", (string?)null, (string?)null, (string?)null),
+            ("ModuleA", "2.0.0", (string?)null, (string?)null, (string?)null),
+            ("ModuleB", "1.0.0", (string?)null, (string?)null, (string?)null)
+        };
+        var right = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
+        {
+            ("ModuleB", "1.0.0", (string?)null, (string?)null, (string?)null),
+            ("ModuleA", "2.0.0", (string?)null, (string?)null, (string?)null),
+            ("ModuleA", "1.0.0", (string?)null, (string?)null, (string?)null)
+        };
+
+        Assert.True(InvokeAreRequiredModuleDraftListsEquivalent(left, right));
+    }
+
+    [Fact]
+    public void AreRequiredModuleDraftListsEquivalent_ReturnsFalse_WhenDuplicateEntriesDiffer()
+    {
+        var left = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
+        {
+            ("ModuleA", "1.0.0", (string?)null, (string?)null, (string?)null),
+            ("ModuleA", "2.0.0", (string?)null, (string?)null, (string?)null)
+        };
+        var right = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
+        {
+            ("ModuleA", "1.0.0", (string?)null, (string?)null, (string?)null),
+            ("ModuleA", "1.0.0", (string?)null, (string?)null, (string?)null)
+        };
+
+        Assert.False(InvokeAreRequiredModuleDraftListsEquivalent(left, right));
+    }
+
+    [Fact]
+    public void AreRequiredModuleDraftListsEquivalent_TreatsNullAndEmptyVersionFieldsAsEqual()
+    {
+        var left = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
+        {
+            ("ModuleA", (string?)null, (string?)null, (string?)null, (string?)null)
+        };
+        var right = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
+        {
+            ("ModuleA", string.Empty, "  ", string.Empty, " ")
+        };
+
+        Assert.True(InvokeAreRequiredModuleDraftListsEquivalent(left, right));
+    }
+
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
@@ -306,8 +358,46 @@ public sealed class ModulePipelineRegressionParityTests
         IReadOnlyCollection<string>? dependentModules = null)
     {
         var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(method);
+        Assert.True(method is not null, "ValidateMissingFunctions method signature may have changed.");
         method!.Invoke(runner, new object?[] { report, plan, dependentModules });
+    }
+
+    private static bool InvokeAreRequiredModuleDraftListsEquivalent(
+        (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[] left,
+        (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[] right)
+    {
+        var runnerType = typeof(ModulePipelineRunner);
+        var draftType = runnerType.GetNestedType("RequiredModuleDraft", BindingFlags.NonPublic);
+        Assert.True(draftType is not null, "RequiredModuleDraft nested type may have changed.");
+
+        var method = runnerType.GetMethod("AreRequiredModuleDraftListsEquivalent", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.True(method is not null, "AreRequiredModuleDraftListsEquivalent method signature may have changed.");
+
+        var leftArray = CreateDraftArray(draftType!, left);
+        var rightArray = CreateDraftArray(draftType!, right);
+
+        return (bool)method!.Invoke(null, new object?[] { leftArray, rightArray })!;
+    }
+
+    private static Array CreateDraftArray(
+        Type draftType,
+        (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[] items)
+    {
+        var result = Array.CreateInstance(draftType, items.Length);
+        for (var i = 0; i < items.Length; i++)
+        {
+            var entry = items[i];
+            var instance = Activator.CreateInstance(
+                draftType,
+                entry.ModuleName,
+                entry.ModuleVersion,
+                entry.MinimumVersion,
+                entry.RequiredVersion,
+                entry.Guid);
+            result.SetValue(instance, i);
+        }
+
+        return result;
     }
 
     private sealed class CollectingLogger : ILogger

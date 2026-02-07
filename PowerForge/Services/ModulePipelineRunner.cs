@@ -496,7 +496,7 @@ public sealed class ModulePipelineRunner
             installMissingModulesRepository,
             installMissingModulesCredential);
         var requiredModulesForPackaging = AreRequiredModuleDraftListsEquivalent(requiredModulesDraft, requiredModulesDraftForPackaging)
-            ? requiredModules
+            ? requiredModules.ToArray()
             : ResolveRequiredModules(
                 requiredModulesDraftForPackaging,
                 resolveMissingModulesOnline,
@@ -1689,26 +1689,49 @@ public sealed class ModulePipelineRunner
         if (leftList.Length == 0)
             return true;
 
-        var map = new Dictionary<string, RequiredModuleDraft>(StringComparer.OrdinalIgnoreCase);
-        foreach (var d in leftList)
-            map[d.ModuleName] = d;
+        var leftCounts = BuildRequiredModuleDraftCounts(leftList);
+        var rightCounts = BuildRequiredModuleDraftCounts(rightList);
+        if (leftCounts.Count != rightCounts.Count)
+            return false;
 
-        foreach (var d in rightList)
+        foreach (var kvp in leftCounts)
         {
-            if (!map.TryGetValue(d.ModuleName, out var other))
+            if (!rightCounts.TryGetValue(kvp.Key, out var rightCount))
                 return false;
-
-            if (!string.Equals(d.ModuleVersion, other.ModuleVersion, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(d.MinimumVersion, other.MinimumVersion, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(d.RequiredVersion, other.RequiredVersion, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(d.Guid, other.Guid, StringComparison.OrdinalIgnoreCase))
-            {
+            if (kvp.Value != rightCount)
                 return false;
-            }
         }
 
         return true;
     }
+
+    private static Dictionary<(string ModuleName, string ModuleVersion, string MinimumVersion, string RequiredVersion, string Guid), int>
+        BuildRequiredModuleDraftCounts(IEnumerable<RequiredModuleDraft> drafts)
+    {
+        var counts = new Dictionary<(string ModuleName, string ModuleVersion, string MinimumVersion, string RequiredVersion, string Guid), int>();
+        foreach (var draft in drafts ?? Array.Empty<RequiredModuleDraft>())
+        {
+            if (draft is null || string.IsNullOrWhiteSpace(draft.ModuleName))
+                continue;
+
+            var key = (
+                ModuleName: NormalizeDraftValue(draft.ModuleName),
+                ModuleVersion: NormalizeDraftValue(draft.ModuleVersion),
+                MinimumVersion: NormalizeDraftValue(draft.MinimumVersion),
+                RequiredVersion: NormalizeDraftValue(draft.RequiredVersion),
+                Guid: NormalizeDraftValue(draft.Guid));
+
+            counts.TryGetValue(key, out var current);
+            counts[key] = current + 1;
+        }
+
+        return counts;
+    }
+
+    private static string NormalizeDraftValue(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToUpperInvariant();
 
     private ManifestEditor.RequiredModule[] ResolveRequiredModules(
         IReadOnlyList<RequiredModuleDraft> drafts,
