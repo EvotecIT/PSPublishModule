@@ -14,7 +14,10 @@ public sealed class WebAuditOptions
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Optional exclude glob patterns (relative to site root).</summary>
     public string[] Exclude { get; set; } = Array.Empty<string>();
-    /// <summary>Maximum number of HTML files to audit (0 disables).</summary>
+    /// <summary>
+    /// Maximum number of HTML files to audit (0 disables).
+    /// When set, files are selected in alphabetical order by path.
+    /// </summary>
     public int MaxHtmlFiles { get; set; }
     /// <summary>When true, apply built-in exclude patterns for partial HTML files.</summary>
     public bool UseDefaultExcludes { get; set; } = true;

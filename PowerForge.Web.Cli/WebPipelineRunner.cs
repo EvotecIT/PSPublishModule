@@ -539,6 +539,8 @@ internal static class WebPipelineRunner
                             }
                             if (maxHtmlFiles <= 0)
                             {
+                                // Optimize touches HTML multiple times (critical-css, rewrites, minify),
+                                // so default to a small scope for local iteration.
                                 maxHtmlFiles = 50;
                                 forced.Add("maxHtmlFiles=50");
                             }
@@ -688,6 +690,8 @@ internal static class WebPipelineRunner
                             }
                             if (maxHtmlFiles <= 0)
                             {
+                                // Static audit is usually cheaper than optimize; allow a wider default
+                                // scope while still keeping large sites manageable during local iteration.
                                 maxHtmlFiles = 200;
                                 forced.Add("maxHtmlFiles=200");
                             }
