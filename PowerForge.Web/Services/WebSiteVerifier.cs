@@ -103,6 +103,7 @@ public static class WebSiteVerifier
         ValidatePrismAssets(spec, plan, warnings);
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
+        ValidateVersioning(spec, warnings);
         ValidateNavigationLint(spec, plan, routes.Keys, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
@@ -603,6 +604,82 @@ public static class WebSiteVerifier
                     warnings.Add("Navigation main menu does not contain '/'. Add a Home link to keep global navigation consistent.");
             }
         }
+    }
+
+    private static void ValidateVersioning(SiteSpec spec, List<string> warnings)
+    {
+        if (spec is null || warnings is null)
+            return;
+
+        var versioning = spec.Versioning;
+        if (versioning is null || !versioning.Enabled)
+            return;
+
+        if (versioning.Versions is null || versioning.Versions.Length == 0)
+        {
+            warnings.Add("Versioning is enabled but no versions are configured.");
+            return;
+        }
+
+        var normalizedBasePath = string.IsNullOrWhiteSpace(versioning.BasePath)
+            ? string.Empty
+            : NormalizeRouteForNavigationMatch(versioning.BasePath);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var defaultCount = 0;
+        var latestCount = 0;
+
+        foreach (var version in versioning.Versions)
+        {
+            if (version is null || string.IsNullOrWhiteSpace(version.Name))
+            {
+                warnings.Add("Versioning contains an entry with missing Name.");
+                continue;
+            }
+
+            var versionName = version.Name.Trim();
+            if (!names.Add(versionName))
+            {
+                warnings.Add($"Versioning defines duplicate version '{versionName}'.");
+                continue;
+            }
+
+            if (version.Default) defaultCount++;
+            if (version.Latest) latestCount++;
+
+            if (string.IsNullOrWhiteSpace(version.Url))
+                continue;
+
+            var url = version.Url.Trim();
+            if (!url.StartsWith("/", StringComparison.Ordinal) && !IsExternalNavigationUrl(url))
+            {
+                warnings.Add($"Versioning version '{versionName}' url '{version.Url}' should be root-relative ('/docs/v2/') or absolute ('https://...').");
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(normalizedBasePath) &&
+                normalizedBasePath != "/" &&
+                !IsExternalNavigationUrl(url))
+            {
+                var normalizedUrl = NormalizeRouteForNavigationMatch(url);
+                if (!normalizedUrl.StartsWith(normalizedBasePath, StringComparison.OrdinalIgnoreCase))
+                    warnings.Add($"Versioning version '{versionName}' url '{version.Url}' is outside Versioning.BasePath '{versioning.BasePath}'.");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(versioning.Current) &&
+            !names.Contains(versioning.Current.Trim()))
+        {
+            warnings.Add($"Versioning.Current '{versioning.Current}' does not match any configured version name.");
+        }
+
+        if (defaultCount > 1)
+            warnings.Add($"Versioning marks {defaultCount} entries as Default. Use only one.");
+        if (latestCount > 1)
+            warnings.Add($"Versioning marks {latestCount} entries as Latest. Use only one.");
+        if (defaultCount == 0)
+            warnings.Add("Versioning does not mark any version as Default. The first version will be used.");
+        if (latestCount == 0)
+            warnings.Add("Versioning does not mark any version as Latest. The current/default version will be used.");
     }
 
     private static void ValidateNavigationLint(SiteSpec spec, WebSitePlan plan, IEnumerable<string> routes, List<string> warnings)

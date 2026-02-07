@@ -2037,7 +2037,8 @@ public static class WebSiteBuilder
             Site = context.Site,
             Page = page,
             Data = context.Data,
-            Project = context.Project
+            Project = context.Project,
+            Versioning = BuildVersioningRuntime(context.Site, string.Empty)
         };
 
         var resolver = context.PartialResolver ?? (_ => null);
@@ -2280,6 +2281,7 @@ public static class WebSiteBuilder
             Data = data,
             Project = projectSpec,
             Navigation = BuildNavigation(spec, item, menuSpecs),
+            Versioning = BuildVersioningRuntime(spec, item.OutputPath),
             Breadcrumbs = breadcrumbs,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
@@ -2982,6 +2984,112 @@ public static class WebSiteBuilder
         nav.Footer = BuildFooter(effectiveFooter, nav.Menus, context, spec.LinkRules);
 
         return nav;
+    }
+
+    private static VersioningRuntime BuildVersioningRuntime(SiteSpec spec, string? currentPath)
+    {
+        var versioning = spec.Versioning;
+        if (versioning is null || !versioning.Enabled || versioning.Versions is null || versioning.Versions.Length == 0)
+            return new VersioningRuntime();
+
+        var versionMap = new Dictionary<string, VersionRuntimeItem>(StringComparer.OrdinalIgnoreCase);
+        foreach (var version in versioning.Versions)
+        {
+            if (version is null || string.IsNullOrWhiteSpace(version.Name))
+                continue;
+
+            if (versionMap.ContainsKey(version.Name))
+                continue;
+
+            versionMap[version.Name] = new VersionRuntimeItem
+            {
+                Name = version.Name.Trim(),
+                Label = string.IsNullOrWhiteSpace(version.Label) ? version.Name.Trim() : version.Label.Trim(),
+                Url = ResolveVersionUrl(versioning.BasePath, version),
+                Default = version.Default,
+                Latest = version.Latest,
+                Deprecated = version.Deprecated
+            };
+        }
+
+        var versions = versionMap.Values.ToArray();
+        if (versions.Length == 0)
+            return new VersioningRuntime();
+
+        var current = ResolveCurrentVersion(versioning.Current, currentPath, versions);
+        var latest = versions.FirstOrDefault(v => v.Latest) ?? versions.FirstOrDefault(v => v.Name.Equals(current.Name, StringComparison.OrdinalIgnoreCase)) ?? versions[0];
+        var @default = versions.FirstOrDefault(v => v.Default) ?? versions[0];
+
+        foreach (var version in versions)
+            version.IsCurrent = version.Name.Equals(current.Name, StringComparison.OrdinalIgnoreCase);
+
+        return new VersioningRuntime
+        {
+            Enabled = true,
+            BasePath = NormalizeVersionBasePath(versioning.BasePath),
+            Current = current,
+            Latest = latest,
+            Default = @default,
+            Versions = versions
+        };
+    }
+
+    private static VersionRuntimeItem ResolveCurrentVersion(string? configuredCurrent, string? currentPath, VersionRuntimeItem[] versions)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredCurrent))
+        {
+            var configured = versions.FirstOrDefault(v => v.Name.Equals(configuredCurrent.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (configured is not null)
+                return configured;
+        }
+
+        var normalizedCurrentPath = NormalizeRouteForMatch(currentPath);
+        if (!string.IsNullOrWhiteSpace(normalizedCurrentPath))
+        {
+            var inferred = versions
+                .Select(v => new
+                {
+                    Version = v,
+                    Url = NormalizeRouteForMatch(v.Url)
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Url) && normalizedCurrentPath.StartsWith(x.Url, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(x => x.Url.Length)
+                .Select(x => x.Version)
+                .FirstOrDefault();
+            if (inferred is not null)
+                return inferred;
+        }
+
+        return versions.FirstOrDefault(v => v.Default) ??
+               versions.FirstOrDefault(v => v.Latest) ??
+               versions[0];
+    }
+
+    private static string ResolveVersionUrl(string? basePath, VersionSpec version)
+    {
+        if (!string.IsNullOrWhiteSpace(version.Url))
+            return NormalizeRouteForMatch(version.Url);
+
+        var versionName = version.Name.Trim('/');
+        if (string.IsNullOrWhiteSpace(versionName))
+            return NormalizeRouteForMatch(basePath);
+
+        var normalizedBasePath = NormalizeVersionBasePath(basePath);
+        if (string.IsNullOrWhiteSpace(normalizedBasePath) || normalizedBasePath == "/")
+            return NormalizeRouteForMatch("/" + versionName + "/");
+
+        return NormalizeRouteForMatch($"{normalizedBasePath}/{versionName}/");
+    }
+
+    private static string NormalizeVersionBasePath(string? basePath)
+    {
+        if (string.IsNullOrWhiteSpace(basePath))
+            return string.Empty;
+
+        var normalized = NormalizeRouteForMatch(basePath);
+        return normalized == "/"
+            ? "/"
+            : normalized.TrimEnd('/');
     }
 
     private static NavigationVisibilitySpec? CloneVisibility(NavigationVisibilitySpec? visibility)

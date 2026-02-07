@@ -8,6 +8,7 @@ internal sealed class ThemeRenderContext
     public IReadOnlyDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     public ProjectSpec? Project { get; init; }
     public NavigationRuntime Navigation { get; init; } = new();
+    public VersioningRuntime Versioning { get; init; } = new();
     public BreadcrumbItem[] Breadcrumbs { get; init; } = Array.Empty<BreadcrumbItem>();
     public string CurrentPath { get; init; } = string.Empty;
     public ShortcodeContext? Shortcode { get; init; }

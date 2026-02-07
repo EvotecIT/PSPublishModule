@@ -36,7 +36,13 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["EXTRA_SCRIPTS"] = context.ExtraScriptsHtml,
             ["BODY_CLASS"] = string.IsNullOrWhiteSpace(context.BodyClass) ? string.Empty : $" class=\"{context.BodyClass}\"",
             ["SITE_NAME"] = context.Site.Name ?? string.Empty,
-            ["BASE_URL"] = context.Site.BaseUrl ?? string.Empty
+            ["BASE_URL"] = context.Site.BaseUrl ?? string.Empty,
+            ["VERSION_CURRENT"] = context.Versioning.Current?.Name ?? string.Empty,
+            ["VERSION_CURRENT_LABEL"] = context.Versioning.Current?.Label ?? string.Empty,
+            ["VERSION_CURRENT_URL"] = context.Versioning.Current?.Url ?? string.Empty,
+            ["VERSION_LATEST"] = context.Versioning.Latest?.Name ?? string.Empty,
+            ["VERSION_LATEST_LABEL"] = context.Versioning.Latest?.Label ?? string.Empty,
+            ["VERSION_LATEST_URL"] = context.Versioning.Latest?.Url ?? string.Empty
         };
     }
 

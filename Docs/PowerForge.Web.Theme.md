@@ -361,6 +361,28 @@ Footer example:
 {{ end }}
 ```
 
+## Versioning runtime
+When `site.json` defines `Versioning`, templates also receive:
+- `versioning` (resolved runtime model)
+- `versions` (shortcut to `versioning.versions`)
+- `current_version`
+- `latest_version`
+
+Each entry includes `name`, `label`, `url`, `default`, `latest`, `deprecated`, `is_current`.
+
+Example:
+```html
+{{ if versioning.enabled && versions.size > 0 }}
+  <select onchange="location.href=this.value">
+    {{ for v in versions }}
+      <option value="{{ v.url }}" {{ if v.is_current }}selected{{ end }}>
+        {{ v.label }}{{ if v.latest }} (latest){{ end }}
+      </option>
+    {{ end }}
+  </select>
+{{ end }}
+```
+
 ## List pages + taxonomies
 Section pages (`_index.md`) and taxonomy pages expose extra data in Scriban:
 - `items`: list of child pages (for sections/taxonomies/terms)

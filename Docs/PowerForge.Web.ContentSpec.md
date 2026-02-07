@@ -663,6 +663,16 @@ Versioning metadata can be stored in `site.json` and used in templates:
 }
 ```
 This data is available under `site.versioning` in templates.
+PowerForge also exposes a resolved runtime object under `versioning` (plus shortcuts `current_version`, `latest_version`, `versions`) with:
+- normalized URLs
+- resolved current version (from `Current` or current page path)
+- `is_current` flags for each version entry
+
+Recommended contract:
+- mark exactly one version as `Default`
+- mark exactly one version as `Latest`
+- keep `Current` aligned to a configured `Name`
+- use root-relative URLs (for example `/docs/v2/`)
 
 ## Link checking
 Enable link checking in `site.json`:

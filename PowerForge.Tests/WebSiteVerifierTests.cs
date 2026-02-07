@@ -3,6 +3,74 @@ using PowerForge.Web;
 public class WebSiteVerifierTests
 {
     [Fact]
+    public void Verify_WarnsWhenVersioningIsMisconfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-versioning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Versioning Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Versioning = new VersioningSpec
+                {
+                    Enabled = true,
+                    BasePath = "/docs",
+                    Current = "v3",
+                    Versions = new[]
+                    {
+                        new VersionSpec { Name = "v2", Url = "/docs/v2/", Latest = true, Default = true },
+                        new VersionSpec { Name = "v2", Url = "/docs/v2-duplicate/" },
+                        new VersionSpec { Name = "v1", Url = "docs/v1/" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("Current 'v3' does not match any configured version", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("duplicate version 'v2'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("url 'docs/v1/' should be root-relative", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhenThemeManifestUsesNonPortablePaths()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-contract-" + Guid.NewGuid().ToString("N"));

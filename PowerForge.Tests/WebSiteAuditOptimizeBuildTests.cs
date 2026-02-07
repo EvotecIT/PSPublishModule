@@ -6,6 +6,95 @@ namespace PowerForge.Tests;
 public class WebSiteAuditOptimizeBuildTests
 {
     [Fact]
+    public void Build_ExposesResolvedVersioningToScribanTemplates()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-versioning-runtime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "versioning-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  <div id="current">{{ versioning.current.name }}</div>
+                  <div id="latest">{{ versioning.latest.name }}</div>
+                  <div id="versions">{{ for v in versioning.versions }}{{ v.name }}{{ if v.is_current }}*{{ end }};{{ end }}</div>
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "versioning-test",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Versioning Runtime Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "versioning-test",
+                ThemesRoot = "themes",
+                Versioning = new VersioningSpec
+                {
+                    Enabled = true,
+                    BasePath = "/docs",
+                    Current = "v1",
+                    Versions = new[]
+                    {
+                        new VersionSpec { Name = "v2", Label = "v2", Url = "/docs/v2/", Latest = true },
+                        new VersionSpec { Name = "v1", Label = "v1", Url = "/docs/v1/", Default = true }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var output = File.ReadAllText(Path.Combine(result.OutputPath, "index.html"));
+            Assert.Contains("<div id=\"current\">v1</div>", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"latest\">v2</div>", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("v1*;", output, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FlagsMissingRequiredNavLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-" + Guid.NewGuid().ToString("N"));
