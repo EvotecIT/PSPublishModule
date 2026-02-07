@@ -30,6 +30,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("versions", context.Versioning.Versions);
         globals.Add("current_version", context.Versioning.Current);
         globals.Add("latest_version", context.Versioning.Latest);
+        globals.Add("outputs", context.Outputs);
+        globals.Add("feed_url", context.FeedUrl ?? string.Empty);
         globals.Add("breadcrumbs", context.Breadcrumbs);
         globals.Add("shortcode", context.Shortcode);
         globals.Add("taxonomy", context.Taxonomy);

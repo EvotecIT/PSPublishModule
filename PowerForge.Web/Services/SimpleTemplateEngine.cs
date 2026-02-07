@@ -42,7 +42,8 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["VERSION_CURRENT_URL"] = context.Versioning.Current?.Url ?? string.Empty,
             ["VERSION_LATEST"] = context.Versioning.Latest?.Name ?? string.Empty,
             ["VERSION_LATEST_LABEL"] = context.Versioning.Latest?.Label ?? string.Empty,
-            ["VERSION_LATEST_URL"] = context.Versioning.Latest?.Url ?? string.Empty
+            ["VERSION_LATEST_URL"] = context.Versioning.Latest?.Url ?? string.Empty,
+            ["FEED_URL"] = context.FeedUrl ?? string.Empty
         };
     }
 

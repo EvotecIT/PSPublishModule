@@ -35,6 +35,8 @@ public static class WebSiteVerifier
 
         var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var collectionRoutes = new Dictionary<string, List<CollectionRoute>>(StringComparer.OrdinalIgnoreCase);
+        var taxonomyTerms = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var usedTaxonomyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var collection in spec.Collections)
         {
             if (collection is null) continue;
@@ -53,6 +55,7 @@ public static class WebSiteVerifier
 
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
+                CollectTaxonomyTerms(spec.Taxonomies, matter, taxonomyTerms, usedTaxonomyNames);
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(body) ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(title))
                 {
@@ -95,6 +98,8 @@ public static class WebSiteVerifier
             }
         }
 
+        AddSyntheticTaxonomyRoutes(spec, routes, taxonomyTerms, warnings);
+
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
         ValidateThemeContract(spec, plan, warnings);
@@ -103,6 +108,7 @@ public static class WebSiteVerifier
         ValidatePrismAssets(spec, plan, warnings);
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
+        ValidateBlogAndTaxonomySupport(spec, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateVersioning(spec, warnings);
         ValidateNavigationLint(spec, plan, routes.Keys, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
@@ -680,6 +686,198 @@ public static class WebSiteVerifier
             warnings.Add("Versioning does not mark any version as Default. The first version will be used.");
         if (latestCount == 0)
             warnings.Add("Versioning does not mark any version as Latest. The current/default version will be used.");
+    }
+
+    private static void CollectTaxonomyTerms(
+        TaxonomySpec[]? taxonomies,
+        FrontMatter? matter,
+        Dictionary<string, HashSet<string>> taxonomyTerms,
+        HashSet<string> usedTaxonomyNames)
+    {
+        if (matter is null)
+            return;
+
+        if (matter.Tags is { Length: > 0 })
+        {
+            usedTaxonomyNames.Add("tags");
+            if (!taxonomyTerms.TryGetValue("tags", out var tags))
+            {
+                tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                taxonomyTerms["tags"] = tags;
+            }
+
+            foreach (var value in matter.Tags)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    tags.Add(value.Trim());
+            }
+        }
+
+        if (matter.Meta is not null)
+        {
+            if (matter.Meta.TryGetValue("categories", out var categoriesValue) &&
+                TryGetMetaValues(categoriesValue, out var categories))
+            {
+                usedTaxonomyNames.Add("categories");
+                if (!taxonomyTerms.TryGetValue("categories", out var categoryTerms))
+                {
+                    categoryTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    taxonomyTerms["categories"] = categoryTerms;
+                }
+
+                foreach (var value in categories)
+                    categoryTerms.Add(value);
+            }
+        }
+
+        foreach (var taxonomy in taxonomies ?? Array.Empty<TaxonomySpec>())
+        {
+            if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || matter.Meta is null)
+                continue;
+
+            if (!matter.Meta.TryGetValue(taxonomy.Name, out var metaValue))
+                continue;
+
+            if (!TryGetMetaValues(metaValue, out var values))
+                continue;
+
+            usedTaxonomyNames.Add(taxonomy.Name);
+            if (!taxonomyTerms.TryGetValue(taxonomy.Name, out var terms))
+            {
+                terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                taxonomyTerms[taxonomy.Name] = terms;
+            }
+
+            foreach (var value in values)
+                terms.Add(value);
+        }
+    }
+
+    private static bool TryGetMetaValues(object? value, out string[] values)
+    {
+        values = Array.Empty<string>();
+        if (value is null)
+            return false;
+
+        if (value is string text && !string.IsNullOrWhiteSpace(text))
+        {
+            values = text.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .ToArray();
+            return values.Length > 0;
+        }
+
+        if (value is IEnumerable<object?> list)
+        {
+            values = list
+                .Select(item => item?.ToString() ?? string.Empty)
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => item.Trim())
+                .ToArray();
+            return values.Length > 0;
+        }
+
+        var scalar = value.ToString();
+        if (string.IsNullOrWhiteSpace(scalar))
+            return false;
+
+        values = new[] { scalar.Trim() };
+        return true;
+    }
+
+    private static void AddSyntheticTaxonomyRoutes(
+        SiteSpec spec,
+        Dictionary<string, string> routes,
+        Dictionary<string, HashSet<string>> taxonomyTerms,
+        List<string> warnings)
+    {
+        if (spec.Taxonomies is null || spec.Taxonomies.Length == 0)
+            return;
+
+        foreach (var taxonomy in spec.Taxonomies)
+        {
+            if (taxonomy is null || string.IsNullOrWhiteSpace(taxonomy.Name) || string.IsNullOrWhiteSpace(taxonomy.BasePath))
+                continue;
+
+            var listRoute = BuildRoute(taxonomy.BasePath, string.Empty, spec.TrailingSlash);
+            if (routes.TryGetValue(listRoute, out var existingListRoute))
+            {
+                if (!existingListRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
+                    warnings.Add($"Taxonomy route '{listRoute}' overlaps content route '{existingListRoute}'.");
+            }
+            else
+            {
+                routes[listRoute] = $"[taxonomy:{taxonomy.Name}]";
+            }
+
+            if (!taxonomyTerms.TryGetValue(taxonomy.Name, out var terms) || terms.Count == 0)
+                continue;
+
+            foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+            {
+                var slug = Slugify(term);
+                if (string.IsNullOrWhiteSpace(slug))
+                    continue;
+
+                var termRoute = BuildRoute(taxonomy.BasePath, slug, spec.TrailingSlash);
+                if (routes.TryGetValue(termRoute, out var existingTermRoute))
+                {
+                    if (!existingTermRoute.StartsWith("[taxonomy:", StringComparison.OrdinalIgnoreCase))
+                        warnings.Add($"Taxonomy term route '{termRoute}' overlaps content route '{existingTermRoute}'.");
+                    continue;
+                }
+
+                routes[termRoute] = $"[taxonomy:{taxonomy.Name}:{term}]";
+            }
+        }
+    }
+
+    private static void ValidateBlogAndTaxonomySupport(
+        SiteSpec spec,
+        IReadOnlyDictionary<string, List<CollectionRoute>> collectionRoutes,
+        HashSet<string> usedTaxonomyNames,
+        List<string> warnings)
+    {
+        if (spec.Collections is null || spec.Collections.Length == 0)
+            return;
+
+        foreach (var collection in spec.Collections)
+        {
+            if (collection is null || string.IsNullOrWhiteSpace(collection.Name))
+                continue;
+
+            var isBlogCollection = collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
+                                   collection.Output.Contains("blog", StringComparison.OrdinalIgnoreCase);
+            if (!isBlogCollection)
+                continue;
+
+            if (!collectionRoutes.TryGetValue(collection.Name, out var routes) || routes.Count == 0)
+                continue;
+
+            var hasNonDraftContent = routes.Any(route => !route.Draft);
+            if (!hasNonDraftContent)
+                continue;
+
+            var expectedRoute = NormalizeRouteForNavigationMatch(BuildRoute(collection.Output, string.Empty, spec.TrailingSlash));
+            var hasLanding = routes
+                .Where(route => !route.Draft)
+                .Select(route => NormalizeRouteForNavigationMatch(route.Route))
+                .Any(route => string.Equals(route, expectedRoute, StringComparison.OrdinalIgnoreCase));
+            if (!hasLanding)
+                warnings.Add($"Collection '{collection.Name}' looks like a blog but has no landing page at '{expectedRoute}'. Add '_index.md' or a page with slug 'index'.");
+        }
+
+        if (usedTaxonomyNames.Contains("tags") &&
+            (spec.Taxonomies is null || !spec.Taxonomies.Any(t => t is not null && t.Name.Equals("tags", StringComparison.OrdinalIgnoreCase))))
+        {
+            warnings.Add("Content uses tags but SiteSpec.Taxonomies does not define 'tags'. Add taxonomy mapping (for example base path '/tags').");
+        }
+
+        if (usedTaxonomyNames.Contains("categories") &&
+            (spec.Taxonomies is null || !spec.Taxonomies.Any(t => t is not null && t.Name.Equals("categories", StringComparison.OrdinalIgnoreCase))))
+        {
+            warnings.Add("Content uses categories but SiteSpec.Taxonomies does not define 'categories'. Add taxonomy mapping (for example base path '/categories').");
+        }
     }
 
     private static void ValidateNavigationLint(SiteSpec spec, WebSitePlan plan, IEnumerable<string> routes, List<string> warnings)

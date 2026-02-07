@@ -647,6 +647,12 @@ Enable multiple outputs (HTML/JSON/RSS) per page kind:
 }
 ```
 
+Implicit defaults (when no explicit output rule/override exists):
+- `blog` section pages: `html` + `rss`
+- `tags`/`categories` taxonomy and term pages: `html` + `rss`
+
+This gives zero-config feeds for common blog/taxonomy layouts while keeping other page kinds HTML-only by default.
+
 ## Versioning
 Versioning metadata can be stored in `site.json` and used in templates:
 ```json

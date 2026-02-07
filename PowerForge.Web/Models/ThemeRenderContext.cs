@@ -9,6 +9,8 @@ internal sealed class ThemeRenderContext
     public ProjectSpec? Project { get; init; }
     public NavigationRuntime Navigation { get; init; } = new();
     public VersioningRuntime Versioning { get; init; } = new();
+    public OutputRuntime[] Outputs { get; init; } = Array.Empty<OutputRuntime>();
+    public string? FeedUrl { get; init; }
     public BreadcrumbItem[] Breadcrumbs { get; init; } = Array.Empty<BreadcrumbItem>();
     public string CurrentPath { get; init; } = string.Empty;
     public ShortcodeContext? Shortcode { get; init; }

@@ -2223,6 +2223,8 @@ public static class WebSiteBuilder
 
         var effectiveData = ResolveDataForProject(data, item.ProjectSlug);
         var formats = ResolveOutputFormats(spec, item);
+        var outputs = ResolveOutputRuntime(spec, item, formats);
+        var alternateHeadLinksHtml = RenderAlternateOutputHeadLinks(outputs);
         foreach (var format in formats)
         {
             var outputFileName = ResolveOutputFileName(format);
@@ -2232,7 +2234,7 @@ public static class WebSiteBuilder
             var outputDirectory = Path.GetDirectoryName(outputFile);
             if (!string.IsNullOrWhiteSpace(outputDirectory))
                 Directory.CreateDirectory(outputDirectory);
-            var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format);
+            var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format, outputs, alternateHeadLinksHtml);
             File.WriteAllText(outputFile, content);
         }
         CopyPageResources(item, isNotFoundRoute ? outputRoot : targetDir);
@@ -2245,7 +2247,9 @@ public static class WebSiteBuilder
         IReadOnlyList<ContentItem> allItems,
         IReadOnlyDictionary<string, object?> data,
         IReadOnlyDictionary<string, ProjectSpec> projectMap,
-        MenuSpec[] menuSpecs)
+        MenuSpec[] menuSpecs,
+        IReadOnlyList<OutputRuntime> outputs,
+        string alternateHeadLinksHtml)
     {
         var themeRoot = ResolveThemeRoot(spec, rootPath);
         var loader = new ThemeLoader();
@@ -2282,6 +2286,8 @@ public static class WebSiteBuilder
             Project = projectSpec,
             Navigation = BuildNavigation(spec, item, menuSpecs),
             Versioning = BuildVersioningRuntime(spec, item.OutputPath),
+            Outputs = outputs.ToArray(),
+            FeedUrl = outputs.FirstOrDefault(o => string.Equals(o.Name, "rss", StringComparison.OrdinalIgnoreCase))?.Url,
             Breadcrumbs = breadcrumbs,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
@@ -2290,7 +2296,9 @@ public static class WebSiteBuilder
             CriticalCssHtml = criticalCss,
             CanonicalHtml = canonical,
             DescriptionMetaHtml = descriptionMeta,
-            HeadHtml = headHtml,
+            HeadHtml = string.IsNullOrWhiteSpace(alternateHeadLinksHtml)
+                ? headHtml
+                : string.Join(Environment.NewLine, new[] { headHtml, alternateHeadLinksHtml }.Where(v => !string.IsNullOrWhiteSpace(v))),
             OpenGraphHtml = openGraph,
             StructuredDataHtml = structuredData,
             ExtraCssHtml = extraCss,
@@ -2365,7 +2373,7 @@ public static class WebSiteBuilder
     private static string[] ResolveOutputRule(SiteSpec spec, ContentItem item)
     {
         if (spec.Outputs?.Rules is null || spec.Outputs.Rules.Length == 0)
-            return Array.Empty<string>();
+            return ResolveImplicitOutputRule(item);
 
         var kind = item.Kind.ToString().ToLowerInvariant();
         foreach (var rule in spec.Outputs.Rules)
@@ -2373,6 +2381,27 @@ public static class WebSiteBuilder
             if (rule is null || string.IsNullOrWhiteSpace(rule.Kind)) continue;
             if (string.Equals(rule.Kind, kind, StringComparison.OrdinalIgnoreCase))
                 return rule.Formats ?? Array.Empty<string>();
+        }
+
+        return ResolveImplicitOutputRule(item);
+    }
+
+    private static string[] ResolveImplicitOutputRule(ContentItem item)
+    {
+        if (item is null)
+            return Array.Empty<string>();
+
+        if (item.Kind == PageKind.Section &&
+            string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
+        {
+            return new[] { "html", "rss" };
+        }
+
+        if ((item.Kind == PageKind.Taxonomy || item.Kind == PageKind.Term) &&
+            (string.Equals(item.Collection, "tags", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(item.Collection, "categories", StringComparison.OrdinalIgnoreCase)))
+        {
+            return new[] { "html", "rss" };
         }
 
         return Array.Empty<string>();
@@ -2404,6 +2433,88 @@ public static class WebSiteBuilder
         return $"index.{format.Suffix}";
     }
 
+    private static OutputRuntime[] ResolveOutputRuntime(SiteSpec spec, ContentItem item, IReadOnlyList<OutputFormatSpec> formats)
+    {
+        if (formats.Count == 0)
+            return Array.Empty<OutputRuntime>();
+
+        var outputs = formats
+            .Where(format => format is not null && !string.IsNullOrWhiteSpace(format.Name))
+            .Select(format =>
+            {
+                var name = format.Name.Trim();
+                var route = ResolveOutputRoute(item.OutputPath, format);
+                var url = string.IsNullOrWhiteSpace(route)
+                    ? string.Empty
+                    : (string.IsNullOrWhiteSpace(spec.BaseUrl) ? route : CombineAbsoluteUrl(spec.BaseUrl, route));
+                return new OutputRuntime
+                {
+                    Name = name.ToLowerInvariant(),
+                    Url = url,
+                    MediaType = string.IsNullOrWhiteSpace(format.MediaType) ? "text/html" : format.MediaType,
+                    Rel = format.Rel,
+                    IsCurrent = string.Equals(name, "html", StringComparison.OrdinalIgnoreCase)
+                };
+            })
+            .GroupBy(output => output.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+
+        return outputs;
+    }
+
+    private static string RenderAlternateOutputHeadLinks(IReadOnlyList<OutputRuntime> outputs)
+    {
+        if (outputs is null || outputs.Count == 0)
+            return string.Empty;
+
+        var lines = outputs
+            .Where(output => !output.IsCurrent)
+            .Where(output => !string.IsNullOrWhiteSpace(output.Url))
+            .Select(output =>
+            {
+                var rel = string.IsNullOrWhiteSpace(output.Rel) ? "alternate" : output.Rel!;
+                var relEncoded = System.Web.HttpUtility.HtmlEncode(rel);
+                var typeEncoded = System.Web.HttpUtility.HtmlEncode(output.MediaType);
+                var hrefEncoded = System.Web.HttpUtility.HtmlEncode(output.Url);
+                var titleEncoded = System.Web.HttpUtility.HtmlEncode(output.Name.ToUpperInvariant());
+                return $"<link rel=\"{relEncoded}\" type=\"{typeEncoded}\" href=\"{hrefEncoded}\" title=\"{titleEncoded}\" />";
+            })
+            .ToArray();
+
+        return lines.Length == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, lines);
+    }
+
+    private static string ResolveOutputRoute(string outputPath, OutputFormatSpec format)
+    {
+        var baseRoute = NormalizeRouteForMatch(outputPath);
+        if (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
+            return baseRoute;
+
+        var prefix = baseRoute.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "/";
+
+        if (prefix == "/")
+            return $"/index.{format.Suffix}";
+
+        return $"{prefix}/index.{format.Suffix}";
+    }
+
+    private static string CombineAbsoluteUrl(string baseUrl, string path)
+    {
+        var normalizedBase = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(normalizedBase))
+            return path;
+
+        var normalizedPath = string.IsNullOrWhiteSpace(path)
+            ? "/"
+            : (path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path.TrimStart('/'));
+        return normalizedBase + normalizedPath;
+    }
+
     private static string RenderOutput(
         SiteSpec spec,
         string rootPath,
@@ -2412,14 +2523,16 @@ public static class WebSiteBuilder
         IReadOnlyDictionary<string, object?> data,
         IReadOnlyDictionary<string, ProjectSpec> projectMap,
         MenuSpec[] menuSpecs,
-        OutputFormatSpec format)
+        OutputFormatSpec format,
+        IReadOnlyList<OutputRuntime> outputs,
+        string alternateHeadLinksHtml)
     {
         var name = format.Name.ToLowerInvariant();
         return name switch
         {
             "json" => RenderJsonOutput(spec, item, allItems),
             "rss" => RenderRssOutput(spec, item, allItems),
-            _ => RenderHtmlPage(spec, rootPath, item, allItems, data, projectMap, menuSpecs)
+            _ => RenderHtmlPage(spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml)
         };
     }
 

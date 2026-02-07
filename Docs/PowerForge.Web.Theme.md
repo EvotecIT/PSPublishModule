@@ -383,6 +383,20 @@ Example:
 {{ end }}
 ```
 
+## Output runtime (feeds/json variants)
+Templates receive output metadata for the current page:
+- `outputs` (array of `{ name, url, media_type, rel, is_current }`)
+- `feed_url` (resolved RSS URL when available)
+
+The engine also injects `<link rel=\"alternate\" ...>` tags for non-HTML outputs into `<head>`.
+
+Example:
+```html
+{{ if feed_url }}
+  <a href="{{ feed_url }}">RSS</a>
+{{ end }}
+```
+
 ## List pages + taxonomies
 Section pages (`_index.md`) and taxonomy pages expose extra data in Scriban:
 - `items`: list of child pages (for sections/taxonomies/terms)

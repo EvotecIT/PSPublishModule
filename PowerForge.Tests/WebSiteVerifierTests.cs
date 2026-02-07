@@ -71,6 +71,131 @@ public class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_DoesNotFlagTaxonomyRoutesAsMissingForNavigationLint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-taxonomy-nav-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                tags: [release]
+                ---
+
+                Home
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Taxonomy Nav Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec { Name = "tags", BasePath = "/tags" }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Tags", Url = "/tags/" }
+                            }
+                        }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("/tags/", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("does not match any generated route", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenBlogCollectionHasNoLandingPage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-blog-landing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "first-post.md"),
+                """
+                ---
+                title: First Post
+                ---
+
+                Hello
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Blog Landing Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("looks like a blog but has no landing page", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhenThemeManifestUsesNonPortablePaths()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-contract-" + Guid.NewGuid().ToString("N"));
