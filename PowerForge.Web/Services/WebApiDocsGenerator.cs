@@ -4387,9 +4387,6 @@ public static class WebApiDocsGenerator
                 return null;
             }
 
-            if (string.IsNullOrWhiteSpace(options.SourceRootPath) && !string.IsNullOrWhiteSpace(options.SourceUrlPattern))
-                warnings.Add("SourceUrlPattern set without SourceRootPath; URLs may contain absolute paths.");
-
             var pdbPath = Path.ChangeExtension(assemblyPath, ".pdb");
             if (!File.Exists(pdbPath))
             {
@@ -4401,10 +4398,27 @@ public static class WebApiDocsGenerator
             {
                 var stream = File.OpenRead(pdbPath);
                 var provider = MetadataReaderProvider.FromPortablePdbStream(stream);
-                var root = string.IsNullOrWhiteSpace(options.SourceRootPath)
-                    ? null
-                    : Path.GetFullPath(options.SourceRootPath);
-                return new SourceLinkContext(provider, stream, root, options.SourceUrlPattern);
+
+                string? root = null;
+                if (!string.IsNullOrWhiteSpace(options.SourceRootPath))
+                {
+                    root = Path.GetFullPath(options.SourceRootPath);
+                }
+                else if (!string.IsNullOrWhiteSpace(options.SourceUrlPattern))
+                {
+                    // If the project lives in a subfolder of a repo, using the git root as SourceRootPath
+                    // keeps generated URLs consistent (and avoids missing prefixes like "IntelligenceX/...").
+                    root = TryFindGitRoot(assemblyPath);
+                }
+
+                var pattern = options.SourceUrlPattern;
+                if (string.IsNullOrWhiteSpace(root) && !string.IsNullOrWhiteSpace(pattern))
+                {
+                    warnings.Add("SourceUrlPattern set without SourceRootPath (and git root not found); source URLs will be omitted.");
+                    pattern = null;
+                }
+
+                return new SourceLinkContext(provider, stream, root, pattern);
             }
             catch (Exception ex)
             {
@@ -4505,6 +4519,30 @@ public static class WebApiDocsGenerator
         {
             _provider.Dispose();
             _stream.Dispose();
+        }
+
+        private static string? TryFindGitRoot(string path)
+        {
+            try
+            {
+                var current = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+                while (!string.IsNullOrWhiteSpace(current))
+                {
+                    var git = Path.Combine(current, ".git");
+                    if (Directory.Exists(git) || File.Exists(git))
+                        return current;
+
+                    var parent = Path.GetDirectoryName(current);
+                    if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, current, StringComparison.OrdinalIgnoreCase))
+                        break;
+                    current = parent;
+                }
+            }
+            catch
+            {
+                // best-effort
+            }
+            return null;
         }
     }
 
