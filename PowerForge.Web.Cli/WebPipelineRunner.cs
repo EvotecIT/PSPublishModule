@@ -970,6 +970,10 @@ internal static class WebPipelineRunner
                 result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
                 if (cacheEnabled && cacheState is not null && cacheUpdated)
                     SavePipelineCache(cachePath, cacheState, logger);
+                // Intentionally asymmetric:
+                // - Success: write profile only when profile is enabled (to avoid noise/overhead).
+                // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
+                //   so CI failures still produce actionable artifacts.
                 if (!string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
                 {
                     WritePipelineProfile(profilePath, result, logger);
