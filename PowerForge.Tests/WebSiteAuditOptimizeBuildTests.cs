@@ -1,5 +1,6 @@
 using PowerForge.Web;
 using ImageMagick;
+using System.Xml.Linq;
 
 namespace PowerForge.Tests;
 
@@ -186,6 +187,226 @@ public class WebSiteAuditOptimizeBuildTests
 
             Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.xml")));
             Assert.True(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.xml")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_FeedOptions_LimitItems_IncludeContent_AndRespectTaxonomyOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-feed-options-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                Blog home
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "first-post.md"),
+                """
+                ---
+                title: First Post
+                date: 2026-01-01
+                tags: [release]
+                ---
+
+                First
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "second-post.md"),
+                """
+                ---
+                title: Second Post
+                date: 2026-01-02
+                tags: [release]
+                ---
+
+                Second
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "third-post.md"),
+                """
+                ---
+                title: Third Post
+                date: 2026-01-03
+                tags: [release]
+                ---
+
+                Third
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feed-options-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "blog.html"),
+                """
+                <!doctype html>
+                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "term.html"),
+                """
+                <!doctype html>
+                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feed-options-test",
+                  "engine": "scriban",
+                  "defaultLayout": "blog"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Feed Options Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feed-options-test",
+                ThemesRoot = "themes",
+                Feed = new FeedSpec
+                {
+                    MaxItems = 1,
+                    IncludeContent = true
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ListLayout = "blog"
+                    }
+                },
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec { Name = "tags", BasePath = "/tags", TermLayout = "term", Outputs = new[] { "html" } }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var blogFeedPath = Path.Combine(result.OutputPath, "blog", "index.xml");
+            Assert.True(File.Exists(blogFeedPath));
+
+            var doc = XDocument.Load(blogFeedPath);
+            var items = doc.Descendants("item").ToArray();
+            Assert.Single(items);
+            Assert.Equal("Third Post", items[0].Element("title")?.Value);
+            Assert.Contains(items[0].Elements(), element =>
+                element.Name.LocalName.Equals("encoded", StringComparison.OrdinalIgnoreCase) &&
+                element.Name.NamespaceName.Equals("http://purl.org/rss/1.0/modules/content/", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.html")));
+            Assert.False(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.xml")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_FeedDisabled_DisablesImplicitRssOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-feed-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                Blog home
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "first-post.md"),
+                """
+                ---
+                title: First Post
+                tags: [release]
+                ---
+
+                First
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feed-disabled-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "blog.html"),
+                """
+                <!doctype html>
+                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "term.html"),
+                """
+                <!doctype html>
+                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feed-disabled-test",
+                  "engine": "scriban",
+                  "defaultLayout": "blog"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Feed Disabled Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feed-disabled-test",
+                ThemesRoot = "themes",
+                Feed = new FeedSpec
+                {
+                    Enabled = false
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ListLayout = "blog"
+                    }
+                },
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec { Name = "tags", BasePath = "/tags", TermLayout = "term" }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.html")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.html")));
+
+            Assert.False(File.Exists(Path.Combine(result.OutputPath, "blog", "index.xml")));
+            Assert.False(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.xml")));
         }
         finally
         {

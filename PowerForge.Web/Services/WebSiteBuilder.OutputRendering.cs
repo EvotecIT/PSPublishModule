@@ -179,7 +179,7 @@ public static partial class WebSiteBuilder
     private static string[] ResolveOutputRule(SiteSpec spec, ContentItem item)
     {
         if (spec.Outputs?.Rules is null || spec.Outputs.Rules.Length == 0)
-            return ResolveImplicitOutputRule(item);
+            return ResolveImplicitOutputRule(spec, item);
 
         var kind = item.Kind.ToString().ToLowerInvariant();
         foreach (var rule in spec.Outputs.Rules)
@@ -189,12 +189,14 @@ public static partial class WebSiteBuilder
                 return rule.Formats ?? Array.Empty<string>();
         }
 
-        return ResolveImplicitOutputRule(item);
+        return ResolveImplicitOutputRule(spec, item);
     }
 
-    private static string[] ResolveImplicitOutputRule(ContentItem item)
+    private static string[] ResolveImplicitOutputRule(SiteSpec spec, ContentItem item)
     {
         if (item is null)
+            return Array.Empty<string>();
+        if (spec.Feed?.Enabled == false)
             return Array.Empty<string>();
 
         if (item.Kind == PageKind.Section &&
@@ -371,40 +373,87 @@ public static partial class WebSiteBuilder
     private static string RenderRssOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
         var listItems = ResolveListItems(item, items);
+        var feedSpec = spec.Feed;
+        var maxItems = feedSpec?.MaxItems ?? 0;
+        var includeContent = feedSpec?.IncludeContent == true;
+        var includeCategories = feedSpec?.IncludeCategories != false;
         var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
         var channelTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
         var channelLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
         var channelDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+        var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "rss", Suffix = "xml" });
+        var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
 
-        var feedItems = listItems
+        IEnumerable<ContentItem> orderedItems = listItems
             .OrderByDescending(i => i.Date ?? DateTime.MinValue)
-            .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase);
+        if (maxItems > 0)
+            orderedItems = orderedItems.Take(maxItems);
+
+        var contentNs = XNamespace.Get("http://purl.org/rss/1.0/modules/content/");
+        var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
+
+        var feedItems = orderedItems
             .Select(i =>
             {
                 var link = string.IsNullOrWhiteSpace(baseUrl) ? i.OutputPath : baseUrl + i.OutputPath;
                 var description = string.IsNullOrWhiteSpace(i.Description) ? BuildSnippet(i.HtmlContent, 200) : i.Description;
                 var pubDate = i.Date?.ToUniversalTime().ToString("r") ?? DateTime.UtcNow.ToString("r");
-                return new XElement("item",
+                var element = new XElement("item",
                     new XElement("title", i.Title),
                     new XElement("link", link),
                     new XElement("description", description),
-                    new XElement("pubDate", pubDate));
+                    new XElement("pubDate", pubDate),
+                    new XElement("guid", link));
+                if (includeCategories)
+                {
+                    foreach (var category in ResolveRssCategories(i))
+                        element.Add(new XElement("category", category));
+                }
+                if (includeContent && !string.IsNullOrWhiteSpace(i.HtmlContent))
+                    element.Add(new XElement(contentNs + "encoded", new XCData(i.HtmlContent)));
+                return element;
             })
             .ToArray();
 
-        var doc = new XDocument(
-            new XDeclaration("1.0", "UTF-8", null),
-            new XElement("rss",
-                new XAttribute("version", "2.0"),
-                new XElement("channel",
-                    new XElement("title", channelTitle),
-                    new XElement("link", channelLink),
-                    new XElement("description", channelDescription),
-                    feedItems)));
+        var root = new XElement("rss",
+            new XAttribute("version", "2.0"),
+            new XAttribute(XNamespace.Xmlns + "atom", atomNs));
+        if (includeContent)
+            root.Add(new XAttribute(XNamespace.Xmlns + "content", contentNs));
 
-        using var sw = new StringWriter();
-        doc.Save(sw);
-        return sw.ToString();
+        root.Add(
+            new XElement("channel",
+                new XElement("title", channelTitle),
+                new XElement("link", channelLink),
+                new XElement("description", channelDescription),
+                new XElement(atomNs + "link",
+                    new XAttribute("href", feedSelfLink),
+                    new XAttribute("rel", "self"),
+                    new XAttribute("type", "application/rss+xml")),
+                feedItems));
+
+        var doc = new XDocument(root);
+        return doc.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static IEnumerable<string> ResolveRssCategories(ContentItem item)
+    {
+        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tag in item.Tags ?? Array.Empty<string>())
+        {
+            if (!string.IsNullOrWhiteSpace(tag))
+                categories.Add(tag.Trim());
+        }
+
+        foreach (var value in GetTaxonomyValues(item, new TaxonomySpec { Name = "categories" }))
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                categories.Add(value.Trim());
+        }
+
+        return categories.OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
     }
 
     private static void CopyPageResources(ContentItem item, string targetDir)

@@ -42,6 +42,7 @@
       "items": { "$ref": "#/$defs/CollectionSpec" }
     },
     "Outputs": { "$ref": "#/$defs/OutputsSpec" },
+    "Feed": { "$ref": "#/$defs/FeedSpec" },
     "Taxonomies": {
       "type": "array",
       "items": { "$ref": "#/$defs/TaxonomySpec" }
@@ -345,6 +346,16 @@
         }
       }
     },
+    "FeedSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "MaxItems": { "type": "integer", "minimum": 0 },
+        "IncludeContent": { "type": "boolean", "default": false },
+        "IncludeCategories": { "type": "boolean", "default": true }
+      }
+    },
     "OutputFormatSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -374,6 +385,7 @@
         "BasePath": { "type": "string" },
         "ListLayout": { "type": "string" },
         "TermLayout": { "type": "string" },
+        "Outputs": { "type": "array", "items": { "type": "string" } },
         "SortBy": { "type": "string" },
         "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
       },

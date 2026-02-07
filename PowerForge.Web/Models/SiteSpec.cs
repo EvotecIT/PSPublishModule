@@ -37,6 +37,8 @@ public sealed class SiteSpec
 
     /// <summary>Output format configuration.</summary>
     public OutputsSpec? Outputs { get; set; }
+    /// <summary>Feed generation settings for RSS outputs.</summary>
+    public FeedSpec? Feed { get; set; }
     /// <summary>Taxonomy definitions (tags, categories).</summary>
     public TaxonomySpec[] Taxonomies { get; set; } = Array.Empty<TaxonomySpec>();
 

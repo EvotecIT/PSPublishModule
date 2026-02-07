@@ -282,6 +282,7 @@ public static partial class WebSiteBuilder
                     Description = string.Empty,
                     Kind = PageKind.Taxonomy,
                     Layout = taxonomy.ListLayout ?? "taxonomy",
+                    Outputs = taxonomy.Outputs,
                     Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                     {
                         ["taxonomy"] = taxonomy.Name
@@ -303,6 +304,7 @@ public static partial class WebSiteBuilder
                         Description = string.Empty,
                         Kind = PageKind.Term,
                         Layout = taxonomy.TermLayout ?? "term",
+                        Outputs = taxonomy.Outputs,
                         Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["taxonomy"] = taxonomy.Name,

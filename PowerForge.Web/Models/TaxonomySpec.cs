@@ -15,6 +15,9 @@ public sealed class TaxonomySpec
     /// <summary>Layout for taxonomy term pages.</summary>
     public string? TermLayout { get; set; }
 
+    /// <summary>Optional output formats for taxonomy list/term pages.</summary>
+    public string[] Outputs { get; set; } = Array.Empty<string>();
+
     /// <summary>Optional sort field for terms.</summary>
     public string? SortBy { get; set; }
 
