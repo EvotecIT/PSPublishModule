@@ -236,6 +236,7 @@ public static class WebSiteBuilder
             generated = true,
             primary,
             menus,
+            menuModels = MapMenus(menuSpecs),
             footer = footer.Count > 0 ? footer : null,
             actions = MapMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>()),
             regions = MapRegions(spec.Navigation?.Regions ?? Array.Empty<NavigationRegionSpec>()),
@@ -274,6 +275,24 @@ public static class WebSiteBuilder
         }).ToArray();
     }
 
+    private static object[] MapMenus(MenuSpec[] menus)
+    {
+        if (menus is null || menus.Length == 0) return Array.Empty<object>();
+        return menus
+            .Where(menu => menu is not null && !string.IsNullOrWhiteSpace(menu.Name))
+            .Select(menu => new
+            {
+                name = menu.Name,
+                label = menu.Label,
+                template = menu.Template,
+                @class = menu.CssClass,
+                visibility = MapVisibility(menu.Visibility),
+                meta = menu.Meta,
+                items = MapMenuItems(menu.Items)
+            })
+            .ToArray();
+    }
+
     private static object[] MapRegions(NavigationRegionSpec[] regions)
     {
         if (regions is null || regions.Length == 0) return Array.Empty<object>();
@@ -285,7 +304,9 @@ public static class WebSiteBuilder
                 title = region.Title,
                 menus = region.Menus,
                 includeActions = region.IncludeActions,
+                template = region.Template,
                 @class = region.CssClass,
+                meta = region.Meta,
                 items = MapMenuItems(region.Items)
             })
             .ToArray();
@@ -299,6 +320,9 @@ public static class WebSiteBuilder
         return new
         {
             label = footer.Label,
+            template = footer.Template,
+            @class = footer.CssClass,
+            meta = footer.Meta,
             menus = footer.Menus,
             columns = MapFooterColumns(footer.Columns),
             legal = MapMenuItems(footer.Legal)
@@ -314,6 +338,9 @@ public static class WebSiteBuilder
             {
                 name = column.Name,
                 title = column.Title,
+                template = column.Template,
+                @class = column.CssClass,
+                meta = column.Meta,
                 items = MapMenuItems(column.Items)
             })
             .ToArray();
@@ -342,7 +369,10 @@ public static class WebSiteBuilder
                     {
                         name = menu.Name,
                         label = menu.Label,
+                        template = menu.Template,
+                        @class = menu.CssClass,
                         visibility = MapVisibility(menu.Visibility),
+                        meta = menu.Meta,
                         items = MapMenuItems(menu.Items)
                     })
                     .ToArray(),
@@ -3036,6 +3066,9 @@ public static class WebSiteBuilder
         {
             Name = menu.Name,
             Label = menu.Label,
+            Template = menu.Template,
+            CssClass = menu.CssClass,
+            Meta = CloneMeta(menu.Meta),
             Visibility = CloneVisibility(menu.Visibility),
             Items = CloneMenuItems(menu.Items)
         };
@@ -3116,6 +3149,9 @@ public static class WebSiteBuilder
                 {
                     Name = menu.Name,
                     Label = menu.Label,
+                    Template = menu.Template,
+                    CssClass = menu.CssClass,
+                    Meta = CloneMeta(menu.Meta),
                     Items = BuildMenuItems(menu.Items, context, spec.LinkRules)
                 })
                 .ToArray();
@@ -3643,7 +3679,9 @@ public static class WebSiteBuilder
             Menus = region.Menus?.ToArray() ?? Array.Empty<string>(),
             Items = CloneMenuItems(region.Items),
             IncludeActions = region.IncludeActions,
-            CssClass = region.CssClass
+            Template = region.Template,
+            CssClass = region.CssClass,
+            Meta = CloneMeta(region.Meta)
         }).ToArray();
     }
 
@@ -3654,6 +3692,9 @@ public static class WebSiteBuilder
         return new NavigationFooterSpec
         {
             Label = footer.Label,
+            Template = footer.Template,
+            CssClass = footer.CssClass,
+            Meta = CloneMeta(footer.Meta),
             Columns = CloneFooterColumns(footer.Columns),
             Menus = footer.Menus?.ToArray() ?? Array.Empty<string>(),
             Legal = CloneMenuItems(footer.Legal)
@@ -3668,6 +3709,9 @@ public static class WebSiteBuilder
         {
             Name = column.Name,
             Title = column.Title,
+            Template = column.Template,
+            CssClass = column.CssClass,
+            Meta = CloneMeta(column.Meta),
             Items = CloneMenuItems(column.Items)
         }).ToArray();
     }
@@ -3793,6 +3837,9 @@ public static class WebSiteBuilder
         var merged = new NavigationFooterSpec
         {
             Label = string.IsNullOrWhiteSpace(profileClone.Label) ? baseClone.Label : profileClone.Label,
+            Template = string.IsNullOrWhiteSpace(profileClone.Template) ? baseClone.Template : profileClone.Template,
+            CssClass = string.IsNullOrWhiteSpace(profileClone.CssClass) ? baseClone.CssClass : profileClone.CssClass,
+            Meta = profileClone.Meta?.Count > 0 ? CloneMeta(profileClone.Meta) : CloneMeta(baseClone.Meta),
             Menus = baseClone.Menus
                 .Concat(profileClone.Menus)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -3810,6 +3857,9 @@ public static class WebSiteBuilder
             {
                 Name = column.Name,
                 Title = column.Title,
+                Template = column.Template,
+                CssClass = column.CssClass,
+                Meta = CloneMeta(column.Meta),
                 Items = CloneMenuItems(column.Items)
             };
         }
@@ -3821,6 +3871,9 @@ public static class WebSiteBuilder
             {
                 Name = column.Name,
                 Title = column.Title,
+                Template = column.Template,
+                CssClass = column.CssClass,
+                Meta = CloneMeta(column.Meta),
                 Items = CloneMenuItems(column.Items)
             };
         }
@@ -3867,7 +3920,9 @@ public static class WebSiteBuilder
             {
                 Name = region.Name,
                 Title = region.Title,
+                Template = region.Template,
                 CssClass = region.CssClass,
+                Meta = CloneMeta(region.Meta),
                 Items = items.ToArray()
             });
         }
@@ -3895,6 +3950,9 @@ public static class WebSiteBuilder
             {
                 Name = column.Name,
                 Title = column.Title,
+                Template = column.Template,
+                CssClass = column.CssClass,
+                Meta = CloneMeta(column.Meta),
                 Items = items
             });
         }
@@ -3909,6 +3967,9 @@ public static class WebSiteBuilder
             {
                 Name = menu.Name,
                 Title = menu.Label ?? menu.Name,
+                Template = menu.Template,
+                CssClass = menu.CssClass,
+                Meta = CloneMeta(menu.Meta),
                 Items = menu.Items
             });
         }
@@ -3916,6 +3977,9 @@ public static class WebSiteBuilder
         return new NavigationFooter
         {
             Label = footer.Label,
+            Template = footer.Template,
+            CssClass = footer.CssClass,
+            Meta = CloneMeta(footer.Meta),
             Columns = columns.ToArray(),
             Legal = BuildMenuItems(footer.Legal, context, linkRules)
         };

@@ -7,7 +7,7 @@ using static PowerForge.Web.Cli.WebCliHelpers;
 
 namespace PowerForge.Web.Cli;
 
-internal static class WebCliCommandHandlers
+internal static partial class WebCliCommandHandlers
 {
     internal static int HandlePublish(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {

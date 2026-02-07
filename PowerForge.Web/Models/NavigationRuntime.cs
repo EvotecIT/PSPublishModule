@@ -28,6 +28,15 @@ public sealed class NavigationMenu
     /// <summary>Optional UI label.</summary>
     public string? Label { get; set; }
 
+    /// <summary>Optional template key for custom menu rendering.</summary>
+    public string? Template { get; set; }
+
+    /// <summary>Optional CSS class for menu container.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Optional custom metadata exposed to templates.</summary>
+    public Dictionary<string, object?>? Meta { get; set; }
+
     /// <summary>Resolved menu items.</summary>
     public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
 }
@@ -114,8 +123,14 @@ public sealed class NavigationRegion
     /// <summary>Optional title.</summary>
     public string? Title { get; set; }
 
+    /// <summary>Optional template key for region rendering.</summary>
+    public string? Template { get; set; }
+
     /// <summary>Optional CSS class.</summary>
     public string? CssClass { get; set; }
+
+    /// <summary>Optional custom metadata exposed to templates.</summary>
+    public Dictionary<string, object?>? Meta { get; set; }
 
     /// <summary>Resolved items for the region.</summary>
     public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();
@@ -126,6 +141,15 @@ public sealed class NavigationFooter
 {
     /// <summary>Optional footer label.</summary>
     public string? Label { get; set; }
+
+    /// <summary>Optional template key for footer rendering.</summary>
+    public string? Template { get; set; }
+
+    /// <summary>Optional CSS class for footer container.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Optional custom metadata exposed to templates.</summary>
+    public Dictionary<string, object?>? Meta { get; set; }
 
     /// <summary>Footer columns.</summary>
     public NavigationFooterColumn[] Columns { get; set; } = Array.Empty<NavigationFooterColumn>();
@@ -142,6 +166,15 @@ public sealed class NavigationFooterColumn
 
     /// <summary>Column title.</summary>
     public string? Title { get; set; }
+
+    /// <summary>Optional template key for custom column rendering.</summary>
+    public string? Template { get; set; }
+
+    /// <summary>Optional CSS class for column container.</summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>Optional custom metadata exposed to templates.</summary>
+    public Dictionary<string, object?>? Meta { get; set; }
 
     /// <summary>Column links/items.</summary>
     public NavigationItem[] Items { get; set; } = Array.Empty<NavigationItem>();

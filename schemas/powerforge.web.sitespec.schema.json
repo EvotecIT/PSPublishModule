@@ -492,6 +492,12 @@
       "properties": {
         "Name": { "type": "string" },
         "Label": { "type": "string" },
+        "Template": { "type": "string" },
+        "CssClass": { "type": "string" },
+        "Meta": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "Visibility": { "$ref": "#/$defs/NavigationVisibilitySpec" },
         "Items": {
           "type": "array",
@@ -547,7 +553,12 @@
         "Menus": { "type": "array", "items": { "type": "string" } },
         "Items": { "type": "array", "items": { "$ref": "#/$defs/MenuItemSpec" } },
         "IncludeActions": { "type": "boolean" },
-        "CssClass": { "type": "string" }
+        "Template": { "type": "string" },
+        "CssClass": { "type": "string" },
+        "Meta": {
+          "type": "object",
+          "additionalProperties": true
+        }
       },
       "required": ["Name"]
     },
@@ -556,6 +567,12 @@
       "additionalProperties": false,
       "properties": {
         "Label": { "type": "string" },
+        "Template": { "type": "string" },
+        "CssClass": { "type": "string" },
+        "Meta": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "Columns": {
           "type": "array",
           "items": { "$ref": "#/$defs/NavigationFooterColumnSpec" }
@@ -570,6 +587,12 @@
       "properties": {
         "Name": { "type": "string" },
         "Title": { "type": "string" },
+        "Template": { "type": "string" },
+        "CssClass": { "type": "string" },
+        "Meta": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "Items": { "type": "array", "items": { "$ref": "#/$defs/MenuItemSpec" } }
       },
       "required": ["Name"]
