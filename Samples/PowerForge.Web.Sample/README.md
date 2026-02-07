@@ -10,7 +10,7 @@ Intended use:
 
 ## Theme engines
 
-Theme engine is selected in `themes/<name>/theme.json`:
+Theme engine is selected in `themes/<name>/theme.manifest.json`:
 ```json
 {
   "name": "base",
@@ -140,7 +140,7 @@ powerforge-web new --collection blog --name \"hello-world\"
 
 ## Theme tokens
 
-Theme tokens live in `themes/<name>/theme.json` and are injected via the `theme-tokens` partial:
+Theme tokens live in `themes/<name>/theme.manifest.json` and are injected via the `theme-tokens` partial:
 ```html
 {{ include "theme-tokens" }}
 ```

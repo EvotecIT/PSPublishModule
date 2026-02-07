@@ -52,6 +52,25 @@ public sealed class ThemeLoader
         if (string.IsNullOrWhiteSpace(themeRoot)) return null;
         if (string.IsNullOrWhiteSpace(partialName)) return null;
 
+        // Slot indirection allows portable themes: layouts can request a stable "slot"
+        // name, and the manifest maps that slot to a concrete partial name/path.
+        // Without this, manifest.Slots is effectively unused.
+        if (manifest?.Slots is not null && manifest.Slots.Count > 0)
+        {
+            var current = partialName;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current };
+            for (var i = 0; i < 8; i++)
+            {
+                if (!manifest.Slots.TryGetValue(current, out var slotMapped) || string.IsNullOrWhiteSpace(slotMapped))
+                    break;
+                if (!seen.Add(slotMapped))
+                    break;
+                current = slotMapped;
+            }
+
+            partialName = current;
+        }
+
         if (manifest?.Partials is not null && TryResolveMappedPath(themeRoot, manifest.Partials, partialName, out var mapped))
             return mapped;
 
