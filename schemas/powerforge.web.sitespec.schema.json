@@ -62,6 +62,7 @@
     "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
     "Analytics": { "$ref": "#/$defs/AnalyticsSpec" },
     "Navigation": { "$ref": "#/$defs/NavigationSpec" },
+    "Localization": { "$ref": "#/$defs/LocalizationSpec" },
     "Versioning": { "$ref": "#/$defs/VersioningSpec" },
     "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
     "Verify": { "$ref": "#/$defs/VerifyPolicySpec" },
@@ -390,6 +391,32 @@
           "items": { "$ref": "#/$defs/VersionSpec" }
         }
       }
+    },
+    "LocalizationSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "DefaultLanguage": { "type": "string" },
+        "PrefixDefaultLanguage": { "type": "boolean" },
+        "DetectFromPath": { "type": "boolean" },
+        "Languages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LanguageSpec" }
+        }
+      }
+    },
+    "LanguageSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Code": { "type": "string" },
+        "Label": { "type": "string" },
+        "Prefix": { "type": "string" },
+        "Default": { "type": "boolean" },
+        "Disabled": { "type": "boolean" }
+      },
+      "required": ["Code"]
     },
     "VersionSpec": {
       "type": "object",
