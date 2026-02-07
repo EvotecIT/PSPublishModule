@@ -7,6 +7,7 @@
   "properties": {
     "$schema": { "type": "string" },
     "name": { "type": "string" },
+    "schemaVersion": { "type": "integer", "enum": [1, 2] },
     "contractVersion": { "type": "integer", "enum": [1, 2] },
     "version": { "type": "string" },
     "author": { "type": "string" },
@@ -16,6 +17,7 @@
     "layoutsPath": { "type": "string" },
     "partialsPath": { "type": "string" },
     "assetsPath": { "type": "string" },
+    "scriptsPath": { "type": "string" },
     "layouts": {
       "type": "object",
       "additionalProperties": { "type": "string" }

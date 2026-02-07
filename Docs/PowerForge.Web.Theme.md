@@ -5,10 +5,10 @@ Goals are consistency, performance, and ease of reuse across many projects.
 See also: `Docs/PowerForge.Web.Assets.md` for asset policy, hashing, and cache headers.
 
 Contract status:
-- `theme.json` is the canonical theme contract.
-- Relative paths in `theme.json` are required for portability.
+- `theme.manifest.json` is the canonical theme contract (`theme.json` is still supported as legacy fallback).
+- Relative paths in the theme manifest are required for portability.
 - Theme assets should be declared in theme-local form and normalized by the engine.
-- `contractVersion: 2` enables stricter, reusable theme checks (recommended for new themes).
+- `schemaVersion: 2` enables stricter, reusable theme checks (recommended for new themes).
 
 ## Goals
 - Themes are portable across projects and repos.
@@ -51,13 +51,13 @@ themes/
     critical.css
 ```
 
-## Theme manifest (theme.json)
+## Theme manifest (`theme.manifest.json`)
 Theme manifest defines identity, engine, inheritance, and assets.
 Schema: `Schemas/powerforge.web.themespec.schema.json`.
 ```json
 {
   "name": "codeglyphx",
-  "contractVersion": 2,
+  "schemaVersion": 2,
   "version": "1.0.0",
   "author": "Evotec",
   "engine": "scriban",
@@ -103,7 +103,8 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 ```
 
 ### Manifest rules
-- `contractVersion` defaults to `1`; use `2` for strict portable contract validation.
+- `schemaVersion` defaults to `1`; use `2` for strict portable contract validation.
+- Legacy `contractVersion` is still read for compatibility, but new themes should use `schemaVersion`.
 - `extends` is optional. If set, theme inherits layouts/partials/assets/tokens from base.
 - Child theme overrides anything it redefines.
 - `assets` is merged: bundles with same name are replaced by child.
@@ -112,7 +113,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 - `engine` should always be explicit (`simple` or `scriban`) to avoid ambiguous rendering.
 - `layoutsPath`, `partialsPath`, `assetsPath`, mapped `layouts`/`partials`, and theme `assets` bundle paths should be relative (not rooted paths, no `..`).
 - `slots` map named hook points to partial files. Layouts can render these hooks consistently across themes.
-- For `contractVersion: 2`, set `defaultLayout` and keep `slots` explicit to maximize theme portability.
+- For `schemaVersion: 2`, set `defaultLayout`, `scriptsPath`, and explicit `slots` to maximize theme portability.
 
 ## Asset copying + output paths
 PowerForge.Web copies theme assets during `build`:

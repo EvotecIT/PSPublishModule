@@ -1847,8 +1847,16 @@ static string[] BuildDoctorRecommendations(WebVerifyResult? verify, WebAuditResu
     {
         if (verify.Errors.Length > 0)
             recommendations.Add("Fix `verify` errors first; they indicate broken site configuration or portability contracts.");
+        if (ContainsText(verify.Warnings, "Theme contract:"))
+            recommendations.Add("Resolve theme contract warnings (schemaVersion, engine, manifest path, and portable asset paths) to keep themes reusable across repos.");
+        if (ContainsText(verify.Warnings, "schemaVersion") || ContainsText(verify.Warnings, "contractVersion"))
+            recommendations.Add("Standardize all themes on `schemaVersion: 2` and keep only one version field in theme manifests.");
         if (ContainsText(verify.Warnings, "theme manifest"))
             recommendations.Add("Standardize themes on `theme.manifest.json` contract v2 (including `scriptsPath`) for portable reusable themes.");
+        if (ContainsText(verify.Warnings, "Navigation lint:"))
+            recommendations.Add("Fix navigation lint findings (duplicate IDs, unknown menu references, and stale profile/path filters) before publishing.");
+        if (ContainsText(verify.Warnings, "does not match any generated route"))
+            recommendations.Add("Align navigation links and visibility/path patterns with generated routes to prevent dead menu entries.");
         if (ContainsText(verify.Warnings, "Markdown hygiene"))
             recommendations.Add("Convert raw HTML-heavy docs to native Markdown to reduce styling drift and simplify maintenance.");
         if (ContainsText(verify.Warnings, "portable relative path"))

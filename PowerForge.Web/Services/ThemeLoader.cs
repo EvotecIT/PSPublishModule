@@ -133,6 +133,7 @@ public sealed class ThemeLoader
         var merged = new ThemeManifest
         {
             Name = string.IsNullOrWhiteSpace(child.Name) ? parent.Name : child.Name,
+            SchemaVersion = child.SchemaVersion ?? parent.SchemaVersion,
             ContractVersion = child.ContractVersion ?? parent.ContractVersion,
             Version = child.Version ?? parent.Version,
             Author = child.Author ?? parent.Author,

@@ -7,6 +7,8 @@ public sealed class ThemeManifest
 {
     /// <summary>Theme name.</summary>
     public string Name { get; set; } = string.Empty;
+    /// <summary>Theme schema version. Use 2 for the portable v2 contract.</summary>
+    public int? SchemaVersion { get; set; }
     /// <summary>Theme contract version. Use 2 for the portable v2 contract.</summary>
     public int? ContractVersion { get; set; }
     /// <summary>Optional theme version.</summary>
