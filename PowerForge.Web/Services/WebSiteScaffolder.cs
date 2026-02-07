@@ -106,17 +106,28 @@ Use this post as a starting point for changelogs, release notes, and engineering
         var layoutsRoot = Path.Combine(themeRoot, "layouts");
         var partialsRoot = Path.Combine(themeRoot, "partials");
         var assetsRoot = Path.Combine(themeRoot, "assets");
+        var scriptsRoot = Path.Combine(themeRoot, "scripts");
         Directory.CreateDirectory(layoutsRoot);
         Directory.CreateDirectory(partialsRoot);
         Directory.CreateDirectory(assetsRoot);
+        Directory.CreateDirectory(scriptsRoot);
 
         var manifest = new ThemeManifest
         {
             Name = themeName,
+            SchemaVersion = 2,
             Engine = engine,
+            DefaultLayout = "base",
             LayoutsPath = "layouts",
             PartialsPath = "partials",
             AssetsPath = "assets",
+            ScriptsPath = "scripts",
+            Slots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["site-header"] = "header",
+                ["site-footer"] = "footer",
+                ["theme-tokens"] = "theme-tokens"
+            },
             Tokens = isScriban
                 ? new Dictionary<string, object?>
                 {
@@ -149,7 +160,7 @@ Use this post as a starting point for changelogs, release notes, and engineering
         };
         var manifestJson = JsonSerializer.Serialize(manifest, WebJson.Options);
         manifestJson = InsertSchema(manifestJson, "./Schemas/powerforge.web.themespec.schema.json");
-        created += WriteFile(Path.Combine(themeRoot, "theme.json"), manifestJson);
+        created += WriteFile(Path.Combine(themeRoot, "theme.manifest.json"), manifestJson);
 
         var layout = isScriban
             ? ScribanLayoutTemplate
@@ -204,23 +215,40 @@ Use this post as a starting point for changelogs, release notes, and engineering
         {
             created += WriteFile(Path.Combine(partialsRoot, "header.html"),
 @"<header class=""pf-header"">
-  <div class=""pf-container"">
-    <div class=""pf-brand"">Site</div>
+  <div class=""pf-container pf-header-inner"">
+    <div class=""pf-brand"">{{SITE_NAME}}</div>
     <nav class=""pf-nav"">
+      <!-- Simple engine: use hard-coded links or migrate to Scriban for full navigation runtime. -->
       <a href=""/"">Home</a>
       <a href=""/docs/"">Docs</a>
-      <a href=""/blog/"">Blog</a>
     </nav>
   </div>
 </header>
 ");
-
-        created += WriteFile(Path.Combine(partialsRoot, "footer.html"),
+            created += WriteFile(Path.Combine(partialsRoot, "footer.html"),
 @"<footer class=""pf-footer"">
   <div class=""pf-container"">
     <span>Powered by PowerForge.Web</span>
   </div>
 </footer>
+");
+            created += WriteFile(Path.Combine(partialsRoot, "theme-tokens.html"),
+@"<style>
+:root {
+  --pf-bg: #0f172a;
+  --pf-panel: rgba(15, 23, 42, 0.85);
+  --pf-ink: #e2e8f0;
+  --pf-muted: #94a3b8;
+  --pf-accent: #38bdf8;
+  --pf-border: rgba(148, 163, 184, 0.2);
+  --pf-radius: 18px;
+  --pf-radius-sm: 12px;
+  --pf-font-body: Segoe UI, sans-serif;
+  --pf-font-display: Segoe UI, sans-serif;
+  --pf-font-mono: Consolas, monospace;
+  --pf-max-width: 1080px;
+}
+</style>
 ");
         }
 
@@ -416,6 +444,7 @@ a { color: inherit; text-decoration: none; }
   {{CANONICAL}}
   {{PRELOADS}}
   {{CRITICAL_CSS}}
+  {{> theme-tokens}}
   {{EXTRA_CSS}}
   {{OPENGRAPH}}
   {{STRUCTURED_DATA}}
@@ -423,7 +452,7 @@ a { color: inherit; text-decoration: none; }
   {{ASSET_CSS}}
 </head>
 <body{{BODY_CLASS}}>
-  {{> header}}
+  {{> site-header}}
   <main class=""pf-web-content"">
     <div class=""pf-container"">
       <div class=""pf-content"">
@@ -431,7 +460,7 @@ a { color: inherit; text-decoration: none; }
       </div>
     </div>
   </main>
-  {{> footer}}
+  {{> site-footer}}
   {{ASSET_JS}}
   {{EXTRA_SCRIPTS}}
 </body>
@@ -457,7 +486,7 @@ a { color: inherit; text-decoration: none; }
   {{ head_html }}
 </head>
 <body{{ if body_class != """" }} class=""{{ body_class }}""{{ end }}>
-  {{ include ""header"" }}
+  {{ include ""site-header"" }}
   <main class=""pf-web-content"">
     <div class=""pf-container"">
       <div class=""pf-content"">
@@ -465,7 +494,7 @@ a { color: inherit; text-decoration: none; }
       </div>
     </div>
   </main>
-  {{ include ""footer"" }}
+  {{ include ""site-footer"" }}
   {{ assets.js_html }}
   {{ extra_scripts_html }}
 </body>
