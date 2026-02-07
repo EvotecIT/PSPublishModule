@@ -14,6 +14,11 @@ public sealed class WebAuditOptions
     public string[] Include { get; set; } = Array.Empty<string>();
     /// <summary>Optional exclude glob patterns (relative to site root).</summary>
     public string[] Exclude { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Maximum number of HTML files to audit (0 disables).
+    /// When set, files are selected in alphabetical order by path.
+    /// </summary>
+    public int MaxHtmlFiles { get; set; }
     /// <summary>When true, apply built-in exclude patterns for partial HTML files.</summary>
     public bool UseDefaultExcludes { get; set; } = true;
     /// <summary>When true, validate HTML structure.</summary>
@@ -161,9 +166,14 @@ public static class WebSiteAuditor
         var errors = new List<string>();
         var warnings = new List<string>();
         var issues = new List<WebAuditIssue>();
-        var htmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
+        var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var htmlFiles = allHtmlFiles;
+        if (options.MaxHtmlFiles > 0 && htmlFiles.Count > options.MaxHtmlFiles)
+            htmlFiles = htmlFiles.Take(options.MaxHtmlFiles).ToList();
+        var htmlFileCount = allHtmlFiles.Count;
+        var htmlSelectedFileCount = htmlFiles.Count;
         var navIgnorePrefixes = options.NavIgnorePrefixes
             .Where(prefix => !string.IsNullOrWhiteSpace(prefix))
             .Select(prefix => prefix.Trim().TrimStart('/'))
@@ -710,6 +720,8 @@ public static class WebSiteAuditor
         var result = new WebAuditResult
         {
             Success = errorCount == 0,
+            HtmlFileCount = htmlFileCount,
+            HtmlSelectedFileCount = htmlSelectedFileCount,
             PageCount = pageCount,
             LinkCount = linkCount,
             BrokenLinkCount = brokenLinkCount,

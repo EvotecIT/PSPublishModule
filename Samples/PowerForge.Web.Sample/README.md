@@ -198,6 +198,15 @@ For CI / production you can turn on the full set (with budgets):
 }
 ```
 
+### Pipeline fast mode (local dev)
+If you want to keep using the same pipeline config but speed up local iteration, run:
+```
+powerforge-web pipeline --config pipeline.json --fast
+```
+Fast mode applies pragmatic overrides:
+- `optimize`: disables heavy flags (`optimizeImages`, `hashAssets`, `cacheHeaders`, `minifyCss`, `minifyJs`) and defaults `maxHtmlFiles` to 50 when not set
+- `audit`: disables `rendered` checks and defaults `maxHtmlFiles` to 200 when not set
+
 ### Pipeline (static only, no CodeMatrix paths)
 Builds and optimizes a static site into Artifacts without touching CodeMatrix.
 ```

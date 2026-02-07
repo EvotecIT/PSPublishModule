@@ -5,6 +5,10 @@ public sealed class WebAuditResult
 {
     /// <summary>Overall audit status.</summary>
     public bool Success { get; set; }
+    /// <summary>Total HTML files discovered under site root.</summary>
+    public int HtmlFileCount { get; set; }
+    /// <summary>Total HTML files selected for auditing (after include/exclude/max filters).</summary>
+    public int HtmlSelectedFileCount { get; set; }
     /// <summary>Total HTML pages scanned.</summary>
     public int PageCount { get; set; }
     /// <summary>Total internal links checked.</summary>

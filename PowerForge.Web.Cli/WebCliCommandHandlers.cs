@@ -382,6 +382,7 @@ internal static partial class WebCliCommandHandlers
         var checkNetworkHints = !HasOption(subArgs, "--no-network-hints");
         var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
+        var maxHtmlFilesText = TryGetOptionValue(subArgs, "--max-html-files") ?? TryGetOptionValue(subArgs, "--max-html");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
@@ -392,6 +393,7 @@ internal static partial class WebCliCommandHandlers
         var maxWarnings = ParseIntOption(maxWarningsText, -1);
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
+        var maxHtmlFiles = ParseIntOption(maxHtmlFilesText, 0);
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
             baselinePathValue = "audit-baseline.json";
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
@@ -404,6 +406,7 @@ internal static partial class WebCliCommandHandlers
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
+            MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,

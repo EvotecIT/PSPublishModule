@@ -26,8 +26,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
-        Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
-        Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--nav-selector <css>]");
+        Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
+        Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
         Console.WriteLine("                     [--no-heading-order] [--no-link-purpose]");
         Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
@@ -74,7 +74,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--clean]");
         Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
         Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
-        Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile]");
+        Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--fast]");
         Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
         Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
         Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");
