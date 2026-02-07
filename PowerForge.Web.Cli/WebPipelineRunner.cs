@@ -453,6 +453,9 @@ internal static class WebPipelineRunner
                         var minifyHtml = GetBool(step, "minifyHtml") ?? false;
                         var minifyCss = GetBool(step, "minifyCss") ?? false;
                         var minifyJs = GetBool(step, "minifyJs") ?? false;
+                        var htmlInclude = GetArrayOfStrings(step, "htmlInclude") ?? GetArrayOfStrings(step, "html-include");
+                        var htmlExclude = GetArrayOfStrings(step, "htmlExclude") ?? GetArrayOfStrings(step, "html-exclude");
+                        var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
                         var optimizeImages = GetBool(step, "optimizeImages") ?? GetBool(step, "images") ?? false;
                         var imageExtensions = GetArrayOfStrings(step, "imageExtensions") ?? GetArrayOfStrings(step, "image-ext");
                         var imageInclude = GetArrayOfStrings(step, "imageInclude") ?? GetArrayOfStrings(step, "image-include");
@@ -467,6 +470,8 @@ internal static class WebPipelineRunner
                         var imageMaxBytes = GetLong(step, "imageMaxBytesPerFile") ?? GetLong(step, "image-max-bytes") ?? 0;
                         var imageMaxTotalBytes = GetLong(step, "imageMaxTotalBytes") ?? GetLong(step, "image-max-total-bytes") ?? 0;
                         var imageFailOnBudget = GetBool(step, "imageFailOnBudget") ?? GetBool(step, "image-fail-on-budget") ?? false;
+                        var imageFailOnFailures = GetBool(step, "imageFailOnFailures") ?? GetBool(step, "image-fail-on-failures") ??
+                                                  GetBool(step, "imageFailOnErrors") ?? GetBool(step, "image-fail-on-errors") ?? false;
                         var hashAssets = GetBool(step, "hashAssets") ?? false;
                         var hashExtensions = GetArrayOfStrings(step, "hashExtensions") ?? GetArrayOfStrings(step, "hash-ext");
                         var hashExclude = GetArrayOfStrings(step, "hashExclude") ?? GetArrayOfStrings(step, "hash-exclude");
@@ -512,6 +517,9 @@ internal static class WebPipelineRunner
                             MinifyHtml = minifyHtml,
                             MinifyCss = minifyCss,
                             MinifyJs = minifyJs,
+                            HtmlInclude = htmlInclude ?? Array.Empty<string>(),
+                            HtmlExclude = htmlExclude ?? Array.Empty<string>(),
+                            MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
                             OptimizeImages = optimizeImages,
                             ImageExtensions = imageExtensions ?? new[] { ".png", ".jpg", ".jpeg", ".webp" },
                             ImageInclude = imageInclude ?? Array.Empty<string>(),
@@ -534,6 +542,16 @@ internal static class WebPipelineRunner
                         });
                         if (imageFailOnBudget && optimize.ImageBudgetExceeded)
                             throw new InvalidOperationException($"Image budget exceeded: {string.Join(" | ", optimize.ImageBudgetWarnings)}");
+                        if (imageFailOnFailures && optimize.ImageFailedCount > 0)
+                        {
+                            var sample = optimize.ImageFailures
+                                .Where(static f => f is not null && !string.IsNullOrWhiteSpace(f.Path))
+                                .Take(3)
+                                .Select(f => $"{f.Path} ({TruncateForLog(f.Error, 120)})")
+                                .ToArray();
+                            var sampleText = sample.Length > 0 ? $" Sample: {string.Join(" | ", sample)}" : string.Empty;
+                            throw new InvalidOperationException($"Image optimization failures: {optimize.ImageFailedCount}.{sampleText}");
+                        }
                         stepResult.Success = true;
                         stepResult.Message = BuildOptimizeSummary(optimize);
                         break;
@@ -1115,6 +1133,9 @@ internal static class WebPipelineRunner
     {
         var parts = new List<string> { $"updated {result.UpdatedCount}" };
 
+        if (result.HtmlSelectedFileCount > 0 && result.HtmlFileCount > 0 && result.HtmlSelectedFileCount != result.HtmlFileCount)
+            parts.Add($"html-scope {result.HtmlSelectedFileCount}/{result.HtmlFileCount}");
+
         if (result.CriticalCssInlinedCount > 0)
             parts.Add($"critical-css {result.CriticalCssInlinedCount}");
         if (result.HtmlMinifiedCount > 0)
@@ -1133,6 +1154,8 @@ internal static class WebPipelineRunner
             parts.Add($"images {result.ImageOptimizedCount}");
         if (result.ImageBytesSaved > 0)
             parts.Add($"images-saved {result.ImageBytesSaved}B");
+        if (result.ImageFailedCount > 0)
+            parts.Add($"image-fails {result.ImageFailedCount}");
         if (result.ImageVariantCount > 0)
             parts.Add($"image-variants {result.ImageVariantCount}");
         if (result.ImageHtmlRewriteCount > 0)
@@ -1144,6 +1167,12 @@ internal static class WebPipelineRunner
             var top = result.OptimizedImages[0];
             parts.Add($"top-image {top.Path}(-{top.BytesSaved}B)");
         }
+        if (result.ImageFailures.Length > 0)
+        {
+            var top = result.ImageFailures[0];
+            var err = TruncateForLog(top.Error, 90);
+            parts.Add($"top-fail {top.Path}({err})");
+        }
         if (result.ImageBudgetExceeded)
             parts.Add("image-budget-exceeded");
 
@@ -1152,9 +1181,21 @@ internal static class WebPipelineRunner
         if (result.CacheHeadersWritten)
             parts.Add("headers");
         if (!string.IsNullOrWhiteSpace(result.ReportPath))
-            parts.Add("report");
+            parts.Add($"report {ShortenReportPath(result.ReportPath)}");
 
         return $"Optimize {string.Join(", ", parts)}";
+    }
+
+    private static string ShortenReportPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return path;
+        var normalized = path.Replace('\\', '/');
+        var marker = "/.powerforge/";
+        var idx = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+            return normalized.Substring(idx + 1); // strip leading slash
+
+        return Path.GetFileName(normalized);
     }
 
     private static string BuildAuditSummary(WebAuditResult result)

@@ -105,6 +105,8 @@ public sealed class WebOptimizeResult
     public string[] UpdatedFiles { get; set; } = Array.Empty<string>();
     /// <summary>Total HTML files discovered under site root.</summary>
     public int HtmlFileCount { get; set; }
+    /// <summary>Total HTML files selected for processing (after include/exclude/max filters).</summary>
+    public int HtmlSelectedFileCount { get; set; }
     /// <summary>Total CSS files discovered under site root.</summary>
     public int CssFileCount { get; set; }
     /// <summary>Total JavaScript files discovered under site root.</summary>
@@ -133,8 +135,16 @@ public sealed class WebOptimizeResult
     public long ImageBytesAfter { get; set; }
     /// <summary>Total bytes saved while optimizing images.</summary>
     public long ImageBytesSaved { get; set; }
+    /// <summary>Number of images that failed to decode/optimize.</summary>
+    public int ImageFailedCount { get; set; }
     /// <summary>Detailed image optimization entries for files that changed.</summary>
     public WebOptimizeImageEntry[] OptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
+    /// <summary>Detailed entries for image files that failed to decode/optimize.</summary>
+    public WebOptimizeImageFailureEntry[] ImageFailures { get; set; } = Array.Empty<WebOptimizeImageFailureEntry>();
+    /// <summary>Top optimized images by bytes saved (summary convenience).</summary>
+    public WebOptimizeImageEntry[] TopOptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
+    /// <summary>Top image failures (summary convenience).</summary>
+    public WebOptimizeImageFailureEntry[] TopImageFailures { get; set; } = Array.Empty<WebOptimizeImageFailureEntry>();
     /// <summary>Number of generated image variants (responsive or next-gen).</summary>
     public int ImageVariantCount { get; set; }
     /// <summary>Generated image variant entries.</summary>
@@ -176,6 +186,15 @@ public sealed class WebOptimizeImageEntry
     public long BytesAfter { get; set; }
     /// <summary>Bytes saved by optimization.</summary>
     public long BytesSaved { get; set; }
+}
+
+/// <summary>Describes an image optimization failure.</summary>
+public sealed class WebOptimizeImageFailureEntry
+{
+    /// <summary>Image path relative to site root.</summary>
+    public string Path { get; set; } = string.Empty;
+    /// <summary>Error message describing why optimization failed.</summary>
+    public string Error { get; set; } = string.Empty;
 }
 
 /// <summary>Describes a generated image variant.</summary>
