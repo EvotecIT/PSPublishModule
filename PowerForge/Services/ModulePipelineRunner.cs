@@ -3080,6 +3080,7 @@ exit 0
         var dependent = new HashSet<string>(dependentRequiredModules, StringComparer.OrdinalIgnoreCase);
         var ignoreModules = new HashSet<string>(plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var ignoreFunctions = new HashSet<string>(plan.ModuleSkip?.IgnoreFunctionName ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        var commandModuleHints = BuildCommandModuleHintMap(plan.CommandModuleDependencies);
         var force = plan.ModuleSkip?.Force == true;
         var strictMissing = plan.ModuleSkip?.FailOnMissingCommands == true;
 
@@ -3148,6 +3149,19 @@ exit 0
                 continue;
             }
 
+            if (TryInferModuleForCommand(name, commandModuleHints, out var inferredModule, out var inferenceSource))
+            {
+                if (ignoreModules.Contains(inferredModule))
+                {
+                    _logger.Warn($"Unresolved command '{name}' likely maps to module '{inferredModule}' (ignored by configuration).");
+                    continue;
+                }
+
+                failures.Add(name);
+                _logger.Error($"Unresolved command '{name}' (likely module '{inferredModule}' via {inferenceSource}).");
+                continue;
+            }
+
             failures.Add(name);
             _logger.Error($"Unresolved command '{name}' (no module source).");
         }
@@ -3164,6 +3178,91 @@ exit 0
             _logger.Warn(
                 $"Missing commands detected during merge. Continuing because FailOnMissingCommands is disabled. Missing: {string.Join(", ", unique)}.");
         }
+    }
+
+    private static Dictionary<string, string[]> BuildCommandModuleHintMap(IReadOnlyDictionary<string, string[]> commandModuleDependencies)
+    {
+        var map = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        if (commandModuleDependencies is null || commandModuleDependencies.Count == 0)
+            return new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var kvp in commandModuleDependencies)
+        {
+            var moduleName = kvp.Key;
+            if (string.IsNullOrWhiteSpace(moduleName))
+                continue;
+
+            foreach (var cmd in kvp.Value ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(cmd))
+                    continue;
+                var commandName = cmd.Trim();
+                if (!map.TryGetValue(commandName, out var modules))
+                {
+                    modules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    map[commandName] = modules;
+                }
+
+                modules.Add(moduleName.Trim());
+            }
+        }
+
+        return map.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.OrderBy(m => m, StringComparer.OrdinalIgnoreCase).ToArray(),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool TryInferModuleForCommand(
+        string commandName,
+        IReadOnlyDictionary<string, string[]> commandModuleHints,
+        out string moduleName,
+        out string source)
+    {
+        moduleName = string.Empty;
+        source = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(commandName))
+            return false;
+
+        var name = commandName.Trim();
+
+        if (commandModuleHints is not null &&
+            commandModuleHints.TryGetValue(name, out var mappedModules) &&
+            mappedModules is { Length: > 0 })
+        {
+            moduleName = mappedModules[0];
+            source = "CommandModuleDependencies";
+            return true;
+        }
+
+        var dash = name.IndexOf('-', StringComparison.Ordinal);
+        if (dash > 0 && dash < name.Length - 1)
+        {
+            var noun = name.Substring(dash + 1);
+            if (noun.StartsWith("AD", StringComparison.OrdinalIgnoreCase))
+            {
+                moduleName = "ActiveDirectory";
+                source = "command pattern";
+                return true;
+            }
+
+            if (noun.StartsWith("DnsServer", StringComparison.OrdinalIgnoreCase))
+            {
+                moduleName = "DnsServer";
+                source = "command pattern";
+                return true;
+            }
+
+            if (noun.StartsWith("DhcpServer", StringComparison.OrdinalIgnoreCase))
+            {
+                moduleName = "DhcpServer";
+                source = "command pattern";
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void LogMergeSummary(
