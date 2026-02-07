@@ -940,6 +940,58 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_RespectsMaxHtmlFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-max-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "a.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>A</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "b.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>B</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(root, "c.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>C</title></head>
+                <body><header><nav><a href="/">Home</a></nav></header></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                MaxHtmlFiles = 1,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.Equal(3, result.HtmlFileCount);
+            Assert.Equal(1, result.HtmlSelectedFileCount);
+            Assert.Equal(1, result.PageCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FailsWhenNavCoverageIsBelowThreshold()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-nav-coverage-" + Guid.NewGuid().ToString("N"));

@@ -55,7 +55,7 @@ internal static class WebPipelineRunner
         public JsonElement Element { get; set; }
     }
 
-    internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger, bool forceProfile = false)
+    internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger, bool forceProfile = false, bool fast = false)
     {
         var json = File.ReadAllText(pipelinePath);
         using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
@@ -113,7 +113,7 @@ internal static class WebPipelineRunner
                 !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
             if (cacheEnabled && cacheState is not null)
             {
-                stepFingerprint = ComputeStepFingerprint(baseDir, step);
+                stepFingerprint = ComputeStepFingerprint(baseDir, step, fast ? "fast" : null);
                 if (cacheState.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
@@ -509,6 +509,43 @@ internal static class WebPipelineRunner
                                 policy.CacheHeaders.ImmutablePaths = cacheHeadersPaths;
                         }
 
+                        if (fast)
+                        {
+                            var forced = new List<string>();
+                            if (optimizeImages)
+                            {
+                                optimizeImages = false;
+                                forced.Add("optimizeImages=false");
+                            }
+                            if (hashAssets)
+                            {
+                                hashAssets = false;
+                                forced.Add("hashAssets=false");
+                            }
+                            if (cacheHeaders)
+                            {
+                                cacheHeaders = false;
+                                forced.Add("cacheHeaders=false");
+                            }
+                            if (minifyCss)
+                            {
+                                minifyCss = false;
+                                forced.Add("minifyCss=false");
+                            }
+                            if (minifyJs)
+                            {
+                                minifyJs = false;
+                                forced.Add("minifyJs=false");
+                            }
+                            if (maxHtmlFiles <= 0)
+                            {
+                                maxHtmlFiles = 50;
+                                forced.Add("maxHtmlFiles=50");
+                            }
+                            if (forced.Count > 0)
+                                logger?.Warn($"{label}: fast mode overrides: {string.Join(", ", forced)}");
+                        }
+
                         var optimize = WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
                         {
                             SiteRoot = siteRoot,
@@ -623,6 +660,7 @@ internal static class WebPipelineRunner
                         var checkNetworkHints = GetBool(step, "checkNetworkHints");
                         var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking");
                         var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking");
+                        var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
                         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
                             baselinePath = "audit-baseline.json";
                         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
@@ -640,6 +678,23 @@ internal static class WebPipelineRunner
                         if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
                             resolvedSarifPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit.sarif"));
 
+                        if (fast)
+                        {
+                            var forced = new List<string>();
+                            if (rendered)
+                            {
+                                rendered = false;
+                                forced.Add("rendered=false");
+                            }
+                            if (maxHtmlFiles <= 0)
+                            {
+                                maxHtmlFiles = 200;
+                                forced.Add("maxHtmlFiles=200");
+                            }
+                            if (forced.Count > 0)
+                                logger?.Warn($"{label}: fast mode overrides: {string.Join(", ", forced)}");
+                        }
+
                         var ensureInstall = rendered && (renderedEnsureInstalled ?? true);
                         var audit = WebSiteAuditor.Audit(new WebAuditOptions
                         {
@@ -647,6 +702,7 @@ internal static class WebPipelineRunner
                             Include = CliPatternHelper.SplitPatterns(include),
                             Exclude = CliPatternHelper.SplitPatterns(exclude),
                             UseDefaultExcludes = useDefaultExclude,
+                            MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
                             IgnoreNavFor = ignoreNavPatterns,
                             NavSelector = navSelector,
                             NavRequired = navRequiredValue,
@@ -1207,6 +1263,9 @@ internal static class WebPipelineRunner
             $"assets {result.AssetCount}"
         };
 
+        if (result.HtmlSelectedFileCount > 0 && result.HtmlFileCount > 0 && result.HtmlSelectedFileCount != result.HtmlFileCount)
+            parts.Insert(0, $"html-scope {result.HtmlSelectedFileCount}/{result.HtmlFileCount}");
+
         if (result.BrokenLinkCount > 0)
             parts.Add($"broken-links {result.BrokenLinkCount}");
         if (result.MissingAssetCount > 0)
@@ -1418,9 +1477,12 @@ internal static class WebPipelineRunner
         }
     }
 
-    private static string ComputeStepFingerprint(string baseDir, JsonElement step)
+    private static string ComputeStepFingerprint(string baseDir, JsonElement step, string? salt = null)
     {
-        var parts = new List<string> { step.GetRawText() };
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(salt))
+            parts.Add($"salt:{salt}");
+        parts.Add(step.GetRawText());
         var paths = EnumerateFingerprintPaths(baseDir, step)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);

@@ -384,7 +384,8 @@ internal static partial class WebCliCommandHandlers
 
         var fullPath = ResolveExistingFilePath(pipelinePath);
         var profilePipeline = HasOption(subArgs, "--profile");
-        var result = WebPipelineRunner.RunPipeline(fullPath, logger, profilePipeline);
+        var fastMode = HasOption(subArgs, "--fast");
+        var result = WebPipelineRunner.RunPipeline(fullPath, logger, profilePipeline, fastMode);
 
         if (outputJson)
         {

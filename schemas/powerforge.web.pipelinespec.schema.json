@@ -358,6 +358,8 @@
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
+        "maxHtmlFiles": { "type": "integer", "minimum": 0 },
+        "max-html-files": { "type": "integer", "minimum": 0 },
         "noDefaultExclude": { "type": "boolean" },
         "ignoreNav": { "type": "string" },
         "noDefaultIgnoreNav": { "type": "boolean" },
