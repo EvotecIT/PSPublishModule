@@ -39,6 +39,10 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("shortcode", context.Shortcode);
         globals.Add("taxonomy", context.Taxonomy);
         globals.Add("term", context.Term);
+        globals.Add("taxonomy_index", ToTaxonomyIndexScript(context.TaxonomyIndex));
+        globals.Add("taxonomy_terms", ToTaxonomyTermsScript(context.TaxonomyTerms));
+        globals.Add("taxonomy_term_summary", ToTaxonomyTermSummaryScript(context.TaxonomyTermSummary));
+        globals.Add("pagination", ToPaginationScript(context.Pagination));
         globals.Add("assets", new
         {
             css_html = context.CssHtml,
@@ -105,6 +109,71 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         return value;
+    }
+
+    private static ScriptObject ToPaginationScript(PaginationRuntime pagination)
+    {
+        var script = new ScriptObject
+        {
+            ["page"] = pagination.Page,
+            ["total_pages"] = pagination.TotalPages,
+            ["page_size"] = pagination.PageSize,
+            ["total_items"] = pagination.TotalItems,
+            ["has_previous"] = pagination.HasPrevious,
+            ["has_next"] = pagination.HasNext,
+            ["previous_url"] = pagination.PreviousUrl,
+            ["next_url"] = pagination.NextUrl,
+            ["first_url"] = pagination.FirstUrl,
+            ["last_url"] = pagination.LastUrl,
+            ["path_segment"] = pagination.PathSegment
+        };
+        return script;
+    }
+
+    private static ScriptObject? ToTaxonomyIndexScript(TaxonomyIndexRuntime? index)
+    {
+        if (index is null)
+            return null;
+
+        return new ScriptObject
+        {
+            ["name"] = index.Name,
+            ["language"] = index.Language,
+            ["total_terms"] = index.TotalTerms,
+            ["total_items"] = index.TotalItems,
+            ["terms"] = ToTaxonomyTermsScript(index.Terms)
+        };
+    }
+
+    private static ScriptArray ToTaxonomyTermsScript(IEnumerable<TaxonomyTermRuntime>? terms)
+    {
+        var result = new ScriptArray();
+        foreach (var term in terms ?? Array.Empty<TaxonomyTermRuntime>())
+        {
+            var item = new ScriptObject
+            {
+                ["name"] = term.Name,
+                ["url"] = term.Url,
+                ["count"] = term.Count,
+                ["latest_date_utc"] = term.LatestDateUtc
+            };
+            result.Add(item);
+        }
+
+        return result;
+    }
+
+    private static ScriptObject? ToTaxonomyTermSummaryScript(TaxonomyTermSummaryRuntime? summary)
+    {
+        if (summary is null)
+            return null;
+
+        return new ScriptObject
+        {
+            ["name"] = summary.Name,
+            ["count"] = summary.Count,
+            ["latest_date_utc"] = summary.LatestDateUtc
+        };
     }
 
     private sealed class InlineTemplateLoader : ITemplateLoader

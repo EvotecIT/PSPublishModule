@@ -27,4 +27,6 @@ public sealed class CollectionSpec
     public SortOrder? SortOrder { get; set; }
     /// <summary>Optional output formats for the collection.</summary>
     public string[] Outputs { get; set; } = Array.Empty<string>();
+    /// <summary>Optional page size for generated section pagination.</summary>
+    public int? PageSize { get; set; }
 }

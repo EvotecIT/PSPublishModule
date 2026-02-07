@@ -37,6 +37,8 @@ public sealed class SiteSpec
 
     /// <summary>Output format configuration.</summary>
     public OutputsSpec? Outputs { get; set; }
+    /// <summary>Pagination defaults for section/taxonomy pages.</summary>
+    public PaginationSpec? Pagination { get; set; }
     /// <summary>Feed generation settings for RSS outputs.</summary>
     public FeedSpec? Feed { get; set; }
     /// <summary>Taxonomy definitions (tags, categories).</summary>

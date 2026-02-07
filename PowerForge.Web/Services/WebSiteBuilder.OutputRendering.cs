@@ -73,13 +73,18 @@ public static partial class WebSiteBuilder
         var descriptionMeta = string.IsNullOrWhiteSpace(item.Description) ? string.Empty : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(item.Description)}\" />";
         projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
         var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
-        var listItems = ResolveListItems(item, allItems);
+        var fullListItems = ResolveListItems(item, allItems);
+        var pagination = ResolvePaginationRuntime(spec, item, fullListItems);
+        var listItems = ApplyPagination(fullListItems, pagination);
         var headHtml = BuildHeadHtml(spec, item, rootPath);
         var bodyClass = BuildBodyClass(spec, item);
         var openGraph = BuildOpenGraphHtml(spec, item);
         var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);
         var extraCss = GetMetaString(item.Meta, "extra_css");
         var extraScripts = BuildExtraScriptsHtml(item, rootPath);
+        var taxonomyTerms = BuildTaxonomyTermsRuntime(item, allItems);
+        var taxonomyIndex = BuildTaxonomyIndexRuntime(item, allItems);
+        var taxonomyTermSummary = BuildTaxonomyTermSummaryRuntime(item, allItems);
 
         var renderContext = new ThemeRenderContext
         {
@@ -110,7 +115,11 @@ public static partial class WebSiteBuilder
             ExtraScriptsHtml = extraScripts,
             BodyClass = bodyClass,
             Taxonomy = ResolveTaxonomy(spec, item),
-            Term = ResolveTerm(item)
+            Term = ResolveTerm(item),
+            TaxonomyIndex = taxonomyIndex,
+            TaxonomyTerms = taxonomyTerms,
+            TaxonomyTermSummary = taxonomyTermSummary,
+            Pagination = pagination
         };
 
         if (!string.IsNullOrWhiteSpace(themeRoot) && Directory.Exists(themeRoot))
@@ -481,7 +490,15 @@ public static partial class WebSiteBuilder
     {
         if (item.Kind == PageKind.Section)
         {
-            var current = NormalizeRouteForMatch(item.OutputPath);
+            var sectionRoot = item.OutputPath;
+            if (IsGeneratedPaginationItem(item))
+            {
+                var firstUrl = GetMetaString(item.Meta, PaginationFirstUrlMetaKey);
+                if (!string.IsNullOrWhiteSpace(firstUrl))
+                    sectionRoot = firstUrl;
+            }
+
+            var current = NormalizeRouteForMatch(sectionRoot);
             return items
                 .Where(i => !i.Draft)
                 .Where(i => i.Collection == item.Collection)

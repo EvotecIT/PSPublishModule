@@ -45,7 +45,15 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
             ["VERSION_LATEST"] = context.Versioning.Latest?.Name ?? string.Empty,
             ["VERSION_LATEST_LABEL"] = context.Versioning.Latest?.Label ?? string.Empty,
             ["VERSION_LATEST_URL"] = context.Versioning.Latest?.Url ?? string.Empty,
-            ["FEED_URL"] = context.FeedUrl ?? string.Empty
+            ["FEED_URL"] = context.FeedUrl ?? string.Empty,
+            ["PAGINATION_PAGE"] = context.Pagination.Page.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_TOTAL_PAGES"] = context.Pagination.TotalPages.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_PAGE_SIZE"] = context.Pagination.PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_TOTAL_ITEMS"] = context.Pagination.TotalItems.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["PAGINATION_PREVIOUS_URL"] = context.Pagination.PreviousUrl,
+            ["PAGINATION_NEXT_URL"] = context.Pagination.NextUrl,
+            ["PAGINATION_FIRST_URL"] = context.Pagination.FirstUrl,
+            ["PAGINATION_LAST_URL"] = context.Pagination.LastUrl
         };
     }
 

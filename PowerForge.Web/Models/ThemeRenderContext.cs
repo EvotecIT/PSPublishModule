@@ -17,6 +17,10 @@ internal sealed class ThemeRenderContext
     public ShortcodeContext? Shortcode { get; init; }
     public TaxonomySpec? Taxonomy { get; init; }
     public string? Term { get; init; }
+    public TaxonomyIndexRuntime? TaxonomyIndex { get; init; }
+    public TaxonomyTermRuntime[] TaxonomyTerms { get; init; } = Array.Empty<TaxonomyTermRuntime>();
+    public TaxonomyTermSummaryRuntime? TaxonomyTermSummary { get; init; }
+    public PaginationRuntime Pagination { get; init; } = new();
     public string CssHtml { get; init; } = string.Empty;
     public string JsHtml { get; init; } = string.Empty;
     public string PreloadsHtml { get; init; } = string.Empty;

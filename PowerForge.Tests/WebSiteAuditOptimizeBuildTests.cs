@@ -416,6 +416,229 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_BlogPagination_GeneratesPagedRoutesAndContext()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-blog-pagination-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                Blog index
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"), "---\ntitle: Post 1\norder: 1\n---\n\nOne");
+            File.WriteAllText(Path.Combine(blogPath, "post-2.md"), "---\ntitle: Post 2\norder: 2\n---\n\nTwo");
+            File.WriteAllText(Path.Combine(blogPath, "post-3.md"), "---\ntitle: Post 3\norder: 3\n---\n\nThree");
+            File.WriteAllText(Path.Combine(blogPath, "post-4.md"), "---\ntitle: Post 4\norder: 4\n---\n\nFour");
+            File.WriteAllText(Path.Combine(blogPath, "post-5.md"), "---\ntitle: Post 5\norder: 5\n---\n\nFive");
+
+            var themeRoot = Path.Combine(root, "themes", "pagination-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "blog.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  <div id="page">{{ pagination.page }}</div>
+                  <div id="total">{{ pagination.total_pages }}</div>
+                  <div id="prev">{{ pagination.previous_url }}</div>
+                  <div id="next">{{ pagination.next_url }}</div>
+                  <ul>{{ for i in items }}<li>{{ i.title }}</li>{{ end }}</ul>
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "pagination-test",
+                  "engine": "scriban",
+                  "defaultLayout": "blog"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Pagination Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "pagination-test",
+                ThemesRoot = "themes",
+                TrailingSlash = TrailingSlashMode.Always,
+                Pagination = new PaginationSpec
+                {
+                    Enabled = true,
+                    PathSegment = "page"
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ListLayout = "blog",
+                        PageSize = 2
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var page1 = File.ReadAllText(Path.Combine(result.OutputPath, "blog", "index.html"));
+            var page2 = File.ReadAllText(Path.Combine(result.OutputPath, "blog", "page", "2", "index.html"));
+            var page3 = File.ReadAllText(Path.Combine(result.OutputPath, "blog", "page", "3", "index.html"));
+
+            Assert.Contains("<div id=\"page\">1</div>", page1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"total\">3</div>", page1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"next\">/blog/page/2/</div>", page1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>Post 1</li>", page1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>Post 2</li>", page1, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<li>Post 3</li>", page1, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains("<div id=\"page\">2</div>", page2, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"prev\">/blog/</div>", page2, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>Post 3</li>", page2, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>Post 4</li>", page2, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<li>Post 5</li>", page2, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains("<div id=\"page\">3</div>", page3, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>Post 5</li>", page3, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_TaxonomyPagination_AndIndexMetadata_AreExposedToTemplates()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-taxonomy-pagination-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"), "---\ntitle: Blog\n---\n\nBlog");
+            File.WriteAllText(Path.Combine(blogPath, "a.md"), "---\ntitle: A\ndate: 2026-01-01\ntags: [release]\n---\n\nA");
+            File.WriteAllText(Path.Combine(blogPath, "b.md"), "---\ntitle: B\ndate: 2026-01-02\ntags: [release]\n---\n\nB");
+            File.WriteAllText(Path.Combine(blogPath, "c.md"), "---\ntitle: C\ndate: 2026-01-03\ntags: [docs]\n---\n\nC");
+
+            var themeRoot = Path.Combine(root, "themes", "taxonomy-pagination-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "blog.html"),
+                """
+                <!doctype html>
+                <html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "taxonomy.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  <div id="terms-total">{{ taxonomy_index.total_terms }}</div>
+                  <div id="items-total">{{ taxonomy_index.total_items }}</div>
+                  <div id="page">{{ pagination.page }}</div>
+                  <ul>{{ for t in taxonomy_terms }}<li>{{ t.name }}={{ t.count }}</li>{{ end }}</ul>
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "term.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  <div id="term">{{ taxonomy_term_summary.name }}</div>
+                  <div id="count">{{ taxonomy_term_summary.count }}</div>
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "taxonomy-pagination-test",
+                  "engine": "scriban",
+                  "defaultLayout": "blog"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Taxonomy Pagination Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "taxonomy-pagination-test",
+                ThemesRoot = "themes",
+                TrailingSlash = TrailingSlashMode.Always,
+                Pagination = new PaginationSpec
+                {
+                    PathSegment = "page"
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ListLayout = "blog"
+                    }
+                },
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec
+                    {
+                        Name = "tags",
+                        BasePath = "/tags",
+                        ListLayout = "taxonomy",
+                        TermLayout = "term",
+                        PageSize = 1
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var tagsPage1 = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "index.html"));
+            var tagsPage2 = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "page", "2", "index.html"));
+            var releaseTerm = File.ReadAllText(Path.Combine(result.OutputPath, "tags", "release", "index.html"));
+
+            Assert.Contains("<div id=\"terms-total\">2</div>", tagsPage1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"items-total\">3</div>", tagsPage1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"page\">1</div>", tagsPage1, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>release=2</li>", tagsPage1, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains("<div id=\"page\">2</div>", tagsPage2, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<li>docs=1</li>", tagsPage2, StringComparison.OrdinalIgnoreCase);
+
+            Assert.Contains("<div id=\"term\">release</div>", releaseTerm, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"count\">2</div>", releaseTerm, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_ResolvesLocalizationRoutesAndRuntime()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-runtime-" + Guid.NewGuid().ToString("N"));

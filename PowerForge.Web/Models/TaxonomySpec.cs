@@ -17,6 +17,8 @@ public sealed class TaxonomySpec
 
     /// <summary>Optional output formats for taxonomy list/term pages.</summary>
     public string[] Outputs { get; set; } = Array.Empty<string>();
+    /// <summary>Optional page size for taxonomy and term listing pages.</summary>
+    public int? PageSize { get; set; }
 
     /// <summary>Optional sort field for terms.</summary>
     public string? SortBy { get; set; }

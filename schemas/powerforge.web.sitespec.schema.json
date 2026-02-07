@@ -42,6 +42,7 @@
       "items": { "$ref": "#/$defs/CollectionSpec" }
     },
     "Outputs": { "$ref": "#/$defs/OutputsSpec" },
+    "Pagination": { "$ref": "#/$defs/PaginationSpec" },
     "Feed": { "$ref": "#/$defs/FeedSpec" },
     "Taxonomies": {
       "type": "array",
@@ -86,7 +87,8 @@
         "Exclude": { "type": "array", "items": { "type": "string" } },
         "SortBy": { "type": "string" },
         "SortOrder": { "type": "string", "enum": ["asc", "desc"] },
-        "Outputs": { "type": "array", "items": { "type": "string" } }
+        "Outputs": { "type": "array", "items": { "type": "string" } },
+        "PageSize": { "type": "integer", "minimum": 1 }
       },
       "required": ["Name", "Input", "Output"]
     },
@@ -346,6 +348,15 @@
         }
       }
     },
+    "PaginationSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "DefaultPageSize": { "type": "integer", "minimum": 0, "default": 0 },
+        "PathSegment": { "type": "string", "default": "page" }
+      }
+    },
     "FeedSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -386,6 +397,7 @@
         "ListLayout": { "type": "string" },
         "TermLayout": { "type": "string" },
         "Outputs": { "type": "array", "items": { "type": "string" } },
+        "PageSize": { "type": "integer", "minimum": 1 },
         "SortBy": { "type": "string" },
         "SortOrder": { "type": "string", "enum": ["asc", "desc"] }
       },

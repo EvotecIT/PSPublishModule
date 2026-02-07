@@ -146,6 +146,8 @@ public static partial class WebSiteBuilder
         {
             if (!string.Equals(item.Collection, auto.Collection, StringComparison.OrdinalIgnoreCase))
                 continue;
+            if (IsGeneratedPaginationItem(item))
+                continue;
             if (!includeDrafts && item.Draft)
                 continue;
             if (!includeIndex && item.Kind == PageKind.Section)
