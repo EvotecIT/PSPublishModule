@@ -18,6 +18,12 @@ public sealed class WebAssetOptimizerOptions
     public string CssLinkPattern { get; set; } = "(app|api-docs)\\.css";
     /// <summary>When true, minify HTML files.</summary>
     public bool MinifyHtml { get; set; } = false;
+    /// <summary>Glob-style include patterns for HTML processing (empty means include all).</summary>
+    public string[] HtmlInclude { get; set; } = Array.Empty<string>();
+    /// <summary>Glob-style exclude patterns for HTML processing.</summary>
+    public string[] HtmlExclude { get; set; } = Array.Empty<string>();
+    /// <summary>Max number of HTML files to process (0 disables).</summary>
+    public int MaxHtmlFiles { get; set; } = 0;
     /// <summary>When true, minify CSS files.</summary>
     public bool MinifyCss { get; set; } = false;
     /// <summary>When true, minify JavaScript files.</summary>
@@ -120,12 +126,34 @@ public static class WebAssetOptimizer
                 result.UpdatedCount++;
         }
 
-        var htmlFiles = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories).ToArray();
+        var allHtmlFiles = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories).ToArray();
+        var htmlFiles = allHtmlFiles;
         var cssFiles = Directory.EnumerateFiles(siteRoot, "*.css", SearchOption.AllDirectories).ToArray();
         var jsFiles = Directory.EnumerateFiles(siteRoot, "*.js", SearchOption.AllDirectories).ToArray();
-        result.HtmlFileCount = htmlFiles.Length;
+        result.HtmlFileCount = allHtmlFiles.Length;
         result.CssFileCount = cssFiles.Length;
         result.JsFileCount = jsFiles.Length;
+
+        if (options.HtmlInclude is { Length: > 0 } || options.HtmlExclude is { Length: > 0 } || options.MaxHtmlFiles > 0)
+        {
+            htmlFiles = htmlFiles
+                .Where(path =>
+                {
+                    var relative = ToRelative(siteRoot, path);
+                    if (options.HtmlInclude is { Length: > 0 } && !IsIncluded(relative, options.HtmlInclude))
+                        return false;
+                    if (IsExcluded(relative, options.HtmlExclude))
+                        return false;
+                    return true;
+                })
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (options.MaxHtmlFiles > 0 && htmlFiles.Length > options.MaxHtmlFiles)
+                htmlFiles = htmlFiles.Take(options.MaxHtmlFiles).ToArray();
+        }
+
+        result.HtmlSelectedFileCount = htmlFiles.Length;
         var policy = options.AssetPolicy;
         if (policy?.Rewrites is { Length: > 0 })
         {
@@ -296,6 +324,15 @@ public static class WebAssetOptimizer
         result.UpdatedFiles = updatedFiles
             .Select(path => ToRelative(siteRoot, path))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        // Convenience summary sections for large reports.
+        const int reportTopCount = 5;
+        result.TopOptimizedImages = (result.OptimizedImages ?? Array.Empty<WebOptimizeImageEntry>())
+            .Take(reportTopCount)
+            .ToArray();
+        result.TopImageFailures = (result.ImageFailures ?? Array.Empty<WebOptimizeImageFailureEntry>())
+            .Take(reportTopCount)
             .ToArray();
 
         if (!string.IsNullOrWhiteSpace(options.ReportPath))

@@ -156,6 +156,48 @@ Runs build + apidocs + llms + sitemap + optimize.
 powerforge-web pipeline --config Samples/PowerForge.Web.CodeGlyphX.Sample/pipeline.json
 ```
 
+### Optimize tips (dev vs CI)
+The `optimize` step can be expensive on large sites because it reads many HTML files multiple times (critical-css, hashing rewrites, minification, image tag rewrites).
+
+For development you can scope optimization to a smaller subset of pages:
+```json
+{
+  "task": "optimize",
+  "siteRoot": "_site",
+  "minifyHtml": true,
+  "minifyCss": false,
+  "minifyJs": false,
+  "optimizeImages": false,
+  "hashAssets": false,
+  "cacheHeaders": false,
+  "htmlInclude": [ "index.html", "docs/**/index.html" ],
+  "maxHtmlFiles": 50,
+  "reportPath": ".powerforge/optimize-report.json"
+}
+```
+
+For CI / production you can turn on the full set (with budgets):
+```json
+{
+  "task": "optimize",
+  "siteRoot": "_site",
+  "minifyHtml": true,
+  "minifyCss": true,
+  "minifyJs": true,
+  "optimizeImages": true,
+  "imageGenerateWebp": true,
+  "imagePreferNextGen": true,
+  "imageWidths": [ "480", "960", "1440" ],
+  "imageEnhanceTags": true,
+  "imageMaxBytesPerFile": 800000,
+  "imageMaxTotalBytes": 80000000,
+  "imageFailOnBudget": true,
+  "imageFailOnFailures": false,
+  "hashAssets": true,
+  "reportPath": ".powerforge/optimize-report.json"
+}
+```
+
 ### Pipeline (static only, no CodeMatrix paths)
 Builds and optimizes a static site into Artifacts without touching CodeMatrix.
 ```

@@ -105,6 +105,8 @@ public sealed class WebOptimizeResult
     public string[] UpdatedFiles { get; set; } = Array.Empty<string>();
     /// <summary>Total HTML files discovered under site root.</summary>
     public int HtmlFileCount { get; set; }
+    /// <summary>Total HTML files selected for processing (after include/exclude/max filters).</summary>
+    public int HtmlSelectedFileCount { get; set; }
     /// <summary>Total CSS files discovered under site root.</summary>
     public int CssFileCount { get; set; }
     /// <summary>Total JavaScript files discovered under site root.</summary>
@@ -139,6 +141,10 @@ public sealed class WebOptimizeResult
     public WebOptimizeImageEntry[] OptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
     /// <summary>Detailed entries for image files that failed to decode/optimize.</summary>
     public WebOptimizeImageFailureEntry[] ImageFailures { get; set; } = Array.Empty<WebOptimizeImageFailureEntry>();
+    /// <summary>Top optimized images by bytes saved (summary convenience).</summary>
+    public WebOptimizeImageEntry[] TopOptimizedImages { get; set; } = Array.Empty<WebOptimizeImageEntry>();
+    /// <summary>Top image failures (summary convenience).</summary>
+    public WebOptimizeImageFailureEntry[] TopImageFailures { get; set; } = Array.Empty<WebOptimizeImageFailureEntry>();
     /// <summary>Number of generated image variants (responsive or next-gen).</summary>
     public int ImageVariantCount { get; set; }
     /// <summary>Generated image variant entries.</summary>
