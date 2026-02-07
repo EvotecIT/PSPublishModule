@@ -63,3 +63,16 @@ public sealed class BuildCacheSpec
     /// <summary>Cache mode (contenthash, mtime).</summary>
     public string? Mode { get; set; }
 }
+
+/// <summary>Verification policy controls shared by CLI and pipeline verify/doctor commands.</summary>
+public sealed class VerifyPolicySpec
+{
+    /// <summary>When true, verify fails when any warning is emitted.</summary>
+    public bool FailOnWarnings { get; set; }
+
+    /// <summary>When true, verify fails when navigation lint warnings are emitted.</summary>
+    public bool FailOnNavLint { get; set; }
+
+    /// <summary>When true, verify fails when theme contract warnings are emitted.</summary>
+    public bool FailOnThemeContract { get; set; }
+}

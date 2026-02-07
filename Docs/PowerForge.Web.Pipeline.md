@@ -38,11 +38,39 @@ Notes:
 #### verify
 Validates content + routing consistency from the site config.
 ```json
-{ "task": "verify", "config": "./site.json" }
+{
+  "task": "verify",
+  "config": "./site.json",
+  "failOnWarnings": true,
+  "failOnNavLint": true,
+  "failOnThemeContract": true
+}
 ```
 Notes:
 - Emits warnings for missing titles, duplicate routes, missing assets, and TOC coverage.
-- Fails the pipeline only when errors are found.
+- By default fails only when errors are found.
+- `failOnWarnings`, `failOnNavLint`, and `failOnThemeContract` can enforce stricter quality gates.
+
+#### doctor
+Runs build/verify/audit as one health-check step.
+```json
+{
+  "task": "doctor",
+  "config": "./site.json",
+  "out": "./Artifacts/site",
+  "build": true,
+  "verify": true,
+  "audit": true,
+  "failOnWarnings": true,
+  "failOnNavLint": true,
+  "failOnThemeContract": true,
+  "summary": true,
+  "sarif": true
+}
+```
+Notes:
+- Supports the same strict verify flags as `verify`.
+- Supports audit controls (`requiredRoutes`, `navRequiredLinks`, `checkHeadingOrder`, `checkLinkPurpose`, etc.).
 
 #### apidocs
 Generates API reference output from XML docs (optionally enriched by assembly).

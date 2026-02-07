@@ -296,12 +296,12 @@ try
             var configPath = TryGetOptionValue(subArgs, "--config");
             if (string.IsNullOrWhiteSpace(configPath))
                 return Fail("Missing required --config.", outputJson, logger, "web.verify");
-            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
-            var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint");
-            var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract");
 
             var fullConfigPath = ResolveExistingFilePath(configPath);
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
+            var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? false);
+            var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? false);
             var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
             var verify = WebSiteVerifier.Verify(spec, plan);
             var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
@@ -364,12 +364,12 @@ try
             var runBuild = !HasOption(subArgs, "--no-build");
             var runVerify = !HasOption(subArgs, "--no-verify");
             var runAudit = !HasOption(subArgs, "--no-audit");
-            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
-            var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint");
-            var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract");
 
             var fullConfigPath = ResolveExistingFilePath(configPath);
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+            var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
+            var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? false);
+            var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? false);
             var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
 
             if (string.IsNullOrWhiteSpace(outPath))
@@ -2446,11 +2446,10 @@ internal static class WebPipelineRunner
                         var config = ResolvePath(baseDir, GetString(step, "config"));
                         if (string.IsNullOrWhiteSpace(config))
                             throw new InvalidOperationException("verify requires config.");
-                        var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
-                        var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? false;
-                        var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? false;
-
                         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+                        var failOnWarnings = GetBool(step, "failOnWarnings") ?? spec.Verify?.FailOnWarnings ?? false;
+                        var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? spec.Verify?.FailOnNavLint ?? false;
+                        var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? spec.Verify?.FailOnThemeContract ?? false;
                         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
                         var verify = WebSiteVerifier.Verify(spec, plan);
                         var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
@@ -3011,10 +3010,10 @@ internal static class WebPipelineRunner
                         var verifyPolicyFailures = Array.Empty<string>();
                         if (executeVerify)
                         {
-                            var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
-                            var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? false;
-                            var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? false;
                             verify = WebSiteVerifier.Verify(spec, plan);
+                            var failOnWarnings = GetBool(step, "failOnWarnings") ?? spec.Verify?.FailOnWarnings ?? false;
+                            var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? spec.Verify?.FailOnNavLint ?? false;
+                            var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? spec.Verify?.FailOnThemeContract ?? false;
                             var (verifySuccess, policyFailures) = WebVerifyPolicy.EvaluateOutcome(
                                 verify,
                                 failOnWarnings,

@@ -64,6 +64,7 @@
     "Navigation": { "$ref": "#/$defs/NavigationSpec" },
     "Versioning": { "$ref": "#/$defs/VersioningSpec" },
     "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
+    "Verify": { "$ref": "#/$defs/VerifyPolicySpec" },
     "Cache": { "$ref": "#/$defs/BuildCacheSpec" }
   },
   "required": ["Name", "BaseUrl", "Collections"],
@@ -419,6 +420,15 @@
         "Enabled": { "type": "boolean" },
         "Root": { "type": "string" },
         "Mode": { "type": "string", "enum": ["contenthash", "mtime"] }
+      }
+    },
+    "VerifyPolicySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "FailOnWarnings": { "type": "boolean" },
+        "FailOnNavLint": { "type": "boolean" },
+        "FailOnThemeContract": { "type": "boolean" }
       }
     },
     "NavigationSpec": {

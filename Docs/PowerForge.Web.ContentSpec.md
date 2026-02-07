@@ -513,6 +513,22 @@ Each menu item can optionally define `Sections`/`Columns` for richer dropdowns:
 }
 ```
 
+### Verify policy defaults
+Set global verify policy defaults in `site.json`:
+```json
+{
+  "Verify": {
+    "FailOnWarnings": true,
+    "FailOnNavLint": true,
+    "FailOnThemeContract": true
+  }
+}
+```
+Notes:
+- Applied by `powerforge-web verify` and `powerforge-web doctor`.
+- CLI flags with the same names also enable these checks.
+- Pipeline `verify`/`doctor` step fields override these defaults when specified.
+
 ## Redirects + aliases
 Use `aliases` in front matter for old URLs.  
 Use `Redirects` or `RouteOverrides` in `site.json` for permanent site‑level rules.
