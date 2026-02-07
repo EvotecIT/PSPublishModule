@@ -70,9 +70,8 @@ internal static class WebPipelineRunner
 
         var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
         var profileEnabled = (GetBool(root, "profile") ?? false) || forceProfile;
-        var profilePath = profileEnabled
-            ? ResolvePathWithinRoot(baseDir, GetString(root, "profilePath") ?? GetString(root, "profile-path"), Path.Combine(".powerforge", "pipeline-profile.json"))
-            : null;
+        var profileWriteOnFail = GetBool(root, "profileOnFail") ?? GetBool(root, "profile-on-fail") ?? true;
+        var profilePath = ResolvePathWithinRoot(baseDir, GetString(root, "profilePath") ?? GetString(root, "profile-path"), Path.Combine(".powerforge", "pipeline-profile.json"));
         var cacheEnabled = GetBool(root, "cache") ?? false;
         var cachePath = ResolvePathWithinRoot(baseDir, GetString(root, "cachePath") ?? GetString(root, "cache-path"), Path.Combine(".powerforge", "pipeline-cache.json"));
         var cacheState = cacheEnabled ? LoadPipelineCache(cachePath, logger) : null;
@@ -478,6 +477,11 @@ internal static class WebPipelineRunner
                         var cacheHeadersHtml = GetString(step, "cacheHeadersHtml") ?? GetString(step, "headersHtml");
                         var cacheHeadersAssets = GetString(step, "cacheHeadersAssets") ?? GetString(step, "headersAssets");
                         var cacheHeadersPaths = GetArrayOfStrings(step, "cacheHeadersPaths") ?? GetArrayOfStrings(step, "headersPaths");
+                        if (string.IsNullOrWhiteSpace(reportPath) &&
+                            (minifyHtml || minifyCss || minifyJs || optimizeImages || hashAssets || cacheHeaders))
+                        {
+                            reportPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "optimize-report.json"));
+                        }
 
                         AssetPolicySpec? policy = null;
                         if (!string.IsNullOrWhiteSpace(configPath))
@@ -580,8 +584,10 @@ internal static class WebPipelineRunner
                         var summary = GetBool(step, "summary") ?? false;
                         var summaryPath = GetString(step, "summaryPath");
                         var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                        var summaryOnFail = GetBool(step, "summaryOnFail") ?? GetBool(step, "summary-on-fail") ?? true;
                         var sarif = GetBool(step, "sarif") ?? false;
                         var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
+                        var sarifOnFail = GetBool(step, "sarifOnFail") ?? GetBool(step, "sarif-on-fail") ?? true;
                         var baselineGenerate = GetBool(step, "baselineGenerate") ?? false;
                         var baselineUpdate = GetBool(step, "baselineUpdate") ?? false;
                         var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline");
@@ -608,7 +614,13 @@ internal static class WebPipelineRunner
                         var navRequiredValue = navRequired ?? !(navOptional ?? false);
                         var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
                         var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+                        var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
+                        if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
+                            resolvedSummaryPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit-summary.json"));
+
                         var resolvedSarifPath = ResolveSarifPathForPipeline(sarif, sarifPath);
+                        if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
+                            resolvedSarifPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit.sarif"));
 
                         var ensureInstall = rendered && (renderedEnsureInstalled ?? true);
                         var audit = WebSiteAuditor.Audit(new WebAuditOptions
@@ -763,8 +775,10 @@ internal static class WebPipelineRunner
                             var summary = GetBool(step, "summary") ?? false;
                             var summaryPath = GetString(step, "summaryPath");
                             var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
+                            var summaryOnFail = GetBool(step, "summaryOnFail") ?? GetBool(step, "summary-on-fail") ?? true;
                             var sarif = GetBool(step, "sarif") ?? false;
                             var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
+                            var sarifOnFail = GetBool(step, "sarifOnFail") ?? GetBool(step, "sarif-on-fail") ?? true;
                             var navCanonicalPath = GetString(step, "navCanonicalPath") ?? GetString(step, "navCanonical");
                             var navCanonicalSelector = GetString(step, "navCanonicalSelector");
                             var navCanonicalRequired = GetBool(step, "navCanonicalRequired") ?? false;
@@ -789,7 +803,13 @@ internal static class WebPipelineRunner
                             var navRequiredValue = navRequired ?? !(navOptional ?? false);
                             var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
                             var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+                            var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
+                            if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
+                                resolvedSummaryPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit-summary.json"));
+
                             var resolvedSarifPath = ResolveSarifPathForPipeline(sarif, sarifPath);
+                            if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
+                                resolvedSarifPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit.sarif"));
 
                             audit = WebSiteAuditor.Audit(new WebAuditOptions
                             {
@@ -811,12 +831,14 @@ internal static class WebPipelineRunner
                                 CheckTitles = GetBool(step, "checkTitles") ?? true,
                                 CheckDuplicateIds = GetBool(step, "checkDuplicateIds") ?? true,
                                 CheckHtmlStructure = GetBool(step, "checkHtmlStructure") ?? true,
-                                SummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath),
-                                SarifPath = resolvedSarifPath,
-                                SummaryMaxIssues = summaryMax,
-                                NavCanonicalPath = navCanonicalPath,
-                                NavCanonicalSelector = navCanonicalSelector,
-                                NavCanonicalRequired = navCanonicalRequired,
+                            SummaryPath = resolvedSummaryPath,
+                            SarifPath = resolvedSarifPath,
+                            SummaryMaxIssues = summaryMax,
+                            SummaryOnFailOnly = summaryOnFail && !summary,
+                            SarifOnFailOnly = sarifOnFail && !sarif,
+                            NavCanonicalPath = navCanonicalPath,
+                            NavCanonicalSelector = navCanonicalSelector,
+                            NavCanonicalRequired = navCanonicalRequired,
                                 CheckUtf8 = checkUtf8,
                                 CheckMetaCharset = checkMetaCharset,
                                 CheckUnicodeReplacementChars = checkReplacement,
@@ -948,7 +970,7 @@ internal static class WebPipelineRunner
                 result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
                 if (cacheEnabled && cacheState is not null && cacheUpdated)
                     SavePipelineCache(cachePath, cacheState, logger);
-                if (!string.IsNullOrWhiteSpace(profilePath))
+                if (!string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
                 {
                     WritePipelineProfile(profilePath, result, logger);
                     result.ProfilePath = profilePath;
@@ -979,7 +1001,7 @@ internal static class WebPipelineRunner
         result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
         if (cacheEnabled && cacheState is not null && cacheUpdated)
             SavePipelineCache(cachePath, cacheState, logger);
-        if (!string.IsNullOrWhiteSpace(profilePath))
+        if (!string.IsNullOrWhiteSpace(profilePath) && profileEnabled)
         {
             WritePipelineProfile(profilePath, result, logger);
             result.ProfilePath = profilePath;

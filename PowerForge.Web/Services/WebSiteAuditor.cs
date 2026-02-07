@@ -91,8 +91,12 @@ public sealed class WebAuditOptions
     public bool RenderedCheckFailedRequests { get; set; } = true;
     /// <summary>Optional path to write audit summary JSON (relative to site root if not rooted).</summary>
     public string? SummaryPath { get; set; }
+    /// <summary>When true, write the summary file only when audit fails.</summary>
+    public bool SummaryOnFailOnly { get; set; }
     /// <summary>Optional path to write SARIF output (relative to site root if not rooted).</summary>
     public string? SarifPath { get; set; }
+    /// <summary>When true, write the SARIF file only when audit fails.</summary>
+    public bool SarifOnFailOnly { get; set; }
     /// <summary>Maximum number of issues to include in the summary.</summary>
     public int SummaryMaxIssues { get; set; } = 10;
     /// <summary>Optional path to canonical nav HTML used as the baseline signature.</summary>
@@ -735,7 +739,8 @@ public static class WebSiteAuditor
             Warnings = warnings.ToArray()
         };
 
-        if (!string.IsNullOrWhiteSpace(options.SummaryPath))
+        if (!string.IsNullOrWhiteSpace(options.SummaryPath) &&
+            (!options.SummaryOnFailOnly || !result.Success))
         {
             var summaryPath = ResolveSummaryPath(siteRoot, options.SummaryPath);
             var summary = new WebAuditSummary
@@ -773,7 +778,8 @@ public static class WebSiteAuditor
             result.SummaryPath = summaryPath;
         }
 
-        if (!string.IsNullOrWhiteSpace(options.SarifPath))
+        if (!string.IsNullOrWhiteSpace(options.SarifPath) &&
+            (!options.SarifOnFailOnly || !result.Success))
         {
             var sarifPath = ResolveSummaryPath(siteRoot, options.SarifPath);
             WriteSarif(sarifPath, result.Issues, warnings);
