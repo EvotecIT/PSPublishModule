@@ -4,16 +4,14 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace PowerForge.Web;
 
+/// <summary>Markdown rendering, prism injection, and data-template helpers.</summary>
 public static partial class WebSiteBuilder
-{    private static string RenderMarkdown(string content, string sourcePath, BuildCacheSpec? cache, string? cacheRoot)
+{
+    private static string RenderMarkdown(string content, string sourcePath, BuildCacheSpec? cache, string? cacheRoot)
     {
         if (cache?.Enabled != true || string.IsNullOrWhiteSpace(cacheRoot))
             return MarkdownRenderer.RenderToHtml(content);
@@ -592,7 +590,5 @@ public static partial class WebSiteBuilder
 
         return false;
     }
-
-
 }
 

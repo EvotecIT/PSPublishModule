@@ -3,17 +3,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace PowerForge.Web;
 
+/// <summary>Data loading, normalization, and build diagnostics helpers.</summary>
 public static partial class WebSiteBuilder
-{    private static IReadOnlyDictionary<string, object?> LoadData(SiteSpec spec, WebSitePlan plan, IReadOnlyList<ProjectSpec> projects)
+{
+    private static IReadOnlyDictionary<string, object?> LoadData(SiteSpec spec, WebSitePlan plan, IReadOnlyList<ProjectSpec> projects)
     {
         var rootPath = plan.RootPath;
         var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
@@ -683,7 +681,5 @@ public static partial class WebSiteBuilder
         if (text.Length <= maxLength) return text;
         return text.Substring(0, maxLength).Trim() + "...";
     }
-
-
 }
 

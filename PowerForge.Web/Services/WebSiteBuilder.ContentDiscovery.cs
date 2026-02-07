@@ -3,17 +3,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace PowerForge.Web;
 
+/// <summary>Content discovery and item construction helpers.</summary>
 public static partial class WebSiteBuilder
-{    private static IEnumerable<ProjectSpec> LoadProjectSpecs(string? projectsRoot, JsonSerializerOptions options)
+{
+    private static IEnumerable<ProjectSpec> LoadProjectSpecs(string? projectsRoot, JsonSerializerOptions options)
     {
         if (string.IsNullOrWhiteSpace(projectsRoot) || !Directory.Exists(projectsRoot))
             yield break;
@@ -595,7 +594,5 @@ public static partial class WebSiteBuilder
         Directory.CreateDirectory(full);
         return full;
     }
-
-
 }
 

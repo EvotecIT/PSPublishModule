@@ -1,19 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace PowerForge.Web;
 
+/// <summary>HTML/JSON/RSS output rendering helpers.</summary>
 public static partial class WebSiteBuilder
-{    private static void WriteContentItem(
+{
+    private static void WriteContentItem(
         string outputRoot,
         SiteSpec spec,
         string rootPath,
@@ -489,7 +486,5 @@ public static partial class WebSiteBuilder
         var term = GetMetaString(item.Meta, "term");
         return string.IsNullOrWhiteSpace(term) ? null : term;
     }
-
-
 }
 

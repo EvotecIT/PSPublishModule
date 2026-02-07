@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using PowerForge.Web;
 
 namespace PowerForge.Web;
 
+/// <summary>Navigation payload projection helpers.</summary>
 public static partial class WebSiteBuilder
 {
     private static void WriteSiteNavData(SiteSpec spec, string outputRoot, MenuSpec[] menuSpecs)
@@ -235,7 +235,5 @@ public static partial class WebSiteBuilder
             })
             .ToArray();
     }
-
-
 }
 
