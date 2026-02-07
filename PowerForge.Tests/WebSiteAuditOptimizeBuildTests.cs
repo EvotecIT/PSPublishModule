@@ -299,6 +299,103 @@ public class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_LocalizationSwitcher_DoesNotCrossProjectForSameTranslationKey()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-project-scope-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var projectARoot = Path.Combine(root, "projects", "ProjectA");
+            var projectBRoot = Path.Combine(root, "projects", "ProjectB");
+            var aEn = Path.Combine(projectARoot, "content", "docs", "en");
+            var aPl = Path.Combine(projectARoot, "content", "docs", "pl");
+            var bEn = Path.Combine(projectBRoot, "content", "docs", "en");
+            var bPl = Path.Combine(projectBRoot, "content", "docs", "pl");
+            Directory.CreateDirectory(aEn);
+            Directory.CreateDirectory(aPl);
+            Directory.CreateDirectory(bEn);
+            Directory.CreateDirectory(bPl);
+
+            File.WriteAllText(Path.Combine(projectARoot, "project.json"), """{ "name": "ProjectA", "slug": "a" }""");
+            File.WriteAllText(Path.Combine(projectBRoot, "project.json"), """{ "name": "ProjectB", "slug": "b" }""");
+
+            File.WriteAllText(Path.Combine(aEn, "index.md"), "---\ntitle: A EN\n---\n\nA EN");
+            File.WriteAllText(Path.Combine(aPl, "index.md"), "---\ntitle: A PL\n---\n\nA PL");
+            File.WriteAllText(Path.Combine(bEn, "index.md"), "---\ntitle: B EN\n---\n\nB EN");
+            File.WriteAllText(Path.Combine(bPl, "index.md"), "---\ntitle: B PL\n---\n\nB PL");
+
+            var themeRoot = Path.Combine(root, "themes", "localization-project-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "docs.html"),
+                """
+                <!doctype html>
+                <html>
+                <body>
+                  {{ for lang in languages }}<a class="lang" data-code="{{ lang.code }}" href="{{ lang.url }}">{{ lang.label }}</a>{{ end }}
+                  {{ content }}
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "localization-project-test",
+                  "engine": "scriban",
+                  "defaultLayout": "docs"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Localization Project Scope Test",
+                BaseUrl = "https://example.test",
+                ProjectsRoot = "projects",
+                DefaultTheme = "localization-project-test",
+                ThemesRoot = "themes",
+                TrailingSlash = TrailingSlashMode.Always,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "en",
+                    PrefixDefaultLanguage = false,
+                    DetectFromPath = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Label = "English", Default = true },
+                        new LanguageSpec { Code = "pl", Label = "Polski" }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "projects/*/content/docs",
+                        Output = "/{project}/docs",
+                        DefaultLayout = "docs"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var projectAPlHtml = File.ReadAllText(Path.Combine(result.OutputPath, "pl", "a", "docs", "index.html"));
+            Assert.Contains("data-code=\"en\" href=\"/a/docs/\"", projectAPlHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("data-code=\"en\" href=\"/b/docs/\"", projectAPlHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_FlagsMissingRequiredNavLinks()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-" + Guid.NewGuid().ToString("N"));

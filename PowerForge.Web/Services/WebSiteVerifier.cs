@@ -36,7 +36,7 @@ public static class WebSiteVerifier
 
         var routes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var collectionRoutes = new Dictionary<string, List<CollectionRoute>>(StringComparer.OrdinalIgnoreCase);
-        var taxonomyTerms = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var taxonomyTermsByLanguage = new Dictionary<string, Dictionary<string, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var usedTaxonomyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var collection in spec.Collections)
         {
@@ -56,7 +56,6 @@ public static class WebSiteVerifier
 
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
-                CollectTaxonomyTerms(spec.Taxonomies, matter, taxonomyTerms, usedTaxonomyNames);
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(body) ?? string.Empty;
                 if (string.IsNullOrWhiteSpace(title))
                 {
@@ -68,6 +67,7 @@ public static class WebSiteVerifier
                 var relativePath = ResolveRelativePath(collectionRoot, file);
                 var resolvedLanguage = ResolveItemLanguage(spec, localization, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
                 var relativeDir = localizedRelativeDir;
+                CollectTaxonomyTerms(spec.Taxonomies, matter, resolvedLanguage, taxonomyTermsByLanguage, usedTaxonomyNames);
                 var isSectionIndex = IsSectionIndex(file);
                 var isBundleIndex = IsLeafBundleIndex(file);
                 var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
@@ -101,7 +101,7 @@ public static class WebSiteVerifier
             }
         }
 
-        AddSyntheticTaxonomyRoutes(spec, localization, routes, taxonomyTerms, warnings);
+        AddSyntheticTaxonomyRoutes(spec, localization, routes, taxonomyTermsByLanguage, warnings);
 
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
@@ -974,25 +974,25 @@ public static class WebSiteVerifier
     private static void CollectTaxonomyTerms(
         TaxonomySpec[]? taxonomies,
         FrontMatter? matter,
-        Dictionary<string, HashSet<string>> taxonomyTerms,
+        string language,
+        Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
         HashSet<string> usedTaxonomyNames)
     {
         if (matter is null)
             return;
 
+        var normalizedLanguage = NormalizeLanguageToken(language);
+        if (string.IsNullOrWhiteSpace(normalizedLanguage))
+            normalizedLanguage = "en";
+
         if (matter.Tags is { Length: > 0 })
         {
             usedTaxonomyNames.Add("tags");
-            if (!taxonomyTerms.TryGetValue("tags", out var tags))
-            {
-                tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                taxonomyTerms["tags"] = tags;
-            }
 
             foreach (var value in matter.Tags)
             {
                 if (!string.IsNullOrWhiteSpace(value))
-                    tags.Add(value.Trim());
+                    RecordTaxonomyTerm(taxonomyTermsByLanguage, "tags", normalizedLanguage, value.Trim());
             }
         }
 
@@ -1002,14 +1002,8 @@ public static class WebSiteVerifier
                 TryGetMetaValues(categoriesValue, out var categories))
             {
                 usedTaxonomyNames.Add("categories");
-                if (!taxonomyTerms.TryGetValue("categories", out var categoryTerms))
-                {
-                    categoryTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    taxonomyTerms["categories"] = categoryTerms;
-                }
-
                 foreach (var value in categories)
-                    categoryTerms.Add(value);
+                    RecordTaxonomyTerm(taxonomyTermsByLanguage, "categories", normalizedLanguage, value);
             }
         }
 
@@ -1025,15 +1019,34 @@ public static class WebSiteVerifier
                 continue;
 
             usedTaxonomyNames.Add(taxonomy.Name);
-            if (!taxonomyTerms.TryGetValue(taxonomy.Name, out var terms))
-            {
-                terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                taxonomyTerms[taxonomy.Name] = terms;
-            }
 
             foreach (var value in values)
-                terms.Add(value);
+                RecordTaxonomyTerm(taxonomyTermsByLanguage, taxonomy.Name, normalizedLanguage, value);
         }
+    }
+
+    private static void RecordTaxonomyTerm(
+        Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
+        string taxonomyName,
+        string language,
+        string term)
+    {
+        if (string.IsNullOrWhiteSpace(taxonomyName) || string.IsNullOrWhiteSpace(term))
+            return;
+
+        if (!taxonomyTermsByLanguage.TryGetValue(taxonomyName, out var termsByLanguage))
+        {
+            termsByLanguage = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+            taxonomyTermsByLanguage[taxonomyName] = termsByLanguage;
+        }
+
+        if (!termsByLanguage.TryGetValue(language, out var terms))
+        {
+            terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            termsByLanguage[language] = terms;
+        }
+
+        terms.Add(term);
     }
 
     private static bool TryGetMetaValues(object? value, out string[] values)
@@ -1072,7 +1085,7 @@ public static class WebSiteVerifier
         SiteSpec spec,
         ResolvedLocalizationConfig localization,
         Dictionary<string, string> routes,
-        Dictionary<string, HashSet<string>> taxonomyTerms,
+        Dictionary<string, Dictionary<string, HashSet<string>>> taxonomyTermsByLanguage,
         List<string> warnings)
     {
         if (spec.Taxonomies is null || spec.Taxonomies.Length == 0)
@@ -1100,7 +1113,9 @@ public static class WebSiteVerifier
                     routes[listRoute] = $"[taxonomy:{taxonomy.Name}:{language}]";
                 }
 
-                if (!taxonomyTerms.TryGetValue(taxonomy.Name, out var terms) || terms.Count == 0)
+                if (!taxonomyTermsByLanguage.TryGetValue(taxonomy.Name, out var termsByLanguage) ||
+                    !termsByLanguage.TryGetValue(language, out var terms) ||
+                    terms.Count == 0)
                     continue;
 
                 foreach (var term in terms.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))

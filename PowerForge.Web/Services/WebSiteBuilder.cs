@@ -3183,6 +3183,7 @@ public static class WebSiteBuilder
         {
             var translated = allItems
                 .Where(i => !i.Draft)
+                .Where(i => string.Equals(i.ProjectSlug ?? string.Empty, page.ProjectSlug ?? string.Empty, StringComparison.OrdinalIgnoreCase))
                 .Where(i => !string.IsNullOrWhiteSpace(i.TranslationKey))
                 .FirstOrDefault(i =>
                     i.TranslationKey!.Equals(page.TranslationKey, StringComparison.OrdinalIgnoreCase) &&
