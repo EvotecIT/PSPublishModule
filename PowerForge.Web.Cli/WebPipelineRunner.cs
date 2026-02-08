@@ -1324,9 +1324,12 @@ internal static class WebPipelineRunner
     private static string BuildAuditFailureSummary(WebAuditResult result, int previewCount)
     {
         var safePreviewCount = Math.Clamp(previewCount, 0, 50);
+        var headline = BuildAuditFailureHeadline(result);
         var parts = new List<string>
         {
-            $"Audit failed ({result.Errors.Length} errors)"
+            string.IsNullOrWhiteSpace(headline)
+                ? $"Audit failed ({result.Errors.Length} errors)"
+                : $"Audit failed ({result.Errors.Length} errors): {TruncateForLog(headline, 180)}"
         };
 
         if (!string.IsNullOrWhiteSpace(result.SummaryPath))
@@ -1390,6 +1393,30 @@ internal static class WebPipelineRunner
         }
 
         return string.Join(", ", parts);
+    }
+
+    private static string? BuildAuditFailureHeadline(WebAuditResult result)
+    {
+        // Prefer a non-gate error issue because it's usually the root cause (vs. "gate failed").
+        var issue = result.Issues
+            .FirstOrDefault(static i =>
+                string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase) &&
+                !IsGateIssue(i) &&
+                !string.IsNullOrWhiteSpace(i.Message));
+        if (issue is not null)
+            return FormatIssueForLog(issue);
+
+        // Fall back to any error string.
+        var error = result.Errors.FirstOrDefault(static e => !string.IsNullOrWhiteSpace(e));
+        if (!string.IsNullOrWhiteSpace(error))
+            return error;
+
+        // Last resort: any issue message.
+        var any = result.Issues.FirstOrDefault(static i => !string.IsNullOrWhiteSpace(i.Message));
+        if (any is not null)
+            return FormatIssueForLog(any);
+
+        return null;
     }
 
     private static bool IsGateIssue(WebAuditIssue issue)
