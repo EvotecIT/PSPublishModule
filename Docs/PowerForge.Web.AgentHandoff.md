@@ -47,6 +47,9 @@ Key doc: `Docs\PowerForge.Web.ApiDocs.md`.
 
 - Verify includes: navigation lint, theme contract checks, not-found checks, markdown hygiene warnings.
 - There is a markdown hygiene fixer step (`markdown-fix`) (dry-run and apply).
+- Verify supports baselines to keep CI stable while fixing legacy warnings:
+  - `powerforge-web verify --baseline-generate` writes `./.powerforge/verify-baseline.json` by default
+  - `--fail-on-new` / `failOnNewWarnings` fails only on newly introduced verify warnings
 
 ### Audit artifacts path bug (fixed upstream)
 
@@ -121,4 +124,4 @@ From a website repo:
 2. Improve audit failure output in `PowerForge.Web.Cli` (print top errors + artifact paths).
 3. Add docs/examples for multi-product IA using `Navigation.Profiles` + `Regions` (goal: help Claude/agents create unique sites).
 4. Fix/standardize API docs source links for monorepo/subfolder repos (IntelligenceX/CodeGlyphX).
-
+5. Add output budgets (example: `audit.maxTotalFiles`) when site outputs start ballooning (keeps surprises down across sites).
