@@ -120,6 +120,10 @@ Runs build/verify/audit as one health-check step.
 Notes:
 - Supports the same strict verify flags as `verify`.
 - Supports `suppressWarnings` to filter verify warnings before policy evaluation.
+- Supports verify baselines (prefix `verify*` to avoid confusion with audit baselines):
+  - `verifyBaseline`: path to a verify baseline file
+  - `verifyBaselineGenerate` / `verifyBaselineUpdate`
+  - `verifyFailOnNewWarnings`: fail only when verify emits new warnings vs baseline
 - Supports audit controls (`requiredRoutes`, `navRequiredLinks`, `checkHeadingOrder`, `checkLinkPurpose`, etc.).
 
 #### apidocs

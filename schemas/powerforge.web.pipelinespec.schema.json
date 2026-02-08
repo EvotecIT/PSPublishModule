@@ -172,7 +172,16 @@
         "checkRenderBlocking": { "type": "boolean" },
         "maxHeadBlockingResources": { "type": "integer", "minimum": 0 },
         "max-head-blocking": { "type": "integer", "minimum": 0 },
-        "errorPreviewCount": { "type": "integer", "minimum": 0 }
+        "errorPreviewCount": { "type": "integer", "minimum": 0 },
+
+        "verifyBaseline": { "type": "string", "description": "Path to a verify baseline file used by the embedded verify run. Must resolve under site root." },
+        "verifyBaselinePath": { "type": "string", "description": "Alias for verifyBaseline." },
+        "verifyBaselineGenerate": { "type": "boolean", "description": "When true, write the verify baseline file from current verify warnings." },
+        "verifyBaselineUpdate": { "type": "boolean", "description": "When true, merge current verify warnings into an existing baseline file." },
+        "verifyFailOnNewWarnings": { "type": "boolean", "description": "When true, fail only when verify emits warnings not present in baseline." },
+        "verifyFailOnNew": { "type": "boolean", "description": "Alias for verifyFailOnNewWarnings." },
+        "verifyWarningPreviewCount": { "type": "integer", "minimum": 0, "description": "How many verify warnings to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." },
+        "verifyErrorPreviewCount": { "type": "integer", "minimum": 0, "description": "How many verify errors to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." }
       },
       "required": ["task", "config"]
     },

@@ -51,24 +51,74 @@ internal static partial class WebPipelineRunner
             var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
             var isCi = ConsoleEnvironment.IsCI;
             var ciStrictDefaults = isCi && !isDev;
+            var verifyWarningPreviewCount = GetInt(step, "verifyWarningPreviewCount") ?? GetInt(step, "verify-warning-preview") ?? (isDev ? 2 : 5);
+            var verifyErrorPreviewCount = GetInt(step, "verifyErrorPreviewCount") ?? GetInt(step, "verify-error-preview") ?? (isDev ? 2 : 5);
 
             var suppressWarnings = GetArrayOfStrings(step, "suppressWarnings") ?? spec.Verify?.SuppressWarnings;
             var failOnWarnings = GetBool(step, "failOnWarnings") ?? spec.Verify?.FailOnWarnings ?? false;
             var failOnNavLint = GetBool(step, "failOnNavLint") ?? GetBool(step, "failOnNavLintWarnings") ?? spec.Verify?.FailOnNavLint ?? ciStrictDefaults;
             var failOnThemeContract = GetBool(step, "failOnThemeContract") ?? spec.Verify?.FailOnThemeContract ?? ciStrictDefaults;
+
+            var verifyBaselineGenerate = GetBool(step, "verifyBaselineGenerate") ?? false;
+            var verifyBaselineUpdate = GetBool(step, "verifyBaselineUpdate") ?? false;
+            var verifyBaselinePath = GetString(step, "verifyBaseline") ?? GetString(step, "verifyBaselinePath");
+            var verifyFailOnNewWarnings = GetBool(step, "verifyFailOnNewWarnings") ?? GetBool(step, "verifyFailOnNew") ?? false;
+            if ((verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings) && string.IsNullOrWhiteSpace(verifyBaselinePath))
+                verifyBaselinePath = "verify-baseline.json";
+
+            var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
+            var baselineKeys = (!string.IsNullOrWhiteSpace(verifyBaselinePath) || verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings)
+                ? WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, verifyBaselinePath)
+                : Array.Empty<string>();
+            var baselineSet = baselineKeys.Length > 0 ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
+            var newWarnings = baselineSet is null
+                ? Array.Empty<string>()
+                : filteredWarnings.Where(w => !string.IsNullOrWhiteSpace(w) && !baselineSet.Contains(w.Trim())).ToArray();
+
             var (verifySuccess, policyFailures) = WebVerifyPolicy.EvaluateOutcome(
                 verify,
                 failOnWarnings,
                 failOnNavLint,
                 failOnThemeContract,
                 suppressWarnings);
+
             verifyPolicyFailures = policyFailures;
+
+            if (verifyFailOnNewWarnings)
+            {
+                if (baselineKeys.Length == 0)
+                {
+                    verifySuccess = false;
+                    verifyPolicyFailures = verifyPolicyFailures
+                        .Concat(new[] { "verifyFailOnNewWarnings enabled but verify baseline could not be loaded (missing/empty/bad path). Generate one with verifyBaselineGenerate." })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+                else if (newWarnings.Length > 0)
+                {
+                    verifySuccess = false;
+                    verifyPolicyFailures = verifyPolicyFailures
+                        .Concat(new[] { $"verifyFailOnNewWarnings enabled and verify produced {newWarnings.Length} new warning(s)." })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+            }
+
+            if (verifyBaselineGenerate || verifyBaselineUpdate)
+                WebVerifyBaselineStore.Write(plan.RootPath, verifyBaselinePath, filteredWarnings, verifyBaselineUpdate, logger: null);
+
             if (!verifySuccess)
             {
-                var firstFailure = policyFailures.Length > 0
-                    ? policyFailures[0]
-                    : "Web verify failed.";
-                throw new InvalidOperationException(firstFailure);
+                var message = BuildVerifyFailureSummary(
+                    verify,
+                    filteredWarnings,
+                    verifyPolicyFailures,
+                    verifyBaselinePath,
+                    baselineKeys.Length,
+                    newWarnings,
+                    verifyWarningPreviewCount,
+                    verifyErrorPreviewCount);
+                throw new InvalidOperationException(message);
             }
         }
 
