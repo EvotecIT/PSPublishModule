@@ -75,6 +75,128 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_WarnsWhenNavJsonMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = Path.Combine(root, "missing-site.json")
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, w => w.Contains("[PFWEB.APIDOCS.NAV]", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("nav json not found", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenCustomFragmentsDoNotContainNavPlaceholders()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-placeholders-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var siteJsonPath = Path.Combine(root, "site.json");
+        File.WriteAllText(siteJsonPath,
+            """
+            {
+              "Name": "TestSite",
+              "Navigation": {
+                "Menus": [
+                  { "Name": "main", "Items": [ { "Title": "Docs", "Url": "/docs/" } ] }
+                ]
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var headerPath = Path.Combine(root, "api-header.html");
+        File.WriteAllText(headerPath, "<header><span>Header</span></header>");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = siteJsonPath,
+            HeaderHtmlPath = headerPath
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, w => w.Contains("[PFWEB.APIDOCS.NAV]", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("placeholders", StringComparison.OrdinalIgnoreCase));
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+            Assert.Contains("<span>Header</span>", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_UsesNavigationProfiles_WhenNavJsonIsSiteJson()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-navprofile-" + Guid.NewGuid().ToString("N"));
