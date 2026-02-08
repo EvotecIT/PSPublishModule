@@ -208,6 +208,9 @@ internal static partial class WebCliCommandHandlers
         var verifyBaselineUpdate = HasOption(subArgs, "--verify-baseline-update");
         var verifyBaselinePath = TryGetOptionValue(subArgs, "--verify-baseline");
         var verifyFailOnNewWarnings = HasOption(subArgs, "--verify-fail-on-new") || HasOption(subArgs, "--verify-fail-on-new-warnings");
+        var verifyWarningSummary = HasOption(subArgs, "--verify-warning-summary") || HasOption(subArgs, "--verify-warning-buckets");
+        var verifyWarningSummaryTopText = TryGetOptionValue(subArgs, "--verify-warning-summary-top") ?? TryGetOptionValue(subArgs, "--verify-warning-buckets-top");
+        var verifyWarningSummaryTop = ParseIntOption(verifyWarningSummaryTopText, 10);
         var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
         var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
         var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
@@ -367,6 +370,8 @@ internal static partial class WebCliCommandHandlers
                 if (!string.IsNullOrWhiteSpace(verifyBaselineWrittenPath))
                     logger.Info($"Verify baseline written: {verifyBaselineWrittenPath}");
             }
+            if (verifyWarningSummary && verify.Warnings.Length > 0)
+                logger.Info(WebWarningBucketer.BuildTopBucketsSummary(verify.Warnings, verifyWarningSummaryTop));
         }
         if (audit is not null)
         {

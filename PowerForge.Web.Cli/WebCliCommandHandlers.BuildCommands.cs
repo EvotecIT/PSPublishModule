@@ -111,6 +111,9 @@ internal static partial class WebCliCommandHandlers
         var errorPreviewText = TryGetOptionValue(subArgs, "--error-preview") ?? TryGetOptionValue(subArgs, "--error-preview-count");
         var warningPreviewCount = ParseIntOption(warningPreviewText, 0);
         var errorPreviewCount = ParseIntOption(errorPreviewText, 0);
+        var warningSummary = HasOption(subArgs, "--warning-summary") || HasOption(subArgs, "--warning-buckets");
+        var warningSummaryTopText = TryGetOptionValue(subArgs, "--warning-summary-top") ?? TryGetOptionValue(subArgs, "--warning-buckets-top");
+        var warningSummaryTop = ParseIntOption(warningSummaryTopText, 10);
         var baselineGenerate = HasOption(subArgs, "--baseline-generate");
         var baselineUpdate = HasOption(subArgs, "--baseline-update");
         var baselinePathValue = TryGetOptionValue(subArgs, "--baseline");
@@ -240,6 +243,9 @@ internal static partial class WebCliCommandHandlers
             if (!string.IsNullOrWhiteSpace(writtenBaselinePath))
                 logger.Info($"Verify baseline written: {writtenBaselinePath}");
         }
+
+        if (warningSummary && filteredWarnings.Length > 0)
+            logger.Info(WebWarningBucketer.BuildTopBucketsSummary(filteredWarnings, warningSummaryTop));
 
         logger.Info($"Verify: {verify.Errors.Length} errors, {filteredWarnings.Length} warnings");
         return verifySuccess ? 0 : 1;
