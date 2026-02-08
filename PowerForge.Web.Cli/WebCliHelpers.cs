@@ -317,6 +317,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Fix `verify` errors first; they indicate broken site configuration or portability contracts.");
             if (ContainsText(verify.Warnings, "Theme contract:"))
                 recommendations.Add("Resolve theme contract warnings (schemaVersion, engine, manifest path, and portable asset paths) to keep themes reusable across repos.");
+            if (ContainsText(verify.Warnings, "Theme CSS contract:"))
+                recommendations.Add("Resolve theme CSS contract warnings (missing selectors / missing CSS entrypoints) to prevent visual regressions across sites.");
             if (ContainsText(verify.Warnings, "schemaVersion") || ContainsText(verify.Warnings, "contractVersion"))
                 recommendations.Add("Standardize all themes on `schemaVersion: 2` and keep only one version field in theme manifests.");
             if (ContainsText(verify.Warnings, "theme manifest"))
