@@ -61,6 +61,22 @@ public static partial class WebSiteVerifier
             }
         }
 
+        // Best-practice nudge: for high-drift features, encourage explicit contracts in schemaVersion 2 themes.
+        if (schemaVersion >= 2)
+        {
+            if (enabled.Contains("apidocs") && !HasFeatureContract(manifest, "apidocs"))
+            {
+                warnings.Add($"Best practice: site enables 'apiDocs' but theme '{manifest.Name}' does not define featureContracts.apiDocs. " +
+                             "Add requiredPartials (api-header/api-footer) and requiredCssSelectors to prevent regressions across sites.");
+            }
+
+            if (enabled.Contains("docs") && !HasFeatureContract(manifest, "docs"))
+            {
+                warnings.Add($"Best practice: site enables 'docs' but theme '{manifest.Name}' does not define featureContracts.docs. " +
+                             "Add requiredLayouts/requiredSlots to make docs support deterministic across themes.");
+            }
+        }
+
         ValidateThemeFeatureContracts(spec, plan, themeRoot, loader, manifest, enabled, warnings);
 
         if (enabled.Contains("apidocs"))
@@ -83,6 +99,27 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Theme contract: site uses feature 'docs' but theme '{manifest.Name}' does not provide a 'docs' layout.");
             }
         }
+    }
+
+    private static bool HasFeatureContract(ThemeManifest manifest, string feature)
+    {
+        if (manifest is null || string.IsNullOrWhiteSpace(feature))
+            return false;
+        if (manifest.FeatureContracts is null || manifest.FeatureContracts.Count == 0)
+            return false;
+
+        var key = NormalizeFeatureName(feature);
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        foreach (var entry in manifest.FeatureContracts)
+        {
+            var candidate = NormalizeFeatureName(entry.Key);
+            if (string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static void ValidateThemeFeatureContracts(

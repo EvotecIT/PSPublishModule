@@ -144,6 +144,9 @@ public static partial class WebSiteVerifier
         if (trimmed.StartsWith("Theme CSS contract:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.THEME.CSS.CONTRACT] " + warning;
 
+        if (trimmed.StartsWith("Best practice:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.BESTPRACTICE] " + warning;
+
         if (trimmed.StartsWith("Theme contract:", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("Theme '", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("theme manifest", StringComparison.OrdinalIgnoreCase))
