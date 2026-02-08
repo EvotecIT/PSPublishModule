@@ -74,7 +74,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--clean]");
         Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
         Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
-        Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
+        Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--watch] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
         Console.WriteLine("  powerforge-web llms --site-root <dir> [--project <path>] [--api-index <path>] [--api-base /api]");
         Console.WriteLine("                     [--name <Name>] [--package <Id>] [--version <X.Y.Z>] [--quickstart <file>]");
         Console.WriteLine("                     [--overview <text>] [--license <text>] [--targets <text>] [--extra <file>]");

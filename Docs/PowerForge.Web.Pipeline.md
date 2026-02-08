@@ -34,6 +34,7 @@ Minimal pipeline:
 - `--mode <name>`: sets a pipeline mode label used for step filtering (see "Step modes" below).
 - `--only <task[,task...]>`: run only the specified tasks.
 - `--skip <task[,task...]>`: skip the specified tasks.
+- `--watch`: rerun the pipeline when files change (watches the pipeline folder, ignores output folders).
 
 ### Step modes
 

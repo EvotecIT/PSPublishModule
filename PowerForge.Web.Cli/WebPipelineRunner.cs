@@ -14,6 +14,7 @@ internal static class WebPipelineRunner
 {
     private const long MaxStateFileSizeBytes = 10 * 1024 * 1024;
     private const int MaxStampFileCount = 1000;
+    private static readonly TimeSpan DefaultWatchDebounce = TimeSpan.FromMilliseconds(250);
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -1167,6 +1168,276 @@ internal static class WebPipelineRunner
             result.ProfilePath = profilePath;
         }
         return result;
+    }
+
+    internal static int WatchPipeline(
+        string pipelinePath,
+        WebConsoleLogger logger,
+        bool forceProfile = false,
+        bool fast = false,
+        string? mode = null,
+        string[]? onlyTasks = null,
+        string[]? skipTasks = null)
+    {
+        var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        logger.Info("Watch mode enabled (Ctrl+C to stop).");
+        var exitCode = 0;
+        WatchPipelineLoop(
+            pipelinePath,
+            logger,
+            cts.Token,
+            forceProfile,
+            fast,
+            mode,
+            onlyTasks,
+            skipTasks,
+            onRunCompleted: res => exitCode = res.Success ? 0 : 1);
+        return exitCode;
+    }
+
+    private static void WatchPipelineLoop(
+        string pipelinePath,
+        WebConsoleLogger logger,
+        CancellationToken token,
+        bool forceProfile,
+        bool fast,
+        string? mode,
+        string[]? onlyTasks,
+        string[]? skipTasks,
+        Action<WebPipelineResult>? onRunCompleted = null)
+    {
+        var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
+        var ignoreRoots = CollectWatchIgnoreRoots(pipelinePath, baseDir);
+        var ignoreRootStrings = ignoreRoots.Select(p => p.Replace('\\', '/')).ToArray();
+
+        var gate = new object();
+        var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var lastEventUtc = DateTime.UtcNow;
+        using var signal = new ManualResetEventSlim(false);
+
+        void OnFsEvent(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            var fullPath = SafeGetFullPath(path);
+            if (string.IsNullOrWhiteSpace(fullPath))
+                return;
+
+            if (IsUnderAnyRoot(fullPath, ignoreRoots))
+                return;
+
+            // Drop noisy temp/editor artifacts.
+            var name = Path.GetFileName(fullPath);
+            if (string.IsNullOrWhiteSpace(name))
+                return;
+            if (name.StartsWith("~", StringComparison.Ordinal) ||
+                name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+                name.EndsWith(".swp", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, ".DS_Store", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            lock (gate)
+            {
+                pending.Add(fullPath);
+                lastEventUtc = DateTime.UtcNow;
+                signal.Set();
+            }
+        }
+
+        using var watcher = new FileSystemWatcher(baseDir)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.CreationTime
+        };
+        watcher.Changed += (_, e) => OnFsEvent(e.FullPath);
+        watcher.Created += (_, e) => OnFsEvent(e.FullPath);
+        watcher.Deleted += (_, e) => OnFsEvent(e.FullPath);
+        watcher.Renamed += (_, e) =>
+        {
+            OnFsEvent(e.OldFullPath);
+            OnFsEvent(e.FullPath);
+        };
+        watcher.Error += (_, e) =>
+        {
+            // FileSystemWatcher can overflow its internal buffer on large change bursts.
+            // In that case, we still trigger a rebuild to recover.
+            logger.Warn($"watcher: {e.GetException()?.Message ?? "unknown error"}");
+            lock (gate)
+            {
+                lastEventUtc = DateTime.UtcNow;
+                signal.Set();
+            }
+        };
+        watcher.EnableRaisingEvents = true;
+
+        // Initial run.
+        RunOnce();
+
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                signal.Wait(token);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            // Debounce: wait until the file system quiets down a bit.
+            while (!token.IsCancellationRequested)
+            {
+                DateTime last;
+                lock (gate) last = lastEventUtc;
+                if (DateTime.UtcNow - last >= DefaultWatchDebounce)
+                    break;
+
+                try
+                {
+                    Task.Delay(50, token).Wait(token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+
+            if (token.IsCancellationRequested)
+                break;
+
+            string[] changed;
+            lock (gate)
+            {
+                changed = pending.Take(15).ToArray();
+                pending.Clear();
+                signal.Reset();
+            }
+
+            var changedPreview = changed.Length == 0 ? "changes detected" : string.Join(", ", changed.Select(Path.GetFileName).Distinct().Take(5));
+            logger.Info($"watch: {changedPreview} -> rebuilding...");
+            RunOnce();
+        }
+
+        logger.Info("Watch stopped.");
+        return;
+
+        void RunOnce()
+        {
+            var result = RunPipeline(
+                pipelinePath,
+                logger,
+                forceProfile: forceProfile,
+                fast: fast,
+                mode: mode,
+                onlyTasks: onlyTasks,
+                skipTasks: skipTasks);
+
+            foreach (var step in result.Steps)
+            {
+                if (step.Success)
+                    logger.Success($"{step.Task}: {step.Message}");
+                else
+                    logger.Error($"{step.Task}: {step.Message}");
+            }
+
+            logger.Info($"Pipeline duration: {result.DurationMs} ms");
+            if (!string.IsNullOrWhiteSpace(result.CachePath))
+                logger.Info($"Pipeline cache: {result.CachePath}");
+            if (!string.IsNullOrWhiteSpace(result.ProfilePath))
+                logger.Info($"Pipeline profile: {result.ProfilePath}");
+
+            onRunCompleted?.Invoke(result);
+        }
+    }
+
+    private static string? SafeGetFullPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsUnderAnyRoot(string path, IReadOnlyList<string> roots)
+    {
+        if (roots.Count == 0) return false;
+
+        foreach (var root in roots)
+        {
+            if (string.IsNullOrWhiteSpace(root)) continue;
+            if (path.StartsWith(root, FileSystemPathComparison))
+                return true;
+        }
+        return false;
+    }
+
+    private static List<string> CollectWatchIgnoreRoots(string pipelinePath, string baseDir)
+    {
+        var ignore = new List<string>();
+
+        void AddRoot(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+            var full = SafeGetFullPath(value);
+            if (string.IsNullOrWhiteSpace(full))
+                return;
+            if (full.StartsWith(SafeGetFullPath(baseDir) ?? baseDir, FileSystemPathComparison) == false)
+                return;
+            if (!full.EndsWith(Path.DirectorySeparatorChar))
+                full += Path.DirectorySeparatorChar;
+            ignore.Add(full);
+        }
+
+        // Common noisy roots.
+        AddRoot(Path.Combine(baseDir, ".git"));
+        AddRoot(Path.Combine(baseDir, ".powerforge"));
+        AddRoot(Path.Combine(baseDir, "bin"));
+        AddRoot(Path.Combine(baseDir, "obj"));
+
+        // Output roots inferred from pipeline steps (best-effort).
+        try
+        {
+            var json = File.ReadAllText(pipelinePath);
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+            var root = doc.RootElement;
+            if (root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var step in steps.EnumerateArray())
+                {
+                    foreach (var key in new[] { "out", "output", "siteRoot", "site-root", "destination", "dest", "htmlOutput", "htmlOut" })
+                    {
+                        var value = GetString(step, key);
+                        if (string.IsNullOrWhiteSpace(value))
+                            continue;
+                        var resolved = ResolvePath(baseDir, value);
+                        if (string.IsNullOrWhiteSpace(resolved))
+                            continue;
+                        AddRoot(resolved);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return ignore
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(v => v.Length) // more specific first
+            .ToList();
     }
 
     private static string? GetSkipReason(
