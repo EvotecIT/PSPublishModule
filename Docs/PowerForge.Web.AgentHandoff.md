@@ -1,0 +1,124 @@
+# PowerForge.Web Agent Handoff (Websites Engine)
+
+Last updated: 2026-02-08
+
+This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
+Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX.Website**, **IntelligenceX Website**.
+
+## Repos / Paths
+
+- PowerForge engine (source): `C:\Support\GitHub\PSPublishModule`
+  - Web CLI: `PowerForge.Web.Cli`
+  - Web engine: `PowerForge.Web`
+  - Docs: `Docs\PowerForge.Web.*.md`
+- CodeGlyphX repo (website + library): `C:\Support\GitHub\CodeMatrix` (remote: `EvotecIT/CodeGlyphX`)
+  - Website: `Website\` or `CodeGlyphX.Website\` (depends on branch/history)
+- IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
+- HtmlForgeX website repo: `C:\Support\GitHub\HtmlForgeX.Website`
+
+## Current Capabilities (What Exists)
+
+### Pipeline / build UX
+
+- CLI supports a pipeline model with steps like `build`, `verify`, `apidocs`, `llms`, `sitemap`, `optimize`, `audit`.
+- There is support for running a lighter dev loop by skipping heavy steps via pipeline configuration (for example `skipModes: ["dev"]` on steps).
+- Web pipeline supports watch mode (`--watch`) to re-run a subset of steps when inputs change.
+
+### Navigation model (important for multi-product sites)
+
+PowerForge navigation is more capable than most themes currently render:
+
+- Nested menus: `Navigation.Menus[].Items[].Items[]...`
+- Mega menus: menu items can define `Sections`/`Columns` (see `Docs\PowerForge.Web.ContentSpec.md`).
+- Regions: `Navigation.Regions` provides named slots like `header.left`, `header.right`, `mobile.drawer`.
+- Profiles: `Navigation.Profiles` allows route/collection/layout/project-scoped navigation variants (critical for multi-product sites).
+- Auto menus: `Navigation.Auto[]` can generate menus from folder structure with `MaxDepth`.
+
+Key doc: `Docs\PowerForge.Web.ContentSpec.md` (`## Navigation` section).
+
+### API docs
+
+- API docs generator supports optional source links:
+  - `sourceRoot` + `sourceUrl` pattern (requires PDB/source info).
+  - Broken "Edit on GitHub" links typically mean `sourceRoot`/`sourceUrl` aren't aligned with repo layout (monorepo/subfolder cases).
+Key doc: `Docs\PowerForge.Web.ApiDocs.md`.
+
+### Verify / lint
+
+- Verify includes: navigation lint, theme contract checks, not-found checks, markdown hygiene warnings.
+- There is a markdown hygiene fixer step (`markdown-fix`) (dry-run and apply).
+
+### Audit artifacts path bug (fixed upstream)
+
+Symptom (HtmlForgeX.Website):
+`audit: Path must resolve under site root: C:\Support\GitHub\HtmlForgeX.Website\.powerforge\audit.sarif`
+
+Fix:
+- PSPublishModule PR #89 merged to `origin/main` (commit `60bf13a`).
+- It changes default fallback paths for audit artifacts to **relative** paths:
+  - `.powerforge/audit-summary.json`
+  - `.powerforge/audit.sarif.json`
+
+Action:
+- Ensure the website build uses a PSPublishModule checkout that includes that commit (or newer).
+
+## Known Gaps / Pain Points (As Observed)
+
+### 1) Theme rendering makes everything feel the same
+
+Even with `Profiles`/`Regions`/mega-menu support, themes tend to render:
+- flat top nav
+- flat left sidebar
+- similar footer
+
+This is primarily a theme-side limitation, not an engine limitation.
+
+### 2) Audit/verify failure output is hard to diagnose
+
+Pipeline currently summarizes failures, but often does not surface enough context (which file/URL, which rule) without opening artifacts.
+
+Target improvement:
+- On `audit` failure: print top N errors (URL/path + short message), and print the exact resolved artifact paths.
+
+### 3) Website build performance in dev loops
+
+`optimize` and `audit` are expensive on large sites.
+
+Current recommended approach:
+- In `pipeline.json`, mark heavy steps with `skipModes: ["dev"]` and run `-Dev` / dev mode.
+
+Target improvement:
+- Better incremental caching and a well-defined "dev contract" (what is skipped, what is always run).
+
+### 4) Source links in API pages can be wrong in monorepo/subfolder layouts
+
+Example pattern:
+- repo contains project under a subfolder (e.g. `IntelligenceX/...`)
+- source link generated as if repo root == project root
+
+Target improvement:
+- better defaults + docs + explicit config knobs in pipeline/site.json.
+
+### 5) Image optimization
+
+Optimize currently focuses on HTML/CSS/JS + critical CSS; it does not (yet) resize/recompress images.
+
+Target improvement:
+- optional pipeline step for image optimization (e.g. Magick.NET) with a report of bytes saved.
+
+## Repro / Commands (Typical)
+
+From a website repo:
+
+- Serve + watch (fast dev loop):
+  - `.\build.ps1 -Serve -Watch -Dev`
+- Full production pipeline:
+  - `.\build.ps1`
+
+## Next Tasks (If You Pick Up Work)
+
+1. HtmlForgeX: confirm audit no longer fails after updating PSPublishModule binaries used by the site.
+2. Improve audit failure output in `PowerForge.Web.Cli` (print top errors + artifact paths).
+3. Add docs/examples for multi-product IA using `Navigation.Profiles` + `Regions` (goal: help Claude/agents create unique sites).
+4. Fix/standardize API docs source links for monorepo/subfolder repos (IntelligenceX/CodeGlyphX).
+
