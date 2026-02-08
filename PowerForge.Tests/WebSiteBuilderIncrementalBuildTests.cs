@@ -68,7 +68,7 @@ public class WebSiteBuilderIncrementalBuildTests
             var plan = WebSitePlanner.Plan(spec, configPath);
 
             var outPath = Path.Combine(root, "_site");
-            WebSiteBuilder.Build(spec, plan, outPath);
+            var build1 = WebSiteBuilder.Build(spec, plan, outPath);
 
             var indexHtml = Path.Combine(outPath, "index.html");
             var planJson = Path.Combine(outPath, "_powerforge", "site-plan.json");
@@ -77,6 +77,7 @@ public class WebSiteBuilderIncrementalBuildTests
             Assert.True(File.Exists(indexHtml));
             Assert.True(File.Exists(planJson));
             Assert.True(File.Exists(themeAsset));
+            Assert.Contains(build1.UpdatedFiles, p => p.Equals("index.html", StringComparison.OrdinalIgnoreCase));
 
             var indexTime = File.GetLastWriteTimeUtc(indexHtml);
             var planTime = File.GetLastWriteTimeUtc(planJson);
@@ -85,11 +86,12 @@ public class WebSiteBuilderIncrementalBuildTests
             Thread.Sleep(1200);
 
             plan = WebSitePlanner.Plan(spec, configPath);
-            WebSiteBuilder.Build(spec, plan, outPath);
+            var build2 = WebSiteBuilder.Build(spec, plan, outPath);
 
             Assert.Equal(indexTime, File.GetLastWriteTimeUtc(indexHtml));
             Assert.Equal(planTime, File.GetLastWriteTimeUtc(planJson));
             Assert.Equal(assetTime, File.GetLastWriteTimeUtc(themeAsset));
+            Assert.Empty(build2.UpdatedFiles);
         }
         finally
         {
@@ -98,4 +100,3 @@ public class WebSiteBuilderIncrementalBuildTests
         }
     }
 }
-
