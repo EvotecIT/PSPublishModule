@@ -213,6 +213,7 @@ public static partial class WebSiteBuilder
 
         if (hasDocs)
         {
+            var hasDocsMenu = menuSpecs.Any(m => string.Equals(m.Name, "docs", StringComparison.OrdinalIgnoreCase));
             AddSurfaceIfMissing(map, new NavigationSurfaceSpec
             {
                 Name = "docs",
@@ -220,7 +221,7 @@ public static partial class WebSiteBuilder
                 Collection = "docs",
                 Layout = "docs",
                 PrimaryMenu = "main",
-                SidebarMenu = "docs"
+                SidebarMenu = hasDocsMenu ? "docs" : null
             });
         }
 
