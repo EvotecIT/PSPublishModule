@@ -78,7 +78,13 @@
         "failOnWarnings": { "type": "boolean" },
         "failOnNavLint": { "type": "boolean" },
         "failOnNavLintWarnings": { "type": "boolean" },
-        "failOnThemeContract": { "type": "boolean" }
+        "failOnThemeContract": { "type": "boolean" },
+        "baseline": { "type": "string", "description": "Path to a verify baseline file (relative to pipeline json unless absolute). Must resolve under site root." },
+        "baselinePath": { "type": "string", "description": "Alias for baseline." },
+        "baselineGenerate": { "type": "boolean", "description": "When true, write the verify baseline file from current warnings." },
+        "baselineUpdate": { "type": "boolean", "description": "When true, merge current warnings into an existing verify baseline file." },
+        "failOnNewWarnings": { "type": "boolean", "description": "When true, fail only when verify emits warnings not present in baseline." },
+        "failOnNew": { "type": "boolean", "description": "Alias for failOnNewWarnings." }
       },
       "required": ["task", "config"]
     },

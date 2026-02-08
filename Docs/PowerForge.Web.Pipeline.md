@@ -81,7 +81,9 @@ Validates content + routing consistency from the site config.
   "config": "./site.json",
   "failOnWarnings": true,
   "failOnNavLint": true,
-  "failOnThemeContract": true
+  "failOnThemeContract": true,
+  "baseline": "./.powerforge/verify-baseline.json",
+  "failOnNewWarnings": true
 }
 ```
 Notes:
@@ -89,6 +91,11 @@ Notes:
 - By default fails only when errors are found.
 - `failOnWarnings`, `failOnNavLint`, and `failOnThemeContract` can enforce stricter quality gates.
 - `suppressWarnings` (array of strings) filters warnings before printing and before policy evaluation (use codes like `PFWEB.NAV.LINT` or `re:...`).
+- Baselines:
+  - `baseline`: path to a baseline file (must resolve under the site root)
+  - `baselineGenerate`: write a baseline from current warnings
+  - `baselineUpdate`: merge current warnings into an existing baseline
+  - `failOnNewWarnings`: fail only when warnings not present in baseline are produced (recommended for CI)
 
 #### doctor
 Runs build/verify/audit as one health-check step.
