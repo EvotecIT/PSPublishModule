@@ -107,6 +107,10 @@ internal static partial class WebCliCommandHandlers
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
         var isCi = ConsoleEnvironment.IsCI;
         var suppressWarnings = spec.Verify?.SuppressWarnings;
+        var warningPreviewText = TryGetOptionValue(subArgs, "--warning-preview") ?? TryGetOptionValue(subArgs, "--warning-preview-count");
+        var errorPreviewText = TryGetOptionValue(subArgs, "--error-preview") ?? TryGetOptionValue(subArgs, "--error-preview-count");
+        var warningPreviewCount = ParseIntOption(warningPreviewText, 0);
+        var errorPreviewCount = ParseIntOption(errorPreviewText, 0);
         var baselineGenerate = HasOption(subArgs, "--baseline-generate");
         var baselineUpdate = HasOption(subArgs, "--baseline-update");
         var baselinePathValue = TryGetOptionValue(subArgs, "--baseline");
@@ -203,13 +207,21 @@ internal static partial class WebCliCommandHandlers
 
         if (filteredWarnings.Length > 0)
         {
-            foreach (var warning in filteredWarnings)
+            var max = warningPreviewCount <= 0 ? filteredWarnings.Length : Math.Max(0, warningPreviewCount);
+            foreach (var warning in filteredWarnings.Take(max))
                 logger.Warn(warning);
+            var remaining = filteredWarnings.Length - max;
+            if (remaining > 0)
+                logger.Info($"Verify warnings: showing {max}/{filteredWarnings.Length} (use --warning-preview 0 to show all).");
         }
         if (verify.Errors.Length > 0)
         {
-            foreach (var error in verify.Errors)
+            var max = errorPreviewCount <= 0 ? verify.Errors.Length : Math.Max(0, errorPreviewCount);
+            foreach (var error in verify.Errors.Take(max))
                 logger.Error(error);
+            var remaining = verify.Errors.Length - max;
+            if (remaining > 0)
+                logger.Info($"Verify errors: showing {max}/{verify.Errors.Length} (use --error-preview 0 to show all).");
         }
         if (verifyPolicyFailures.Length > 0)
         {
@@ -229,6 +241,7 @@ internal static partial class WebCliCommandHandlers
                 logger.Info($"Verify baseline written: {writtenBaselinePath}");
         }
 
+        logger.Info($"Verify: {verify.Errors.Length} errors, {filteredWarnings.Length} warnings");
         return verifySuccess ? 0 : 1;
     }
 

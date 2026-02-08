@@ -204,6 +204,10 @@ internal static partial class WebCliCommandHandlers
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
         var isCi = ConsoleEnvironment.IsCI;
         var suppressWarnings = spec.Verify?.SuppressWarnings;
+        var verifyBaselineGenerate = HasOption(subArgs, "--verify-baseline-generate");
+        var verifyBaselineUpdate = HasOption(subArgs, "--verify-baseline-update");
+        var verifyBaselinePath = TryGetOptionValue(subArgs, "--verify-baseline");
+        var verifyFailOnNewWarnings = HasOption(subArgs, "--verify-fail-on-new") || HasOption(subArgs, "--verify-fail-on-new-warnings");
         var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
         var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
         var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
@@ -234,6 +238,51 @@ internal static partial class WebCliCommandHandlers
                 failOnNavLint,
                 failOnThemeContract,
                 suppressWarnings);
+
+        if ((verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings) && string.IsNullOrWhiteSpace(verifyBaselinePath))
+            verifyBaselinePath = "verify-baseline.json";
+
+        string? verifyBaselineWrittenPath = null;
+        if (verify is not null && !string.IsNullOrWhiteSpace(verifyBaselinePath))
+        {
+            var baselineKeys = WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, verifyBaselinePath);
+            var baselineSet = baselineKeys.Length > 0 ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
+            var newWarnings = baselineSet is null
+                ? Array.Empty<string>()
+                : filteredVerifyWarnings.Where(w => !string.IsNullOrWhiteSpace(w) && !baselineSet.Contains(w.Trim())).ToArray();
+
+            verify.BaselinePath = verifyBaselinePath;
+            verify.BaselineWarningCount = baselineKeys.Length;
+            verify.NewWarnings = newWarnings;
+            verify.NewWarningCount = newWarnings.Length;
+
+            if (verifyFailOnNewWarnings)
+            {
+                if (baselineKeys.Length == 0)
+                {
+                    verifySuccess = false;
+                    verifyPolicyFailures = verifyPolicyFailures
+                        .Concat(new[] { "verify-fail-on-new-warnings enabled but verify baseline could not be loaded (missing/empty/bad path). Generate one with --verify-baseline-generate." })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+                else if (newWarnings.Length > 0)
+                {
+                    verifySuccess = false;
+                    verifyPolicyFailures = verifyPolicyFailures
+                        .Concat(new[] { $"verify-fail-on-new-warnings enabled and verify produced {newWarnings.Length} new warning(s)." })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+            }
+
+            if (verifyBaselineGenerate || verifyBaselineUpdate)
+            {
+                verifyBaselineWrittenPath = WebVerifyBaselineStore.Write(plan.RootPath, verifyBaselinePath, filteredVerifyWarnings, verifyBaselineUpdate, logger);
+                verify.BaselinePath = verifyBaselineWrittenPath;
+            }
+        }
+
         var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs) : null;
         if (verify is not null && filteredVerifyWarnings.Length != verify.Warnings.Length)
         {
@@ -241,7 +290,11 @@ internal static partial class WebCliCommandHandlers
             {
                 Success = verify.Success,
                 Errors = verify.Errors,
-                Warnings = filteredVerifyWarnings
+                Warnings = filteredVerifyWarnings,
+                BaselinePath = verify.BaselinePath,
+                BaselineWarningCount = verify.BaselineWarningCount,
+                NewWarningCount = verify.NewWarningCount,
+                NewWarnings = verify.NewWarnings
             };
         }
 
@@ -304,7 +357,17 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Verify executed: {doctorResult.VerifyExecuted}");
         logger.Info($"Audit executed: {doctorResult.AuditExecuted}");
         if (verify is not null)
+        {
             logger.Info($"Verify: {verify.Errors.Length} errors, {verify.Warnings.Length} warnings");
+            if (!string.IsNullOrWhiteSpace(verify.BaselinePath))
+            {
+                logger.Info($"Verify baseline: {verify.BaselinePath} ({verify.BaselineWarningCount} keys)");
+                if (verify.NewWarningCount > 0)
+                    logger.Info($"New verify warnings vs baseline: {verify.NewWarningCount}");
+                if (!string.IsNullOrWhiteSpace(verifyBaselineWrittenPath))
+                    logger.Info($"Verify baseline written: {verifyBaselineWrittenPath}");
+            }
+        }
         if (audit is not null)
         {
             logger.Info($"Audit: {audit.ErrorCount} errors, {audit.WarningCount} warnings");
