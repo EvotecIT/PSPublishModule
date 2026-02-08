@@ -131,7 +131,7 @@ public sealed class ModuleBuildPipeline
     /// <param name="spec">Install specification.</param>
     /// <param name="updateManifestToResolvedVersion">When true, patches the PSD1 ModuleVersion to the resolved version.</param>
     /// <returns>Installer result including resolved version and installed paths.</returns>
-    public ModuleInstallerResult InstallFromStaging(ModuleInstallSpec spec, bool updateManifestToResolvedVersion = true)
+    public ModuleInstallerResult InstallFromStaging(ModuleInstallSpec spec, bool? updateManifestToResolvedVersion = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));        
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
@@ -146,7 +146,8 @@ public sealed class ModuleBuildPipeline
             fallbackVersion: null);
 
         var resolved = ModuleInstaller.ResolveTargetVersion(spec.Roots, spec.Name, spec.Version, spec.Strategy);
-        if (updateManifestToResolvedVersion)
+        var patchManifest = updateManifestToResolvedVersion ?? spec.UpdateManifestToResolvedVersion;
+        if (patchManifest)
         {
             try { ManifestEditor.TrySetTopLevelModuleVersion(Path.Combine(staging, $"{spec.Name}.psd1"), resolved); }
             catch { /* best effort */ }

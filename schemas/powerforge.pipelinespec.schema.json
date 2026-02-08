@@ -18,6 +18,7 @@
         "LegacyFlatHandling": { "$ref": "powerforge.common.schema.json#/$defs/LegacyFlatModuleHandling" },
         "KeepVersions": { "type": ["integer", "null"], "minimum": 1 },
         "PreserveVersions": { "type": ["array", "null"], "items": { "type": "string" } },
+        "UpdateManifestToResolvedVersion": { "type": "boolean" },
         "Roots": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },

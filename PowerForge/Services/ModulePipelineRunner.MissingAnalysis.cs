@@ -94,13 +94,17 @@ public sealed partial class ModulePipelineRunner
             var allIgnored = group.All(c => ignoreFunctions.Contains(c.Name));
             if (force || ignoreModules.Contains(moduleName) || allIgnored)
             {
-                _logger.Warn($"Missing module '{moduleName}' ignored by configuration.");
+                var hint = TryGetInstallHintForModule(moduleName);
+                _logger.Warn($"Missing module '{moduleName}' ignored by configuration.{(string.IsNullOrWhiteSpace(hint) ? string.Empty : " " + hint)}");
                 continue;
             }
 
             failures.Add(moduleName);
             foreach (var cmd in group)
-                _logger.Error($"Missing module '{moduleName}' provides '{cmd.Name}' (CommandType: {cmd.CommandType}).");
+            {
+                var hint = TryGetInstallHintForModule(moduleName);
+                _logger.Error($"Missing module '{moduleName}' provides '{cmd.Name}' (CommandType: {cmd.CommandType}).{(string.IsNullOrWhiteSpace(hint) ? string.Empty : " " + hint)}");
+            }
         }
 
         var unresolved = report.Summary
@@ -137,7 +141,8 @@ public sealed partial class ModulePipelineRunner
                 }
 
                 failures.Add(name);
-                _logger.Error($"Unresolved command '{name}' (likely module '{inferredModule}' via {inferenceSource}).");
+                var hint = TryGetInstallHintForModule(inferredModule);
+                _logger.Error($"Unresolved command '{name}' (likely module '{inferredModule}' via {inferenceSource}).{(string.IsNullOrWhiteSpace(hint) ? string.Empty : " " + hint)}");
                 continue;
             }
 
@@ -242,6 +247,18 @@ public sealed partial class ModulePipelineRunner
         }
 
         return false;
+    }
+
+    private static string? TryGetInstallHintForModule(string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName)) return null;
+        if (string.Equals(moduleName, "ActiveDirectory", StringComparison.OrdinalIgnoreCase))
+            return "Hint: install RSAT Active Directory PowerShell module (e.g. Windows feature RSAT-AD-PowerShell).";
+        if (string.Equals(moduleName, "DnsServer", StringComparison.OrdinalIgnoreCase))
+            return "Hint: install RSAT DNS Server tools (DnsServer module).";
+        if (string.Equals(moduleName, "DhcpServer", StringComparison.OrdinalIgnoreCase))
+            return "Hint: install RSAT DHCP Server tools (DhcpServer module).";
+        return null;
     }
 
     private void LogMergeSummary(
