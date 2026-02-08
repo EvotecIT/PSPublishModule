@@ -72,6 +72,8 @@ public sealed class WebBuildResult
     public string SpecPath { get; set; } = string.Empty;
     /// <summary>Path to the generated redirects file.</summary>
     public string RedirectsPath { get; set; } = string.Empty;
+    /// <summary>Relative output files updated during this build.</summary>
+    public string[] UpdatedFiles { get; set; } = Array.Empty<string>();
     /// <summary>UTC timestamp when build was generated.</summary>
     public DateTime GeneratedAtUtc { get; set; }
 }

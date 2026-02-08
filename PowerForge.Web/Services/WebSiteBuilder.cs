@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace PowerForge.Web;
 
@@ -12,6 +13,11 @@ namespace PowerForge.Web;
 public static partial class WebSiteBuilder
 {
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+    private static readonly AsyncLocal<Action<string>?> UpdatedSink = new();
+    private static readonly StringComparison FileSystemPathComparison =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex TocHeaderRegex = new("<h(?<level>[2-3])[^>]*>(?<text>.*?)</h\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StripTagsRegex = new("<.*?>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -42,8 +48,23 @@ public static partial class WebSiteBuilder
         var specPath = Path.Combine(metaDir, "site-spec.json");
         var redirectsPath = Path.Combine(metaDir, "redirects.json");
 
-        WriteAllTextIfChanged(planPath, JsonSerializer.Serialize(plan, jsonOptions));
-        WriteAllTextIfChanged(specPath, JsonSerializer.Serialize(spec, jsonOptions));
+        var updated = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalizedOut = NormalizeRootPathForSink(outDir);
+        void MarkUpdated(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            var full = Path.GetFullPath(path);
+            if (!IsPathWithinRoot(normalizedOut, full)) return;
+            var relative = Path.GetRelativePath(outDir, full).Replace('\\', '/');
+            updated.Add(relative);
+        }
+
+        var prevSink = UpdatedSink.Value;
+        UpdatedSink.Value = MarkUpdated;
+        try
+        {
+            WriteAllTextIfChanged(planPath, JsonSerializer.Serialize(plan, jsonOptions));
+            WriteAllTextIfChanged(specPath, JsonSerializer.Serialize(spec, jsonOptions));
 
         var redirects = new List<RedirectSpec>();
         if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
@@ -84,25 +105,33 @@ public static partial class WebSiteBuilder
             routeOverrides = spec.RouteOverrides,
             redirects = redirects
         };
-        WriteAllTextIfChanged(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
-        WriteRedirectOutputs(outDir, redirects);
-        EnsureNoJekyllFile(outDir);
+            WriteAllTextIfChanged(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
+            WriteRedirectOutputs(outDir, redirects);
+            EnsureNoJekyllFile(outDir);
 
-        return new WebBuildResult
+            return new WebBuildResult
+            {
+                OutputPath = outDir,
+                PlanPath = planPath,
+                SpecPath = specPath,
+                RedirectsPath = redirectsPath,
+                UpdatedFiles = updated
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
+                GeneratedAtUtc = DateTime.UtcNow
+            };
+        }
+        finally
         {
-            OutputPath = outDir,
-            PlanPath = planPath,
-            SpecPath = specPath,
-            RedirectsPath = redirectsPath,
-            GeneratedAtUtc = DateTime.UtcNow
-        };
+            UpdatedSink.Value = prevSink;
+        }
     }
 
     private static void EnsureNoJekyllFile(string outputRoot)
     {
         var markerPath = Path.Combine(outputRoot, ".nojekyll");
         if (!File.Exists(markerPath))
-            File.WriteAllText(markerPath, string.Empty);
+            WriteAllTextIfChanged(markerPath, string.Empty);
     }
 
     private static void CopyThemeAssets(SiteSpec spec, string rootPath, string outputRoot)
@@ -201,10 +230,10 @@ public static partial class WebSiteBuilder
         }
     }
 
-    private static void WriteAllTextIfChanged(string path, string content)
+    private static bool WriteAllTextIfChanged(string path, string content)
     {
         if (string.IsNullOrWhiteSpace(path))
-            return;
+            return false;
 
         // Keep output timestamps stable when content didn't change. This enables pipeline step caching
         // (and avoids expensive optimize/audit reruns) on large sites during local iteration.
@@ -214,7 +243,7 @@ public static partial class WebSiteBuilder
             {
                 var existing = File.ReadAllText(path);
                 if (string.Equals(existing, content, StringComparison.Ordinal))
-                    return;
+                    return false;
             }
         }
         catch
@@ -223,21 +252,23 @@ public static partial class WebSiteBuilder
         }
 
         File.WriteAllText(path, content, Utf8NoBom);
+        UpdatedSink.Value?.Invoke(path);
+        return true;
     }
 
-    private static void WriteAllLinesIfChanged(string path, IEnumerable<string> lines)
+    private static bool WriteAllLinesIfChanged(string path, IEnumerable<string> lines)
     {
         if (string.IsNullOrWhiteSpace(path))
-            return;
+            return false;
 
         var payload = string.Join(Environment.NewLine, lines);
-        WriteAllTextIfChanged(path, payload);
+        return WriteAllTextIfChanged(path, payload);
     }
 
-    private static void CopyFileIfChanged(string sourcePath, string destPath)
+    private static bool CopyFileIfChanged(string sourcePath, string destPath)
     {
         if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(destPath))
-            return;
+            return false;
 
         try
         {
@@ -248,7 +279,7 @@ public static partial class WebSiteBuilder
 
                 // Fast path: same size and destination is at least as new as source.
                 if (srcInfo.Length == dstInfo.Length && dstInfo.LastWriteTimeUtc >= srcInfo.LastWriteTimeUtc)
-                    return;
+                    return false;
             }
         }
         catch
@@ -270,6 +301,21 @@ public static partial class WebSiteBuilder
         {
             // best-effort
         }
+
+        UpdatedSink.Value?.Invoke(destPath);
+        return true;
+    }
+
+    private static string NormalizeRootPathForSink(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
 }

@@ -86,6 +86,10 @@ internal static class WebPipelineRunner
         var totalSteps = steps.Count;
         var stepResultsByIndex = new Dictionary<int, WebPipelineStepResult>();
 
+        // Allows fast mode to scope optimize/audit to just the pages touched by the last build step.
+        var lastBuildOutPath = string.Empty;
+        var lastBuildUpdatedFiles = Array.Empty<string>();
+
         foreach (var definition in steps)
         {
             var step = definition.Element;
@@ -148,6 +152,8 @@ internal static class WebPipelineRunner
                         if (cleanOutput)
                             WebCliFileSystem.CleanOutputDirectory(outPath);
                         var build = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);
+                        lastBuildOutPath = Path.GetFullPath(build.OutputPath);
+                        lastBuildUpdatedFiles = build.UpdatedFiles ?? Array.Empty<string>();
                         stepResult.Success = true;
                         stepResult.Message = $"Built {build.OutputPath}";
                         break;
@@ -511,6 +517,21 @@ internal static class WebPipelineRunner
 
                         if (fast)
                         {
+                            if ((htmlInclude is null || htmlInclude.Length == 0) &&
+                                lastBuildUpdatedFiles.Length > 0 &&
+                                string.Equals(Path.GetFullPath(siteRoot), lastBuildOutPath, FileSystemPathComparison))
+                            {
+                                var updatedHtml = lastBuildUpdatedFiles
+                                    .Where(static p => p.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                                                       p.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+                                    .ToArray();
+                                if (updatedHtml.Length > 0)
+                                {
+                                    htmlInclude = updatedHtml;
+                                    logger?.Info($"{label}: fast incremental html scope: {updatedHtml.Length} updated page(s)");
+                                }
+                            }
+
                             var forced = new List<string>();
                             if (optimizeImages)
                             {
@@ -682,6 +703,21 @@ internal static class WebPipelineRunner
 
                         if (fast)
                         {
+                            if (string.IsNullOrWhiteSpace(include) &&
+                                lastBuildUpdatedFiles.Length > 0 &&
+                                string.Equals(Path.GetFullPath(siteRoot), lastBuildOutPath, FileSystemPathComparison))
+                            {
+                                var updatedHtml = lastBuildUpdatedFiles
+                                    .Where(static p => p.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                                                       p.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+                                    .ToArray();
+                                if (updatedHtml.Length > 0)
+                                {
+                                    include = string.Join(";", updatedHtml);
+                                    logger?.Info($"{label}: fast incremental html scope: {updatedHtml.Length} updated page(s)");
+                                }
+                            }
+
                             var forced = new List<string>();
                             if (rendered)
                             {
