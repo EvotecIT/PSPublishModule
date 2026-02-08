@@ -212,7 +212,7 @@ public sealed class ModuleInstaller
     {
         var quarantine = EnsureChildPath(moduleRoot, "_legacy_flat");
         Directory.CreateDirectory(quarantine);
-        var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
         var folder = $"{suffix}_{stamp}";
         var target = EnsureChildPath(quarantine, folder);
         Directory.CreateDirectory(target);
@@ -263,7 +263,13 @@ public sealed class ModuleInstaller
     }
 
     private static bool IsVersionFolderName(string name)
-        => !string.IsNullOrWhiteSpace(name) && char.IsDigit(name[0]);
+    {
+        if (string.IsNullOrWhiteSpace(name) || !char.IsDigit(name[0]))
+            return false;
+
+        var basePart = name.Split(new[] { '-' }, 2)[0];
+        return Version.TryParse(basePart, out _);
+    }
 
     private void TryMoveFile(string sourcePath, string destPath)
     {
@@ -492,15 +498,14 @@ public sealed class ModuleInstaller
         if (!Directory.Exists(moduleRoot)) return 0;
         var dirs = Directory.EnumerateDirectories(moduleRoot)
             .Select(d => Path.GetFileName(d) ?? string.Empty)
-            .Where(n => n.Length > 0 && char.IsDigit(n[0]))
+            .Where(IsVersionFolderName)
             .OrderByDescending(n => ParseVersionSortable(n!))
             .ToList();
 
         var preserve = preserveVersions ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var keepSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in preserve)
-            if (!string.IsNullOrWhiteSpace(p))
-                keepSet.Add(p.Trim());
+        foreach (var p in preserve.Where(p => !string.IsNullOrWhiteSpace(p)))
+            keepSet.Add(p.Trim());
 
         // Keep up to 'keep' non-preserved versions (dirs are already ordered descending).
         var keptNonPreserved = 0;
@@ -519,7 +524,7 @@ public sealed class ModuleInstaller
             try { Directory.Delete(full, recursive: true); removed.Add(full); }
             catch { /* best effort */ }
         }
-        return keepSet.Count;
+        return dirs.Count(d => keepSet.Contains(d));
     }
 
     private void TryDeleteFile(string path)
@@ -530,11 +535,15 @@ public sealed class ModuleInstaller
 
     private static Version ParseVersionSortable(string v)
     {
-        // pad to 4 segments for correct ordering
-        var parts = v.Split('.');
-        var arr = new int[4];
-        for (int i = 0; i < Math.Min(parts.Length, 4); i++) int.TryParse(parts[i], out arr[i]);
-        return new Version(arr[0], arr[1], arr[2], arr[3]);
+        var basePart = v.Split(new[] { '-' }, 2)[0];
+        if (Version.TryParse(basePart, out var parsed))
+        {
+            var build = parsed.Build < 0 ? 0 : parsed.Build;
+            var rev = parsed.Revision < 0 ? 0 : parsed.Revision;
+            return new Version(parsed.Major, parsed.Minor, build, rev);
+        }
+
+        return new Version(0, 0, 0, 0);
     }
 
     private static void ValidatePathSegment(string value, string name)
@@ -551,6 +560,9 @@ public sealed class ModuleInstaller
 
         if (v.Contains(':'))
             throw new ArgumentException("Value cannot contain drive specifiers.", name);
+
+        if (v.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("Value contains invalid path characters.", name);
     }
 
     private static string EnsureChildPath(string root, string child)
