@@ -524,6 +524,9 @@ public static partial class WebApiDocsGenerator
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;
 
+        if (trimmed.StartsWith("API docs nav:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.NAV] " + warning;
+
         if (trimmed.StartsWith("API docs:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS] " + warning;
 

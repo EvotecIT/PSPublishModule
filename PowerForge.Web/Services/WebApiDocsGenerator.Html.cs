@@ -26,7 +26,7 @@ public static partial class WebApiDocsGenerator
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
-        ApplyNavTokens(options, ref header, ref footer);
+        ApplyNavTokens(options, warnings, ref header, ref footer);
           var bodyClass = ResolveBodyClass(options.BodyClass);
           var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
           var fallbackCss = LoadAsset(options, "fallback.css", null);
@@ -100,7 +100,7 @@ public static partial class WebApiDocsGenerator
         var header = LoadOptionalHtml(options.HeaderHtmlPath);
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
-        ApplyNavTokens(options, ref header, ref footer);
+        ApplyNavTokens(options, warnings, ref header, ref footer);
           var bodyClass = ResolveBodyClass(options.BodyClass);
           var cssLink = string.IsNullOrWhiteSpace(options.CssHref) ? string.Empty : $"<link rel=\"stylesheet\" href=\"{options.CssHref}\" />";
         var fallbackCss = LoadAsset(options, "fallback.css", null);
