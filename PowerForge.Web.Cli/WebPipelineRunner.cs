@@ -462,6 +462,7 @@ internal static class WebPipelineRunner
                         var htmlInclude = GetArrayOfStrings(step, "htmlInclude") ?? GetArrayOfStrings(step, "html-include");
                         var htmlExclude = GetArrayOfStrings(step, "htmlExclude") ?? GetArrayOfStrings(step, "html-exclude");
                         var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
+                        var htmlScopeFromBuildUpdated = GetBool(step, "scopeFromBuildUpdated") ?? GetBool(step, "scope-from-build-updated");
                         var optimizeImages = GetBool(step, "optimizeImages") ?? GetBool(step, "images") ?? false;
                         var imageExtensions = GetArrayOfStrings(step, "imageExtensions") ?? GetArrayOfStrings(step, "image-ext");
                         var imageInclude = GetArrayOfStrings(step, "imageInclude") ?? GetArrayOfStrings(step, "image-include");
@@ -515,23 +516,26 @@ internal static class WebPipelineRunner
                                 policy.CacheHeaders.ImmutablePaths = cacheHeadersPaths;
                         }
 
+                        if (htmlScopeFromBuildUpdated != false &&
+                            (htmlScopeFromBuildUpdated == true || fast) &&
+                            (htmlInclude is null || htmlInclude.Length == 0) &&
+                            lastBuildUpdatedFiles.Length > 0 &&
+                            string.Equals(Path.GetFullPath(siteRoot), lastBuildOutPath, FileSystemPathComparison))
+                        {
+                            var updatedHtml = lastBuildUpdatedFiles
+                                .Where(static p => p.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                                                   p.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+                                .ToArray();
+                            if (updatedHtml.Length > 0)
+                            {
+                                htmlInclude = updatedHtml;
+                                var modeLabel = fast ? "fast incremental" : "incremental";
+                                logger?.Info($"{label}: {modeLabel} html scope: {updatedHtml.Length} updated page(s)");
+                            }
+                        }
+
                         if (fast)
                         {
-                            if ((htmlInclude is null || htmlInclude.Length == 0) &&
-                                lastBuildUpdatedFiles.Length > 0 &&
-                                string.Equals(Path.GetFullPath(siteRoot), lastBuildOutPath, FileSystemPathComparison))
-                            {
-                                var updatedHtml = lastBuildUpdatedFiles
-                                    .Where(static p => p.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-                                                       p.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
-                                    .ToArray();
-                                if (updatedHtml.Length > 0)
-                                {
-                                    htmlInclude = updatedHtml;
-                                    logger?.Info($"{label}: fast incremental html scope: {updatedHtml.Length} updated page(s)");
-                                }
-                            }
-
                             var forced = new List<string>();
                             if (optimizeImages)
                             {
@@ -624,6 +628,7 @@ internal static class WebPipelineRunner
 
                         var include = GetString(step, "include");
                         var exclude = GetString(step, "exclude");
+                        var includeScopeFromBuildUpdated = GetBool(step, "scopeFromBuildUpdated") ?? GetBool(step, "scope-from-build-updated");
                         var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
                         var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
                                                 GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
@@ -701,23 +706,26 @@ internal static class WebPipelineRunner
                         if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
                             resolvedSarifPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit.sarif"));
 
+                        if (includeScopeFromBuildUpdated != false &&
+                            (includeScopeFromBuildUpdated == true || fast) &&
+                            string.IsNullOrWhiteSpace(include) &&
+                            lastBuildUpdatedFiles.Length > 0 &&
+                            string.Equals(Path.GetFullPath(siteRoot), lastBuildOutPath, FileSystemPathComparison))
+                        {
+                            var updatedHtml = lastBuildUpdatedFiles
+                                .Where(static p => p.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                                                   p.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
+                                .ToArray();
+                            if (updatedHtml.Length > 0)
+                            {
+                                include = string.Join(";", updatedHtml);
+                                var modeLabel = fast ? "fast incremental" : "incremental";
+                                logger?.Info($"{label}: {modeLabel} html scope: {updatedHtml.Length} updated page(s)");
+                            }
+                        }
+
                         if (fast)
                         {
-                            if (string.IsNullOrWhiteSpace(include) &&
-                                lastBuildUpdatedFiles.Length > 0 &&
-                                string.Equals(Path.GetFullPath(siteRoot), lastBuildOutPath, FileSystemPathComparison))
-                            {
-                                var updatedHtml = lastBuildUpdatedFiles
-                                    .Where(static p => p.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-                                                       p.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
-                                    .ToArray();
-                                if (updatedHtml.Length > 0)
-                                {
-                                    include = string.Join(";", updatedHtml);
-                                    logger?.Info($"{label}: fast incremental html scope: {updatedHtml.Length} updated page(s)");
-                                }
-                            }
-
                             var forced = new List<string>();
                             if (rendered)
                             {

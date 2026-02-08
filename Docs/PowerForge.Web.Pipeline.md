@@ -313,6 +313,7 @@ Notes:
 - `imageWidths` generates responsive variants and `srcset` entries.
 - `imageEnhanceTags` injects `loading=\"lazy\"`, `decoding=\"async\"`, and intrinsic `width`/`height` (when known) on rewritten image tags.
 - `imageMaxBytesPerFile` / `imageMaxTotalBytes` define budgets; `imageFailOnBudget` fails the step if budgets are exceeded.
+- `scopeFromBuildUpdated`: when enabled, and `htmlInclude` is not set, limits HTML processing to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site optimize even in fast mode.
 
 #### audit
 Runs static (and optional rendered) checks against generated HTML.
@@ -341,6 +342,7 @@ Notes:
 - `renderedBaseUrl` lets you run rendered checks against a running server (otherwise a local server is started).
 - `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.
 - `renderedEnsureInstalled` auto-installs Playwright browsers before rendered checks (defaults to `true` in CLI/pipeline when `rendered` is enabled).
+- `scopeFromBuildUpdated`: when enabled, and `include` is not set, limits the audit to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site audit even in fast mode.
 CLI note:
 - Use `--rendered-no-install` to skip auto-install (for CI environments with preinstalled browsers).
 
