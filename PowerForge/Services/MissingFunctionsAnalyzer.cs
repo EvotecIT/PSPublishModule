@@ -347,11 +347,7 @@ public sealed class MissingFunctionsAnalyzer
     private static CommandInfo? GetCommandFromModuleScope(string moduleName, string commandName)
     {
         using var ps = CreatePowerShell();
-        var script = @"
-param($moduleName, $commandName)
-$m = Import-Module -Name $moduleName -PassThru -ErrorAction Stop -Verbose:$false
-& $m { param($c) Get-Command $c -ErrorAction Stop -Verbose:$false } $commandName
-";
+        var script = EmbeddedScripts.Load("Scripts/Analysis/Get-CommandFromModuleScope.ps1");
         ps.AddScript(script).AddArgument(moduleName).AddArgument(commandName);
         var results = ps.Invoke();
         if (ps.HadErrors || results.Count == 0)
