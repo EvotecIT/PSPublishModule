@@ -384,6 +384,7 @@ internal static partial class WebCliCommandHandlers
 
         var fullPath = ResolveExistingFilePath(pipelinePath);
         var profilePipeline = HasOption(subArgs, "--profile");
+        var watch = HasOption(subArgs, "--watch");
         var devMode = HasOption(subArgs, "--dev");
         var fastMode = devMode || HasOption(subArgs, "--fast");
         var mode = TryGetOptionValue(subArgs, "--mode");
@@ -392,6 +393,21 @@ internal static partial class WebCliCommandHandlers
 
         var onlyTasks = ReadOptionList(subArgs, "--only");
         var skipTasks = ReadOptionList(subArgs, "--skip");
+        if (watch)
+        {
+            if (outputJson)
+                return Fail("--watch is not supported with JSON output.", outputJson, logger, "web.pipeline");
+
+            return WebPipelineRunner.WatchPipeline(
+                fullPath,
+                logger,
+                forceProfile: profilePipeline,
+                fast: fastMode,
+                mode: mode,
+                onlyTasks: onlyTasks.Count > 0 ? onlyTasks.ToArray() : null,
+                skipTasks: skipTasks.Count > 0 ? skipTasks.ToArray() : null);
+        }
+
         var result = WebPipelineRunner.RunPipeline(
             fullPath,
             logger,
