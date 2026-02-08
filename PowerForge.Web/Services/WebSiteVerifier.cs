@@ -141,6 +141,15 @@ public static partial class WebSiteVerifier
         if (trimmed.StartsWith("Navigation lint:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.NAV.LINT] " + warning;
 
+        if (trimmed.StartsWith("Markdown hygiene:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.MD.HYGIENE] " + warning;
+
+        if (trimmed.StartsWith("Data file '", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.DATA.VALIDATION] " + warning;
+
+        if (trimmed.StartsWith("Collection '", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.COLLECTION] " + warning;
+
         if (trimmed.StartsWith("Theme CSS contract:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.THEME.CSS.CONTRACT] " + warning;
 
