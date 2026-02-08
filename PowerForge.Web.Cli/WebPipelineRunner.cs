@@ -55,7 +55,14 @@ internal static class WebPipelineRunner
         public JsonElement Element { get; set; }
     }
 
-    internal static WebPipelineResult RunPipeline(string pipelinePath, WebConsoleLogger? logger, bool forceProfile = false, bool fast = false)
+    internal static WebPipelineResult RunPipeline(
+        string pipelinePath,
+        WebConsoleLogger? logger,
+        bool forceProfile = false,
+        bool fast = false,
+        string? mode = null,
+        string[]? onlyTasks = null,
+        string[]? skipTasks = null)
     {
         var json = File.ReadAllText(pipelinePath);
         using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
@@ -69,6 +76,15 @@ internal static class WebPipelineRunner
             throw new InvalidOperationException("Pipeline config must include a steps array.");
 
         var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
+        var normalizedMode = string.IsNullOrWhiteSpace(mode) ? null : mode.Trim();
+        var onlyTaskSet = onlyTasks is { Length: > 0 }
+            ? new HashSet<string>(onlyTasks.Where(static t => !string.IsNullOrWhiteSpace(t)).Select(static t => t.Trim()), StringComparer.OrdinalIgnoreCase)
+            : null;
+        var skipTaskSet = skipTasks is { Length: > 0 }
+            ? new HashSet<string>(skipTasks.Where(static t => !string.IsNullOrWhiteSpace(t)).Select(static t => t.Trim()), StringComparer.OrdinalIgnoreCase)
+            : null;
+        if (!string.IsNullOrWhiteSpace(normalizedMode))
+            logger?.Info($"Pipeline mode: {normalizedMode}");
         var profileEnabled = (GetBool(root, "profile") ?? false) || forceProfile;
         var profileWriteOnFail = GetBool(root, "profileOnFail") ?? GetBool(root, "profile-on-fail") ?? true;
         var profilePath = ResolvePathWithinRoot(baseDir, GetString(root, "profilePath") ?? GetString(root, "profile-path"), Path.Combine(".powerforge", "pipeline-profile.json"));
@@ -96,9 +112,24 @@ internal static class WebPipelineRunner
             var task = definition.Task;
             var stepIndex = definition.Index;
             var label = $"[{stepIndex}/{totalSteps}] {task}";
+            var stepResult = new WebPipelineStepResult { Task = task };
+
+            if (!ShouldExecuteTask(task, onlyTaskSet, skipTaskSet))
+            {
+                var reason = skipTaskSet is not null && skipTaskSet.Contains(task) ? "skip" : "only";
+                stepResult.Success = true;
+                stepResult.Cached = false;
+                stepResult.DurationMs = 0;
+                stepResult.Message = $"skipped ({reason})";
+                result.Steps.Add(stepResult);
+                stepResultsByIndex[stepIndex] = stepResult;
+                if (profileEnabled)
+                    logger?.Info($"Finished {label} (skipped) in 0 ms");
+                continue;
+            }
+
             logger?.Info($"Starting {label}...");
             var stopwatch = Stopwatch.StartNew();
-            var stepResult = new WebPipelineStepResult { Task = task };
             var cacheKey = $"{stepIndex}:{task}";
             var stepFingerprint = string.Empty;
             var expectedOutputs = GetExpectedStepOutputs(task, step, baseDir);
@@ -782,7 +813,7 @@ internal static class WebPipelineRunner
                             RenderedCheckFailedRequests = renderedCheckFailures,
                             RenderedInclude = CliPatternHelper.SplitPatterns(renderedInclude),
                             RenderedExclude = CliPatternHelper.SplitPatterns(renderedExclude),
-                            SummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath),
+                            SummaryPath = resolvedSummaryPath,
                             SarifPath = resolvedSarifPath,
                             SummaryMaxIssues = summaryMax,
                             BaselinePath = baselinePath,
@@ -1133,6 +1164,15 @@ internal static class WebPipelineRunner
             result.ProfilePath = profilePath;
         }
         return result;
+    }
+
+    private static bool ShouldExecuteTask(string task, HashSet<string>? onlyTasks, HashSet<string>? skipTasks)
+    {
+        if (skipTasks is not null && skipTasks.Contains(task))
+            return false;
+        if (onlyTasks is null || onlyTasks.Count == 0)
+            return true;
+        return onlyTasks.Contains(task);
     }
 
     private static List<PipelineStepDefinition> BuildStepDefinitions(JsonElement stepsElement)
