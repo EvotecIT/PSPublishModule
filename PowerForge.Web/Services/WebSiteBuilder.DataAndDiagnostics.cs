@@ -568,7 +568,7 @@ public static partial class WebSiteBuilder
         var searchDir = Path.Combine(outputRoot, "search");
         Directory.CreateDirectory(searchDir);
         var searchPath = Path.Combine(searchDir, "index.json");
-        File.WriteAllText(searchPath, JsonSerializer.Serialize(entries, WebJson.Options));
+        WriteAllTextIfChanged(searchPath, JsonSerializer.Serialize(entries, WebJson.Options));
     }
 
     private static void WriteLinkCheckReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)
@@ -625,7 +625,7 @@ public static partial class WebSiteBuilder
         };
 
         var path = Path.Combine(metaDir, "linkcheck.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(payload, WebJson.Options));
+        WriteAllTextIfChanged(path, JsonSerializer.Serialize(payload, WebJson.Options));
     }
 
     private static IEnumerable<string> ExtractLinks(string html)
