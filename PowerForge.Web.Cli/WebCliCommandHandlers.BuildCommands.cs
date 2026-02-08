@@ -384,8 +384,22 @@ internal static partial class WebCliCommandHandlers
 
         var fullPath = ResolveExistingFilePath(pipelinePath);
         var profilePipeline = HasOption(subArgs, "--profile");
-        var fastMode = HasOption(subArgs, "--fast");
-        var result = WebPipelineRunner.RunPipeline(fullPath, logger, profilePipeline, fastMode);
+        var devMode = HasOption(subArgs, "--dev");
+        var fastMode = devMode || HasOption(subArgs, "--fast");
+        var mode = TryGetOptionValue(subArgs, "--mode");
+        if (devMode && string.IsNullOrWhiteSpace(mode))
+            mode = "dev";
+
+        var onlyTasks = ReadOptionList(subArgs, "--only");
+        var skipTasks = ReadOptionList(subArgs, "--skip");
+        var result = WebPipelineRunner.RunPipeline(
+            fullPath,
+            logger,
+            forceProfile: profilePipeline,
+            fast: fastMode,
+            mode: mode,
+            onlyTasks: onlyTasks.Count > 0 ? onlyTasks.ToArray() : null,
+            skipTasks: skipTasks.Count > 0 ? skipTasks.ToArray() : null);
 
         if (outputJson)
         {
