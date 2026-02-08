@@ -733,11 +733,11 @@ internal static class WebPipelineRunner
                         var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
                         var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
                         if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
-                            resolvedSummaryPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit-summary.json"));
+                            resolvedSummaryPath = ".powerforge/audit-summary.json";
 
                         var resolvedSarifPath = ResolveSarifPathForPipeline(sarif, sarifPath);
                         if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
-                            resolvedSarifPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit.sarif"));
+                            resolvedSarifPath = ".powerforge/audit.sarif.json";
 
                         if (includeScopeFromBuildUpdated != false &&
                             (includeScopeFromBuildUpdated == true || fast) &&
@@ -962,11 +962,11 @@ internal static class WebPipelineRunner
                             var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
                             var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
                             if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
-                                resolvedSummaryPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit-summary.json"));
+                                resolvedSummaryPath = ".powerforge/audit-summary.json";
 
                             var resolvedSarifPath = ResolveSarifPathForPipeline(sarif, sarifPath);
                             if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
-                                resolvedSarifPath = ResolvePathWithinRoot(baseDir, null, Path.Combine(".powerforge", "audit.sarif"));
+                                resolvedSarifPath = ".powerforge/audit.sarif.json";
 
                             audit = WebSiteAuditor.Audit(new WebAuditOptions
                             {
