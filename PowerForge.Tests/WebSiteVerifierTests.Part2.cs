@@ -260,6 +260,81 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_ThemeFeatureContracts_WarnWhenRequiredPartialIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-feature-contracts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "contract-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "contract-test",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "home",
+                  "features": ["apiDocs"],
+                  "featureContracts": {
+                    "apiDocs": {
+                      "requiredPartials": ["api-header", "api-footer"]
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Theme Feature Contracts Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "contract-test",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("feature 'apidocs' requires partial 'api-header'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("feature 'apidocs' requires partial 'api-footer'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsOnMarkdownRawHtmlHygiene()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-" + Guid.NewGuid().ToString("N"));

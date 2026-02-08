@@ -43,6 +43,12 @@ public sealed class ThemeManifest
     /// <summary>Theme-supported features (for example: docs, apiDocs, blog, search).</summary>
     public string[] Features { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Optional per-feature theme contracts (required layouts/partials/slots/surfaces/CSS selectors).
+    /// This is enforced by verify in CI by default when the site enables the feature.
+    /// </summary>
+    public Dictionary<string, ThemeFeatureContractSpec>? FeatureContracts { get; set; }
+
     /// <summary>Resolved base theme manifest.</summary>
     [JsonIgnore]
     public ThemeManifest? Base { get; set; }
@@ -50,4 +56,32 @@ public sealed class ThemeManifest
     /// <summary>Resolved base theme root path.</summary>
     [JsonIgnore]
     public string? BaseRoot { get; set; }
+}
+
+/// <summary>Theme contract requirements for a specific feature.</summary>
+public sealed class ThemeFeatureContractSpec
+{
+    /// <summary>Layouts that must exist (layout names, not paths).</summary>
+    public string[] RequiredLayouts { get; set; } = Array.Empty<string>();
+
+    /// <summary>Partials that must exist (partial names, not paths).</summary>
+    public string[] RequiredPartials { get; set; } = Array.Empty<string>();
+
+    /// <summary>Slots that must exist and resolve to a real partial.</summary>
+    public string[] RequiredSlots { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Navigation surfaces expected by the theme (for example: main, docs, apidocs, products).
+    /// Only enforced when the site explicitly defines Navigation.Surfaces.
+    /// </summary>
+    public string[] RequiredSurfaces { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// CSS hrefs/paths to scan when validating required selectors. If empty, the engine uses best-effort
+    /// detection based on route bundles for the feature.
+    /// </summary>
+    public string[] CssHrefs { get; set; } = Array.Empty<string>();
+
+    /// <summary>CSS selectors expected to be present in feature styles.</summary>
+    public string[] RequiredCssSelectors { get; set; } = Array.Empty<string>();
 }

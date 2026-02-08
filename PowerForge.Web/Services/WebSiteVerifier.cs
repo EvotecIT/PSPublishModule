@@ -141,6 +141,9 @@ public static partial class WebSiteVerifier
         if (trimmed.StartsWith("Navigation lint:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.NAV.LINT] " + warning;
 
+        if (trimmed.StartsWith("Theme CSS contract:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.THEME.CSS.CONTRACT] " + warning;
+
         if (trimmed.StartsWith("Theme contract:", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("Theme '", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("theme manifest", StringComparison.OrdinalIgnoreCase))

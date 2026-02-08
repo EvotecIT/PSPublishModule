@@ -103,6 +103,38 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 }
 ```
 
+## Feature Contracts (catch regressions across sites)
+If you want "DocFX/Hugo-tier" predictability across multiple sites, add `featureContracts` to your theme manifest.
+This allows the engine to verify that when a site enables a feature (e.g. `apiDocs`), the theme actually provides
+the expected layouts/partials/slots and that your CSS contains critical selectors.
+
+Example:
+```json
+{
+  "name": "mytheme",
+  "schemaVersion": 2,
+  "engine": "scriban",
+  "features": ["docs", "apiDocs"],
+  "featureContracts": {
+    "apiDocs": {
+      "requiredPartials": ["api-header", "api-footer"],
+      "requiredCssSelectors": [".api-layout", ".api-sidebar", ".api-content"]
+    },
+    "docs": {
+      "requiredLayouts": ["docs"]
+    }
+  }
+}
+```
+Notes:
+- `requiredPartials` and `requiredLayouts` are validated using theme resolution (including `extends`).
+- `requiredSlots` ensures `slots.<name>` exists and resolves to a real partial file.
+- `requiredSurfaces` is only enforced when the site explicitly defines `Navigation.Surfaces`.
+- `requiredCssSelectors` is validated by scanning local CSS files:
+  - if `cssHrefs` is provided, those hrefs are scanned
+  - otherwise, the engine infers CSS from route bundles for representative routes (`/docs/`, `/api/`, `/blog/`)
+  - remote CSS (`http/https`) is skipped (best-effort)
+
 ### Manifest rules
 - `schemaVersion` defaults to `1`; use `2` for strict portable contract validation.
 - Legacy `contractVersion` is still read for compatibility, but new themes should use `schemaVersion`.

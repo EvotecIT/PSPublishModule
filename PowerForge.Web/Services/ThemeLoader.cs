@@ -169,7 +169,8 @@ public sealed class ThemeLoader
             Slots = MergeDictionary(parent.Slots, child.Slots),
             Tokens = MergeTokens(parent.Tokens, child.Tokens),
             Assets = child.Assets ?? parent.Assets,
-            Features = MergeStringArray(parent.Features, child.Features)
+            Features = MergeStringArray(parent.Features, child.Features),
+            FeatureContracts = MergeFeatureContracts(parent.FeatureContracts, child.FeatureContracts)
         };
 
         return merged;
@@ -237,6 +238,72 @@ public sealed class ThemeLoader
             .Select(v => v.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static Dictionary<string, ThemeFeatureContractSpec>? MergeFeatureContracts(
+        Dictionary<string, ThemeFeatureContractSpec>? parent,
+        Dictionary<string, ThemeFeatureContractSpec>? child)
+    {
+        if (parent is null && child is null)
+            return null;
+
+        var merged = new Dictionary<string, ThemeFeatureContractSpec>(StringComparer.OrdinalIgnoreCase);
+        if (parent is not null)
+        {
+            foreach (var kvp in parent)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value is null)
+                    continue;
+                merged[kvp.Key.Trim()] = CloneFeatureContract(kvp.Value);
+            }
+        }
+
+        if (child is not null)
+        {
+            foreach (var kvp in child)
+            {
+                if (string.IsNullOrWhiteSpace(kvp.Key) || kvp.Value is null)
+                    continue;
+
+                var key = kvp.Key.Trim();
+                if (merged.TryGetValue(key, out var existing))
+                {
+                    merged[key] = MergeFeatureContract(existing, kvp.Value);
+                }
+                else
+                {
+                    merged[key] = CloneFeatureContract(kvp.Value);
+                }
+            }
+        }
+
+        return merged.Count == 0 ? null : merged;
+    }
+
+    private static ThemeFeatureContractSpec CloneFeatureContract(ThemeFeatureContractSpec value)
+    {
+        return new ThemeFeatureContractSpec
+        {
+            RequiredLayouts = value.RequiredLayouts?.ToArray() ?? Array.Empty<string>(),
+            RequiredPartials = value.RequiredPartials?.ToArray() ?? Array.Empty<string>(),
+            RequiredSlots = value.RequiredSlots?.ToArray() ?? Array.Empty<string>(),
+            RequiredSurfaces = value.RequiredSurfaces?.ToArray() ?? Array.Empty<string>(),
+            CssHrefs = value.CssHrefs?.ToArray() ?? Array.Empty<string>(),
+            RequiredCssSelectors = value.RequiredCssSelectors?.ToArray() ?? Array.Empty<string>()
+        };
+    }
+
+    private static ThemeFeatureContractSpec MergeFeatureContract(ThemeFeatureContractSpec parent, ThemeFeatureContractSpec child)
+    {
+        return new ThemeFeatureContractSpec
+        {
+            RequiredLayouts = MergeStringArray(parent.RequiredLayouts, child.RequiredLayouts),
+            RequiredPartials = MergeStringArray(parent.RequiredPartials, child.RequiredPartials),
+            RequiredSlots = MergeStringArray(parent.RequiredSlots, child.RequiredSlots),
+            RequiredSurfaces = MergeStringArray(parent.RequiredSurfaces, child.RequiredSurfaces),
+            CssHrefs = MergeStringArray(parent.CssHrefs, child.CssHrefs),
+            RequiredCssSelectors = MergeStringArray(parent.RequiredCssSelectors, child.RequiredCssSelectors)
+        };
     }
 
 

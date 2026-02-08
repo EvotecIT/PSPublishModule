@@ -38,6 +38,10 @@
         "enum": ["docs", "apiDocs", "blog", "search", "notFound"]
       }
     },
+    "featureContracts": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/ThemeFeatureContractSpec" }
+    },
     "tokens": {
       "type": "object",
       "additionalProperties": true
@@ -45,6 +49,18 @@
   },
   "required": ["name"],
   "$defs": {
+    "ThemeFeatureContractSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requiredLayouts": { "type": "array", "items": { "type": "string" } },
+        "requiredPartials": { "type": "array", "items": { "type": "string" } },
+        "requiredSlots": { "type": "array", "items": { "type": "string" } },
+        "requiredSurfaces": { "type": "array", "items": { "type": "string" } },
+        "cssHrefs": { "type": "array", "items": { "type": "string" } },
+        "requiredCssSelectors": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "AssetRegistrySpec": {
       "type": "object",
       "additionalProperties": false,
