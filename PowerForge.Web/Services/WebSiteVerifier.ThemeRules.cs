@@ -37,7 +37,7 @@ public static partial class WebSiteVerifier
 
         if (explicitFeatures.Count == 0 && enabled.Count > 0)
         {
-            warnings.Add("Theme contract: site does not declare 'features' in site.json; using best-effort inference for theme checks. " +
+            warnings.Add("Best practice: site does not declare 'features' in site.json; using best-effort inference for theme checks. " +
                          "Add features (e.g., [\"docs\",\"apiDocs\"]) to make this deterministic across sites.");
         }
 
@@ -48,7 +48,7 @@ public static partial class WebSiteVerifier
         var schemaVersion = manifest.SchemaVersion ?? manifest.ContractVersion ?? 1;
         if (schemaVersion >= 2 && supported.Count == 0)
         {
-            warnings.Add($"Theme contract: '{manifest.Name}' schemaVersion 2 should declare 'features' to make capabilities explicit.");
+            warnings.Add($"Best practice: '{manifest.Name}' schemaVersion 2 should declare 'features' to make capabilities explicit.");
         }
 
         foreach (var feature in enabled)
@@ -165,13 +165,13 @@ public static partial class WebSiteVerifier
             return;
 
         if (Path.GetFileName(manifestPath).Equals("theme.json", StringComparison.OrdinalIgnoreCase))
-            warnings.Add($"Theme contract: '{manifest.Name}' uses legacy manifest file 'theme.json'. Prefer 'theme.manifest.json'.");
+            warnings.Add($"Best practice: '{manifest.Name}' uses legacy manifest file 'theme.json'. Prefer 'theme.manifest.json'.");
 
         var contractVersion = ResolveThemeContractVersion(manifest, warnings);
 
         if (string.IsNullOrWhiteSpace(manifest.Engine))
         {
-            warnings.Add($"Theme contract: '{manifest.Name}' does not set 'engine'. Set 'simple' or 'scriban' explicitly.");
+            warnings.Add($"Best practice: '{manifest.Name}' does not set 'engine'. Set 'simple' or 'scriban' explicitly.");
         }
         else if (!manifest.Engine.Equals("simple", StringComparison.OrdinalIgnoreCase) &&
                  !manifest.Engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
@@ -193,13 +193,13 @@ public static partial class WebSiteVerifier
         if (contractVersion >= 2)
         {
             if (string.IsNullOrWhiteSpace(manifest.DefaultLayout))
-                warnings.Add($"Theme contract: '{manifest.Name}' schemaVersion 2 should set 'defaultLayout'.");
+                warnings.Add($"Best practice: '{manifest.Name}' schemaVersion 2 should set 'defaultLayout'.");
 
             if (manifest.Slots is null || manifest.Slots.Count == 0)
-                warnings.Add($"Theme contract: '{manifest.Name}' schemaVersion 2 should define 'slots' for portable hook points.");
+                warnings.Add($"Best practice: '{manifest.Name}' schemaVersion 2 should define 'slots' for portable hook points.");
 
             if (string.IsNullOrWhiteSpace(manifest.ScriptsPath))
-                warnings.Add($"Theme contract: '{manifest.Name}' schemaVersion 2 should set 'scriptsPath' for portable JS assets.");
+                warnings.Add($"Best practice: '{manifest.Name}' schemaVersion 2 should set 'scriptsPath' for portable JS assets.");
         }
 
         if (!string.IsNullOrWhiteSpace(manifest.DefaultLayout))
@@ -229,16 +229,16 @@ public static partial class WebSiteVerifier
 
         if (schemaVersion is null && legacyVersion is null)
         {
-            warnings.Add($"Theme contract: '{manifest.Name}' does not declare 'schemaVersion'. Set 'schemaVersion': 2 for portable reusable themes.");
+            warnings.Add($"Best practice: '{manifest.Name}' does not declare 'schemaVersion'. Set 'schemaVersion': 2 for portable reusable themes.");
         }
         else if (schemaVersion is null && legacyVersion is not null)
         {
-            warnings.Add($"Theme contract: '{manifest.Name}' uses legacy 'contractVersion'. Rename to 'schemaVersion' to keep contract intent explicit.");
+            warnings.Add($"Best practice: '{manifest.Name}' uses legacy 'contractVersion'. Rename to 'schemaVersion' to keep contract intent explicit.");
         }
 
         if (schemaVersion is not null && legacyVersion is not null && schemaVersion.Value != legacyVersion.Value)
         {
-            warnings.Add($"Theme contract: '{manifest.Name}' defines schemaVersion={schemaVersion.Value} and contractVersion={legacyVersion.Value}. Keep them aligned or remove the legacy field.");
+            warnings.Add($"Best practice: '{manifest.Name}' defines schemaVersion={schemaVersion.Value} and contractVersion={legacyVersion.Value}. Keep them aligned or remove the legacy field.");
         }
 
         var resolved = schemaVersion ?? legacyVersion ?? 1;
