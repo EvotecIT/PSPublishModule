@@ -84,7 +84,9 @@
         "baselineGenerate": { "type": "boolean", "description": "When true, write the verify baseline file from current warnings." },
         "baselineUpdate": { "type": "boolean", "description": "When true, merge current warnings into an existing verify baseline file." },
         "failOnNewWarnings": { "type": "boolean", "description": "When true, fail only when verify emits warnings not present in baseline." },
-        "failOnNew": { "type": "boolean", "description": "Alias for failOnNewWarnings." }
+        "failOnNew": { "type": "boolean", "description": "Alias for failOnNewWarnings." },
+        "warningPreviewCount": { "type": "integer", "minimum": 0, "description": "How many warnings to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." },
+        "errorPreviewCount": { "type": "integer", "minimum": 0, "description": "How many errors to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." }
       },
       "required": ["task", "config"]
     },

@@ -96,6 +96,9 @@ Notes:
   - `baselineGenerate`: write a baseline from current warnings
   - `baselineUpdate`: merge current warnings into an existing baseline
   - `failOnNewWarnings`: fail only when warnings not present in baseline are produced (recommended for CI)
+- Failure previews (pipeline output):
+  - `warningPreviewCount`: number of warnings included in the thrown failure summary
+  - `errorPreviewCount`: number of errors included in the thrown failure summary
 
 #### doctor
 Runs build/verify/audit as one health-check step.

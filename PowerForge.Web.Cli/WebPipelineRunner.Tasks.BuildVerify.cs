@@ -45,6 +45,8 @@ internal static partial class WebPipelineRunner
         var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
         var isCi = ConsoleEnvironment.IsCI;
         var ciStrictDefaults = isCi && !isDev;
+        var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+        var errorPreviewCount = GetInt(step, "errorPreviewCount") ?? GetInt(step, "error-preview") ?? (isDev ? 2 : 5);
 
         var suppressWarnings = GetArrayOfStrings(step, "suppressWarnings") ?? spec.Verify?.SuppressWarnings;
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? spec.Verify?.FailOnWarnings ?? false;
@@ -98,10 +100,17 @@ internal static partial class WebPipelineRunner
 
         if (!verifySuccess)
         {
-            var firstFailure = verifyPolicyFailures.Length > 0
-                ? verifyPolicyFailures[0]
-                : "Web verify failed.";
-            throw new InvalidOperationException(firstFailure);
+            var baselineLabel = string.IsNullOrWhiteSpace(baselinePath) ? null : baselinePath;
+            var message = BuildVerifyFailureSummary(
+                verify,
+                filteredWarnings,
+                verifyPolicyFailures,
+                baselineLabel,
+                baselineKeys.Length,
+                newWarnings,
+                warningPreviewCount,
+                errorPreviewCount);
+            throw new InvalidOperationException(message);
         }
 
         if (baselineGenerate || baselineUpdate)
