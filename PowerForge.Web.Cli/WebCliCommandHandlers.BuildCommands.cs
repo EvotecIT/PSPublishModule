@@ -132,7 +132,7 @@ internal static partial class WebCliCommandHandlers
             suppressWarnings);
 
         if ((baselineGenerate || baselineUpdate || failOnNewWarnings) && string.IsNullOrWhiteSpace(baselinePathValue))
-            baselinePathValue = "verify-baseline.json";
+            baselinePathValue = ".powerforge/verify-baseline.json";
 
         var baselineKeys = (baselineGenerate || baselineUpdate || failOnNewWarnings || !string.IsNullOrWhiteSpace(baselinePathValue))
             ? WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, baselinePathValue)

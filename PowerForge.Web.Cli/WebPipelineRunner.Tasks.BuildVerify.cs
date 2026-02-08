@@ -61,7 +61,7 @@ internal static partial class WebPipelineRunner
         var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
 
         if ((baselineGenerate || baselineUpdate || failOnNewWarnings) && string.IsNullOrWhiteSpace(baselinePath))
-            baselinePath = "verify-baseline.json";
+            baselinePath = ".powerforge/verify-baseline.json";
 
         var baselineKeys = (!string.IsNullOrWhiteSpace(baselinePath) || baselineGenerate || baselineUpdate || failOnNewWarnings)
             ? WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, baselinePath)

@@ -243,7 +243,7 @@ internal static partial class WebCliCommandHandlers
                 suppressWarnings);
 
         if ((verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings) && string.IsNullOrWhiteSpace(verifyBaselinePath))
-            verifyBaselinePath = "verify-baseline.json";
+            verifyBaselinePath = ".powerforge/verify-baseline.json";
 
         string? verifyBaselineWrittenPath = null;
         if (verify is not null && !string.IsNullOrWhiteSpace(verifyBaselinePath))
