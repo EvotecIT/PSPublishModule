@@ -37,3 +37,6 @@ rows.sort((a, b) => b[0] - a[0] || a[1].localeCompare(b[1]));
 for (const [n, rel] of rows) {
   console.log(String(n).padStart(6, ' ') + '  ' + rel);
 }
+
+// Make this usable in CI: non-zero when any files exceed the limit.
+process.exitCode = rows.length > 0 ? 1 : 0;
