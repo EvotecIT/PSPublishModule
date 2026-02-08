@@ -32,7 +32,30 @@ When `nav`/`navJsonPath` is set and `headerHtml`/`footerHtml` are not provided, 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
 - `navContextPath` (defaults to `baseUrl`, e.g. `/api`)
 - optionally `navContextLayout` / `navContextCollection` / `navContextProject`
-so the generator can select the same profile your theme uses. For best results, point `nav` at `site-nav.json` (the nav export) when available.
+ so the generator can select the same profile your theme uses. For best results, point `nav` at `site-nav.json` (the nav export) when available.
+
+## Best practice: enforce CSS + fragments with featureContracts
+To prevent API regressions (generator adds new UI but the theme does not style it), define a theme-level contract in `theme.manifest.json`:
+```json
+{
+  "name": "mytheme",
+  "schemaVersion": 2,
+  "features": ["apiDocs"],
+  "featureContracts": {
+    "apiDocs": {
+      "requiredPartials": ["api-header", "api-footer"],
+      "requiredCssSelectors": [
+        ".api-layout", ".api-sidebar", ".api-content",
+        ".sidebar-toggle", ".type-item", ".filter-button",
+        ".member-card", ".member-signature"
+      ]
+    }
+  }
+}
+```
+Notes:
+- `powerforge-web verify` emits `Theme CSS contract:` warnings when selectors are missing (code: `[PFWEB.THEME.CSS.CONTRACT]`).
+- The `apidocs` pipeline step can fail in CI on API docs warnings (including `API docs CSS contract:`; code: `[PFWEB.APIDOCS.CSS.CONTRACT]`).
 
 ## Simple template CSS hooks
 
