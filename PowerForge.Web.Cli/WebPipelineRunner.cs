@@ -77,6 +77,7 @@ internal static class WebPipelineRunner
 
         var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
         var normalizedMode = string.IsNullOrWhiteSpace(mode) ? null : mode.Trim();
+        var effectiveMode = string.IsNullOrWhiteSpace(normalizedMode) ? "default" : normalizedMode;
         var onlyTaskSet = onlyTasks is { Length: > 0 }
             ? new HashSet<string>(onlyTasks.Where(static t => !string.IsNullOrWhiteSpace(t)).Select(static t => t.Trim()), StringComparer.OrdinalIgnoreCase)
             : null;
@@ -114,13 +115,13 @@ internal static class WebPipelineRunner
             var label = $"[{stepIndex}/{totalSteps}] {task}";
             var stepResult = new WebPipelineStepResult { Task = task };
 
-            if (!ShouldExecuteTask(task, onlyTaskSet, skipTaskSet))
+            var skipReason = GetSkipReason(task, step, effectiveMode, onlyTaskSet, skipTaskSet);
+            if (skipReason is not null)
             {
-                var reason = skipTaskSet is not null && skipTaskSet.Contains(task) ? "skip" : "only";
                 stepResult.Success = true;
                 stepResult.Cached = false;
                 stepResult.DurationMs = 0;
-                stepResult.Message = $"skipped ({reason})";
+                stepResult.Message = $"skipped ({skipReason})";
                 result.Steps.Add(stepResult);
                 stepResultsByIndex[stepIndex] = stepResult;
                 if (profileEnabled)
@@ -816,6 +817,8 @@ internal static class WebPipelineRunner
                             SummaryPath = resolvedSummaryPath,
                             SarifPath = resolvedSarifPath,
                             SummaryMaxIssues = summaryMax,
+                            SummaryOnFailOnly = summaryOnFail && !summary,
+                            SarifOnFailOnly = sarifOnFail && !sarif,
                             BaselinePath = baselinePath,
                             FailOnWarnings = failOnWarnings,
                             FailOnNewIssues = failOnNewIssues,
@@ -1166,6 +1169,22 @@ internal static class WebPipelineRunner
         return result;
     }
 
+    private static string? GetSkipReason(
+        string task,
+        JsonElement step,
+        string effectiveMode,
+        HashSet<string>? onlyTasks,
+        HashSet<string>? skipTasks)
+    {
+        if (!ShouldExecuteTask(task, onlyTasks, skipTasks))
+            return skipTasks is not null && skipTasks.Contains(task) ? "skip" : "only";
+
+        if (!ShouldExecuteStepMode(step, effectiveMode))
+            return $"mode={effectiveMode}";
+
+        return null;
+    }
+
     private static bool ShouldExecuteTask(string task, HashSet<string>? onlyTasks, HashSet<string>? skipTasks)
     {
         if (skipTasks is not null && skipTasks.Contains(task))
@@ -1173,6 +1192,26 @@ internal static class WebPipelineRunner
         if (onlyTasks is null || onlyTasks.Count == 0)
             return true;
         return onlyTasks.Contains(task);
+    }
+
+    private static bool ShouldExecuteStepMode(JsonElement step, string effectiveMode)
+    {
+        // Absent mode constraints => step runs in all modes.
+        var mode = GetString(step, "mode");
+        var modes = GetArrayOfStrings(step, "modes") ??
+                    GetArrayOfStrings(step, "onlyModes") ?? GetArrayOfStrings(step, "only-modes");
+        if (!string.IsNullOrWhiteSpace(mode))
+            modes = modes is null ? new[] { mode } : modes.Concat(new[] { mode }).ToArray();
+
+        var skipModes = GetArrayOfStrings(step, "skipModes") ?? GetArrayOfStrings(step, "skip-modes");
+        if (skipModes is not null &&
+            skipModes.Any(m => string.Equals(m?.Trim(), effectiveMode, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        if (modes is null || modes.Length == 0)
+            return true;
+
+        return modes.Any(m => string.Equals(m?.Trim(), effectiveMode, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<PipelineStepDefinition> BuildStepDefinitions(JsonElement stepsElement)

@@ -31,9 +31,36 @@ Minimal pipeline:
 
 - `--fast`: applies safe performance-focused overrides (for example, scopes optimize/audit when possible and disables expensive rendered checks).
 - `--dev`: implies `--fast` and sets pipeline mode to `dev` (printed in the pipeline log).
-- `--mode <name>`: attaches a mode label to the run (currently used for logging/diagnostics).
+- `--mode <name>`: sets a pipeline mode label used for step filtering (see "Step modes" below).
 - `--only <task[,task...]>`: run only the specified tasks.
 - `--skip <task[,task...]>`: skip the specified tasks.
+
+### Step modes
+
+Pipelines can gate individual steps by mode to keep local iteration fast while keeping CI exhaustive.
+
+Behavior:
+- If `--mode` is not specified, the effective mode is `default`.
+- If a step does not specify any mode constraints, it runs in all modes.
+- `mode`/`modes` restrict when a step runs.
+- `skipModes` disables a step for selected modes.
+
+Step fields:
+- `mode`: single mode name (string).
+- `modes` (or `onlyModes`): allowed modes (array of strings).
+- `skipModes`: disallowed modes (array of strings).
+
+Example: skip heavy steps in `dev`, keep them in `ci`/`default`.
+```json
+{
+  "steps": [
+    { "task": "build", "config": "./site.json", "out": "./_site" },
+    { "task": "verify", "config": "./site.json" },
+    { "task": "optimize", "siteRoot": "./_site", "skipModes": ["dev"] },
+    { "task": "audit", "siteRoot": "./_site", "skipModes": ["dev"] }
+  ]
+}
+```
 
 ### Supported steps
 
