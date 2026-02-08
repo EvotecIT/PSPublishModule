@@ -124,7 +124,8 @@ public static class WebApiDocsGenerator
         if (!string.IsNullOrWhiteSpace(options.NavJsonPath) &&
             string.IsNullOrWhiteSpace(options.HeaderHtmlPath) &&
             string.IsNullOrWhiteSpace(options.FooterHtmlPath) &&
-            template.Equals("docs", StringComparison.OrdinalIgnoreCase))
+            (template.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
+             template.Equals("sidebar", StringComparison.OrdinalIgnoreCase)))
         {
             warnings.Add("NavJsonPath is set but HeaderHtmlPath/FooterHtmlPath are not set. " +
                          "The docs template will render without site header/footer navigation unless you provide API header/footer fragments.");
