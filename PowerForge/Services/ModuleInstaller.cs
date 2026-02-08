@@ -40,6 +40,7 @@ public sealed class ModuleInstaller
         var roots = options.DestinationRoots.Count > 0 ? options.DestinationRoots : GetDefaultModuleRoots();
         var installed = new List<string>();
         var pruned = new List<string>();
+        var preserveVersions = new HashSet<string>(options.PreserveVersions ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
         string resolvedVersion = ResolveVersion(roots, moduleName, moduleVersion, options.Strategy);
         _logger.Info($"Install strategy: {options.Strategy} → target version {resolvedVersion}");
@@ -52,6 +53,11 @@ public sealed class ModuleInstaller
                 var rootFull = Path.GetFullPath(root.Trim().Trim('"'));
                 var moduleRoot = EnsureChildPath(rootFull, moduleName);
                 Directory.CreateDirectory(moduleRoot);
+
+                // If the user has an old "flat" install (no version folder), it can mask versioned installs.
+                // Handle it before installing the new version folder.
+                HandleLegacyFlatInstall(moduleRoot, moduleName, options.LegacyFlatHandling, preserveVersions);
+
                 var finalPath = EnsureChildPath(moduleRoot, resolvedVersion);
                 var tempPath = EnsureChildPath(moduleRoot, $".tmp_install_{Guid.NewGuid():N}");
 
@@ -91,7 +97,7 @@ public sealed class ModuleInstaller
                         SyncDirectoryToSource(tempPath, finalPath);
                         TryDeleteDirectory(tempPath);
                         installed.Add(finalPath);
-                        var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, out var removedInExact);
+                        var keptExact = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removedInExact);
                         pruned.AddRange(removedInExact);
                         _logger.Verbose($"Installed at {finalPath}; versions kept={keptExact}, pruned={removedInExact.Count}");
                         continue;
@@ -116,7 +122,7 @@ public sealed class ModuleInstaller
                 installed.Add(finalPath);
 
                 // Prune old versions
-                var left = PruneOldVersions(moduleRoot, options.KeepVersions, out var removed);
+                var left = PruneOldVersions(moduleRoot, options.KeepVersions, preserveVersions, out var removed);
                 pruned.AddRange(removed);
                 _logger.Verbose($"Installed at {finalPath}; versions kept={left}, pruned={removed.Count}");
             }
@@ -132,6 +138,193 @@ public sealed class ModuleInstaller
         }
 
         return new ModuleInstallerResult(resolvedVersion, installed, pruned);
+    }
+
+    private void HandleLegacyFlatInstall(
+        string moduleRoot,
+        string moduleName,
+        LegacyFlatModuleHandling handling,
+        ISet<string> preserveVersions)
+    {
+        if (handling == LegacyFlatModuleHandling.Ignore)
+            return;
+
+        var flatManifest = Path.Combine(moduleRoot, $"{moduleName}.psd1");
+        if (!File.Exists(flatManifest))
+            return;
+
+        if (handling == LegacyFlatModuleHandling.Warn)
+        {
+            _logger.Warn(
+                $"Legacy flat module install detected at '{moduleRoot}'. This can conflict with versioned installs. " +
+                $"Configure Install.LegacyFlatHandling (Warn/Convert/Delete/Ignore) or remove it manually.");
+            return;
+        }
+
+        if (handling == LegacyFlatModuleHandling.Delete)
+        {
+            _logger.Warn($"Deleting legacy flat module install items under '{moduleRoot}'.");
+            DeleteLegacyFlatItems(moduleRoot);
+            return;
+        }
+
+        if (handling != LegacyFlatModuleHandling.Convert)
+            return;
+
+        if (!ManifestEditor.TryGetTopLevelString(flatManifest, "ModuleVersion", out var version) ||
+            string.IsNullOrWhiteSpace(version))
+        {
+            var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "unknown");
+            _logger.Warn($"Legacy flat install detected but ModuleVersion could not be read. Quarantining to '{target}'.");
+            MoveLegacyFlatItems(moduleRoot, target);
+            return;
+        }
+
+        var legacyVersion = version!.Trim();
+        try { ValidatePathSegment(legacyVersion, nameof(legacyVersion)); }
+        catch
+        {
+            var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, "invalidversion");
+            _logger.Warn($"Legacy flat install detected but ModuleVersion '{legacyVersion}' is not a safe folder name. Quarantining to '{target}'.");
+            MoveLegacyFlatItems(moduleRoot, target);
+            return;
+        }
+
+        var destination = EnsureChildPath(moduleRoot, legacyVersion);
+        if (Directory.Exists(destination))
+        {
+            var target = EnsureLegacyFlatQuarantineFolder(moduleRoot, legacyVersion);
+            _logger.Warn($"Legacy flat install version '{legacyVersion}' already exists as a version folder. Quarantining flat items to '{target}'.");
+            MoveLegacyFlatItems(moduleRoot, target);
+            preserveVersions.Add(legacyVersion);
+            return;
+        }
+
+        Directory.CreateDirectory(destination);
+        _logger.Info($"Converting legacy flat module install to versioned layout: '{moduleRoot}' -> '{destination}'.");
+        MoveLegacyFlatItems(moduleRoot, destination);
+
+        // Ensure converted versions don't get pruned immediately when KeepVersions is small.
+        preserveVersions.Add(legacyVersion);
+    }
+
+    private static string EnsureLegacyFlatQuarantineFolder(string moduleRoot, string suffix)
+    {
+        var quarantine = EnsureChildPath(moduleRoot, "_legacy_flat");
+        Directory.CreateDirectory(quarantine);
+        var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var folder = $"{suffix}_{stamp}";
+        var target = EnsureChildPath(quarantine, folder);
+        Directory.CreateDirectory(target);
+        return target;
+    }
+
+    private void DeleteLegacyFlatItems(string moduleRoot)
+    {
+        foreach (var file in Directory.EnumerateFiles(moduleRoot, "*", SearchOption.TopDirectoryOnly))
+        {
+            TryDeleteFile(file);
+        }
+
+        foreach (var dir in Directory.EnumerateDirectories(moduleRoot, "*", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(dir) ?? string.Empty;
+            if (name.Length == 0) continue;
+            if (IsVersionFolderName(name)) continue;
+            if (name.StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, "_legacy_flat", StringComparison.OrdinalIgnoreCase)) continue;
+            TryDeleteDirectory(dir);
+        }
+    }
+
+    private void MoveLegacyFlatItems(string moduleRoot, string destinationRoot)
+    {
+        Directory.CreateDirectory(destinationRoot);
+
+        foreach (var file in Directory.EnumerateFiles(moduleRoot, "*", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(file) ?? string.Empty;
+            if (name.Length == 0) continue;
+            var target = Path.Combine(destinationRoot, name);
+            TryMoveFile(file, target);
+        }
+
+        foreach (var dir in Directory.EnumerateDirectories(moduleRoot, "*", SearchOption.TopDirectoryOnly))
+        {
+            var name = Path.GetFileName(dir) ?? string.Empty;
+            if (name.Length == 0) continue;
+            if (IsVersionFolderName(name)) continue;
+            if (name.StartsWith(".tmp_install_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(name, "_legacy_flat", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var target = Path.Combine(destinationRoot, name);
+            TryMoveDirectory(dir, target);
+        }
+    }
+
+    private static bool IsVersionFolderName(string name)
+        => !string.IsNullOrWhiteSpace(name) && char.IsDigit(name[0]);
+
+    private void TryMoveFile(string sourcePath, string destPath)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+            if (File.Exists(destPath))
+            {
+                File.Copy(sourcePath, destPath, overwrite: true);
+                TryDeleteFile(sourcePath);
+                return;
+            }
+            File.Move(sourcePath, destPath);
+        }
+        catch (IOException)
+        {
+            try { File.Copy(sourcePath, destPath, overwrite: true); }
+            catch (Exception ex) { _logger.Warn($"Failed to copy legacy flat file '{sourcePath}' -> '{destPath}': {ex.Message}"); return; }
+            TryDeleteFile(sourcePath);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            try { File.Copy(sourcePath, destPath, overwrite: true); }
+            catch (Exception ex) { _logger.Warn($"Failed to copy legacy flat file '{sourcePath}' -> '{destPath}': {ex.Message}"); return; }
+            TryDeleteFile(sourcePath);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to move legacy flat file '{sourcePath}' -> '{destPath}': {ex.Message}");
+        }
+    }
+
+    private void TryMoveDirectory(string sourceDir, string destDir)
+    {
+        try
+        {
+            if (Directory.Exists(destDir))
+            {
+                CopyDirectory(sourceDir, destDir);
+                TryDeleteDirectory(sourceDir);
+                return;
+            }
+
+            Directory.Move(sourceDir, destDir);
+        }
+        catch (IOException)
+        {
+            try { CopyDirectory(sourceDir, destDir); }
+            catch (Exception ex) { _logger.Warn($"Failed to copy legacy flat directory '{sourceDir}' -> '{destDir}': {ex.Message}"); return; }
+            TryDeleteDirectory(sourceDir);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            try { CopyDirectory(sourceDir, destDir); }
+            catch (Exception ex) { _logger.Warn($"Failed to copy legacy flat directory '{sourceDir}' -> '{destDir}': {ex.Message}"); return; }
+            TryDeleteDirectory(sourceDir);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Failed to move legacy flat directory '{sourceDir}' -> '{destDir}': {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -293,7 +486,7 @@ public sealed class ModuleInstaller
         catch { /* best effort */ }
     }
 
-    private static int PruneOldVersions(string moduleRoot, int keep, out List<string> removed)
+    private static int PruneOldVersions(string moduleRoot, int keep, ISet<string>? preserveVersions, out List<string> removed)
     {
         removed = new List<string>();
         if (!Directory.Exists(moduleRoot)) return 0;
@@ -302,14 +495,37 @@ public sealed class ModuleInstaller
             .Where(n => n.Length > 0 && char.IsDigit(n[0]))
             .OrderByDescending(n => ParseVersionSortable(n!))
             .ToList();
-        var keepSet = dirs.Take(keep).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var d in dirs.Skip(keep))
+
+        var preserve = preserveVersions ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keepSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in preserve)
+            if (!string.IsNullOrWhiteSpace(p))
+                keepSet.Add(p.Trim());
+
+        // Keep up to 'keep' non-preserved versions (dirs are already ordered descending).
+        var keptNonPreserved = 0;
+        foreach (var d in dirs)
         {
+            if (keepSet.Contains(d)) continue;
+            if (keptNonPreserved >= keep) continue;
+            keepSet.Add(d);
+            keptNonPreserved++;
+        }
+
+        foreach (var d in dirs)
+        {
+            if (keepSet.Contains(d)) continue;
             var full = Path.Combine(moduleRoot, d);
             try { Directory.Delete(full, recursive: true); removed.Add(full); }
             catch { /* best effort */ }
         }
         return keepSet.Count;
+    }
+
+    private void TryDeleteFile(string path)
+    {
+        try { File.Delete(path); }
+        catch (Exception ex) { _logger.Warn($"Failed to delete file '{path}': {ex.Message}"); }
     }
 
     private static Version ParseVersionSortable(string v)

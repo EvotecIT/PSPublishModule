@@ -22,5 +22,14 @@ public sealed class ModuleInstallSpec
 
     /// <summary>Destination module roots. When empty, defaults are used.</summary>
     public string[] Roots { get; set; } = Array.Empty<string>();
-}
 
+    /// <summary>
+    /// Controls how legacy flat installs under &lt;root&gt;\&lt;ModuleName&gt; should be handled.
+    /// </summary>
+    public LegacyFlatModuleHandling LegacyFlatHandling { get; set; } = LegacyFlatModuleHandling.Warn;
+
+    /// <summary>
+    /// Version folder names to preserve during pruning.
+    /// </summary>
+    public string[] PreserveVersions { get; set; } = Array.Empty<string>();
+}

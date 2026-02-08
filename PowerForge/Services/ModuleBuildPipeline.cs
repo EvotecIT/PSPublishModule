@@ -153,7 +153,12 @@ public sealed class ModuleBuildPipeline
         }
 
         var installer = new ModuleInstaller(_logger);
-        var options = new ModuleInstallerOptions(spec.Roots, InstallationStrategy.Exact, spec.KeepVersions);
+        var options = new ModuleInstallerOptions(
+            destinationRoots: spec.Roots,
+            strategy: InstallationStrategy.Exact,
+            keepVersions: spec.KeepVersions,
+            legacyFlatHandling: spec.LegacyFlatHandling,
+            preserveVersions: spec.PreserveVersions);
         return installer.InstallFromStaging(staging, spec.Name, resolved, options);
     }
 
