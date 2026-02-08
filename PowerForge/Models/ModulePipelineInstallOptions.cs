@@ -27,5 +27,15 @@ public sealed class ModulePipelineInstallOptions
     /// otherwise defaults are used by the installer.
     /// </summary>
     public string[]? Roots { get; set; }
-}
 
+    /// <summary>
+    /// Controls how legacy "flat" installs under &lt;root&gt;\&lt;ModuleName&gt; should be handled during install.
+    /// Default: <see cref="LegacyFlatModuleHandling.Warn"/>.
+    /// </summary>
+    public LegacyFlatModuleHandling LegacyFlatHandling { get; set; } = LegacyFlatModuleHandling.Warn;
+
+    /// <summary>
+    /// Version folder names to preserve during pruning. Useful when migrating from older major versions.
+    /// </summary>
+    public string[]? PreserveVersions { get; set; }
+}

@@ -1368,7 +1368,9 @@ public sealed class ModulePipelineRunner
                     StagingPath = installPackagePath,
                     Strategy = plan.InstallStrategy,
                     KeepVersions = plan.InstallKeepVersions,
-                    Roots = plan.InstallRoots
+                    Roots = plan.InstallRoots,
+                    LegacyFlatHandling = spec.Install?.LegacyFlatHandling ?? LegacyFlatModuleHandling.Warn,
+                    PreserveVersions = spec.Install?.PreserveVersions ?? Array.Empty<string>()
                 };
                 installResult = pipeline.InstallFromStaging(installSpec);
                 SafeDone(installStep);
