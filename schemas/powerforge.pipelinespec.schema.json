@@ -15,7 +15,9 @@
       "properties": {
         "Enabled": { "type": "boolean" },
         "Strategy": { "anyOf": [{ "$ref": "powerforge.common.schema.json#/$defs/InstallationStrategy" }, { "type": "null" }] },
+        "LegacyFlatHandling": { "$ref": "powerforge.common.schema.json#/$defs/LegacyFlatModuleHandling" },
         "KeepVersions": { "type": ["integer", "null"], "minimum": 1 },
+        "PreserveVersions": { "type": ["array", "null"], "items": { "type": "string" } },
         "Roots": { "type": ["array", "null"], "items": { "type": "string" } }
       }
     },
@@ -26,4 +28,3 @@
   },
   "required": ["Build"]
 }
-

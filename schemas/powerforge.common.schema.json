@@ -8,6 +8,10 @@
       "type": "string",
       "enum": ["Exact", "AutoRevision"]
     },
+    "LegacyFlatModuleHandling": {
+      "type": "string",
+      "enum": ["Warn", "Convert", "Delete", "Ignore"]
+    },
     "ModuleTestSuiteOutputFormat": {
       "type": "string",
       "enum": ["Detailed", "Normal", "Minimal"]
