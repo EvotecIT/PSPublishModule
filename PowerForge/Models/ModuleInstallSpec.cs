@@ -32,4 +32,10 @@ public sealed class ModuleInstallSpec
     /// Version folder names to preserve during pruning.
     /// </summary>
     public string[] PreserveVersions { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// When true (default), patches the installed PSD1 ModuleVersion to the resolved install version.
+    /// When false, keeps the staged ModuleVersion.
+    /// </summary>
+    public bool UpdateManifestToResolvedVersion { get; set; } = true;
 }

@@ -191,9 +191,19 @@ public sealed partial class ModulePipelineRunner
         var result = RunScript(runner, script, args, TimeSpan.FromMinutes(5));
         if (result.ExitCode != 0)
         {
-            var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-            if (string.IsNullOrWhiteSpace(message)) message = "Import-Module failed.";
-            throw new InvalidOperationException(message.Trim());
+            var sb = new StringBuilder();
+            sb.AppendLine($"Import-Module failed (exit {result.ExitCode}).");
+            if (!string.IsNullOrWhiteSpace(result.StdOut))
+            {
+                sb.AppendLine("StdOut:");
+                sb.AppendLine(result.StdOut.TrimEnd());
+            }
+            if (!string.IsNullOrWhiteSpace(result.StdErr))
+            {
+                sb.AppendLine("StdErr:");
+                sb.AppendLine(result.StdErr.TrimEnd());
+            }
+            throw new InvalidOperationException(sb.ToString().TrimEnd());
         }
     }
 

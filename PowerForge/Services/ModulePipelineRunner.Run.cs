@@ -763,6 +763,7 @@ public sealed partial class ModulePipelineRunner
                     Strategy = plan.InstallStrategy,
                     KeepVersions = plan.InstallKeepVersions,
                     Roots = plan.InstallRoots,
+                    UpdateManifestToResolvedVersion = spec.Install?.UpdateManifestToResolvedVersion ?? true,
                     LegacyFlatHandling = spec.Install?.LegacyFlatHandling ?? LegacyFlatModuleHandling.Warn,
                     PreserveVersions = spec.Install?.PreserveVersions ?? Array.Empty<string>()
                 };

@@ -38,4 +38,10 @@ public sealed class ModulePipelineInstallOptions
     /// Version folder names to preserve during pruning. Useful when migrating from older major versions.
     /// </summary>
     public string[]? PreserveVersions { get; set; }
+
+    /// <summary>
+    /// When true (default), patches the installed PSD1 ModuleVersion to the resolved install version.
+    /// When false, keeps the staged ModuleVersion (useful for dev installs to avoid introducing 4-part versions).
+    /// </summary>
+    public bool UpdateManifestToResolvedVersion { get; set; } = true;
 }
