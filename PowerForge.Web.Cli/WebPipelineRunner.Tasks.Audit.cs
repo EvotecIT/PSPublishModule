@@ -86,6 +86,7 @@ internal static partial class WebPipelineRunner
         var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking");
         var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking");
         var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
+        var maxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0;
 
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
             baselinePath = "audit-baseline.json";
@@ -150,6 +151,7 @@ internal static partial class WebPipelineRunner
             Exclude = CliPatternHelper.SplitPatterns(exclude),
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
+            MaxTotalFiles = Math.Max(0, maxTotalFiles),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequiredValue,
@@ -222,4 +224,3 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException(stepResult.Message);
     }
 }
-

@@ -186,6 +186,7 @@ internal static partial class WebPipelineRunner
                 Include = CliPatternHelper.SplitPatterns(include),
                 Exclude = CliPatternHelper.SplitPatterns(exclude),
                 UseDefaultExcludes = useDefaultExclude,
+                MaxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0,
                 IgnoreNavFor = ignoreNavPatterns,
                 NavSelector = navSelector,
                 NavRequired = navRequiredValue,

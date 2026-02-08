@@ -21,6 +21,9 @@ internal static partial class WebPipelineRunner
             $"assets {result.AssetCount}"
         };
 
+        if (result.TotalFileCount > 0)
+            parts.Insert(0, $"files {result.TotalFileCount}");
+
         if (result.HtmlSelectedFileCount > 0 && result.HtmlFileCount > 0 && result.HtmlSelectedFileCount != result.HtmlFileCount)
             parts.Insert(0, $"html-scope {result.HtmlSelectedFileCount}/{result.HtmlFileCount}");
 

@@ -468,6 +468,7 @@ internal static partial class WebCliCommandHandlers
         var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
         var maxHtmlFilesText = TryGetOptionValue(subArgs, "--max-html-files") ?? TryGetOptionValue(subArgs, "--max-html");
+        var maxTotalFilesText = TryGetOptionValue(subArgs, "--max-total-files") ?? TryGetOptionValue(subArgs, "--max-files-total");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
@@ -479,6 +480,7 @@ internal static partial class WebCliCommandHandlers
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
         var maxHtmlFiles = ParseIntOption(maxHtmlFilesText, 0);
+        var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
             baselinePathValue = "audit-baseline.json";
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
@@ -492,6 +494,7 @@ internal static partial class WebCliCommandHandlers
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
+            MaxTotalFiles = Math.Max(0, maxTotalFiles),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,
@@ -577,8 +580,10 @@ internal static partial class WebCliCommandHandlers
         }
 
         if (result.Success)
-            logger.Success("Web audit passed.");
+        logger.Success("Web audit passed.");
 
+        if (result.TotalFileCount > 0)
+            logger.Info($"Files: {result.TotalFileCount}");
         logger.Info($"Pages: {result.PageCount}");
         logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
         logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");

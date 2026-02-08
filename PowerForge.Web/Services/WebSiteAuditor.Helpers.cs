@@ -8,6 +8,27 @@ namespace PowerForge.Web;
 /// <summary>Audits generated HTML output using static checks.</summary>
 public static partial class WebSiteAuditor
 {
+    private static int CountAllFiles(string root, int stopAfter)
+    {
+        // Best-effort: avoid full traversal when auditing just wants a budget check.
+        var count = 0;
+        try
+        {
+            foreach (var _ in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                count++;
+                if (stopAfter > 0 && count > stopAfter)
+                    break;
+            }
+        }
+        catch
+        {
+            // ignore IO errors; this is a best-effort metric
+        }
+
+        return count;
+    }
+
     private static IEnumerable<string> EnumerateHtmlFiles(string root, string[] includePatterns, string[] excludePatterns, bool useDefaultExcludes)
     {
         var includes = NormalizePatterns(includePatterns);

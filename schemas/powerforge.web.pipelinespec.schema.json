@@ -121,6 +121,8 @@
         "failOnThemeContract": { "type": "boolean" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
+        "maxTotalFiles": { "type": "integer", "minimum": 0, "description": "Maximum allowed total file count under siteRoot (0 disables)." },
+        "max-total-files": { "type": "integer", "minimum": 0, "description": "Alias for maxTotalFiles." },
         "noDefaultExclude": { "type": "boolean" },
         "ignoreNav": { "type": "string" },
         "ignore-nav": { "type": "string" },
@@ -455,6 +457,8 @@
         "exclude": { "type": "string" },
         "maxHtmlFiles": { "type": "integer", "minimum": 0 },
         "max-html-files": { "type": "integer", "minimum": 0 },
+        "maxTotalFiles": { "type": "integer", "minimum": 0, "description": "Maximum allowed total file count under siteRoot (0 disables)." },
+        "max-total-files": { "type": "integer", "minimum": 0, "description": "Alias for maxTotalFiles." },
         "scopeFromBuildUpdated": {
           "type": "boolean",
           "description": "When true, if include is not set, scope the audit to the HTML files updated by the most recent build step (when siteRoot matches build out). In --fast mode this behavior is enabled by default; set this to false to disable."
