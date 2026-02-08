@@ -64,7 +64,7 @@ internal static class WebVerifyBaselineStore
 
     internal static string ResolveBaselinePath(string siteRoot, string? baselinePath)
     {
-        var candidate = string.IsNullOrWhiteSpace(baselinePath) ? "verify-baseline.json" : baselinePath.Trim();
+        var candidate = string.IsNullOrWhiteSpace(baselinePath) ? ".powerforge/verify-baseline.json" : baselinePath.Trim();
         var normalizedRoot = NormalizeDirectoryPath(siteRoot);
         var resolvedPath = Path.IsPathRooted(candidate)
             ? Path.GetFullPath(candidate)
@@ -166,4 +166,3 @@ internal static class WebVerifyBaselineStore
         return false;
     }
 }
-
