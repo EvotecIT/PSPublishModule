@@ -673,6 +673,24 @@ public static partial class WebSiteVerifier
                 primary.ValueKind != JsonValueKind.Array)
                 return;
 
+            if (!doc.RootElement.TryGetProperty("menuModels", out var menuModels) ||
+                menuModels.ValueKind != JsonValueKind.Array)
+            {
+                warnings.Add("Navigation lint: site-nav.json does not contain 'menuModels'. This looks like an older nav export shape; regenerate it to avoid navigation/profile drift.");
+            }
+
+            if (!doc.RootElement.TryGetProperty("profiles", out var profiles) ||
+                profiles.ValueKind != JsonValueKind.Array)
+            {
+                warnings.Add("Navigation lint: site-nav.json does not contain 'profiles'. Navigation.Profiles cannot be applied by downstream tools (e.g., API docs nav injection). Regenerate the nav export.");
+            }
+
+            if (!doc.RootElement.TryGetProperty("surfaces", out var surfaces) ||
+                surfaces.ValueKind != JsonValueKind.Object)
+            {
+                warnings.Add("Navigation lint: site-nav.json does not contain 'surfaces'. Regenerate the nav export so themes and tools can rely on stable nav surfaces (main/docs/apidocs/products).");
+            }
+
             var menu = nav.Menus.FirstOrDefault(m => string.Equals(m.Name, "main", StringComparison.OrdinalIgnoreCase));
             if (menu is null || menu.Items is null || menu.Items.Length == 0) return;
 
@@ -693,7 +711,7 @@ public static partial class WebSiteVerifier
 
             if (expected.Length != actual.Length)
             {
-                warnings.Add($"site-nav.json primary count ({actual.Length}) differs from Navigation main menu ({expected.Length}).");
+                warnings.Add($"Navigation lint: site-nav.json primary count ({actual.Length}) differs from Navigation main menu ({expected.Length}).");
                 return;
             }
 
@@ -702,7 +720,7 @@ public static partial class WebSiteVerifier
                 if (!string.Equals(expected[i].Href, actual[i].Href, StringComparison.OrdinalIgnoreCase) ||
                     !string.Equals(expected[i].Text, actual[i].Text, StringComparison.Ordinal))
                 {
-                    warnings.Add("site-nav.json primary entries differ from Navigation main menu. " +
+                    warnings.Add("Navigation lint: site-nav.json primary entries differ from Navigation main menu. " +
                                  "Regenerate the nav export or update the custom data file.");
                     break;
                 }
@@ -710,7 +728,7 @@ public static partial class WebSiteVerifier
         }
         catch (Exception ex)
         {
-            warnings.Add($"Failed to read site-nav.json for navigation consistency: {ex.Message}");
+            warnings.Add($"Navigation lint: failed to read site-nav.json for navigation consistency: {ex.Message}");
         }
     }
 

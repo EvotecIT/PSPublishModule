@@ -335,6 +335,84 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenCustomSiteNavIsMissingProfilesAndSurfaces()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-site-nav-shape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "data"));
+            File.WriteAllText(Path.Combine(root, "data", "site-nav.json"),
+                """
+                {
+                  "primary": [
+                    { "href": "/", "text": "Home" }
+                  ]
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier site-nav shape test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DataRoot = "data",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("site-nav.json does not contain 'profiles'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("site-nav.json does not contain 'surfaces'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsOnMarkdownRawHtmlHygiene()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-" + Guid.NewGuid().ToString("N"));
