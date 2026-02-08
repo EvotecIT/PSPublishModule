@@ -19,6 +19,12 @@ public class WebSiteScaffolderTests
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
             var spec = specDoc.RootElement;
 
+            Assert.True(spec.TryGetProperty("features", out var features));
+            Assert.Equal(JsonValueKind.Array, features.ValueKind);
+            var featureList = features.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray();
+            Assert.Contains("docs", featureList, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("blog", featureList, StringComparer.OrdinalIgnoreCase);
+
             var collections = spec.GetProperty("collections").EnumerateArray()
                 .Select(element => element.GetProperty("name").GetString() ?? string.Empty)
                 .ToArray();

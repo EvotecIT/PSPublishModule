@@ -117,6 +117,14 @@ Use this post as a starting point for changelogs, release notes, and engineering
             Name = themeName,
             SchemaVersion = 2,
             Engine = engine,
+            Features = new[] { "docs", "blog" },
+            FeatureContracts = new Dictionary<string, ThemeFeatureContractSpec>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["docs"] = new ThemeFeatureContractSpec
+                {
+                    RequiredLayouts = new[] { "docs" }
+                }
+            },
             DefaultLayout = "base",
             LayoutsPath = "layouts",
             PartialsPath = "partials",
@@ -282,6 +290,7 @@ a { color: inherit; text-decoration: none; }
             ContentRoot = "content",
             ThemesRoot = "themes",
             DataRoot = "data",
+            Features = new[] { "docs", "blog" },
             Collections = new[]
             {
                 new CollectionSpec
@@ -341,6 +350,16 @@ a { color: inherit; text-decoration: none; }
                             new MenuItemSpec { Title = "Docs", Url = "/docs/" },
                             new MenuItemSpec { Title = "Blog", Url = "/blog/" }
                         }
+                    }
+                },
+                Auto = new[]
+                {
+                    new NavigationAutoSpec
+                    {
+                        Collection = "docs",
+                        Menu = "docs",
+                        MaxDepth = 3,
+                        IncludeIndex = true
                     }
                 }
             },
