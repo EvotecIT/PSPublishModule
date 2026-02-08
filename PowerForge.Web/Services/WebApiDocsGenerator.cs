@@ -120,6 +120,17 @@ public static class WebApiDocsGenerator
         if (options.Type == ApiDocsType.PowerShell && !File.Exists(helpPath) && !Directory.Exists(helpPath))
             warnings.Add($"PowerShell help not found: {helpPath}");
 
+        var template = (options.Template ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(options.NavJsonPath) &&
+            string.IsNullOrWhiteSpace(options.HeaderHtmlPath) &&
+            string.IsNullOrWhiteSpace(options.FooterHtmlPath) &&
+            (template.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
+             template.Equals("sidebar", StringComparison.OrdinalIgnoreCase)))
+        {
+            warnings.Add("NavJsonPath is set but HeaderHtmlPath/FooterHtmlPath are not set. " +
+                         "The docs template will render without site header/footer navigation unless you provide API header/footer fragments.");
+        }
+
         Assembly? assembly = null;
         if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
         {
