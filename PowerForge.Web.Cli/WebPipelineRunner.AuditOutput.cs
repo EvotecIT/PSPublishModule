@@ -89,6 +89,25 @@ internal static partial class WebPipelineRunner
                 : $"Audit failed ({result.Errors.Length} errors): {TruncateForLog(headline, 180)}"
         };
 
+        // Always include a compact "context line" so failures are diagnosable without opening artifacts.
+        var context = new List<string>();
+        if (result.TotalFileCount > 0)
+            context.Add($"files {result.TotalFileCount}");
+        if (result.HtmlSelectedFileCount > 0 && result.HtmlFileCount > 0 && result.HtmlSelectedFileCount != result.HtmlFileCount)
+            context.Add($"html-scope {result.HtmlSelectedFileCount}/{result.HtmlFileCount}");
+        if (result.PageCount > 0)
+            context.Add($"pages {result.PageCount}");
+        if (result.NavCheckedCount > 0 || result.NavIgnoredCount > 0)
+            context.Add($"nav {result.NavCheckedCount} checked/{result.NavIgnoredCount} ignored ({result.NavCoveragePercent:0.0}%)");
+        if (result.WarningCount > 0)
+            context.Add($"warnings {result.WarningCount}");
+        if (result.NewIssueCount > 0)
+            context.Add($"new {result.NewIssueCount} ({result.NewErrorCount}e/{result.NewWarningCount}w)");
+        if (!string.IsNullOrWhiteSpace(result.BaselinePath))
+            context.Add($"baseline {result.BaselinePath} (known {result.BaselineIssueCount})");
+        if (context.Count > 0)
+            parts.Add(string.Join(", ", context));
+
         if (!string.IsNullOrWhiteSpace(result.SummaryPath))
             parts.Add($"summary {result.SummaryPath}");
         if (!string.IsNullOrWhiteSpace(result.SarifPath))
