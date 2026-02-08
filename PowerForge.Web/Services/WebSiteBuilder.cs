@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
@@ -10,6 +11,7 @@ namespace PowerForge.Web;
 /// <summary>Builds a static site from configuration and content.</summary>
 public static partial class WebSiteBuilder
 {
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex TocHeaderRegex = new("<h(?<level>[2-3])[^>]*>(?<text>.*?)</h\\1>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex StripTagsRegex = new("<.*?>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
@@ -40,8 +42,8 @@ public static partial class WebSiteBuilder
         var specPath = Path.Combine(metaDir, "site-spec.json");
         var redirectsPath = Path.Combine(metaDir, "redirects.json");
 
-        File.WriteAllText(planPath, JsonSerializer.Serialize(plan, jsonOptions));
-        File.WriteAllText(specPath, JsonSerializer.Serialize(spec, jsonOptions));
+        WriteAllTextIfChanged(planPath, JsonSerializer.Serialize(plan, jsonOptions));
+        WriteAllTextIfChanged(specPath, JsonSerializer.Serialize(spec, jsonOptions));
 
         var redirects = new List<RedirectSpec>();
         if (spec.RouteOverrides is { Length: > 0 }) redirects.AddRange(spec.RouteOverrides);
@@ -82,7 +84,7 @@ public static partial class WebSiteBuilder
             routeOverrides = spec.RouteOverrides,
             redirects = redirects
         };
-        File.WriteAllText(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
+        WriteAllTextIfChanged(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
         WriteRedirectOutputs(outDir, redirects);
         EnsureNoJekyllFile(outDir);
 
@@ -148,7 +150,7 @@ public static partial class WebSiteBuilder
         foreach (var file in Directory.GetFiles(source))
         {
             var destFile = Path.Combine(destination, Path.GetFileName(file));
-            File.Copy(file, destFile, true);
+            CopyFileIfChanged(file, destFile);
         }
 
         foreach (var dir in Directory.GetDirectories(source))
@@ -188,7 +190,7 @@ public static partial class WebSiteBuilder
                 if (!string.IsNullOrWhiteSpace(destDir))
                     Directory.CreateDirectory(destDir);
 
-                File.Copy(sourcePath, destPath, true);
+                CopyFileIfChanged(sourcePath, destPath);
                 continue;
             }
 
@@ -196,6 +198,77 @@ public static partial class WebSiteBuilder
                 ? outputRoot
                 : Path.Combine(outputRoot, destination);
             CopyDirectory(sourcePath, targetRoot);
+        }
+    }
+
+    private static void WriteAllTextIfChanged(string path, string content)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        // Keep output timestamps stable when content didn't change. This enables pipeline step caching
+        // (and avoids expensive optimize/audit reruns) on large sites during local iteration.
+        try
+        {
+            if (File.Exists(path))
+            {
+                var existing = File.ReadAllText(path);
+                if (string.Equals(existing, content, StringComparison.Ordinal))
+                    return;
+            }
+        }
+        catch
+        {
+            // If comparison fails, fall back to writing to keep the build correct.
+        }
+
+        File.WriteAllText(path, content, Utf8NoBom);
+    }
+
+    private static void WriteAllLinesIfChanged(string path, IEnumerable<string> lines)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        var payload = string.Join(Environment.NewLine, lines);
+        WriteAllTextIfChanged(path, payload);
+    }
+
+    private static void CopyFileIfChanged(string sourcePath, string destPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(destPath))
+            return;
+
+        try
+        {
+            if (File.Exists(destPath))
+            {
+                var srcInfo = new FileInfo(sourcePath);
+                var dstInfo = new FileInfo(destPath);
+
+                // Fast path: same size and destination is at least as new as source.
+                if (srcInfo.Length == dstInfo.Length && dstInfo.LastWriteTimeUtc >= srcInfo.LastWriteTimeUtc)
+                    return;
+            }
+        }
+        catch
+        {
+            // If file metadata comparison fails, fall back to copying.
+        }
+
+        var destDir = Path.GetDirectoryName(destPath);
+        if (!string.IsNullOrWhiteSpace(destDir))
+            Directory.CreateDirectory(destDir);
+
+        File.Copy(sourcePath, destPath, overwrite: true);
+        try
+        {
+            // Preserve source timestamp so downstream caching based on mtimes behaves predictably.
+            File.SetLastWriteTimeUtc(destPath, File.GetLastWriteTimeUtc(sourcePath));
+        }
+        catch
+        {
+            // best-effort
         }
     }
 

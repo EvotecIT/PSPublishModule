@@ -800,7 +800,7 @@ public static partial class WebSiteBuilder
         }
 
         if (lines.Count > 0)
-            File.WriteAllLines(path, lines);
+            WriteAllLinesIfChanged(path, lines);
     }
 
     private static void WriteAzureStaticWebAppConfig(string path, IReadOnlyList<RedirectSpec> redirects)
@@ -816,7 +816,7 @@ public static partial class WebSiteBuilder
         }
 
         var payload = new { routes };
-        File.WriteAllText(path, JsonSerializer.Serialize(payload, WebJson.Options));
+        WriteAllTextIfChanged(path, JsonSerializer.Serialize(payload, WebJson.Options));
     }
 
     private static void WriteVercelRedirects(string path, IReadOnlyList<RedirectSpec> redirects)
@@ -831,7 +831,7 @@ public static partial class WebSiteBuilder
         }
 
         var payload = new { redirects = items };
-        File.WriteAllText(path, JsonSerializer.Serialize(payload, WebJson.Options));
+        WriteAllTextIfChanged(path, JsonSerializer.Serialize(payload, WebJson.Options));
     }
 
     private static string NormalizeNetlifySource(RedirectSpec r)

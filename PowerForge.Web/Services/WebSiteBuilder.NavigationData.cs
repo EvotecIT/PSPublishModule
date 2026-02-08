@@ -20,9 +20,6 @@ public static partial class WebSiteBuilder
             return;
 
         var outputPath = Path.Combine(dataDir, "site-nav.json");
-        if (File.Exists(outputPath))
-            return;
-
         Directory.CreateDirectory(dataDir);
 
         var menus = menuSpecs.ToDictionary(
@@ -51,7 +48,7 @@ public static partial class WebSiteBuilder
             profiles = MapProfiles(spec.Navigation?.Profiles ?? Array.Empty<NavigationProfileSpec>())
         };
 
-        File.WriteAllText(outputPath, JsonSerializer.Serialize(payload, WebJson.Options));
+        WriteAllTextIfChanged(outputPath, JsonSerializer.Serialize(payload, WebJson.Options));
     }
 
     private static object[] MapMenuItems(MenuItemSpec[] items)

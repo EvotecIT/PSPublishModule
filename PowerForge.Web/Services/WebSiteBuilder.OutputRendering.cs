@@ -39,7 +39,7 @@ public static partial class WebSiteBuilder
             if (!string.IsNullOrWhiteSpace(outputDirectory))
                 Directory.CreateDirectory(outputDirectory);
             var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format, outputs, alternateHeadLinksHtml);
-            File.WriteAllText(outputFile, content);
+            WriteAllTextIfChanged(outputFile, content);
         }
         CopyPageResources(item, isNotFoundRoute ? outputRoot : targetDir);
     }
@@ -482,7 +482,7 @@ public static partial class WebSiteBuilder
             var targetFolder = Path.GetDirectoryName(target);
             if (!string.IsNullOrWhiteSpace(targetFolder))
                 Directory.CreateDirectory(targetFolder);
-            File.Copy(resource.SourcePath, target, overwrite: true);
+            CopyFileIfChanged(resource.SourcePath, target);
         }
     }
 
