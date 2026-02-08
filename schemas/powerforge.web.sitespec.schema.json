@@ -68,6 +68,20 @@
     "Versioning": { "$ref": "#/$defs/VersioningSpec" },
     "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
     "Verify": { "$ref": "#/$defs/VerifyPolicySpec" },
+    "Features": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["docs", "apiDocs", "blog", "search", "notFound"]
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["docs", "apiDocs", "blog", "search", "notFound"]
+      }
+    },
     "Cache": { "$ref": "#/$defs/BuildCacheSpec" }
   },
   "required": ["Name", "BaseUrl", "Collections"],
@@ -479,7 +493,8 @@
       "properties": {
         "FailOnWarnings": { "type": "boolean" },
         "FailOnNavLint": { "type": "boolean" },
-        "FailOnThemeContract": { "type": "boolean" }
+        "FailOnThemeContract": { "type": "boolean" },
+        "SuppressWarnings": { "type": "array", "items": { "type": "string" } }
       }
     },
     "NavigationSpec": {
@@ -500,6 +515,10 @@
           "items": { "$ref": "#/$defs/NavigationRegionSpec" }
         },
         "Footer": { "$ref": "#/$defs/NavigationFooterSpec" },
+        "Surfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NavigationSurfaceSpec" }
+        },
         "Profiles": {
           "type": "array",
           "items": { "$ref": "#/$defs/NavigationProfileSpec" }
@@ -509,6 +528,21 @@
           "items": { "$ref": "#/$defs/NavigationAutoSpec" }
         }
       }
+    },
+    "NavigationSurfaceSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "Path": { "type": "string" },
+        "Collection": { "type": "string" },
+        "Layout": { "type": "string" },
+        "Project": { "type": "string" },
+        "PrimaryMenu": { "type": "string" },
+        "SidebarMenu": { "type": "string" },
+        "ProductsMenu": { "type": "string" }
+      },
+      "required": ["Name"]
     },
     "MenuSpec": {
       "type": "object",

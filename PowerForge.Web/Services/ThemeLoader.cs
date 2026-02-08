@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Linq;
 
 namespace PowerForge.Web;
 
@@ -167,7 +168,8 @@ public sealed class ThemeLoader
             Partials = MergeDictionary(parent.Partials, child.Partials),
             Slots = MergeDictionary(parent.Slots, child.Slots),
             Tokens = MergeTokens(parent.Tokens, child.Tokens),
-            Assets = child.Assets ?? parent.Assets
+            Assets = child.Assets ?? parent.Assets,
+            Features = MergeStringArray(parent.Features, child.Features)
         };
 
         return merged;
@@ -221,6 +223,20 @@ public sealed class ThemeLoader
             }
         }
         return merged;
+    }
+
+    private static string[] MergeStringArray(string[]? parent, string[]? child)
+    {
+        var p = parent ?? Array.Empty<string>();
+        var c = child ?? Array.Empty<string>();
+        if (p.Length == 0 && c.Length == 0)
+            return Array.Empty<string>();
+
+        return p.Concat(c)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
 

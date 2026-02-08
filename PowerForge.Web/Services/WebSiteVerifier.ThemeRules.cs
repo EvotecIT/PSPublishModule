@@ -8,6 +8,174 @@ namespace PowerForge.Web;
 /// <summary>Theme contract, layout, and token verification rules.</summary>
 public static partial class WebSiteVerifier
 {
+    private static void ValidateThemeFeatureContract(SiteSpec spec, WebSitePlan plan, List<string> warnings)
+    {
+        if (spec is null || plan is null || warnings is null) return;
+        if (string.IsNullOrWhiteSpace(spec.DefaultTheme)) return;
+
+        var themeRoot = ResolveThemeRoot(spec, plan.RootPath, plan.ThemesRoot);
+        if (string.IsNullOrWhiteSpace(themeRoot))
+            return;
+
+        var loader = new ThemeLoader();
+        ThemeManifest? manifest = null;
+        try
+        {
+            manifest = loader.Load(themeRoot, ResolveThemesRoot(spec, plan.RootPath, plan.ThemesRoot));
+        }
+        catch
+        {
+            return;
+        }
+
+        if (manifest is null)
+            return;
+
+        var explicitFeatures = NormalizeFeatures(spec.Features);
+        var inferredFeatures = explicitFeatures.Count == 0 ? InferFeatures(spec) : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var enabled = explicitFeatures.Count > 0 ? explicitFeatures : inferredFeatures;
+
+        if (explicitFeatures.Count == 0 && enabled.Count > 0)
+        {
+            warnings.Add("Theme contract: site does not declare 'features' in site.json; using best-effort inference for theme checks. " +
+                         "Add features (e.g., [\"docs\",\"apiDocs\"]) to make this deterministic across sites.");
+        }
+
+        if (enabled.Count == 0)
+            return;
+
+        var supported = NormalizeFeatures(manifest.Features);
+        var schemaVersion = manifest.SchemaVersion ?? manifest.ContractVersion ?? 1;
+        if (schemaVersion >= 2 && supported.Count == 0)
+        {
+            warnings.Add($"Theme contract: '{manifest.Name}' schemaVersion 2 should declare 'features' to make capabilities explicit.");
+        }
+
+        foreach (var feature in enabled)
+        {
+            if (supported.Count > 0 && !supported.Contains(feature))
+            {
+                warnings.Add($"Theme contract: '{manifest.Name}' does not declare support for feature '{feature}', but the site enables it.");
+            }
+        }
+
+        if (enabled.Contains("apidocs"))
+        {
+            var header = loader.ResolvePartialPath(themeRoot, manifest, "api-header");
+            var footer = loader.ResolvePartialPath(themeRoot, manifest, "api-footer");
+            if (string.IsNullOrWhiteSpace(header) || !File.Exists(header) ||
+                string.IsNullOrWhiteSpace(footer) || !File.Exists(footer))
+            {
+                warnings.Add($"Theme contract: site uses feature 'apiDocs' but theme '{manifest.Name}' does not provide 'api-header.html' and 'api-footer.html' fragments under partials. " +
+                             "API reference pages may render without site navigation unless the pipeline provides headerHtml/footerHtml.");
+            }
+        }
+
+        if (enabled.Contains("docs"))
+        {
+            var docsLayout = loader.ResolveLayoutPath(themeRoot, manifest, "docs");
+            if (string.IsNullOrWhiteSpace(docsLayout) || !File.Exists(docsLayout))
+            {
+                warnings.Add($"Theme contract: site uses feature 'docs' but theme '{manifest.Name}' does not provide a 'docs' layout.");
+            }
+        }
+    }
+
+    private static HashSet<string> NormalizeFeatures(string[]? features)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (features is null || features.Length == 0)
+            return set;
+        foreach (var feature in features)
+        {
+            var normalized = NormalizeFeatureName(feature);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                set.Add(normalized);
+        }
+        return set;
+    }
+
+    private static string NormalizeFeatureName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (trimmed.Equals("apiDocs", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("apidocs", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("api", StringComparison.OrdinalIgnoreCase))
+            return "apidocs";
+
+        if (trimmed.Equals("notFound", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("404", StringComparison.OrdinalIgnoreCase))
+            return "notfound";
+
+        return trimmed.ToLowerInvariant();
+    }
+
+    private static HashSet<string> InferFeatures(SiteSpec spec)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (spec.Collections is not null)
+        {
+            foreach (var c in spec.Collections)
+            {
+                if (c is null) continue;
+                if (!string.IsNullOrWhiteSpace(c.Name) && c.Name.Equals("docs", StringComparison.OrdinalIgnoreCase))
+                    set.Add("docs");
+                if (!string.IsNullOrWhiteSpace(c.Output) && c.Output.StartsWith("/docs", StringComparison.OrdinalIgnoreCase))
+                    set.Add("docs");
+                if (!string.IsNullOrWhiteSpace(c.Name) && c.Name.Equals("blog", StringComparison.OrdinalIgnoreCase))
+                    set.Add("blog");
+                if (!string.IsNullOrWhiteSpace(c.Output) && c.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase))
+                    set.Add("blog");
+            }
+        }
+
+        if (spec.AssetRegistry?.RouteBundles is not null)
+        {
+            foreach (var route in spec.AssetRegistry.RouteBundles)
+            {
+                var match = route?.Match;
+                if (!string.IsNullOrWhiteSpace(match) && match.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+                {
+                    set.Add("apidocs");
+                    break;
+                }
+            }
+        }
+
+        if (!set.Contains("apidocs") && spec.Navigation?.Menus is not null)
+        {
+            foreach (var menu in spec.Navigation.Menus)
+            {
+                if (menu?.Items is null) continue;
+                if (ContainsApiLink(menu.Items))
+                {
+                    set.Add("apidocs");
+                    break;
+                }
+            }
+        }
+
+        return set;
+    }
+
+    private static bool ContainsApiLink(MenuItemSpec[]? items)
+    {
+        if (items is null || items.Length == 0) return false;
+        foreach (var item in items)
+        {
+            if (item is null) continue;
+            if (!string.IsNullOrWhiteSpace(item.Url) && item.Url.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (ContainsApiLink(item.Items))
+                return true;
+        }
+        return false;
+    }
+
     private static void ValidateThemeAssets(SiteSpec spec, WebSitePlan plan, List<string> warnings)
     {
         if (spec is null || plan is null || warnings is null) return;

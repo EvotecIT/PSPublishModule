@@ -90,23 +90,26 @@ Example pipeline:
     { "task": "build", "config": "./site.json", "out": "./Artifacts/site" },
     {
       "task": "apidocs",
-      "type": "csharp",
-      "xmlPath": "./Artifacts/generated/MyLibrary.xml",
-      "assemblyPath": "./Artifacts/generated/MyLibrary.dll",
-      "outputPath": "./Artifacts/site/api",
+      "config": "./site.json",
+      "type": "CSharp",
+      "xml": "./Artifacts/generated/MyLibrary.xml",
+      "assembly": "./Artifacts/generated/MyLibrary.dll",
+      "out": "./Artifacts/site/api",
       "baseUrl": "/api",
       "format": "json"
     },
     {
       "task": "apidocs",
-      "type": "csharp",
-      "xmlPath": "./Artifacts/generated/MyLibrary.xml",
-      "assemblyPath": "./Artifacts/generated/MyLibrary.dll",
-      "outputPath": "./Artifacts/site/api-docs",
+      "config": "./site.json",
+      "type": "CSharp",
+      "xml": "./Artifacts/generated/MyLibrary.xml",
+      "assembly": "./Artifacts/generated/MyLibrary.dll",
+      "out": "./Artifacts/site/api-docs",
       "baseUrl": "/api",
       "format": "hybrid",
-      "headerHtmlPath": "./apidocs/header.html",
-      "footerHtmlPath": "./apidocs/footer.html"
+      "headerHtml": "./apidocs/header.html",
+      "footerHtml": "./apidocs/footer.html",
+      "nav": "./site.json"
     },
     { "task": "sitemap", "siteRoot": "./Artifacts/site", "baseUrl": "https://example.com", "html": true },
     { "task": "optimize", "siteRoot": "./Artifacts/site" }

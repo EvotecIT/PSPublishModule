@@ -31,6 +31,8 @@
     <EmbeddedResource Include="Assets\ApiDocs\docs-index.html" />
     <EmbeddedResource Include="Assets\ApiDocs\docs-type.html" />
     <EmbeddedResource Include="Assets\ApiDocs\docs.js" />
+    <EmbeddedResource Include="Assets\ApiDocs\api-header.html" />
+    <EmbeddedResource Include="Assets\ApiDocs\api-footer.html" />
   </ItemGroup>
 
 </Project>

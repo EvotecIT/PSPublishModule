@@ -27,6 +27,13 @@ To customize templates, copy the embedded defaults from:
 - `{{CSS}}` injects a stylesheet link or inline fallback CSS.
 - `{{HEADER}}` / `{{FOOTER}}` are optional HTML fragments.
 
+When `nav`/`navJsonPath` is set and `headerHtml`/`footerHtml` are not provided, the generator falls back to embedded header/footer fragments so API pages still include basic site navigation. Provide explicit fragments to fully control branding and markup.
+
+If your site uses `Navigation.Profiles` (route/layout specific menus), set:
+- `navContextPath` (defaults to `baseUrl`, e.g. `/api`)
+- optionally `navContextLayout` / `navContextCollection` / `navContextProject`
+so the generator can select the same profile your theme uses. For best results, point `nav` at `site-nav.json` (the nav export) when available.
+
 ## Simple template CSS hooks
 
 Element + class / id:

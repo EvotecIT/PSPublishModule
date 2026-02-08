@@ -40,6 +40,9 @@ public sealed class ThemeManifest
     /// <summary>Theme token values.</summary>
     public Dictionary<string, object?>? Tokens { get; set; }
 
+    /// <summary>Theme-supported features (for example: docs, apiDocs, blog, search).</summary>
+    public string[] Features { get; set; } = Array.Empty<string>();
+
     /// <summary>Resolved base theme manifest.</summary>
     [JsonIgnore]
     public ThemeManifest? Base { get; set; }

@@ -68,11 +68,21 @@ public sealed class BuildCacheSpec
 public sealed class VerifyPolicySpec
 {
     /// <summary>When true, verify fails when any warning is emitted.</summary>
-    public bool FailOnWarnings { get; set; }
+    public bool? FailOnWarnings { get; set; }
 
     /// <summary>When true, verify fails when navigation lint warnings are emitted.</summary>
-    public bool FailOnNavLint { get; set; }
+    public bool? FailOnNavLint { get; set; }
 
     /// <summary>When true, verify fails when theme contract warnings are emitted.</summary>
-    public bool FailOnThemeContract { get; set; }
+    public bool? FailOnThemeContract { get; set; }
+
+    /// <summary>
+    /// Optional list of warning codes/patterns to suppress (do not print, do not fail policy).
+    /// Entries may be:
+    /// - a code (matches <c>[CODE]</c> prefixes)
+    /// - a substring (case-insensitive)
+    /// - a wildcard pattern with <c>*</c> and <c>?</c>
+    /// - a regex prefixed with <c>re:</c>
+    /// </summary>
+    public string[] SuppressWarnings { get; set; } = Array.Empty<string>();
 }

@@ -30,7 +30,7 @@ Minimal pipeline:
 `powerforge-web pipeline` supports a few command-line flags to speed up local iteration:
 
 - `--fast`: applies safe performance-focused overrides (for example, scopes optimize/audit when possible and disables expensive rendered checks).
-- `--dev`: implies `--fast` and sets pipeline mode to `dev` (printed in the pipeline log).
+- `--dev`: implies `--fast`, sets pipeline mode to `dev`, and skips `optimize` + `audit` unless you explicitly include them via `--only`.
 - `--mode <name>`: sets a pipeline mode label used for step filtering (see "Step modes" below).
 - `--only <task[,task...]>`: run only the specified tasks.
 - `--skip <task[,task...]>`: skip the specified tasks.
@@ -88,6 +88,7 @@ Notes:
 - Emits warnings for missing titles, duplicate routes, missing assets, and TOC coverage.
 - By default fails only when errors are found.
 - `failOnWarnings`, `failOnNavLint`, and `failOnThemeContract` can enforce stricter quality gates.
+- `suppressWarnings` (array of strings) filters warnings before printing and before policy evaluation (use codes like `PFWEB.NAV.LINT` or `re:...`).
 
 #### doctor
 Runs build/verify/audit as one health-check step.
@@ -108,6 +109,7 @@ Runs build/verify/audit as one health-check step.
 ```
 Notes:
 - Supports the same strict verify flags as `verify`.
+- Supports `suppressWarnings` to filter verify warnings before policy evaluation.
 - Supports audit controls (`requiredRoutes`, `navRequiredLinks`, `checkHeadingOrder`, `checkLinkPurpose`, etc.).
 
 #### apidocs
@@ -115,6 +117,7 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 ```json
 {
   "task": "apidocs",
+  "config": "./site.json",
   "xml": "./Artifacts/generated/MyLib.xml",
   "assembly": "./Artifacts/generated/MyLib.dll",
   "out": "./Artifacts/site/api",
@@ -128,6 +131,9 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
+- `config` (recommended) enables best-practice defaults:
+  - if `nav` is not set, it prefers `static/<dataRoot>/site-nav.json` (when present), otherwise falls back to `config`
+  - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` and `api-footer.html` (when present)
 - `template`: `simple` (default) or `docs` (sidebar layout)
 - `type`: `CSharp` (default) or `PowerShell` (uses PowerShell help XML)
 - `templateRoot` lets you override built-in templates/assets by placing files like
@@ -142,6 +148,13 @@ Notes:
   - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
+- `navContextPath` / `navContextCollection` / `navContextLayout` / `navContextProject`:
+  - optional context used to select `Navigation.Profiles` when injecting nav tokens (default `navContextPath` = `baseUrl`)
+- `failOnWarnings`: fail the pipeline step when API docs emits warnings
+  - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
+- `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
+  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`
+- `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 

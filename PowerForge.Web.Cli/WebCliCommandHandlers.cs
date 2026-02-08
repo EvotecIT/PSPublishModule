@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using PowerForge;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -201,9 +202,11 @@ internal static partial class WebCliCommandHandlers
 
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+        var isCi = ConsoleEnvironment.IsCI;
+        var suppressWarnings = spec.Verify?.SuppressWarnings;
         var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
-        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? false);
-        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? false);
+        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
+        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
 
         if (string.IsNullOrWhiteSpace(outPath))
@@ -220,14 +223,28 @@ internal static partial class WebCliCommandHandlers
             return Fail("Doctor audit requires an existing site root. Use --out with --build or pass --site-root.", outputJson, logger, "web.doctor");
 
         var verify = runVerify ? WebSiteVerifier.Verify(spec, plan) : null;
+        var filteredVerifyWarnings = verify is null
+            ? Array.Empty<string>()
+            : WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
         var (verifySuccess, verifyPolicyFailures) = verify is null
             ? (true, Array.Empty<string>())
             : WebVerifyPolicy.EvaluateOutcome(
                 verify,
                 failOnWarnings,
                 failOnNavLint,
-                failOnThemeContract);
+                failOnThemeContract,
+                suppressWarnings);
         var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs) : null;
+        if (verify is not null && filteredVerifyWarnings.Length != verify.Warnings.Length)
+        {
+            verify = new WebVerifyResult
+            {
+                Success = verify.Success,
+                Errors = verify.Errors,
+                Warnings = filteredVerifyWarnings
+            };
+        }
+
         var recommendations = BuildDoctorRecommendations(verify, audit, verifyPolicyFailures);
         var success = verifySuccess && (audit?.Success ?? true);
 

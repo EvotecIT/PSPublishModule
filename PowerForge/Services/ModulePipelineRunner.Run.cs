@@ -61,77 +61,46 @@ public sealed partial class ModulePipelineRunner
         var installStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Install);
         var cleanupStep = steps.FirstOrDefault(s => s.Kind == ModulePipelineStepKind.Cleanup);
 
-        void SafeStart(ModulePipelineStep? step)
-        {
-            if (step is null) return;
-            if (!string.IsNullOrWhiteSpace(step.Key)) startedKeys.Add(step.Key);
-            try { reporter.StepStarting(step); } catch { /* best effort */ }
-        }
-
-        void SafeDone(ModulePipelineStep? step)
-        {
-            if (step is null) return;
-            try { reporter.StepCompleted(step); } catch { /* best effort */ }
-        }
-
-        void SafeFail(ModulePipelineStep? step, Exception ex)
-        {
-            if (step is null) return;
-            try { reporter.StepFailed(step, ex); } catch { /* best effort */ }
-        }
-
         var pipeline = new ModuleBuildPipeline(_logger);
         string? stagingPathForCleanup = plan.BuildSpec.StagingPath;
         Exception? pipelineFailure = null;
 
         try
         {
-            if (plan.InstallMissingModules)
-            {
-                try
-                {
-                    _ = EnsureBuildDependenciesInstalled(plan);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error($"Dependency installation failed. {ex.Message}");
-                    if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
-                    throw;
-                }
-            }
+            EnsureBuildDependenciesInstalledIfNeeded(plan);
 
             ModuleBuildPipeline.StagingResult staged;
-            SafeStart(stageStep);
+            SafeStart(reporter, startedKeys, stageStep);
             try
             {
                 staged = pipeline.StageToStaging(plan.BuildSpec);
                 stagingPathForCleanup = staged.StagingPath;
-                SafeDone(stageStep);
+                SafeDone(reporter, stageStep);
             }
             catch (Exception ex)
             {
-                SafeFail(stageStep, ex);
+                SafeFail(reporter, stageStep, ex);
                 stagingPathForCleanup ??= plan.BuildSpec.StagingPath;
                 throw;
             }
 
             ModuleBuildResult buildResult;
-            SafeStart(buildStep);
+            SafeStart(reporter, startedKeys, buildStep);
             try
             {
                 buildResult = pipeline.BuildInStaging(plan.BuildSpec, staged.StagingPath);
-                SafeDone(buildStep);
+                SafeDone(reporter, buildStep);
             }
             catch (Exception ex)
             {
-                SafeFail(buildStep, ex);
+                SafeFail(reporter, buildStep, ex);
                 throw;
             }
 
             var mergedScripts = ApplyMerge(plan, buildResult);
             ApplyPlaceholders(plan, buildResult);
 
-            SafeStart(manifestStep);
+            SafeStart(reporter, startedKeys, manifestStep);
             try
             {
                 if (plan.CompatiblePSEditions is { Length: > 0 })
@@ -189,11 +158,11 @@ public sealed partial class ModulePipelineRunner
                 if (!mergedScripts)
                     TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
-                SafeDone(manifestStep);
+                SafeDone(reporter, manifestStep);
             }
             catch (Exception ex)
             {
-                SafeFail(manifestStep, ex);
+                SafeFail(reporter, manifestStep, ex);
                 throw;
             }
 
@@ -237,9 +206,9 @@ public sealed partial class ModulePipelineRunner
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(docsExtractStep, ex);
-                    SafeFail(docsWriteStep, ex);
-                    SafeFail(docsMamlStep, ex);
+                    SafeFail(reporter, docsExtractStep, ex);
+                    SafeFail(reporter, docsWriteStep, ex);
+                    SafeFail(reporter, docsMamlStep, ex);
                     throw;
                 }
             }
@@ -253,7 +222,7 @@ public sealed partial class ModulePipelineRunner
             {
                 var formattingPipeline = new FormattingPipeline(_logger);       
 
-                SafeStart(formatStagingStep);
+                SafeStart(reporter, startedKeys, formatStagingStep);
                 try
                 {
                     formattingStagingResults = FormatPowerShellTree(
@@ -271,17 +240,17 @@ public sealed partial class ModulePipelineRunner
                         throw new InvalidOperationException(
                             BuildFormattingFailureMessage("staging root", buildResult.StagingPath, stagingFmt, formattingStagingResults));
                     }
-                    SafeDone(formatStagingStep);
+                    SafeDone(reporter, formatStagingStep);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(formatStagingStep, ex);
+                    SafeFail(reporter, formatStagingStep, ex);
                     throw;
                 }
 
                 if (plan.Formatting.Options.UpdateProjectRoot)
                 {
-                    SafeStart(formatProjectStep);
+                    SafeStart(reporter, startedKeys, formatProjectStep);
                     try
                     {
                         var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
@@ -300,11 +269,11 @@ public sealed partial class ModulePipelineRunner
                             throw new InvalidOperationException(
                                 BuildFormattingFailureMessage("project root", plan.ProjectRoot, projectFmt, formattingProjectResults));
                         }
-                        SafeDone(formatProjectStep);
+                        SafeDone(reporter, formatProjectStep);
                     }
                     catch (Exception ex)
                     {
-                        SafeFail(formatProjectStep, ex);
+                        SafeFail(reporter, formatProjectStep, ex);
                         throw;
                     }
                 }
@@ -329,18 +298,18 @@ public sealed partial class ModulePipelineRunner
 
             if (plan.SignModule)
             {
-                SafeStart(signStep);
+                SafeStart(reporter, startedKeys, signStep);
                 try
                 {
                     signingResult = SignBuiltModuleOutput(
                         moduleName: plan.ModuleName,
                         rootPath: buildResult.StagingPath,
                         signing: plan.Signing);
-                    SafeDone(signStep);
+                    SafeDone(reporter, signStep);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(signStep, ex);
+                    SafeFail(reporter, signStep, ex);
                     throw;
                 }
             }
@@ -366,7 +335,7 @@ public sealed partial class ModulePipelineRunner
 
             if (runStaging)
             {
-                SafeStart(fileConsistencyStep);
+                SafeStart(reporter, startedKeys, fileConsistencyStep);
                 try
                 {
                     var excludeDirs = MergeExcludeDirectories(
@@ -467,18 +436,18 @@ public sealed partial class ModulePipelineRunner
                     if (fileConsistencySeverity == ValidationSeverity.Error && fileConsistencyStatus == CheckStatus.Fail)
                         throw new InvalidOperationException($"File consistency check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
-                    SafeDone(fileConsistencyStep);
+                    SafeDone(reporter, fileConsistencyStep);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(fileConsistencyStep, ex);
+                    SafeFail(reporter, fileConsistencyStep, ex);
                     throw;
                 }
             }
 
             if (runProject)
             {
-                SafeStart(projectFileConsistencyStep);
+                SafeStart(reporter, startedKeys, projectFileConsistencyStep);
                 try
                 {
                     var excludeDirs = MergeExcludeDirectories(
@@ -579,11 +548,11 @@ public sealed partial class ModulePipelineRunner
                     if (fileConsistencySeverity == ValidationSeverity.Error && projectFileConsistencyStatus == CheckStatus.Fail)
                         throw new InvalidOperationException($"File consistency (project) check failed. {BuildFileConsistencyMessage(finalReport, s)}");
 
-                    SafeDone(projectFileConsistencyStep);
+                    SafeDone(reporter, projectFileConsistencyStep);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(projectFileConsistencyStep, ex);
+                    SafeFail(reporter, projectFileConsistencyStep, ex);
                     throw;
                 }
             }
@@ -591,7 +560,7 @@ public sealed partial class ModulePipelineRunner
 
         if (plan.CompatibilitySettings?.Enable == true)
         {
-            SafeStart(compatibilityStep);
+            SafeStart(reporter, startedKeys, compatibilityStep);
             try
             {
                 var s = plan.CompatibilitySettings;
@@ -613,18 +582,18 @@ public sealed partial class ModulePipelineRunner
                 if (compatibilitySeverity == ValidationSeverity.Error && adjusted.Summary.Status == CheckStatus.Fail)
                     throw new InvalidOperationException($"PowerShell compatibility check failed. {adjusted.Summary.Message}");
 
-                SafeDone(compatibilityStep);
+                SafeDone(reporter, compatibilityStep);
             }
             catch (Exception ex)
             {
-                SafeFail(compatibilityStep, ex);
+                SafeFail(reporter, compatibilityStep, ex);
                 throw;
             }
         }
 
         if (plan.ValidationSettings?.Enable == true)
         {
-            SafeStart(moduleValidationStep);
+            SafeStart(reporter, startedKeys, moduleValidationStep);
             try
             {
                 var validator = new ModuleValidationService(_logger);
@@ -641,11 +610,11 @@ public sealed partial class ModulePipelineRunner
                 if (validationReport.Status == CheckStatus.Fail)
                     throw new InvalidOperationException($"Module validation failed ({validationReport.Summary}).");
 
-                SafeDone(moduleValidationStep);
+                SafeDone(reporter, moduleValidationStep);
             }
             catch (Exception ex)
             {
-                SafeFail(moduleValidationStep, ex);
+                SafeFail(reporter, moduleValidationStep, ex);
                 throw;
             }
         }
@@ -653,15 +622,15 @@ public sealed partial class ModulePipelineRunner
         if (plan.ImportModules is not null &&
             (plan.ImportModules.Self == true || plan.ImportModules.RequiredModules == true))
         {
-            SafeStart(importModulesStep);
+            SafeStart(reporter, startedKeys, importModulesStep);
             try
             {
                 RunImportModules(plan, buildResult);
-                SafeDone(importModulesStep);
+                SafeDone(reporter, importModulesStep);
             }
             catch (Exception ex)
             {
-                SafeFail(importModulesStep, ex);
+                SafeFail(reporter, importModulesStep, ex);
                 throw;
             }
         }
@@ -673,15 +642,15 @@ public sealed partial class ModulePipelineRunner
             {
                 var cfg = plan.TestsAfterMerge[i];
                 var step = testSteps.Length > i ? testSteps[i] : null;
-                SafeStart(step);
+                SafeStart(reporter, startedKeys, step);
                 try
                 {
                     RunTestsAfterMerge(plan, buildResult, cfg, testService);
-                    SafeDone(step);
+                    SafeDone(reporter, step);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(step, ex);
+                    SafeFail(reporter, step, ex);
                     throw;
                 }
             }
@@ -694,7 +663,7 @@ public sealed partial class ModulePipelineRunner
             foreach (var artefact in plan.Artefacts)
             {
                 artefactSteps.TryGetValue(artefact, out var step);
-                SafeStart(step);
+                SafeStart(reporter, startedKeys, step);
                 try
                 {
                     artefactResults.Add(builder.Build(
@@ -707,11 +676,11 @@ public sealed partial class ModulePipelineRunner
                         requiredModules: packagingRequiredModules,
                         information: plan.Information,
                         includeScriptFolders: !mergedScripts));
-                    SafeDone(step);
+                    SafeDone(reporter, step);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(step, ex);
+                    SafeFail(reporter, step, ex);
                     throw;
                 }
             }
@@ -724,15 +693,15 @@ public sealed partial class ModulePipelineRunner
             foreach (var publish in plan.Publishes)
             {
                 publishSteps.TryGetValue(publish, out var step);
-                SafeStart(step);
+                SafeStart(reporter, startedKeys, step);
                 try
                 {
                     publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults));
-                    SafeDone(step);
+                    SafeDone(reporter, step);
                 }
                 catch (Exception ex)
                 {
-                    SafeFail(step, ex);
+                    SafeFail(reporter, step, ex);
                     throw;
                 }
             }
@@ -741,7 +710,7 @@ public sealed partial class ModulePipelineRunner
         ModuleInstallerResult? installResult = null;
             if (plan.InstallEnabled)
             {
-                SafeStart(installStep);
+                SafeStart(reporter, startedKeys, installStep);
             string? installPackagePath = null;
             try
             {
@@ -768,11 +737,11 @@ public sealed partial class ModulePipelineRunner
                     PreserveVersions = spec.Install?.PreserveVersions ?? Array.Empty<string>()
                 };
                 installResult = pipeline.InstallFromStaging(installSpec);
-                SafeDone(installStep);
+                SafeDone(reporter, installStep);
             }
             catch (Exception ex)
             {
-                SafeFail(installStep, ex);
+                SafeFail(reporter, installStep, ex);
                 throw;
             }
             finally
@@ -785,26 +754,26 @@ public sealed partial class ModulePipelineRunner
             }
         }
 
-            return new ModulePipelineResult(
-                plan,
-                buildResult,
-                installResult,
-                documentationResult,
-                fileConsistencyReport,
-                fileConsistencyStatus,
-                fileConsistencyEncodingFix,
-                fileConsistencyLineEndingFix,
-                compatibilityReport,
-                validationReport,
-                publishResults.ToArray(),
-                artefactResults.ToArray(),
-                formattingStagingResults,
-                formattingProjectResults,
-                projectFileConsistencyReport,
-                projectFileConsistencyStatus,
-                projectFileConsistencyEncodingFix,
-                projectFileConsistencyLineEndingFix,
-                signingResult);
+        return BuildPipelineResult(
+            plan,
+            buildResult,
+            installResult,
+            documentationResult,
+            fileConsistencyReport,
+            fileConsistencyStatus,
+            fileConsistencyEncodingFix,
+            fileConsistencyLineEndingFix,
+            compatibilityReport,
+            validationReport,
+            publishResults.ToArray(),
+            artefactResults.ToArray(),
+            formattingStagingResults,
+            formattingProjectResults,
+            projectFileConsistencyReport,
+            projectFileConsistencyStatus,
+            projectFileConsistencyEncodingFix,
+            projectFileConsistencyLineEndingFix,
+            signingResult);
         }
         catch (Exception ex)
         {
@@ -815,22 +784,14 @@ public sealed partial class ModulePipelineRunner
         {
             if (plan.DeleteGeneratedStagingAfterRun)
             {
-                SafeStart(cleanupStep);
+                SafeStart(reporter, startedKeys, cleanupStep);
                 try { DeleteDirectoryWithRetries(stagingPathForCleanup); }
                 catch (Exception ex) { _logger.Warn($"Failed to delete staging folder: {ex.Message}"); }
-                SafeDone(cleanupStep);
+                SafeDone(reporter, cleanupStep);
             }
 
-            if (pipelineFailure is not null && reporterV2 is not null)
-            {
-                foreach (var step in steps)
-                {
-                    if (step is null) continue;
-                    if (string.IsNullOrWhiteSpace(step.Key)) continue;
-                    if (startedKeys.Contains(step.Key)) continue;
-                    try { reporterV2.StepSkipped(step); } catch { /* best effort */ }
-                }
-            }
+            if (pipelineFailure is not null)
+                NotifySkippedStepsOnFailure(reporterV2, steps, startedKeys);
         }
     }
 

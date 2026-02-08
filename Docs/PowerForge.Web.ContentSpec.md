@@ -268,6 +268,10 @@ emit one based on `site.json` navigation (including auto‑generated menus).
 If you provide your own `data/site-nav.json` (for example via `static/data`),
 the generator will **not** overwrite it.
 
+The generated `site-nav.json` also includes:
+- `profiles`: exported `Navigation.Profiles` rules (so other tools can select the same nav your theme uses)
+- `surfaces`: resolved navigation projections for stable "nav surfaces" like `main`, `docs`, `apidocs`, `products`. Use `Navigation.Surfaces` in `site.json` to define/override; each surface captures the selected profile context and resolved menu projections (`primary`, optional `sidebar`, optional `products`).
+
 ### Markdown-friendly data fields
 Data keys ending with `_md` or `_markdown` are automatically rendered as HTML.
 The rendered value is exposed under the base key (suffix removed) if the base key is missing.
@@ -545,7 +549,11 @@ Set global verify policy defaults in `site.json`:
   "Verify": {
     "FailOnWarnings": true,
     "FailOnNavLint": true,
-    "FailOnThemeContract": true
+    "FailOnThemeContract": true,
+    "SuppressWarnings": [
+      "PFWEB.NAV.LINT",
+      "PFWEB.THEME.CONTRACT"
+    ]
   }
 }
 ```
@@ -553,6 +561,12 @@ Notes:
 - Applied by `powerforge-web verify` and `powerforge-web doctor`.
 - CLI flags with the same names also enable these checks.
 - Pipeline `verify`/`doctor` step fields override these defaults when specified.
+
+`SuppressWarnings` supports:
+- warning codes (for warnings prefixed like `[PFWEB.NAV.LINT] ...`)
+- substring matches (case-insensitive)
+- wildcard patterns (`*`, `?`)
+- regex patterns prefixed with `re:`
 
 ## Redirects + aliases
 Use `aliases` in front matter for old URLs.  

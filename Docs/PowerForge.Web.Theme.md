@@ -61,6 +61,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
   "version": "1.0.0",
   "author": "Evotec",
   "engine": "scriban",
+  "features": ["docs", "apiDocs", "blog", "search"],
   "extends": "base",
   "defaultLayout": "page",
   "layouts": {

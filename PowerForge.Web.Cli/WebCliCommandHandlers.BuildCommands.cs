@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using PowerForge;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -104,19 +105,33 @@ internal static partial class WebCliCommandHandlers
 
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+        var isCi = ConsoleEnvironment.IsCI;
+        var suppressWarnings = spec.Verify?.SuppressWarnings;
         var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
-        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? false);
-        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? false);
+        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
+        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
         var verify = WebSiteVerifier.Verify(spec, plan);
+        var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
         var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
             verify,
             failOnWarnings,
             failOnNavLint,
-            failOnThemeContract);
+            failOnThemeContract,
+            suppressWarnings);
 
         if (outputJson)
         {
+            if (filteredWarnings.Length != verify.Warnings.Length)
+            {
+                verify = new WebVerifyResult
+                {
+                    Success = verify.Success,
+                    Errors = verify.Errors,
+                    Warnings = filteredWarnings
+                };
+            }
+
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
             {
                 SchemaVersion = outputSchemaVersion,
@@ -132,9 +147,9 @@ internal static partial class WebCliCommandHandlers
             return verifySuccess ? 0 : 1;
         }
 
-        if (verify.Warnings.Length > 0)
+        if (filteredWarnings.Length > 0)
         {
-            foreach (var warning in verify.Warnings)
+            foreach (var warning in filteredWarnings)
                 logger.Warn(warning);
         }
         if (verify.Errors.Length > 0)
@@ -393,6 +408,15 @@ internal static partial class WebCliCommandHandlers
 
         var onlyTasks = ReadOptionList(subArgs, "--only");
         var skipTasks = ReadOptionList(subArgs, "--skip");
+
+        // Dev mode should be a fast feedback loop by default. Users can still opt-in to heavy tasks
+        // by using --only or explicitly omitting --dev.
+        if (devMode && onlyTasks.Count == 0 && skipTasks.Count == 0)
+        {
+            skipTasks.Add("optimize");
+            skipTasks.Add("audit");
+        }
+
         if (watch)
         {
             if (outputJson)
