@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -2227,34 +2227,7 @@ public sealed class ModulePipelineRunner
 
     private static string BuildGetInstalledModuleInfoScript()
     {
-        return @"
-param(
-  [string]$NamesB64
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-
-function DecodeLines([string]$b64) {
-  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
-  $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
-  return $text -split ""`n"" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-}
-
-$names = DecodeLines $NamesB64
-foreach ($n in $names) {
-  try {
-    $m = Get-Module -ListAvailable -Name $n | Sort-Object Version -Descending | Select-Object -First 1
-    $ver = if ($m) { [string]$m.Version } else { '' }
-    $guid = if ($m) { [string]$m.Guid } else { '' }
-    $fields = @($n, $ver, $guid) | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
-    Write-Output ('PFMODINFO::ITEM::' + ($fields -join '::'))
-  } catch {
-    $fields = @($n, '', '') | ForEach-Object { [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$_)) }
-    Write-Output ('PFMODINFO::ITEM::' + ($fields -join '::'))
-  }
-}
-exit 0
-";
+        return EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");
     }
 
     private static IEnumerable<string> SplitLines(string? text)
@@ -2797,49 +2770,7 @@ exit 0
 
     private static string BuildImportModulesScript()
     {
-        return @"
-param(
-  [string]$ModulesB64,
-  [string]$ImportRequired,
-  [string]$ImportSelf,
-  [string]$ModulePath,
-  [string]$VerboseFlag
-)
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-$importVerbose = ($VerboseFlag -eq '1')
-$VerbosePreference = if ($importVerbose) { 'Continue' } else { 'SilentlyContinue' }
-
-function DecodeModules([string]$b64) {
-  if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
-  $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64))
-  if ([string]::IsNullOrWhiteSpace($json)) { return @() }
-  try { return $json | ConvertFrom-Json } catch { return @() }
-}
-
-if ($ImportRequired -eq '1') {
-  $modules = DecodeModules $ModulesB64
-  foreach ($m in $modules) {
-    if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
-    if ($m.RequiredVersion) {
-      Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importVerbose
-    } elseif ($m.MinimumVersion) {
-      Import-Module -Name $m.Name -MinimumVersion $m.MinimumVersion -Force -ErrorAction Stop -Verbose:$importVerbose
-    } else {
-      Import-Module -Name $m.Name -Force -ErrorAction Stop -Verbose:$importVerbose
-    }
-  }
-}
-
-if ($ImportSelf -eq '1') {
-  if (-not [string]::IsNullOrWhiteSpace($ModulePath)) {
-    Import-Module -Name $ModulePath -Force -ErrorAction Stop -Verbose:$importVerbose
-  } else {
-    throw 'ModulePath is required for ImportSelf.'
-  }
-}
-exit 0
-";
+        return EmbeddedScripts.Load("Scripts/ModulePipeline/Import-Modules.ps1");
     }
 
     private static string EncodeImportModules(IEnumerable<ImportModuleEntry> modules)
@@ -3443,16 +3374,7 @@ exit 0
         try
         {
             using var ps = CreatePowerShell();
-            var script = @"
-param($name)
-$mod = Get-Module -ListAvailable -Name $name |
-  Sort-Object Version -Descending |
-  Select-Object -First 1
-if ($null -eq $mod) { return @() }
-$req = $mod.RequiredModules
-if ($null -eq $req) { return @() }
-$req | ForEach-Object { $_.Name }
-";
+            var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-RequiredModules.ps1");
             ps.AddScript(script).AddArgument(moduleName);
             var results = ps.Invoke();
             if (ps.HadErrors || results is null)
