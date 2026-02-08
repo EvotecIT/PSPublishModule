@@ -89,6 +89,7 @@ internal static class WebVerifyPolicy
 
         var normalized = StripCodePrefix(warning);
         return normalized.StartsWith("Theme contract:", StringComparison.OrdinalIgnoreCase) ||
+               normalized.StartsWith("Theme CSS contract:", StringComparison.OrdinalIgnoreCase) ||
                normalized.StartsWith("Theme '", StringComparison.OrdinalIgnoreCase) ||
                normalized.Contains("theme manifest", StringComparison.OrdinalIgnoreCase);
     }
