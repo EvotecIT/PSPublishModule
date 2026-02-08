@@ -482,7 +482,7 @@ internal static partial class WebCliCommandHandlers
         var maxHtmlFiles = ParseIntOption(maxHtmlFilesText, 0);
         var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
-            baselinePathValue = "audit-baseline.json";
+            baselinePathValue = ".powerforge/audit-baseline.json";
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);

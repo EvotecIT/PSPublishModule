@@ -72,7 +72,7 @@ internal static class WebAuditBaselineStore
 
     internal static string ResolveBaselinePath(string siteRoot, string? baselinePath)
     {
-        var candidate = string.IsNullOrWhiteSpace(baselinePath) ? "audit-baseline.json" : baselinePath.Trim();
+        var candidate = string.IsNullOrWhiteSpace(baselinePath) ? ".powerforge/audit-baseline.json" : baselinePath.Trim();
         var normalizedRoot = NormalizeDirectoryPath(siteRoot);
         var resolvedPath = Path.IsPathRooted(candidate)
             ? Path.GetFullPath(candidate)

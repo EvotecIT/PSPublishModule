@@ -74,7 +74,7 @@ Verify baseline (creates `./.powerforge/verify-baseline.json`):
 powerforge-web verify --config .\site.json --baseline-generate
 ```
 
-Audit baseline (creates `audit-baseline.json` unless you provide `--baseline`):
+Audit baseline (creates `./.powerforge/audit-baseline.json` by default):
 ```powershell
 powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline.json --baseline-generate
 ```
@@ -87,4 +87,3 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
   - For `apiDocs`, include required fragments and a CSS selector contract.
 - Add budgets only when you can defend them:
   - `maxTotalFiles` is a simple early warning for accidental output explosion.
-

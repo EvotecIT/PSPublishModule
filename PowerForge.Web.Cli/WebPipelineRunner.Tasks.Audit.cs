@@ -89,7 +89,7 @@ internal static partial class WebPipelineRunner
         var maxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0;
 
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
-            baselinePath = "audit-baseline.json";
+            baselinePath = ".powerforge/audit-baseline.json";
 
         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
         var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
