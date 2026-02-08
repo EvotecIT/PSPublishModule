@@ -302,6 +302,11 @@
         "html-exclude": { "type": "array", "items": { "type": "string" } },
         "maxHtmlFiles": { "type": "integer", "minimum": 0 },
         "max-html-files": { "type": "integer", "minimum": 0 },
+        "scopeFromBuildUpdated": {
+          "type": "boolean",
+          "description": "When true, if htmlInclude/html-include is not set, scope HTML processing to the HTML files updated by the most recent build step (when siteRoot matches build out). In --fast mode this behavior is enabled by default; set this to false to disable."
+        },
+        "scope-from-build-updated": { "type": "boolean" },
         "optimizeImages": { "type": "boolean" },
         "images": { "type": "boolean" },
         "imageExtensions": { "type": "array", "items": { "type": "string" } },
@@ -360,6 +365,11 @@
         "exclude": { "type": "string" },
         "maxHtmlFiles": { "type": "integer", "minimum": 0 },
         "max-html-files": { "type": "integer", "minimum": 0 },
+        "scopeFromBuildUpdated": {
+          "type": "boolean",
+          "description": "When true, if include is not set, scope the audit to the HTML files updated by the most recent build step (when siteRoot matches build out). In --fast mode this behavior is enabled by default; set this to false to disable."
+        },
+        "scope-from-build-updated": { "type": "boolean" },
         "noDefaultExclude": { "type": "boolean" },
         "ignoreNav": { "type": "string" },
         "noDefaultIgnoreNav": { "type": "boolean" },
