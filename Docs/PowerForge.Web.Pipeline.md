@@ -25,6 +25,16 @@ Minimal pipeline:
 }
 ```
 
+### CLI flags
+
+`powerforge-web pipeline` supports a few command-line flags to speed up local iteration:
+
+- `--fast`: applies safe performance-focused overrides (for example, scopes optimize/audit when possible and disables expensive rendered checks).
+- `--dev`: implies `--fast` and sets pipeline mode to `dev` (printed in the pipeline log).
+- `--mode <name>`: attaches a mode label to the run (currently used for logging/diagnostics).
+- `--only <task[,task...]>`: run only the specified tasks.
+- `--skip <task[,task...]>`: skip the specified tasks.
+
 ### Supported steps
 
 #### build
