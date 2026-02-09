@@ -53,7 +53,7 @@ themes/
 
 ## Theme manifest (`theme.manifest.json`)
 Theme manifest defines identity, engine, inheritance, and assets.
-Schema: `Schemas/powerforge.web.themespec.schema.json`.
+Schema: `schemas/powerforge.web.themespec.schema.json`.
 ```json
 {
   "name": "codeglyphx",

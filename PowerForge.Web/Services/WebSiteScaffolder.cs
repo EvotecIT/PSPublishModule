@@ -5,6 +5,7 @@ namespace PowerForge.Web;
 /// <summary>Scaffolds a starter site with content and theme.</summary>
 public static class WebSiteScaffolder
 {
+    private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/schemas/";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
@@ -167,7 +168,7 @@ Use this post as a starting point for changelogs, release notes, and engineering
                 : null
         };
         var manifestJson = JsonSerializer.Serialize(manifest, WebJson.Options);
-        manifestJson = InsertSchema(manifestJson, "./schemas/powerforge.web.themespec.schema.json");
+        manifestJson = InsertSchema(manifestJson, DefaultSchemaBaseUrl + "powerforge.web.themespec.schema.json");
         created += WriteFile(Path.Combine(themeRoot, "theme.manifest.json"), manifestJson);
 
         var layout = isScriban
@@ -407,7 +408,7 @@ a { color: inherit; text-decoration: none; }
         };
 
         var siteJson = JsonSerializer.Serialize(siteSpec, WebJson.Options);
-        siteJson = InsertSchema(siteJson, "./schemas/powerforge.web.sitespec.schema.json");
+        siteJson = InsertSchema(siteJson, DefaultSchemaBaseUrl + "powerforge.web.sitespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "site.json"), siteJson);
 
         // Provide a ready-to-run pipeline with dev/ci modes and baseline paths under .powerforge.
@@ -424,7 +425,7 @@ a { color: inherit; text-decoration: none; }
               ]
             }
             """,
-            "./schemas/powerforge.web.pipelinespec.schema.json");
+            DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
 
         var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
@@ -459,6 +460,9 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 ```
 
 Commit the generated files under `.powerforge/` so CI can run `failOnNewWarnings` / `failOnNewIssues`.
+
+Schema refs:
+- The scaffold uses `$schema` URLs pointing at the PSPublishModule `main` branch so they work outside this repo.
 ");
 
         return new WebScaffoldResult

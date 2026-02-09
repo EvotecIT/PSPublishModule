@@ -9,12 +9,12 @@ Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
 Schema:
-- `Schemas/powerforge.web.pipelinespec.schema.json`
+- `schemas/powerforge.web.pipelinespec.schema.json`
 
 Minimal pipeline:
 ```json
 {
-  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
+  "$schema": "./schemas/powerforge.web.pipelinespec.schema.json",
   "steps": [
     {
       "task": "build",
@@ -474,12 +474,12 @@ Publish specs wrap a typical build + publish flow into a single config.
 Paths are resolved relative to the publish JSON file location.
 
 Schema:
-- `Schemas/powerforge.web.publishspec.schema.json`
+- `schemas/powerforge.web.publishspec.schema.json`
 
 Minimal publish:
 ```json
 {
-  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",
@@ -497,7 +497,7 @@ Minimal publish:
 Full publish with overlay + optimize:
 ```json
 {
-  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",

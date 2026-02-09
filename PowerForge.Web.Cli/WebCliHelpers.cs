@@ -19,7 +19,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
         Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
-        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--output json]");
+        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
@@ -48,6 +48,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--no-default-exclude]");
         Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
         Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
+        Console.WriteLine("                     [--warning-preview <n>] [--error-preview <n>]");
         Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
         Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
