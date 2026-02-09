@@ -41,13 +41,14 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
         Console.WriteLine("                     [--nav-optional]");
-        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>]");
+        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--max-total-files <n>]");
         Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
         Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
         Console.WriteLine("                     [--no-network-hints] [--no-render-blocking] [--max-head-blocking <n>]");
         Console.WriteLine("                     [--no-default-exclude]");
         Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
         Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
+        Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
         Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
         Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");

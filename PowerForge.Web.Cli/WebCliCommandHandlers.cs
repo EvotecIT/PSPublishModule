@@ -469,6 +469,7 @@ internal static partial class WebCliCommandHandlers
         var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
         var maxHtmlFilesText = TryGetOptionValue(subArgs, "--max-html-files") ?? TryGetOptionValue(subArgs, "--max-html");
         var maxTotalFilesText = TryGetOptionValue(subArgs, "--max-total-files") ?? TryGetOptionValue(subArgs, "--max-files-total");
+        var suppressIssues = ReadOptionList(subArgs, "--suppress-issue", "--suppress-issues");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
@@ -495,6 +496,7 @@ internal static partial class WebCliCommandHandlers
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,

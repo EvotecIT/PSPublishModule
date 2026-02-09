@@ -87,6 +87,7 @@ internal static partial class WebPipelineRunner
         var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking");
         var maxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0;
         var maxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0;
+        var suppressIssues = GetArrayOfStrings(step, "suppressIssues") ?? GetArrayOfStrings(step, "suppress-issues");
 
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
             baselinePath = ".powerforge/audit-baseline.json";
@@ -152,6 +153,7 @@ internal static partial class WebPipelineRunner
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            SuppressIssues = suppressIssues ?? Array.Empty<string>(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequiredValue,

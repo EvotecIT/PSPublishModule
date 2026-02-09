@@ -32,6 +32,7 @@ public static partial class WebSiteAuditor
         var errors = new List<string>();
         var warnings = new List<string>();
         var issues = new List<WebAuditIssue>();
+        var suppressIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.SuppressIssues);
         var maxTotalFiles = Math.Max(0, options.MaxTotalFiles);
         var totalFileCount = maxTotalFiles > 0 ? CountAllFiles(siteRoot, maxTotalFiles) : 0;
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
@@ -65,6 +66,15 @@ public static partial class WebSiteAuditor
                 ? message
                 : $"{issuePath}: {message}";
             var issueKey = BuildIssueKey(normalizedSeverity, normalizedCategory, issuePath, keyHint ?? message);
+
+            var suppressionCode = $"PFAUDIT.{normalizedCategory.ToUpperInvariant()}";
+            if (suppressIssuePatterns.Length > 0)
+            {
+                var suppressionText = $"[{suppressionCode}] {issueText} (key:{issueKey})";
+                if (WebSuppressionMatcher.IsSuppressed(suppressionText, suppressionCode, suppressIssuePatterns))
+                    return;
+            }
+
             issues.Add(new WebAuditIssue
             {
                 Severity = normalizedSeverity,

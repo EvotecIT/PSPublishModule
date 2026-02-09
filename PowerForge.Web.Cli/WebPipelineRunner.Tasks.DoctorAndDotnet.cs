@@ -172,6 +172,7 @@ internal static partial class WebPipelineRunner
             var navRequiredValue = navRequired ?? !(navOptional ?? false);
             var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
             var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+            var suppressIssues = GetArrayOfStrings(step, "suppressIssues") ?? GetArrayOfStrings(step, "suppress-issues");
             var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
             if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
                 resolvedSummaryPath = ".powerforge/audit-summary.json";
@@ -187,6 +188,7 @@ internal static partial class WebPipelineRunner
                 Exclude = CliPatternHelper.SplitPatterns(exclude),
                 UseDefaultExcludes = useDefaultExclude,
                 MaxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0,
+                SuppressIssues = suppressIssues ?? Array.Empty<string>(),
                 IgnoreNavFor = ignoreNavPatterns,
                 NavSelector = navSelector,
                 NavRequired = navRequiredValue,

@@ -545,6 +545,12 @@
         "checkUtf8": { "type": "boolean" },
         "checkMetaCharset": { "type": "boolean" },
         "checkUnicodeReplacementChars": { "type": "boolean" },
+        "suppressIssues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Issue suppressions (do not emit, do not count, do not gate). Supports codes like PFAUDIT.BUDGET plus substring/wildcard/re:... matching."
+        },
+        "suppress-issues": { "type": "array", "items": { "type": "string" }, "description": "Alias for suppressIssues." },
         "baselineGenerate": { "type": "boolean" },
         "baselineUpdate": { "type": "boolean" }
       },

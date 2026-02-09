@@ -118,6 +118,15 @@ public sealed class WebAuditOptions
     public bool CheckUnicodeReplacementChars { get; set; } = true;
     /// <summary>Optional baseline file path for issue key suppression/diffing.</summary>
     public string? BaselinePath { get; set; }
+    /// <summary>
+    /// Optional list of issue suppressions (do not emit, do not count, do not gate).
+    /// Entries may be:
+    /// - a code (matches <c>[CODE]</c> prefixes; audit issues use codes like <c>PFAUDIT.NAV</c>, <c>PFAUDIT.BUDGET</c>)
+    /// - a substring (case-insensitive)
+    /// - a wildcard pattern with <c>*</c> and <c>?</c>
+    /// - a regex prefixed with <c>re:</c>
+    /// </summary>
+    public string[] SuppressIssues { get; set; } = Array.Empty<string>();
     /// <summary>When true, warnings make audit fail.</summary>
     public bool FailOnWarnings { get; set; }
     /// <summary>When true, newly introduced issues (not present in baseline) make audit fail.</summary>
@@ -129,4 +138,3 @@ public sealed class WebAuditOptions
     /// <summary>Fail audit when any issue in selected categories is found.</summary>
     public string[] FailOnCategories { get; set; } = Array.Empty<string>();
 }
-

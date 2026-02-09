@@ -402,6 +402,7 @@ Notes:
 - `renderedInclude` / `renderedExclude` are comma-separated glob patterns (paths are relative to `siteRoot`).
 - `summary: true` writes `audit-summary.json` under `siteRoot` unless `summaryPath` is provided.
 - `maxTotalFiles` can be used as a guardrail to keep site outputs from silently ballooning (for example, too many generated assets).
+- `suppressIssues` (array of strings) filters audit issues before counts/gates and before printing/writing artifacts (use codes like `PFAUDIT.BUDGET` or `re:...`).
 - Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
