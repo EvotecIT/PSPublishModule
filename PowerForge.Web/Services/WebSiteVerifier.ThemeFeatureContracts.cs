@@ -363,6 +363,14 @@ public static partial class WebSiteVerifier
         }
 
         // Root-relative href: try mapping to static/ overlay.
+        // In verify/audit flows, plan.RootPath may be either:
+        // - the repo/site root (where "static/" lives), or
+        // - the built output root (where "/css/app.css" lives).
+        // Try output-root first, then static/.
+        var outputCandidate = Path.Combine(plan.RootPath, value.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(outputCandidate))
+            return Path.GetFullPath(outputCandidate);
+
         var staticCandidate = Path.Combine(plan.RootPath, "static", value.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
         if (File.Exists(staticCandidate))
             return Path.GetFullPath(staticCandidate);
