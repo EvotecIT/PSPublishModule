@@ -212,7 +212,63 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        var categorySummary = BuildAuditCategorySummary(result);
+        if (!string.IsNullOrWhiteSpace(categorySummary))
+            parts.Add(categorySummary);
+
         return string.Join(", ", parts);
+    }
+
+    private static string? BuildAuditCategorySummary(WebAuditResult result)
+    {
+        if (result is null)
+            return null;
+
+        var issues = result.Issues;
+        if (issues is null || issues.Length == 0)
+            return null;
+
+        var counts = new Dictionary<string, (int Errors, int Warnings)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var issue in issues)
+        {
+            if (issue is null)
+                continue;
+            if (IsGateIssue(issue))
+                continue;
+            if (string.IsNullOrWhiteSpace(issue.Category))
+                continue;
+
+            var category = issue.Category.Trim();
+            if (!counts.TryGetValue(category, out var current))
+                current = (0, 0);
+
+            if (string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                current.Errors++;
+            else
+                current.Warnings++;
+
+            counts[category] = current;
+        }
+
+        if (counts.Count == 0)
+            return null;
+
+        const int top = 6;
+        var topCategories = counts
+            .OrderByDescending(static kvp => kvp.Value.Errors + kvp.Value.Warnings)
+            .ThenBy(static kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(top)
+            .ToArray();
+
+        var parts = topCategories
+            .Select(kvp => $"{kvp.Key} {kvp.Value.Errors}e/{kvp.Value.Warnings}w")
+            .ToList();
+
+        var remaining = counts.Count - topCategories.Length;
+        if (remaining > 0)
+            parts.Add($"+{remaining} more");
+
+        return parts.Count == 0 ? null : $"categories: {string.Join(", ", parts)}";
     }
 
     private static string? BuildAuditFailureHeadline(WebAuditResult result)
