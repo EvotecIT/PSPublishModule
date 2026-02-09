@@ -8,17 +8,21 @@ namespace PowerForge.Web;
 /// <summary>Audits generated HTML output using static checks.</summary>
 public static partial class WebSiteAuditor
 {
-    private static int CountAllFiles(string root, int stopAfter)
+    private static int CountAllFiles(string root, int stopAfter, out bool truncated)
     {
         // Best-effort: avoid full traversal when auditing just wants a budget check.
         var count = 0;
+        truncated = false;
         try
         {
             foreach (var _ in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             {
                 count++;
                 if (stopAfter > 0 && count > stopAfter)
+                {
+                    truncated = true;
                     break;
+                }
             }
         }
         catch

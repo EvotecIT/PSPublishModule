@@ -34,7 +34,8 @@ public static partial class WebSiteAuditor
         var issues = new List<WebAuditIssue>();
         var suppressIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.SuppressIssues);
         var maxTotalFiles = Math.Max(0, options.MaxTotalFiles);
-        var totalFileCount = maxTotalFiles > 0 ? CountAllFiles(siteRoot, maxTotalFiles) : 0;
+        var totalFileCountTruncated = false;
+        var totalFileCount = maxTotalFiles > 0 ? CountAllFiles(siteRoot, maxTotalFiles, out totalFileCountTruncated) : 0;
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -94,7 +95,10 @@ public static partial class WebSiteAuditor
             AddIssue("warning", "general", null, "No HTML files found to audit.", "no-html");
 
         if (maxTotalFiles > 0 && totalFileCount > maxTotalFiles)
-            AddIssue("warning", "budget", null, $"total file count under site root exceeds budget: {totalFileCount} > {maxTotalFiles}.", "max-total-files");
+        {
+            var countLabel = totalFileCountTruncated ? $"> {maxTotalFiles}" : totalFileCount.ToString();
+            AddIssue("warning", "budget", null, $"total file count under site root exceeds budget: {countLabel} (budget {maxTotalFiles}).", "max-total-files");
+        }
 
         var baselineNavSignatures = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var baselineNavSources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
