@@ -167,7 +167,7 @@ Use this post as a starting point for changelogs, release notes, and engineering
                 : null
         };
         var manifestJson = JsonSerializer.Serialize(manifest, WebJson.Options);
-        manifestJson = InsertSchema(manifestJson, "./Schemas/powerforge.web.themespec.schema.json");
+        manifestJson = InsertSchema(manifestJson, "./schemas/powerforge.web.themespec.schema.json");
         created += WriteFile(Path.Combine(themeRoot, "theme.manifest.json"), manifestJson);
 
         var layout = isScriban
@@ -407,8 +407,28 @@ a { color: inherit; text-decoration: none; }
         };
 
         var siteJson = JsonSerializer.Serialize(siteSpec, WebJson.Options);
-        siteJson = InsertSchema(siteJson, "./Schemas/powerforge.web.sitespec.schema.json");
+        siteJson = InsertSchema(siteJson, "./schemas/powerforge.web.sitespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "site.json"), siteJson);
+
+        // Provide a ready-to-run pipeline with dev/ci modes and baseline paths under .powerforge.
+        var pipelineJson = InsertSchema(
+            """
+            {
+              "steps": [
+                { "task": "build", "config": "./site.json", "out": "./_site", "clean": true },
+
+                { "task": "verify", "id": "verify-dev", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
+                { "task": "verify", "id": "verify-ci", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
+
+                { "task": "audit", "id": "audit-ci", "siteRoot": "./_site", "modes": ["ci"], "summary": true, "sarif": true, "baseline": "./.powerforge/audit-baseline.json", "failOnNewIssues": true }
+              ]
+            }
+            """,
+            "./schemas/powerforge.web.pipelinespec.schema.json");
+        created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
+
+        var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
+        Directory.CreateDirectory(powerforgeRoot);
 
         return new WebScaffoldResult
         {
