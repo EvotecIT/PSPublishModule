@@ -251,6 +251,8 @@ internal static class WebCliHelpers
         var checkNetworkHints = !HasOption(argv, "--no-network-hints");
         var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
+        var maxTotalFilesText = TryGetOptionValue(argv, "--max-total-files") ?? TryGetOptionValue(argv, "--max-files-total");
+        var suppressIssues = ReadOptionList(argv, "--suppress-issue", "--suppress-issues");
 
         if (requiredRoutes.Count == 0)
             requiredRoutes.Add("/404.html");
@@ -261,6 +263,7 @@ internal static class WebCliHelpers
         var summaryMax = ParseIntOption(summaryMaxText, 10);
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
+        var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
@@ -271,6 +274,8 @@ internal static class WebCliHelpers
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
+            MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,

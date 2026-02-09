@@ -120,6 +120,7 @@ Runs build/verify/audit as one health-check step.
 Notes:
 - Supports the same strict verify flags as `verify`.
 - Supports `suppressWarnings` to filter verify warnings before policy evaluation.
+- Supports `suppressIssues` to filter audit issues before counts/gates and before writing summary/SARIF.
 - Supports verify baselines (prefix `verify*` to avoid confusion with audit baselines):
   - `verifyBaseline`: path to a verify baseline file
   - `verifyBaselineGenerate` / `verifyBaselineUpdate`

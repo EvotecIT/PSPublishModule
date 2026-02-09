@@ -123,6 +123,8 @@
         "exclude": { "type": "string" },
         "maxTotalFiles": { "type": "integer", "minimum": 0, "description": "Maximum allowed total file count under siteRoot (0 disables)." },
         "max-total-files": { "type": "integer", "minimum": 0, "description": "Alias for maxTotalFiles." },
+        "suppressIssues": { "type": "array", "items": { "type": "string" }, "description": "Audit issue suppressions (same matching rules as audit step). Supports codes like PFAUDIT.BUDGET plus substring/wildcard/re:... matching." },
+        "suppress-issues": { "type": "array", "items": { "type": "string" }, "description": "Alias for suppressIssues." },
         "noDefaultExclude": { "type": "boolean" },
         "ignoreNav": { "type": "string" },
         "ignore-nav": { "type": "string" },
