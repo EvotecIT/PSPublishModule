@@ -106,7 +106,10 @@ internal static partial class WebCliCommandHandlers
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
         var isCi = ConsoleEnvironment.IsCI;
-        var suppressWarnings = spec.Verify?.SuppressWarnings;
+        var suppressWarnings = (spec.Verify?.SuppressWarnings ?? Array.Empty<string>())
+            .Concat(ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var warningPreviewText = TryGetOptionValue(subArgs, "--warning-preview") ?? TryGetOptionValue(subArgs, "--warning-preview-count");
         var errorPreviewText = TryGetOptionValue(subArgs, "--error-preview") ?? TryGetOptionValue(subArgs, "--error-preview-count");
         var warningPreviewCount = ParseIntOption(warningPreviewText, 0);

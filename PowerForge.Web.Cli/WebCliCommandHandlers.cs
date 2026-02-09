@@ -203,7 +203,10 @@ internal static partial class WebCliCommandHandlers
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
         var isCi = ConsoleEnvironment.IsCI;
-        var suppressWarnings = spec.Verify?.SuppressWarnings;
+        var suppressWarnings = (spec.Verify?.SuppressWarnings ?? Array.Empty<string>())
+            .Concat(ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var verifyBaselineGenerate = HasOption(subArgs, "--verify-baseline-generate");
         var verifyBaselineUpdate = HasOption(subArgs, "--verify-baseline-update");
         var verifyBaselinePath = TryGetOptionValue(subArgs, "--verify-baseline");
@@ -571,16 +574,29 @@ internal static partial class WebCliCommandHandlers
             return result.Success ? 0 : 1;
         }
 
+        var warningPreviewText = TryGetOptionValue(subArgs, "--warning-preview") ?? TryGetOptionValue(subArgs, "--warning-preview-count");
+        var errorPreviewText = TryGetOptionValue(subArgs, "--error-preview") ?? TryGetOptionValue(subArgs, "--error-preview-count");
+        var warningPreviewCount = ParseIntOption(warningPreviewText, 0);
+        var errorPreviewCount = ParseIntOption(errorPreviewText, 0);
+
         if (result.Warnings.Length > 0)
         {
-            foreach (var w in result.Warnings)
+            var max = warningPreviewCount <= 0 ? result.Warnings.Length : Math.Max(0, warningPreviewCount);
+            foreach (var w in result.Warnings.Take(max))
                 logger.Warn(w);
+            var remaining = result.Warnings.Length - max;
+            if (remaining > 0)
+                logger.Info($"Audit warnings: showing {max}/{result.Warnings.Length} (use --warning-preview 0 to show all).");
         }
 
         if (result.Errors.Length > 0)
         {
-            foreach (var e in result.Errors)
+            var max = errorPreviewCount <= 0 ? result.Errors.Length : Math.Max(0, errorPreviewCount);
+            foreach (var e in result.Errors.Take(max))
                 logger.Error(e);
+            var remaining = result.Errors.Length - max;
+            if (remaining > 0)
+                logger.Info($"Audit errors: showing {max}/{result.Errors.Length} (use --error-preview 0 to show all).");
         }
 
         if (result.Success)

@@ -44,6 +44,7 @@ internal static partial class WebCliCommandHandlers
         var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
         var includeTypes = ReadOptionList(subArgs, "--include-type");
         var excludeTypes = ReadOptionList(subArgs, "--exclude-type");
+        var suppressWarnings = ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings").ToArray();
 
         var apiType = ApiDocsType.CSharp;
         if (!string.IsNullOrWhiteSpace(typeText) &&
@@ -96,10 +97,11 @@ internal static partial class WebCliCommandHandlers
             options.ExcludeTypeNames.AddRange(excludeTypes);
 
         var result = WebApiDocsGenerator.Generate(options);
+        var filteredWarnings = WebVerifyPolicy.FilterWarnings(result.Warnings, suppressWarnings);
 
-        if (!outputJson && result.Warnings.Length > 0)
+        if (!outputJson && filteredWarnings.Length > 0)
         {
-            foreach (var warning in result.Warnings)
+            foreach (var warning in filteredWarnings)
                 logger.Warn(warning);
         }
         if (!outputJson && result.UsedReflectionFallback)
@@ -107,6 +109,20 @@ internal static partial class WebCliCommandHandlers
 
         if (outputJson)
         {
+            if (filteredWarnings.Length != result.Warnings.Length)
+            {
+                result = new WebApiDocsResult
+                {
+                    OutputPath = result.OutputPath,
+                    IndexPath = result.IndexPath,
+                    SearchPath = result.SearchPath,
+                    TypesPath = result.TypesPath,
+                    TypeCount = result.TypeCount,
+                    UsedReflectionFallback = result.UsedReflectionFallback,
+                    Warnings = filteredWarnings
+                };
+            }
+
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
             {
                 SchemaVersion = outputSchemaVersion,
