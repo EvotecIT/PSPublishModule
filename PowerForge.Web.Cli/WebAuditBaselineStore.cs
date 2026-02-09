@@ -37,20 +37,12 @@ internal static class WebAuditBaselineStore
                     keys.Add(issue.Key);
             }
 
-            var issues = result.Issues
-                .Where(issue => !string.IsNullOrWhiteSpace(issue.Key) && keys.Contains(issue.Key))
-                .GroupBy(issue => issue.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .OrderBy(issue => issue.Key, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
             var payload = new
             {
                 version = 1,
                 generatedAtUtc = DateTimeOffset.UtcNow,
                 issueCount = keys.Count,
-                issueKeys = keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToArray(),
-                issues
+                issueKeys = keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToArray()
             };
 
             var directory = Path.GetDirectoryName(resolvedPath);
