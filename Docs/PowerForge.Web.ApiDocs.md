@@ -203,7 +203,7 @@ When assembly reflection is available, the generator emits:
 - base type + implemented interfaces
 - static/abstract/sealed flags
 - attributes for types and members
-- extension methods (shown under “Extension Methods”)
+- extension methods (shown under "Extension Methods")
 - constructors are rendered in their own section and overloads are grouped by name
 - optional source links (when `sourceRoot` + `sourceUrl` are set and PDBs exist)
 
@@ -220,6 +220,10 @@ If you change class names or IDs, provide your own JS via `docsScript` /
 When `css` is not provided, the generator inlines `fallback.css`.
 To fully control the visuals, provide `css` or supply a custom `fallback.css`
 via `templateRoot`.
+
+`css` may be a single href or a comma/whitespace-separated list of hrefs. When
+multiple are provided, the generator emits multiple `<link rel="stylesheet" ...>`
+tags (for example `"/css/app.css,/css/api.css"`).
 
 ## XML docs vs reflection
 
@@ -238,7 +242,7 @@ referenced type exists in the generated API docs.
 
 Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 (for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
-Each command is treated as a “type” with parameter sets rendered as methods.
+Each command is treated as a "type" with parameter sets rendered as methods.
 
 ## Usage scenarios
 
