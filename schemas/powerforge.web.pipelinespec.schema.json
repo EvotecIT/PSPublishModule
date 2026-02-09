@@ -494,6 +494,8 @@
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
+        "budgetExclude": { "type": "string", "description": "Comma-separated glob patterns to exclude from budget counters (for example api/**). Does not affect the HTML audit scope." },
+        "budget-exclude": { "type": "string", "description": "Alias for budgetExclude." },
         "maxHtmlFiles": { "type": "integer", "minimum": 0 },
         "max-html-files": { "type": "integer", "minimum": 0 },
         "maxTotalFiles": { "type": "integer", "minimum": 0, "description": "Maximum allowed total file count under siteRoot (0 disables)." },

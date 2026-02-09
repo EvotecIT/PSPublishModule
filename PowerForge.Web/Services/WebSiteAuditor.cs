@@ -35,7 +35,9 @@ public static partial class WebSiteAuditor
         var suppressIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.SuppressIssues);
         var maxTotalFiles = Math.Max(0, options.MaxTotalFiles);
         var totalFileCountTruncated = false;
-        var totalFileCount = maxTotalFiles > 0 ? CountAllFiles(siteRoot, maxTotalFiles, out totalFileCountTruncated) : 0;
+        var totalFileCount = maxTotalFiles > 0
+            ? CountAllFiles(siteRoot, maxTotalFiles, options.BudgetExclude, options.UseDefaultExcludes, out totalFileCountTruncated)
+            : 0;
         var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();

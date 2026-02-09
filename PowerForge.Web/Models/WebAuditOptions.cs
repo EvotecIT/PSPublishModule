@@ -19,6 +19,12 @@ public sealed class WebAuditOptions
     /// This is useful as a "bundle explosion" / site bloat guardrail.
     /// </summary>
     public int MaxTotalFiles { get; set; }
+    /// <summary>
+    /// Optional glob patterns to exclude from budget counters (for example <c>api/**</c>).
+    /// This is applied to file-count budgets like <see cref="MaxTotalFiles"/> without affecting
+    /// the HTML audit scope (<see cref="Include"/>/<see cref="Exclude"/>).
+    /// </summary>
+    public string[] BudgetExclude { get; set; } = Array.Empty<string>();
     /// <summary>When true, apply built-in exclude patterns for partial HTML files.</summary>
     public bool UseDefaultExcludes { get; set; } = true;
     /// <summary>When true, validate HTML structure.</summary>

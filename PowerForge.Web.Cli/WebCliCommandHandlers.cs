@@ -423,6 +423,7 @@ internal static partial class WebCliCommandHandlers
 
         var include = ReadOptionList(subArgs, "--include");
         var exclude = ReadOptionList(subArgs, "--exclude");
+        var budgetExclude = ReadOptionList(subArgs, "--budget-exclude", "--budget-excludes");
         var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
         var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
@@ -505,6 +506,7 @@ internal static partial class WebCliCommandHandlers
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            BudgetExclude = budgetExclude.ToArray(),
             SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,

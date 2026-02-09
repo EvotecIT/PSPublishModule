@@ -25,6 +25,7 @@ internal static partial class WebPipelineRunner
 
         var include = GetString(step, "include");
         var exclude = GetString(step, "exclude");
+        var budgetExclude = GetString(step, "budgetExclude") ?? GetString(step, "budget-exclude");
         var includeScopeFromBuildUpdated = GetBool(step, "scopeFromBuildUpdated") ?? GetBool(step, "scope-from-build-updated");
         var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
         var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
@@ -154,6 +155,7 @@ internal static partial class WebPipelineRunner
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            BudgetExclude = CliPatternHelper.SplitPatterns(budgetExclude),
             SuppressIssues = suppressIssues ?? Array.Empty<string>(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
