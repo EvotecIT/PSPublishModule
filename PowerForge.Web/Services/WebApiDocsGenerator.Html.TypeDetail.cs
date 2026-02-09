@@ -388,7 +388,7 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine($"          <p class=\"member-summary\">{RenderLinkedText(member.Summary, baseUrl, slugMap)}</p>");
         if (member.TypeParameters.Count > 0)
         {
-            sb.AppendLine("          <h4>Type Parameters</h4>");
+            sb.AppendLine("          <h3>Type Parameters</h3>");
             sb.AppendLine("          <dl class=\"typeparam-list\">");
             foreach (var tp in member.TypeParameters)
             {
@@ -400,7 +400,7 @@ public static partial class WebApiDocsGenerator
         }
         if (member.Parameters.Count > 0)
         {
-            sb.AppendLine("          <h4>Parameters</h4>");
+            sb.AppendLine("          <h3>Parameters</h3>");
             sb.AppendLine("          <dl class=\"param-list\">");
             foreach (var param in member.Parameters)
             {
@@ -415,7 +415,7 @@ public static partial class WebApiDocsGenerator
         }
         if (!string.IsNullOrWhiteSpace(member.ValueSummary))
         {
-            sb.AppendLine("          <h4>Value</h4>");
+            sb.AppendLine("          <h3>Value</h3>");
             sb.AppendLine($"          <p>{RenderLinkedText(member.ValueSummary, baseUrl, slugMap)}</p>");
         }
         if (sectionLabel == "Fields" || sectionLabel == "Values")
@@ -425,12 +425,12 @@ public static partial class WebApiDocsGenerator
         }
         if (!string.IsNullOrWhiteSpace(member.Returns))
         {
-            sb.AppendLine("          <h4>Returns</h4>");
+            sb.AppendLine("          <h3>Returns</h3>");
             sb.AppendLine($"          <p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
         }
         if (member.Exceptions.Count > 0)
         {
-            sb.AppendLine("          <h4>Exceptions</h4>");
+            sb.AppendLine("          <h3>Exceptions</h3>");
             sb.AppendLine("          <ul class=\"exception-list\">");
             foreach (var ex in member.Exceptions)
             {
@@ -442,12 +442,12 @@ public static partial class WebApiDocsGenerator
         }
         if (member.Examples.Count > 0)
         {
-            sb.AppendLine("          <h4>Examples</h4>");
+            sb.AppendLine("          <h3>Examples</h3>");
             AppendExamples(sb, member.Examples, baseUrl, slugMap, codeLanguage);
         }
         if (member.SeeAlso.Count > 0)
         {
-            sb.AppendLine("          <h4>See Also</h4>");
+            sb.AppendLine("          <h3>See Also</h3>");
             sb.AppendLine("          <ul class=\"see-also-list\">");
             foreach (var item in member.SeeAlso)
             {
