@@ -5,6 +5,11 @@ Last updated: 2026-02-09
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
 Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX.Website**, **IntelligenceX Website**.
 
+Start here:
+- `AGENTS.md` (repo + website paths and working agreements)
+- `Docs\PowerForge.Web.Roadmap.md` (Have/Partial/Missing + milestones)
+- `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract pattern)
+
 ## Repos / Paths
 
 - PowerForge engine (source): `C:\Support\GitHub\PSPublishModule`
@@ -12,9 +17,16 @@ Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**,
   - Web engine: `PowerForge.Web`
   - Docs: `Docs\PowerForge.Web.*.md`
 - CodeGlyphX repo (website + library): `C:\Support\GitHub\CodeMatrix` (remote: `EvotecIT/CodeGlyphX`)
-  - Website: `Website\` or `CodeGlyphX.Website\` (depends on branch/history)
+  - Website: `C:\Support\GitHub\CodeMatrix\Website`
 - IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
 - HtmlForgeX website repo: `C:\Support\GitHub\HtmlForgeX.Website`
+
+## Recent Changes (2026-02-09)
+
+- Audit baselines can live under repo root (for example `./.powerforge/audit-baseline.json`) instead of under `_site`.
+- Audit baselines use hashed issue keys to avoid huge baseline files that fail to load.
+- Verify baselines support an "empty baseline" (0 keys) for `failOnNewWarnings` (baseline present = contract is enabled).
+- Windows CSS contract check: root-relative hrefs like `/css/app.css` are treated as web-root paths (not disk-rooted paths).
 
 ## Current Capabilities (What Exists)
 
@@ -138,7 +150,7 @@ From a website repo:
 
 ## Next Tasks (If You Pick Up Work)
 
-1. HtmlForgeX: confirm audit no longer fails after updating PSPublishModule binaries used by the site.
+1. HtmlForgeX: confirm audit + CI mode gates pass end-to-end with baselines and `--mode ci` (verify + audit).
 2. Improve audit failure output in `PowerForge.Web.Cli` (print resolved absolute artifact paths + top issues with URL/path).
 3. Add docs/examples for multi-product IA using `Navigation.Profiles` + `Regions` (goal: help Claude/agents create unique sites).
 4. Fix/standardize API docs source links for monorepo/subfolder repos (IntelligenceX/CodeGlyphX).

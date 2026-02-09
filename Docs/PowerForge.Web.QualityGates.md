@@ -65,9 +65,10 @@ Example `pipeline.json`:
 Notes:
 - `verify` baselines are stored under `./.powerforge/verify-baseline.json` by default when generated from the CLI.
 - `audit` already supports baselines (`failOnNewIssues`) and can gate on categories (useful for budgets).
-- Use `suppressWarnings` as a scalpel; prefer baselines for “existing debt”.
+- Use `suppressWarnings` as a scalpel; prefer baselines for "existing debt".
 - Use `suppressIssues` (audit) as a scalpel too (e.g. `PFAUDIT.BUDGET`), but prefer baselines for existing debt and `failOnCategories` for enforceable budgets.
 - Verify baseline keys strip any leading `[CODE]` prefix for stability (so adding/changing warning codes does not break baselines).
+- An empty verify baseline (0 keys) is valid and enables `failOnNewWarnings` semantics ("any warning is new").
 
 ## Creating/Updating Baselines
 
@@ -84,7 +85,7 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 ## Common Rules Of Thumb
 
 - Prefer `failOnNewWarnings` (verify) and `failOnNewIssues` (audit) in CI.
-- Prefer strict theme contracts over “it renders ok on one site”:
+- Prefer strict theme contracts over "it renders ok on one site":
   - `theme.manifest.json` should declare `features` and `featureContracts`.
   - For `apiDocs`, include required fragments and a CSS selector contract.
 - Add budgets only when you can defend them:
