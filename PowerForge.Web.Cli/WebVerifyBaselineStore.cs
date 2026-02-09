@@ -111,6 +111,60 @@ internal static class WebVerifyBaselineStore
         }
     }
 
+    internal static bool TryLoadWarningKeys(string siteRoot, string? baselinePath, out string resolvedPath, out string[] keys)
+    {
+        resolvedPath = string.Empty;
+        keys = Array.Empty<string>();
+        try
+        {
+            resolvedPath = ResolveBaselinePath(siteRoot, baselinePath);
+            if (!File.Exists(resolvedPath))
+                return false;
+
+            var info = new FileInfo(resolvedPath);
+            if (info.Length > MaxBaselineFileSizeBytes)
+                return false;
+
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var stream = File.OpenRead(resolvedPath);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+
+            if (TryGetPropertyIgnoreCase(root, "warningKeys", out var warningKeys) && warningKeys.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in warningKeys.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var value = item.GetString();
+                    var normalized = NormalizeWarningKey(value);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                        set.Add(normalized);
+                }
+            }
+
+            if (TryGetPropertyIgnoreCase(root, "warnings", out var warnings) && warnings.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in warnings.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var value = item.GetString();
+                    var normalized = NormalizeWarningKey(value);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                        set.Add(normalized);
+                }
+            }
+
+            keys = set.ToArray();
+            return true;
+        }
+        catch
+        {
+            resolvedPath = string.Empty;
+            keys = Array.Empty<string>();
+            return false;
+        }
+    }
+
     private static IEnumerable<string> LoadWarningKeys(string path)
     {
         if (!File.Exists(path))

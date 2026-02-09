@@ -137,12 +137,12 @@ internal static partial class WebCliCommandHandlers
         if ((baselineGenerate || baselineUpdate || failOnNewWarnings) && string.IsNullOrWhiteSpace(baselinePathValue))
             baselinePathValue = ".powerforge/verify-baseline.json";
 
-        var baselineKeys = (baselineGenerate || baselineUpdate || failOnNewWarnings || !string.IsNullOrWhiteSpace(baselinePathValue))
-            ? WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, baselinePathValue)
-            : Array.Empty<string>();
-        var baselineSet = baselineKeys.Length > 0
-            ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase)
-            : null;
+        var baselineLoaded = false;
+        var baselineKeys = Array.Empty<string>();
+        if (baselineGenerate || baselineUpdate || failOnNewWarnings || !string.IsNullOrWhiteSpace(baselinePathValue))
+            baselineLoaded = WebVerifyBaselineStore.TryLoadWarningKeys(plan.RootPath, baselinePathValue, out _, out baselineKeys);
+
+        var baselineSet = baselineLoaded ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
         var newWarnings = baselineSet is null
             ? Array.Empty<string>()
             : filteredWarnings.Where(w =>
@@ -157,7 +157,7 @@ internal static partial class WebCliCommandHandlers
 
         if (failOnNewWarnings)
         {
-            if (baselineKeys.Length == 0)
+            if (!baselineLoaded)
             {
                 verifySuccess = false;
                 verifyPolicyFailures = verifyPolicyFailures

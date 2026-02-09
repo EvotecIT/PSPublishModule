@@ -67,10 +67,12 @@ internal static partial class WebPipelineRunner
                 verifyBaselinePath = ".powerforge/verify-baseline.json";
 
             var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
-            var baselineKeys = (!string.IsNullOrWhiteSpace(verifyBaselinePath) || verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings)
-                ? WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, verifyBaselinePath)
-                : Array.Empty<string>();
-            var baselineSet = baselineKeys.Length > 0 ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
+            var baselineLoaded = false;
+            var baselineKeys = Array.Empty<string>();
+            if (!string.IsNullOrWhiteSpace(verifyBaselinePath) || verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings)
+                baselineLoaded = WebVerifyBaselineStore.TryLoadWarningKeys(plan.RootPath, verifyBaselinePath, out _, out baselineKeys);
+
+            var baselineSet = baselineLoaded ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
             var newWarnings = baselineSet is null
                 ? Array.Empty<string>()
                 : filteredWarnings.Where(w => !string.IsNullOrWhiteSpace(w) && !baselineSet.Contains(w.Trim())).ToArray();
@@ -86,7 +88,7 @@ internal static partial class WebPipelineRunner
 
             if (verifyFailOnNewWarnings)
             {
-                if (baselineKeys.Length == 0)
+                if (!baselineLoaded)
                 {
                     verifySuccess = false;
                     verifyPolicyFailures = verifyPolicyFailures

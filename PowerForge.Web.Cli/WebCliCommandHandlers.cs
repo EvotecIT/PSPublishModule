@@ -251,8 +251,8 @@ internal static partial class WebCliCommandHandlers
         string? verifyBaselineWrittenPath = null;
         if (verify is not null && !string.IsNullOrWhiteSpace(verifyBaselinePath))
         {
-            var baselineKeys = WebVerifyBaselineStore.LoadWarningKeysSafe(plan.RootPath, verifyBaselinePath);
-            var baselineSet = baselineKeys.Length > 0 ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
+            var baselineLoaded = WebVerifyBaselineStore.TryLoadWarningKeys(plan.RootPath, verifyBaselinePath, out _, out var baselineKeys);
+            var baselineSet = baselineLoaded ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
             var newWarnings = baselineSet is null
                 ? Array.Empty<string>()
                 : filteredVerifyWarnings.Where(w =>
@@ -266,7 +266,7 @@ internal static partial class WebCliCommandHandlers
 
             if (verifyFailOnNewWarnings)
             {
-                if (baselineKeys.Length == 0)
+                if (!baselineLoaded)
                 {
                     verifySuccess = false;
                     verifyPolicyFailures = verifyPolicyFailures
