@@ -167,6 +167,21 @@ internal static partial class WebPipelineRunner
             var checkNetworkHints = GetBool(step, "checkNetworkHints") ?? true;
             var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking") ?? true;
             var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking") ?? new WebAuditOptions().MaxHeadBlockingResources;
+            var rendered = GetBool(step, "rendered") ?? false;
+            var renderedEngine = GetString(step, "renderedEngine");
+            var renderedEnsureInstalled = GetBool(step, "renderedEnsureInstalled");
+            var renderedHeadless = GetBool(step, "renderedHeadless") ?? true;
+            var renderedBaseUrl = GetString(step, "renderedBaseUrl");
+            var renderedHost = GetString(step, "renderedHost");
+            var renderedPort = GetInt(step, "renderedPort") ?? 0;
+            var renderedServe = GetBool(step, "renderedServe") ?? true;
+            var renderedMaxPages = GetInt(step, "renderedMaxPages") ?? 20;
+            var renderedTimeoutMs = GetInt(step, "renderedTimeoutMs") ?? 30000;
+            var renderedCheckErrors = GetBool(step, "renderedCheckConsoleErrors") ?? true;
+            var renderedCheckWarnings = GetBool(step, "renderedCheckConsoleWarnings") ?? true;
+            var renderedCheckFailures = GetBool(step, "renderedCheckFailedRequests") ?? true;
+            var renderedInclude = GetString(step, "renderedInclude");
+            var renderedExclude = GetString(step, "renderedExclude");
 
             var requiredRouteList = CliPatternHelper.SplitPatterns(requiredRoutes).ToList();
             if (requiredRouteList.Count == 0)
@@ -191,6 +206,13 @@ internal static partial class WebPipelineRunner
 
             if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
                 baselinePath = ".powerforge/audit-baseline.json";
+
+            if (fast && rendered)
+            {
+                rendered = false;
+            }
+
+            var ensureInstall = rendered && (renderedEnsureInstalled ?? true);
 
             audit = WebSiteAuditor.Audit(new WebAuditOptions
             {
@@ -237,7 +259,22 @@ internal static partial class WebPipelineRunner
                 CheckLinkPurposeConsistency = checkLinkPurpose,
                 CheckNetworkHints = checkNetworkHints,
                 CheckRenderBlockingResources = checkRenderBlocking,
-                MaxHeadBlockingResources = maxHeadBlockingResources
+                MaxHeadBlockingResources = maxHeadBlockingResources,
+                CheckRendered = rendered,
+                RenderedEngine = renderedEngine ?? "Chromium",
+                RenderedEnsureInstalled = ensureInstall,
+                RenderedHeadless = renderedHeadless,
+                RenderedBaseUrl = renderedBaseUrl,
+                RenderedServe = renderedServe,
+                RenderedServeHost = string.IsNullOrWhiteSpace(renderedHost) ? "localhost" : renderedHost,
+                RenderedServePort = renderedPort,
+                RenderedMaxPages = renderedMaxPages,
+                RenderedTimeoutMs = renderedTimeoutMs,
+                RenderedCheckConsoleErrors = renderedCheckErrors,
+                RenderedCheckConsoleWarnings = renderedCheckWarnings,
+                RenderedCheckFailedRequests = renderedCheckFailures,
+                RenderedInclude = CliPatternHelper.SplitPatterns(renderedInclude),
+                RenderedExclude = CliPatternHelper.SplitPatterns(renderedExclude)
             });
 
             if (baselineGenerate || baselineUpdate)
