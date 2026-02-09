@@ -114,7 +114,31 @@ internal static partial class WebPipelineRunner
             parts.Add($"sarif {result.SarifPath}");
 
         if (safePreviewCount <= 0 || result.Errors.Length == 0)
+        {
+            // Still include warning samples when the failure is driven by gates (often an error "gate failed"
+            // plus a large set of warnings).
+            if (safePreviewCount > 0 && result.Warnings.Length > 0)
+            {
+                var warnPreviewCount = Math.Min(safePreviewCount, 5);
+                var warnPreview = result.Warnings
+                    .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+                    .Take(warnPreviewCount)
+                    .Select(warning => TruncateForLog(warning, 220))
+                    .ToArray();
+
+                if (warnPreview.Length > 0)
+                {
+                    var warnText = string.Join(" | ", warnPreview);
+                    var warnRemaining = result.Warnings.Length - warnPreview.Length;
+                    if (warnRemaining > 0)
+                        warnText += $" | +{warnRemaining} more";
+
+                    parts.Add($"warnings: {warnText}");
+                }
+            }
+
             return string.Join(", ", parts);
+        }
 
         var preview = result.Errors
             .Where(static error => !string.IsNullOrWhiteSpace(error))
@@ -131,6 +155,26 @@ internal static partial class WebPipelineRunner
             previewText += $" | +{remaining} more";
 
         parts.Add($"sample: {previewText}");
+
+        if (result.Warnings.Length > 0)
+        {
+            var warnPreviewCount = Math.Min(safePreviewCount, 5);
+            var warnPreview = result.Warnings
+                .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+                .Take(warnPreviewCount)
+                .Select(warning => TruncateForLog(warning, 220))
+                .ToArray();
+
+            if (warnPreview.Length > 0)
+            {
+                var warnText = string.Join(" | ", warnPreview);
+                var warnRemaining = result.Warnings.Length - warnPreview.Length;
+                if (warnRemaining > 0)
+                    warnText += $" | +{warnRemaining} more";
+
+                parts.Add($"warnings: {warnText}");
+            }
+        }
 
         if (result.Issues.Length > 0)
         {
