@@ -148,10 +148,12 @@ internal static partial class WebPipelineRunner
 
             var dependencyMiss = definition.DependencyIndexes.Any(index =>
                 !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
-            if (cacheEnabled && cacheState is not null)
+            var cacheStateLocal = cacheState;
+            var cacheable = cacheEnabled && cacheStateLocal is not null && IsCacheableTask(task);
+            if (cacheable)
             {
                 stepFingerprint = ComputeStepFingerprint(baseDir, step, fast ? "fast" : null);
-                if (cacheState.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
+                if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
                     AreExpectedOutputsPresent(expectedOutputs))
@@ -198,9 +200,9 @@ internal static partial class WebPipelineRunner
 
             stepResult.Message = AppendDuration(stepResult.Message, stopwatch);
             stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
-            if (cacheEnabled && cacheState is not null && !string.IsNullOrWhiteSpace(stepFingerprint))
+            if (cacheable && !string.IsNullOrWhiteSpace(stepFingerprint))
             {
-                cacheState.Entries[cacheKey] = new WebPipelineCacheEntry
+                cacheStateLocal!.Entries[cacheKey] = new WebPipelineCacheEntry
                 {
                     Fingerprint = stepFingerprint,
                     Message = stepResult.Message

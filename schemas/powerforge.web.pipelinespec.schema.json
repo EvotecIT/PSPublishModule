@@ -34,7 +34,8 @@
         { "$ref": "#/$defs/AuditStep" },
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
-        { "$ref": "#/$defs/OverlayStep" }
+        { "$ref": "#/$defs/OverlayStep" },
+        { "$ref": "#/$defs/CloudflareStep" }
       ]
     },
     "BuildStep": {
@@ -211,6 +212,42 @@
         "apply": { "type": "boolean" }
       },
       "required": ["task"]
+    },
+    "CloudflareStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "cloudflare" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "zoneId": { "type": "string" },
+        "zone-id": { "type": "string" },
+        "tokenEnv": { "type": "string", "description": "Env var name containing a Cloudflare API token (recommended). Defaults to CLOUDFLARE_API_TOKEN." },
+        "token-env": { "type": "string", "description": "Alias for tokenEnv." },
+        "token": { "type": "string", "description": "Inline API token (discouraged; prefer tokenEnv and CI secrets)." },
+        "baseUrl": { "type": "string", "description": "Base URL used to combine with paths (required when using paths)." },
+        "base-url": { "type": "string", "description": "Alias for baseUrl." },
+        "paths": { "type": "string", "description": "Comma-separated paths to purge (combined with baseUrl)." },
+        "path": { "type": "string", "description": "Alias for paths." },
+        "urls": { "type": "string", "description": "Comma-separated full URLs to purge." },
+        "url": { "type": "string", "description": "Alias for urls." },
+        "purgeEverything": { "type": "boolean" },
+        "purge-everything": { "type": "boolean" },
+        "dryRun": { "type": "boolean" },
+        "dry-run": { "type": "boolean" }
+      },
+      "required": ["task"],
+      "anyOf": [
+        { "required": ["zoneId"] },
+        { "required": ["zone-id"] }
+      ]
     },
     "ApiDocsStep": {
       "type": "object",

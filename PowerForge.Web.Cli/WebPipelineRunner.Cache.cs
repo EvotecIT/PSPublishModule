@@ -12,6 +12,18 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner
 {
+    private static bool IsCacheableTask(string task)
+    {
+        if (string.IsNullOrWhiteSpace(task))
+            return false;
+
+        // Tasks with external side-effects should not be cached.
+        if (task.Equals("cloudflare", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
+
     private static WebPipelineCacheState LoadPipelineCache(string cachePath, WebConsoleLogger? logger)
     {
         try

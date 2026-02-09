@@ -58,6 +58,9 @@ internal static partial class WebPipelineRunner
             case "overlay":
                 ExecuteOverlay(step, baseDir, stepResult);
                 break;
+            case "cloudflare":
+                ExecuteCloudflare(step, baseDir, stepResult);
+                break;
             default:
                 stepResult.Success = false;
                 stepResult.Message = "Unknown task";

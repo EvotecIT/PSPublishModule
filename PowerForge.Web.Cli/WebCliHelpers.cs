@@ -84,6 +84,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
         Console.WriteLine("                     [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
+        Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
+        Console.WriteLine("                     [--purge-everything] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
     }
 
     internal static int Fail(string message, bool outputJson, WebConsoleLogger logger, string command)
