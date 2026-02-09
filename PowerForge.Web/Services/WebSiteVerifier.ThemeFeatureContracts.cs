@@ -345,10 +345,14 @@ public static partial class WebSiteVerifier
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             return null;
 
-        if (Path.IsPathRooted(value))
+        // On Windows, "/css/app.css" is considered a rooted file path, but in this context it's a web-root href.
+        // Only treat it as a disk-rooted path if it is not a web-root href.
+        var isWebRootHref = value.StartsWith("/", StringComparison.Ordinal);
+
+        if (!isWebRootHref && Path.IsPathRooted(value))
             return File.Exists(value) ? Path.GetFullPath(value) : null;
 
-        if (!value.StartsWith("/", StringComparison.Ordinal))
+        if (!isWebRootHref)
         {
             // Relative href: ambiguous. Try theme root first (theme-local bundles), then site root.
             var themeCandidate = Path.GetFullPath(Path.Combine(themeRoot, value.Replace('/', Path.DirectorySeparatorChar)));
