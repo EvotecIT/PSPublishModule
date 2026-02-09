@@ -54,6 +54,7 @@ Key doc: `Docs\PowerForge.Web.ContentSpec.md` (`## Navigation` section).
   - `sourceRoot` + `sourceUrl` pattern (requires PDB/source info).
   - Broken "Edit on GitHub" links typically mean `sourceRoot`/`sourceUrl` aren't aligned with repo layout (monorepo/subfolder cases).
 - Pipeline `apidocs` step tries to keep navigation consistent by default:
+  - if `config` is not set, it will use `./site.json` when present at the pipeline root (prevents missing nav/theme drift)
   - if `headerHtml`/`footerHtml` are not set, it prefers theme `partials/api-header.html` + `api-footer.html`
   - if those are missing, it falls back to theme `partials/header.html` + `footer.html` (so API reference pages don't lose site nav)
 Key doc: `Docs\PowerForge.Web.ApiDocs.md`.

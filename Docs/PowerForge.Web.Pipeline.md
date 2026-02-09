@@ -146,7 +146,8 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
-- `config` (recommended) enables best-practice defaults:
+- `config` (recommended) enables best-practice defaults.
+  - If `config` is omitted, the pipeline will use `./site.json` when it exists at the pipeline root.
   - if `nav` is not set, it prefers `static/<dataRoot>/site-nav.json` (when present), otherwise falls back to `config`
   - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` + `api-footer.html` (when present), otherwise falls back to `header.html` + `footer.html`
 - `template`: `simple` (default) or `docs` (sidebar layout)
