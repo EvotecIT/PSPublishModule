@@ -58,6 +58,13 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - API pages must use the same global CSS as normal pages plus API-specific CSS.
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
 
+## Optional: CDN Cache Purge (Cloudflare)
+
+If your site is behind Cloudflare and caches HTML, consider purging key HTML URLs after deploy
+(or keeping HTML TTL low). PowerForge.Web provides a small purge command:
+
+- `Docs/PowerForge.Web.Cloudflare.md`
+
 ## Theme Inheritance (extends)
 
 If a theme declares `extends`, the base theme must be present on disk (vendored into the repo).
@@ -75,4 +82,3 @@ In `AGENTS.md` (site repo):
 - theme structure + whether it uses `extends`
 - where API docs config lives (apidocs steps + css list)
 - where baselines/budgets live and how to update them
-
