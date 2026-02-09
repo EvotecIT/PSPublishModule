@@ -76,6 +76,7 @@ public static partial class WebSiteAuditor
                     return;
             }
 
+            var issueLine = $"[{suppressionCode}] {issueText}";
             issues.Add(new WebAuditIssue
             {
                 Severity = normalizedSeverity,
@@ -86,9 +87,9 @@ public static partial class WebSiteAuditor
             });
 
             if (normalizedSeverity == "error")
-                errors.Add(issueText);
+                errors.Add(issueLine);
             else
-                warnings.Add(issueText);
+                warnings.Add(issueLine);
         }
 
         if (htmlFiles.Count == 0)
