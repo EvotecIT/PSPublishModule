@@ -67,6 +67,7 @@ Notes:
 - `audit` already supports baselines (`failOnNewIssues`) and can gate on categories (useful for budgets).
 - Use `suppressWarnings` as a scalpel; prefer baselines for “existing debt”.
 - Use `suppressIssues` (audit) as a scalpel too (e.g. `PFAUDIT.BUDGET`), but prefer baselines for existing debt and `failOnCategories` for enforceable budgets.
+- Verify baseline keys strip any leading `[CODE]` prefix for stability (so adding/changing warning codes does not break baselines).
 
 ## Creating/Updating Baselines
 

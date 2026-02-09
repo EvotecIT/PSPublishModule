@@ -24,8 +24,8 @@ public class WebVerifyBaselineStoreTests
             Assert.True(File.Exists(written));
 
             var keys = WebVerifyBaselineStore.LoadWarningKeysSafe(root, baselinePath);
-            Assert.Contains(keys, k => k.Contains("PFWEB.X", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(keys, k => k.Contains("PFWEB.Y", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(keys, k => string.Equals(k, "One", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(keys, k => string.Equals(k, "Two", StringComparison.OrdinalIgnoreCase));
             Assert.Equal(2, keys.Length);
 
             using var doc = JsonDocument.Parse(File.ReadAllText(baselinePath));
@@ -81,4 +81,3 @@ public class WebVerifyBaselineStoreTests
         }
     }
 }
-

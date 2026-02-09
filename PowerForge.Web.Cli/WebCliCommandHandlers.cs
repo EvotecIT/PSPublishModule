@@ -252,7 +252,9 @@ internal static partial class WebCliCommandHandlers
             var baselineSet = baselineKeys.Length > 0 ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
             var newWarnings = baselineSet is null
                 ? Array.Empty<string>()
-                : filteredVerifyWarnings.Where(w => !string.IsNullOrWhiteSpace(w) && !baselineSet.Contains(w.Trim())).ToArray();
+                : filteredVerifyWarnings.Where(w =>
+                    !string.IsNullOrWhiteSpace(w) &&
+                    !baselineSet.Contains(WebVerifyBaselineStore.NormalizeWarningKey(w))).ToArray();
 
             verify.BaselinePath = verifyBaselinePath;
             verify.BaselineWarningCount = baselineKeys.Length;

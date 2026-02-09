@@ -142,7 +142,9 @@ internal static partial class WebCliCommandHandlers
             : null;
         var newWarnings = baselineSet is null
             ? Array.Empty<string>()
-            : filteredWarnings.Where(w => !string.IsNullOrWhiteSpace(w) && !baselineSet.Contains(w.Trim())).ToArray();
+            : filteredWarnings.Where(w =>
+                !string.IsNullOrWhiteSpace(w) &&
+                !baselineSet.Contains(WebVerifyBaselineStore.NormalizeWarningKey(w))).ToArray();
 
         if (!string.IsNullOrWhiteSpace(baselinePathValue))
             verify.BaselinePath = baselinePathValue;

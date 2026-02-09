@@ -69,7 +69,9 @@ internal static partial class WebPipelineRunner
         var baselineSet = baselineKeys.Length > 0 ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
         var newWarnings = baselineSet is null
             ? Array.Empty<string>()
-            : filteredWarnings.Where(w => !string.IsNullOrWhiteSpace(w) && !baselineSet.Contains(w.Trim())).ToArray();
+            : filteredWarnings.Where(w =>
+                !string.IsNullOrWhiteSpace(w) &&
+                !baselineSet.Contains(WebVerifyBaselineStore.NormalizeWarningKey(w))).ToArray();
 
         var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
             verify,

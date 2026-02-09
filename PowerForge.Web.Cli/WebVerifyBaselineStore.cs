@@ -13,6 +13,26 @@ internal static class WebVerifyBaselineStore
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
 
+    /// <summary>
+    /// Normalizes a warning string into a stable baseline key.
+    /// Today this strips any leading "[CODE]" prefix so baseline keys don't churn when codes are added/updated.
+    /// </summary>
+    internal static string NormalizeWarningKey(string? warning)
+    {
+        if (string.IsNullOrWhiteSpace(warning))
+            return string.Empty;
+
+        var trimmed = warning.Trim();
+        if (trimmed.Length < 3 || trimmed[0] != '[')
+            return trimmed;
+
+        var end = trimmed.IndexOf(']');
+        if (end <= 0)
+            return trimmed;
+
+        return trimmed.Substring(end + 1).TrimStart();
+    }
+
     internal static string Write(
         string siteRoot,
         string? baselinePath,
@@ -27,12 +47,16 @@ internal static class WebVerifyBaselineStore
             if (mergeWithExisting)
             {
                 foreach (var key in LoadWarningKeys(resolvedPath))
-                    keys.Add(key);
+                {
+                    var normalized = NormalizeWarningKey(key);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                        keys.Add(normalized);
+                }
             }
 
             foreach (var warning in warnings ?? Array.Empty<string>())
             {
-                var normalized = warning?.Trim();
+                var normalized = NormalizeWarningKey(warning);
                 if (!string.IsNullOrWhiteSpace(normalized))
                     keys.Add(normalized);
             }
@@ -109,8 +133,9 @@ internal static class WebVerifyBaselineStore
                 {
                     if (item.ValueKind != JsonValueKind.String) continue;
                     var value = item.GetString();
-                    if (!string.IsNullOrWhiteSpace(value))
-                        keys.Add(value.Trim());
+                    var normalized = NormalizeWarningKey(value);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                        keys.Add(normalized);
                 }
             }
 
@@ -120,8 +145,9 @@ internal static class WebVerifyBaselineStore
                 {
                     if (item.ValueKind != JsonValueKind.String) continue;
                     var value = item.GetString();
-                    if (!string.IsNullOrWhiteSpace(value))
-                        keys.Add(value.Trim());
+                    var normalized = NormalizeWarningKey(value);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                        keys.Add(normalized);
                 }
             }
         }
