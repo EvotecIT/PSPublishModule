@@ -110,6 +110,7 @@ public static partial class WebSiteAuditor
         var navMismatchCount = 0;
         var navCheckedCount = 0;
         var navIgnoredCount = 0;
+        var navMissing = new Dictionary<string, (int Count, List<string> Samples)>(StringComparer.OrdinalIgnoreCase);
         var duplicateIdCount = 0;
         var requiredRouteCount = 0;
         var missingRequiredRouteCount = 0;
@@ -223,6 +224,20 @@ public static partial class WebSiteAuditor
             baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue);
         }
 
+        const int NavMissingSampleLimit = 5;
+        void RecordNavMissing(string selector, string relativePath)
+        {
+            var key = string.IsNullOrWhiteSpace(selector) ? "nav" : selector.Trim();
+            if (!navMissing.TryGetValue(key, out var entry))
+                entry = (0, new List<string>(NavMissingSampleLimit));
+
+            entry.Count++;
+            if (entry.Samples.Count < NavMissingSampleLimit)
+                entry.Samples.Add(relativePath);
+
+            navMissing[key] = entry;
+        }
+
         foreach (var file in htmlFiles)
         {
             pageCount++;
@@ -322,7 +337,7 @@ public static partial class WebSiteAuditor
                 if (navElement is null)
                 {
                     if (navRequired)
-                        AddIssue("warning", "nav", relativePath, $"nav not found using selector '{navSelector}'.", "nav-missing");
+                        RecordNavMissing(navSelector, relativePath);
                 }
                 else
                 {
@@ -417,6 +432,20 @@ public static partial class WebSiteAuditor
                         }
                     }
                 }
+            }
+        }
+
+        if (navMissing.Count > 0)
+        {
+            foreach (var entry in navMissing.OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase))
+            {
+                var selector = entry.Key;
+                var count = entry.Value.Count;
+                var samples = entry.Value.Samples;
+                var sampleText = samples.Count > 0 ? $" Sample: {string.Join(", ", samples)}." : string.Empty;
+                AddIssue("warning", "nav", null,
+                    $"nav not found using selector '{selector}' on {count} page(s).{sampleText}",
+                    $"nav-missing:{selector}");
             }
         }
 
