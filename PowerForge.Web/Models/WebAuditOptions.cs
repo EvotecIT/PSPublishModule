@@ -119,6 +119,11 @@ public sealed class WebAuditOptions
     /// <summary>Optional baseline file path for issue key suppression/diffing.</summary>
     public string? BaselinePath { get; set; }
     /// <summary>
+    /// Optional root directory used to resolve <see cref="BaselinePath"/> when it is relative.
+    /// Defaults to <see cref="SiteRoot"/> when not set.
+    /// </summary>
+    public string? BaselineRoot { get; set; }
+    /// <summary>
     /// Optional list of issue suppressions (do not emit, do not count, do not gate).
     /// Entries may be:
     /// - a code (matches <c>[CODE]</c> prefixes; audit issues use codes like <c>PFAUDIT.NAV</c>, <c>PFAUDIT.BUDGET</c>)

@@ -15,13 +15,13 @@ internal static class WebAuditBaselineStore
         : StringComparison.Ordinal;
 
     internal static string Write(
-        string siteRoot,
+        string baselineRoot,
         string? baselinePath,
         WebAuditResult result,
         bool mergeWithExisting,
         WebConsoleLogger? logger)
     {
-        var resolvedPath = ResolveBaselinePath(siteRoot, baselinePath);
+        var resolvedPath = ResolveBaselinePath(baselineRoot, baselinePath);
         try
         {
             var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -70,15 +70,16 @@ internal static class WebAuditBaselineStore
         }
     }
 
-    internal static string ResolveBaselinePath(string siteRoot, string? baselinePath)
+    internal static string ResolveBaselinePath(string baselineRoot, string? baselinePath)
     {
         var candidate = string.IsNullOrWhiteSpace(baselinePath) ? ".powerforge/audit-baseline.json" : baselinePath.Trim();
-        var normalizedRoot = NormalizeDirectoryPath(siteRoot);
-        var resolvedPath = Path.IsPathRooted(candidate)
-            ? Path.GetFullPath(candidate)
-            : Path.GetFullPath(Path.Combine(normalizedRoot, candidate));
+        if (Path.IsPathRooted(candidate))
+            return Path.GetFullPath(candidate);
+
+        var normalizedRoot = NormalizeDirectoryPath(baselineRoot);
+        var resolvedPath = Path.GetFullPath(Path.Combine(normalizedRoot, candidate));
         if (!IsWithinRoot(normalizedRoot, resolvedPath))
-            throw new InvalidOperationException($"Baseline path must resolve under site root: {candidate}");
+            throw new InvalidOperationException($"Baseline path must resolve under baseline root: {candidate}");
         return resolvedPath;
     }
 

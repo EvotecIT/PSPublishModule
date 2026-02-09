@@ -489,6 +489,9 @@ internal static partial class WebCliCommandHandlers
         var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
             baselinePathValue = ".powerforge/audit-baseline.json";
+        var baselineRoot = !string.IsNullOrWhiteSpace(configPath)
+            ? (Path.GetDirectoryName(ResolveExistingFilePath(configPath)) ?? Directory.GetCurrentDirectory())
+            : Directory.GetCurrentDirectory();
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
@@ -496,6 +499,7 @@ internal static partial class WebCliCommandHandlers
         var result = WebSiteAuditor.Audit(new WebAuditOptions
         {
             SiteRoot = siteRoot,
+            BaselineRoot = baselineRoot,
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
@@ -556,7 +560,7 @@ internal static partial class WebCliCommandHandlers
         string? writtenBaselinePath = null;
         if (baselineGenerate || baselineUpdate)
         {
-            writtenBaselinePath = WebAuditBaselineStore.Write(siteRoot, baselinePathValue, result, baselineUpdate, logger);
+            writtenBaselinePath = WebAuditBaselineStore.Write(baselineRoot, baselinePathValue, result, baselineUpdate, logger);
             result.BaselinePath = writtenBaselinePath;
         }
 

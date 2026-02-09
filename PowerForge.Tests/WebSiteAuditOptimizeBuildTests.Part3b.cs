@@ -137,7 +137,7 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
-    public void Audit_BaselinePathOutsideRoot_Throws()
+    public void Audit_BaselinePathOutsideRoot_IsAllowedWhenAbsolute()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-baseline-path-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -147,12 +147,41 @@ public partial class WebSiteAuditOptimizeBuildTests
             File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
             var outsideBaselinePath = Path.Combine(Path.GetTempPath(), "pf-web-audit-outside-" + Guid.NewGuid().ToString("N") + ".json");
 
-            Assert.Throws<InvalidOperationException>(() => WebSiteAuditor.Audit(new WebAuditOptions
+            // Absolute baseline paths are allowed (baseline is a control input, not an output artifact).
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
             {
                 SiteRoot = root,
                 CheckLinks = false,
                 CheckAssets = false,
                 BaselinePath = outsideBaselinePath
+            });
+
+            Assert.True(result.Success);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_BaselinePathRelativeEscape_Throws()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-baseline-escape-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><head><title>Home</title></head><body></body></html>");
+
+            Assert.Throws<InvalidOperationException>(() => WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                BaselineRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                BaselinePath = "..\\outside.json"
             }));
         }
         finally

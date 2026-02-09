@@ -221,7 +221,7 @@ public static partial class WebSiteAuditor
         string? baselinePath = null;
         if (!string.IsNullOrWhiteSpace(options.BaselinePath))
         {
-            baselinePath = ResolveSummaryPath(siteRoot, options.BaselinePath);
+            baselinePath = ResolveBaselinePath(siteRoot, options.BaselineRoot, options.BaselinePath);
             baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue);
 
             // Best practice: fail-on-new requires a usable baseline. If it's missing/empty, fail clearly

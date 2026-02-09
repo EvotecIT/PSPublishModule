@@ -148,6 +148,7 @@ internal static partial class WebPipelineRunner
         var audit = WebSiteAuditor.Audit(new WebAuditOptions
         {
             SiteRoot = siteRoot,
+            BaselineRoot = baseDir,
             Include = CliPatternHelper.SplitPatterns(include),
             Exclude = CliPatternHelper.SplitPatterns(exclude),
             UseDefaultExcludes = useDefaultExclude,
@@ -210,7 +211,7 @@ internal static partial class WebPipelineRunner
         string? baselineWrittenPath = null;
         if (baselineGenerate || baselineUpdate)
         {
-            baselineWrittenPath = WebAuditBaselineStore.Write(siteRoot, baselinePath, audit, baselineUpdate, logger);
+            baselineWrittenPath = WebAuditBaselineStore.Write(baseDir, baselinePath, audit, baselineUpdate, logger);
             audit.BaselinePath = baselineWrittenPath;
         }
 

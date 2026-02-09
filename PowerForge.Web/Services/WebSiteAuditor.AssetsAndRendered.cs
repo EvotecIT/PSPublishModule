@@ -182,6 +182,20 @@ public static partial class WebSiteAuditor
         return resolved;
     }
 
+    private static string ResolveBaselinePath(string siteRoot, string? baselineRoot, string baselinePath)
+    {
+        var trimmed = baselinePath.Trim();
+        if (Path.IsPathRooted(trimmed))
+            return Path.GetFullPath(trimmed);
+
+        var root = string.IsNullOrWhiteSpace(baselineRoot) ? siteRoot : baselineRoot.Trim();
+        var normalizedRoot = NormalizeRootPath(root);
+        var resolved = Path.GetFullPath(Path.Combine(normalizedRoot, trimmed));
+        if (!IsPathWithinRoot(normalizedRoot, resolved))
+            throw new InvalidOperationException($"Baseline path must resolve under baseline root: {baselinePath}");
+        return resolved;
+    }
+
     private static string NormalizeRootPath(string siteRoot)
     {
         var full = Path.GetFullPath(siteRoot);
