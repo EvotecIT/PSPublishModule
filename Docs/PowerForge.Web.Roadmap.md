@@ -9,6 +9,22 @@ This document is the single source of truth for:
 - what is missing,
 - and the next milestones to prevent “going in circles”.
 
+## How This Roadmap Is Verified (Avoid "We Think")
+
+This file is intended to be evidence-based:
+
+- **Schemas**: check `schemas/powerforge.web.*.schema.json` for the config surface area.
+- **Engine code**: verify key features exist by locating their implementation under `PowerForge.Web/Services` and related models under `PowerForge.Web/Models`.
+- **CLI wiring**: verify tasks/policies exist under `PowerForge.Web.Cli/`.
+
+When adding items to **Missing**, sanity-check with a quick search so we don't invent gaps:
+
+- `rg -n "application/atom\\+xml|jsonfeed|application/feed\\+json" PowerForge.Web Docs schemas`
+- `rg -n "xref|cross[- ]ref" PowerForge.Web Docs`
+- `rg -n "plugin|hook|transform" PowerForge.Web Docs schemas`
+
+If a "Missing" item is implemented later, move it to **Have** or **Partial** and link the implementing files.
+
 ## Guiding Principles
 
 - Determinism over cleverness: specs + contracts + verification.
@@ -42,7 +58,7 @@ Legend:
   - Code: `PowerForge.Web/Services/WebSiteBuilder.OutputRendering.cs` (`RenderRssOutput`)
   - Model: `PowerForge.Web/Models/FeedSpec.cs`
 - **Partial**: “Blog UX defaults” (archives pages, featured posts, series) are theme-driven, not standardized by engine.
-- **Missing**: Atom feed and JSON Feed formats (RSS only today).
+- **Missing**: Atom feed and JSON Feed formats (RSS only today; RSS uses Atom namespace only for self-link metadata).
 
 ### Search
 
@@ -156,4 +172,3 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Pipeline:
   - Add a `verify-ci` step (`modes:["ci"]`) with `failOnNewWarnings:true` + baseline.
   - Add audit/doctor baselines and a `maxTotalFiles` budget.
-
