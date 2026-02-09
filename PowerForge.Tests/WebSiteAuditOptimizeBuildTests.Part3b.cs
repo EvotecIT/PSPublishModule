@@ -98,6 +98,45 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_FailOnNewIssues_WithMissingBaseline_FailsClearly()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-fail-on-new-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body></body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                BaselinePath = "missing-baseline.json",
+                FailOnNewIssues = true,
+                CheckLinks = false,
+                CheckAssets = false,
+                CheckNavConsistency = false,
+                NavRequired = false
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, e => e.Contains("fail-on-new", StringComparison.OrdinalIgnoreCase) &&
+                                               e.Contains("baseline", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_BaselinePathOutsideRoot_Throws()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-baseline-path-" + Guid.NewGuid().ToString("N"));

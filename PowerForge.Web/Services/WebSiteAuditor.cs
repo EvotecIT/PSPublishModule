@@ -223,6 +223,22 @@ public static partial class WebSiteAuditor
         {
             baselinePath = ResolveSummaryPath(siteRoot, options.BaselinePath);
             baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue);
+
+            // Best practice: fail-on-new requires a usable baseline. If it's missing/empty, fail clearly
+            // rather than treating every issue as "new" (which makes the failure noisy and harder to diagnose).
+            if (options.FailOnNewIssues && baselineIssueKeys.Count == 0)
+            {
+                AddIssue("error", "gate", null,
+                    $"Audit gate failed: fail-on-new is enabled but the baseline is missing/empty: {ToRelative(siteRoot, baselinePath)}.",
+                    "gate-baseline-fail-on-new");
+                baselineIssueKeys = null;
+            }
+        }
+        else if (options.FailOnNewIssues)
+        {
+            AddIssue("error", "gate", null,
+                "Audit gate failed: fail-on-new is enabled but no baselinePath was provided.",
+                "gate-baseline-fail-on-new");
         }
 
         const int NavMissingSampleLimit = 5;
