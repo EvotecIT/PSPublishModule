@@ -76,7 +76,30 @@ internal static partial class WebPipelineRunner
         if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
             throw new InvalidOperationException("apidocs requires help for PowerShell.");
 
+        // Best-practice default: when pipeline runs at a website repo root, assume ./site.json
+        // unless the step overrides it explicitly. This prevents "API reference has no navigation"
+        // and theme drift when agents forget to wire config/nav.
         var configPath = ResolvePath(baseDir, GetString(step, "config"));
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            var defaultSiteConfig = Path.Combine(baseDir, "site.json");
+            if (File.Exists(defaultSiteConfig))
+                configPath = defaultSiteConfig;
+        }
+
+        // If the user configured header/footer paths but they don't exist, treat them as unset so
+        // we can fall back to theme fragments (or embedded fragments) deterministically.
+        if (!string.IsNullOrWhiteSpace(header) && !File.Exists(Path.GetFullPath(header)))
+        {
+            logger?.Warn($"{label}: apidocs headerHtml not found: {header}");
+            header = null;
+        }
+        if (!string.IsNullOrWhiteSpace(footer) && !File.Exists(Path.GetFullPath(footer)))
+        {
+            logger?.Warn($"{label}: apidocs footerHtml not found: {footer}");
+            footer = null;
+        }
+
         if (!string.IsNullOrWhiteSpace(configPath))
         {
             if (string.IsNullOrWhiteSpace(nav))
