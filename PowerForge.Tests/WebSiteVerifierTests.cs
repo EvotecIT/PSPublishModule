@@ -622,8 +622,8 @@ public partial class WebSiteVerifierTests
 
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, warning =>
-                warning.Contains("api-header.html", StringComparison.OrdinalIgnoreCase) &&
-                warning.Contains("api-footer.html", StringComparison.OrdinalIgnoreCase));
+                warning.Contains("api-header/api-footer", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("header/footer", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -694,6 +694,77 @@ public partial class WebSiteVerifierTests
             Assert.True(result.Success);
             Assert.DoesNotContain(result.Warnings, warning =>
                 warning.Contains("site uses feature 'apiDocs'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsBestPracticeWhenThemeFallsBackToHeaderFooterForApiDocs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-features-apidocs-fallback-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feature-test-fallback");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "header.html"), "<header>Header</header>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "footer.html"), "<footer>Footer</footer>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feature-test-fallback",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Theme Features Test Fallback",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feature-test-fallback",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("Best practice:", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("fall back to header/footer", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

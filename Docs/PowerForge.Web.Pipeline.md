@@ -148,7 +148,7 @@ Notes:
 - HTML mode can include `headerHtml` + `footerHtml` fragments
 - `config` (recommended) enables best-practice defaults:
   - if `nav` is not set, it prefers `static/<dataRoot>/site-nav.json` (when present), otherwise falls back to `config`
-  - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` and `api-footer.html` (when present)
+  - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` + `api-footer.html` (when present), otherwise falls back to `header.html` + `footer.html`
 - `template`: `simple` (default) or `docs` (sidebar layout)
 - `type`: `CSharp` (default) or `PowerShell` (uses PowerShell help XML)
 - `templateRoot` lets you override built-in templates/assets by placing files like

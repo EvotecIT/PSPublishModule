@@ -132,6 +132,12 @@ internal static partial class WebPipelineRunner
                 var candidate = loader.ResolvePartialPath(themeRoot, manifest, "api-header");
                 if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
                     header = candidate;
+                else
+                {
+                    candidate = loader.ResolvePartialPath(themeRoot, manifest, "header");
+                    if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                        header = candidate;
+                }
             }
 
             if (string.IsNullOrWhiteSpace(footer))
@@ -139,6 +145,12 @@ internal static partial class WebPipelineRunner
                 var candidate = loader.ResolvePartialPath(themeRoot, manifest, "api-footer");
                 if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
                     footer = candidate;
+                else
+                {
+                    candidate = loader.ResolvePartialPath(themeRoot, manifest, "footer");
+                    if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
+                        footer = candidate;
+                }
             }
         }
         catch

@@ -79,13 +79,25 @@ public static partial class WebSiteVerifier
 
         if (enabled.Contains("apidocs"))
         {
-            var header = loader.ResolvePartialPath(themeRoot, manifest, "api-header");
-            var footer = loader.ResolvePartialPath(themeRoot, manifest, "api-footer");
-            if (string.IsNullOrWhiteSpace(header) || !File.Exists(header) ||
-                string.IsNullOrWhiteSpace(footer) || !File.Exists(footer))
+            var apiHeader = loader.ResolvePartialPath(themeRoot, manifest, "api-header");
+            var apiFooter = loader.ResolvePartialPath(themeRoot, manifest, "api-footer");
+            var fallbackHeader = loader.ResolvePartialPath(themeRoot, manifest, "header");
+            var fallbackFooter = loader.ResolvePartialPath(themeRoot, manifest, "footer");
+
+            var hasApiFragments = !string.IsNullOrWhiteSpace(apiHeader) && File.Exists(apiHeader) &&
+                                  !string.IsNullOrWhiteSpace(apiFooter) && File.Exists(apiFooter);
+            var hasFallbackFragments = !string.IsNullOrWhiteSpace(fallbackHeader) && File.Exists(fallbackHeader) &&
+                                       !string.IsNullOrWhiteSpace(fallbackFooter) && File.Exists(fallbackFooter);
+
+            if (!hasApiFragments && !hasFallbackFragments)
             {
-                warnings.Add($"Theme contract: site uses feature 'apiDocs' but theme '{manifest.Name}' does not provide 'api-header.html' and 'api-footer.html' fragments under partials. " +
+                warnings.Add($"Theme contract: site uses feature 'apiDocs' but theme '{manifest.Name}' does not provide API header/footer fragments (api-header/api-footer) or fallback header/footer fragments (header/footer) under partials. " +
                              "API reference pages may render without site navigation unless the pipeline provides headerHtml/footerHtml.");
+            }
+            else if (!hasApiFragments && hasFallbackFragments)
+            {
+                warnings.Add($"Best practice: site uses feature 'apiDocs' but theme '{manifest.Name}' does not provide api-header/api-footer fragments. " +
+                             "PowerForge will fall back to header/footer when available; add api-header/api-footer for better control over API reference layout.");
             }
         }
 
