@@ -37,12 +37,21 @@ internal static class WebAuditBaselineStore
                     keys.Add(issue.Key);
             }
 
+            var keyHashes = keys
+                .Where(static k => !string.IsNullOrWhiteSpace(k))
+                .Select(WebAuditKeyHasher.Hash)
+                .Where(static k => !string.IsNullOrWhiteSpace(k))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
             var payload = new
             {
                 version = 1,
                 generatedAtUtc = DateTimeOffset.UtcNow,
-                issueCount = keys.Count,
-                issueKeys = keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToArray()
+                issueCount = keyHashes.Length,
+                keyFormat = WebAuditKeyHasher.DefaultFormat,
+                issueKeyHashes = keyHashes
             };
 
             var directory = Path.GetDirectoryName(resolvedPath);
@@ -90,14 +99,26 @@ internal static class WebAuditBaselineStore
             using var stream = File.OpenRead(path);
             using var doc = JsonDocument.Parse(stream);
             var root = doc.RootElement;
-            if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
+
+            if (TryGetPropertyIgnoreCase(root, "issueKeyHashes", out var issueKeyHashes) && issueKeyHashes.ValueKind == JsonValueKind.Array)
             {
-                foreach (var item in issueKeys.EnumerateArray())
+                foreach (var item in issueKeyHashes.EnumerateArray())
                 {
                     if (item.ValueKind != JsonValueKind.String) continue;
                     var value = item.GetString();
                     if (!string.IsNullOrWhiteSpace(value))
                         keys.Add(value);
+                }
+            }
+            else if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in issueKeys.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var value = item.GetString();
+                    var hashed = WebAuditKeyHasher.Hash(value);
+                    if (!string.IsNullOrWhiteSpace(hashed))
+                        keys.Add(hashed);
                 }
             }
 
@@ -108,8 +129,9 @@ internal static class WebAuditBaselineStore
                     if (issue.ValueKind != JsonValueKind.Object) continue;
                     if (!TryGetPropertyIgnoreCase(issue, "key", out var keyElement) || keyElement.ValueKind != JsonValueKind.String) continue;
                     var value = keyElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(value))
-                        keys.Add(value);
+                    var hashed = WebAuditKeyHasher.Hash(value);
+                    if (!string.IsNullOrWhiteSpace(hashed))
+                        keys.Add(hashed);
                 }
             }
         }

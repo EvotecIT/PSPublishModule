@@ -218,11 +218,12 @@ public static partial class WebSiteAuditor
         }
 
         HashSet<string>? baselineIssueKeys = null;
+        var baselineKeysAreHashed = false;
         string? baselinePath = null;
         if (!string.IsNullOrWhiteSpace(options.BaselinePath))
         {
             baselinePath = ResolveBaselinePath(siteRoot, options.BaselineRoot, options.BaselinePath);
-            baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue);
+            baselineIssueKeys = LoadBaselineIssueKeys(baselinePath, AddIssue, out baselineKeysAreHashed);
 
             // Best practice: fail-on-new requires a usable baseline. If it's missing/empty, fail clearly
             // rather than treating every issue as "new" (which makes the failure noisy and harder to diagnose).
@@ -577,7 +578,12 @@ public static partial class WebSiteAuditor
         if (baselineIssueKeys is not null)
         {
             foreach (var issue in issues)
-                issue.IsNew = !baselineIssueKeys.Contains(issue.Key);
+            {
+                if (issue is null || string.IsNullOrWhiteSpace(issue.Key))
+                    continue;
+                var key = baselineKeysAreHashed ? WebAuditKeyHasher.Hash(issue.Key) : issue.Key;
+                issue.IsNew = string.IsNullOrWhiteSpace(key) || !baselineIssueKeys.Contains(key);
+            }
         }
 
         var navTotalCount = navCheckedCount + navIgnoredCount;
@@ -639,7 +645,12 @@ public static partial class WebSiteAuditor
         if (baselineIssueKeys is not null)
         {
             foreach (var issue in issues)
-                issue.IsNew = !baselineIssueKeys.Contains(issue.Key);
+            {
+                if (issue is null || string.IsNullOrWhiteSpace(issue.Key))
+                    continue;
+                var key = baselineKeysAreHashed ? WebAuditKeyHasher.Hash(issue.Key) : issue.Key;
+                issue.IsNew = string.IsNullOrWhiteSpace(key) || !baselineIssueKeys.Contains(key);
+            }
         }
 
         var errorCount = errors.Count;

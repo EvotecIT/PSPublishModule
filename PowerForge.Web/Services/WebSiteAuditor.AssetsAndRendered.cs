@@ -236,9 +236,11 @@ public static partial class WebSiteAuditor
 
     private static HashSet<string> LoadBaselineIssueKeys(
         string baselinePath,
-        Action<string, string, string?, string, string?> addIssue)
+        Action<string, string, string?, string, string?> addIssue,
+        out bool keysAreHashed)
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        keysAreHashed = false;
         if (!File.Exists(baselinePath))
         {
             addIssue("warning", "baseline", null, $"Baseline file not found: {baselinePath}.", "baseline-missing");
@@ -257,6 +259,24 @@ public static partial class WebSiteAuditor
             using var stream = File.OpenRead(baselinePath);
             using var doc = JsonDocument.Parse(stream);
             var root = doc.RootElement;
+
+            if (TryGetPropertyIgnoreCase(root, "issueKeyHashes", out var issueKeyHashes) && issueKeyHashes.ValueKind == JsonValueKind.Array)
+            {
+                keysAreHashed = true;
+                foreach (var item in issueKeyHashes.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.String) continue;
+                    var value = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        keys.Add(value);
+                }
+
+                if (keys.Count == 0)
+                    addIssue("warning", "baseline", null, $"Baseline file does not contain issue keys: {baselinePath}.", "baseline-empty");
+
+                return keys;
+            }
+
             if (TryGetPropertyIgnoreCase(root, "issueKeys", out var issueKeys) && issueKeys.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in issueKeys.EnumerateArray())
