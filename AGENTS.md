@@ -119,7 +119,6 @@ Baselines:
 ## Current State (As Of 2026-02-09)
 
 - Engine branch: `feature/web-engine-contracts` contains recent quality-gate and contract hardening work.
-- Site branches were created for CI quality gates:
-  - IntelligenceX: `chore/quality-gates`
-  - CodeGlyphX: `chore/quality-gates`
-  - HtmlForgeX: `chore/quality-gates`
+- Website quality gates (baselines/budgets/CI-vs-dev pattern) were merged to the default branches
+  of the three site repos. Avoid long-lived "quality-gates" branches; prefer small PR branches
+  that get merged and deleted.
