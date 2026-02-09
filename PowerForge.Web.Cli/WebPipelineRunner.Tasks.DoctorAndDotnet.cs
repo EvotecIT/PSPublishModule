@@ -148,6 +148,14 @@ internal static partial class WebPipelineRunner
             var sarif = GetBool(step, "sarif") ?? false;
             var sarifPath = GetString(step, "sarifPath") ?? GetString(step, "sarif-path");
             var sarifOnFail = GetBool(step, "sarifOnFail") ?? GetBool(step, "sarif-on-fail") ?? true;
+            var baselineGenerate = GetBool(step, "baselineGenerate") ?? false;
+            var baselineUpdate = GetBool(step, "baselineUpdate") ?? false;
+            var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline");
+            var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
+            var failOnNewIssues = GetBool(step, "failOnNewIssues") ?? GetBool(step, "failOnNew") ?? false;
+            var maxErrors = GetInt(step, "maxErrors") ?? -1;
+            var maxWarnings = GetInt(step, "maxWarnings") ?? -1;
+            var failOnCategories = GetString(step, "failOnCategories") ?? GetString(step, "failCategories");
             var navCanonicalPath = GetString(step, "navCanonicalPath") ?? GetString(step, "navCanonical");
             var navCanonicalSelector = GetString(step, "navCanonicalSelector");
             var navCanonicalRequired = GetBool(step, "navCanonicalRequired") ?? false;
@@ -181,12 +189,17 @@ internal static partial class WebPipelineRunner
             if (string.IsNullOrWhiteSpace(resolvedSarifPath) && sarifOnFail)
                 resolvedSarifPath = ".powerforge/audit.sarif.json";
 
+            if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
+                baselinePath = ".powerforge/audit-baseline.json";
+
             audit = WebSiteAuditor.Audit(new WebAuditOptions
             {
                 SiteRoot = effectiveSiteRoot!,
+                BaselineRoot = baseDir,
                 Include = CliPatternHelper.SplitPatterns(include),
                 Exclude = CliPatternHelper.SplitPatterns(exclude),
                 UseDefaultExcludes = useDefaultExclude,
+                MaxHtmlFiles = GetInt(step, "maxHtmlFiles") ?? GetInt(step, "max-html-files") ?? 0,
                 MaxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0,
                 SuppressIssues = suppressIssues ?? Array.Empty<string>(),
                 IgnoreNavFor = ignoreNavPatterns,
@@ -208,6 +221,12 @@ internal static partial class WebPipelineRunner
                 SummaryMaxIssues = summaryMax,
                 SummaryOnFailOnly = summaryOnFail && !summary,
                 SarifOnFailOnly = sarifOnFail && !sarif,
+                BaselinePath = baselinePath,
+                FailOnWarnings = failOnWarnings,
+                FailOnNewIssues = failOnNewIssues,
+                MaxErrors = maxErrors,
+                MaxWarnings = maxWarnings,
+                FailOnCategories = CliPatternHelper.SplitPatterns(failOnCategories),
                 NavCanonicalPath = navCanonicalPath,
                 NavCanonicalSelector = navCanonicalSelector,
                 NavCanonicalRequired = navCanonicalRequired,
@@ -220,6 +239,12 @@ internal static partial class WebPipelineRunner
                 CheckRenderBlockingResources = checkRenderBlocking,
                 MaxHeadBlockingResources = maxHeadBlockingResources
             });
+
+            if (baselineGenerate || baselineUpdate)
+            {
+                var written = WebAuditBaselineStore.Write(baseDir, baselinePath, audit, baselineUpdate, logger: null);
+                audit.BaselinePath = written;
+            }
 
             if (!audit.Success)
                 throw new InvalidOperationException(BuildAuditFailureSummary(audit, GetInt(step, "errorPreviewCount") ?? 5));
