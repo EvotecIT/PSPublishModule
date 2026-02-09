@@ -176,6 +176,26 @@ public static partial class WebSiteVerifier
         if (manifest is null)
             return;
 
+        // Best practice: if a theme declares 'extends' but the base theme folder doesn't exist,
+        // ThemeLoader will silently fall back to the child theme only. This is a common source of
+        // drift across repos when the base theme isn't vendored into the site.
+        if (!string.IsNullOrWhiteSpace(manifest.Extends))
+        {
+            var themesRoot = ResolveThemesRoot(spec, plan.RootPath, plan.ThemesRoot);
+            if (string.IsNullOrWhiteSpace(themesRoot))
+                themesRoot = Path.GetDirectoryName(themeRoot);
+
+            var baseRoot = string.IsNullOrWhiteSpace(themesRoot)
+                ? null
+                : Path.Combine(themesRoot, manifest.Extends.Trim());
+
+            if (string.IsNullOrWhiteSpace(baseRoot) || !Directory.Exists(baseRoot))
+            {
+                warnings.Add($"Theme contract: theme '{manifest.Name}' declares extends '{manifest.Extends}', but base theme folder was not found at '{baseRoot}'. " +
+                             "Vendor the base theme into the repo (themes/<base>) or remove 'extends' to avoid silent fallback behavior.");
+            }
+        }
+
         if (Path.GetFileName(manifestPath).Equals("theme.json", StringComparison.OrdinalIgnoreCase))
             warnings.Add($"Best practice: '{manifest.Name}' uses legacy manifest file 'theme.json'. Prefer 'theme.manifest.json'.");
 
