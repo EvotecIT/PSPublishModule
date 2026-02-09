@@ -6,10 +6,14 @@ This file is the "start here" context for any agent working on the PowerForge.We
 
 ## Repos / Local Paths
 
+These are the maintainer's default Windows paths (safe to assume in this workspace):
+
 - Engine (this repo): `C:\Support\GitHub\PSPublishModule`
   - Web engine: `PowerForge.Web\`
   - Web CLI: `PowerForge.Web.Cli\`
   - Web docs: `Docs\PowerForge.Web.*.md`
+  - PowerShell module: `PSPublishModule\` (+ packaging under `Module\`)
+  - Core .NET libs/CLI: `PowerForge\`, `PowerForge.Cli\`
 
 - HtmlForgeX website: `C:\Support\GitHub\HtmlForgeX.Website`
   - Remote: `https://github.com/EvotecIT/HtmlForgeX.Website.git` (currently `origin`)
@@ -19,6 +23,28 @@ This file is the "start here" context for any agent working on the PowerForge.We
 
 - CodeGlyphX website: `C:\Support\GitHub\CodeMatrix\Website`
   - Remote: `https://github.com/EvotecIT/CodeGlyphX.git`
+
+## Portable Path Discovery (WSL/macOS/Linux)
+
+If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout heuristic:
+
+- Common layout: the repos are siblings under one parent folder:
+  - `<root>/PSPublishModule`
+  - `<root>/HtmlForgeX.Website`
+  - `<root>/IntelligenceX/Website`
+  - `<root>/CodeMatrix/Website`
+
+Practical search strategy:
+
+1. Start at the current repo root (where this `AGENTS.md` lives).
+2. Check `..` (parent) and `../..` (grandparent) for sibling repo folders above.
+3. If you're in WSL, Windows drives usually live under `/mnt/c`:
+   - Example: `/mnt/c/Support/GitHub/PSPublishModule`
+
+Recommended environment variable (makes site scripts deterministic):
+
+- Set `POWERFORGE_ROOT` to the engine repo root (path to `PSPublishModule`).
+  - Website `build.ps1` scripts prefer `POWERFORGE_ROOT` when resolving `PowerForge.Web.Cli`.
 
 ## What To Read First (Canonical)
 
@@ -31,6 +57,7 @@ Reference docs (as needed):
 - `Docs\PowerForge.Web.Theme.md` (theme anatomy + shortcodes)
 - `Docs\PowerForge.Web.Pipeline.md` (pipeline tasks)
 - `Docs\PowerForge.Web.ApiDocs.md` (API generator)
+- `Docs\PSPublishModule.ProjectBuild.md` (PowerShell module build/publish pipeline)
 
 ## Working Agreements (Best Practices)
 
@@ -59,6 +86,11 @@ Each website should have:
 - File size discipline (line limit):
   - `node .\Build\linecount.js . 800`
 
+## Commands (PowerShell Module)
+
+- Module lives under `PSPublishModule\` (plus packaging helpers under `Module\`).
+- The PowerForge.Web engine is .NET; the PSPublishModule is the PowerShell-facing surface.
+
 ## Commands (Websites)
 
 From a website repo folder:
@@ -83,4 +115,3 @@ Baselines:
   - IntelligenceX: `chore/quality-gates`
   - CodeGlyphX: `chore/quality-gates`
   - HtmlForgeX: `chore/quality-gates`
-
