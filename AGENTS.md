@@ -51,6 +51,7 @@ Recommended environment variable (makes site scripts deterministic):
 1. `Docs\PowerForge.Web.Roadmap.md` (inventory: Have/Partial/Missing + milestones)
 2. `Docs\PowerForge.Web.AgentHandoff.md` (high-signal handoff + commands)
 3. `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract, baselines, budgets)
+4. `Docs\PowerForge.Web.WebsiteStarter.md` (golden path for building new sites without surprises)
 
 Reference docs (as needed):
 - `Docs\PowerForge.Web.ContentSpec.md` (content model + navigation)
@@ -58,6 +59,13 @@ Reference docs (as needed):
 - `Docs\PowerForge.Web.Pipeline.md` (pipeline tasks)
 - `Docs\PowerForge.Web.ApiDocs.md` (API generator)
 - `Docs\PSPublishModule.ProjectBuild.md` (PowerShell module build/publish pipeline)
+
+## Repo Skills (.agents/skills)
+
+This repo ships agent skills under `.agents/skills` so new contributors/agents don't
+need per-user global skill installs.
+
+- Website scaffolding skill: `.agents/skills/powerforge-website-starter`
 
 ## Working Agreements (Best Practices)
 
