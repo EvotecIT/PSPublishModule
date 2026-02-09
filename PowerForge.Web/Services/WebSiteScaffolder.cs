@@ -430,6 +430,37 @@ a { color: inherit; text-decoration: none; }
         var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
         Directory.CreateDirectory(powerforgeRoot);
 
+        created += WriteFile(Path.Combine(fullOutput, "README.md"),
+@$"# {name}
+
+Starter site scaffolded by PowerForge.Web.
+
+## Quick start
+
+Local dev loop:
+
+```powershell
+powerforge-web pipeline --config .\pipeline.json --mode dev
+```
+
+CI mode (strict, but stable via baselines):
+
+```powershell
+powerforge-web pipeline --config .\pipeline.json --mode ci
+```
+
+## Baselines (recommended workflow)
+
+Generate baselines once the site is in a good state:
+
+```powershell
+powerforge-web verify --config .\site.json --baseline-generate
+powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline.json --baseline-generate
+```
+
+Commit the generated files under `.powerforge/` so CI can run `failOnNewWarnings` / `failOnNewIssues`.
+");
+
         return new WebScaffoldResult
         {
             OutputPath = fullOutput,
