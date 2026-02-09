@@ -69,11 +69,13 @@ Hugo is strongest at:
 PowerForge.Web today:
 
 - Has collections, data, and good audit/verify/optimize.
-- Lacks first-class taxonomies/blog/RSS, shortcodes, i18n, and a plugin ecosystem.
+- Has taxonomies and RSS output support (section + taxonomy pages can emit `rss.xml`).
+- Lacks Atom/JSON feed formats, richer blog primitives (archives/series), i18n polish, and a plugin ecosystem.
 
 High-value Hugo-like gaps:
 
-- Posts collection + taxonomies + list pages + RSS/Atom.
+- Feed parity: Atom and JSON Feed (keep RSS as-is).
+- Better blog UX defaults: archives, featured posts, series, and pagination conventions.
 - Shortcodes (safe, deterministic) for common patterns.
 - Persistent build cache keyed by content hash (real incremental builds).
 
@@ -150,7 +152,7 @@ These are the biggest “regression preventers” across multiple sites:
    - Bucketing + thresholds + “fail only on new” everywhere.
    - Required routes + nav coverage + heading order + CSS contracts as first-class checks.
 5. Blog/tags/RSS
-   - Posts collection + taxonomy pages + RSS/Atom to meet baseline SSG expectations.
+   - Blog collection + taxonomy pages + RSS already exist; add Atom + JSON feed, and make the default theme scaffolding cover blog/taxonomy layouts.
 
 ## Notes On “Ignoring” Issues (Best Practice)
 
@@ -161,4 +163,3 @@ These are the biggest “regression preventers” across multiple sites:
 - Recommended policy:
   - Dev: warn, summarize, don’t block iteration.
   - CI/release: fail on new warnings/issues and on configured categories/budgets.
-
