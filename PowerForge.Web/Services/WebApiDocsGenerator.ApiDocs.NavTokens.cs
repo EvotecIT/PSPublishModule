@@ -79,25 +79,73 @@ public static partial class WebApiDocsGenerator
         var sb = new StringBuilder();
         foreach (var item in items)
         {
-            if (string.IsNullOrWhiteSpace(item.Href) || string.IsNullOrWhiteSpace(item.Text))
-                continue;
-            var href = System.Web.HttpUtility.HtmlEncode(item.Href);
-            var text = System.Web.HttpUtility.HtmlEncode(item.Text);
-            var target = item.Target;
-            var rel = item.Rel;
-            if (string.IsNullOrWhiteSpace(target) && item.External)
-                target = "_blank";
-            if (string.IsNullOrWhiteSpace(rel) && item.External)
-                rel = "noopener";
-
-            sb.Append("<a href=\"").Append(href).Append("\"");
-            if (!string.IsNullOrWhiteSpace(target))
-                sb.Append(" target=\"").Append(System.Web.HttpUtility.HtmlEncode(target)).Append("\"");
-            if (!string.IsNullOrWhiteSpace(rel))
-                sb.Append(" rel=\"").Append(System.Web.HttpUtility.HtmlEncode(rel)).Append("\"");
-            sb.Append(">").Append(text).Append("</a>");
+            AppendNavItemHtml(sb, item);
         }
         return sb.ToString();
+    }
+
+    private static void AppendNavItemHtml(StringBuilder sb, NavItem item)
+    {
+        if (sb is null || item is null)
+            return;
+        if (string.IsNullOrWhiteSpace(item.Href) || string.IsNullOrWhiteSpace(item.Text))
+            return;
+
+        if (item.Items.Count == 0)
+        {
+            AppendAnchorHtml(sb, item, cssClass: null);
+            return;
+        }
+
+        // Keep API docs header behavior consistent with normal site headers:
+        // nested menu items are rendered as dropdowns instead of flattened links.
+        sb.Append("<div class=\"nav-dropdown\">");
+        AppendAnchorHtml(sb, item, cssClass: "nav-dropdown-trigger", includeArrow: true);
+        sb.Append("<div class=\"nav-dropdown-menu\">");
+        AppendDropdownItemsHtml(sb, item.Items);
+        sb.Append("</div></div>");
+    }
+
+    private static void AppendDropdownItemsHtml(StringBuilder sb, IReadOnlyList<NavItem> items)
+    {
+        if (sb is null || items is null || items.Count == 0)
+            return;
+
+        foreach (var child in items)
+        {
+            if (child is null || string.IsNullOrWhiteSpace(child.Href) || string.IsNullOrWhiteSpace(child.Text))
+                continue;
+
+            AppendAnchorHtml(sb, child, cssClass: null);
+            if (child.Items.Count > 0)
+                AppendDropdownItemsHtml(sb, child.Items);
+        }
+    }
+
+    private static void AppendAnchorHtml(StringBuilder sb, NavItem item, string? cssClass, bool includeArrow = false)
+    {
+        var href = System.Web.HttpUtility.HtmlEncode(item.Href);
+        var text = System.Web.HttpUtility.HtmlEncode(item.Text);
+        var target = item.Target;
+        var rel = item.Rel;
+        if (string.IsNullOrWhiteSpace(target) && item.External)
+            target = "_blank";
+        if (string.IsNullOrWhiteSpace(rel) && item.External)
+            rel = "noopener";
+
+        sb.Append("<a href=\"").Append(href).Append("\"");
+        if (!string.IsNullOrWhiteSpace(cssClass))
+            sb.Append(" class=\"").Append(System.Web.HttpUtility.HtmlEncode(cssClass)).Append("\"");
+        if (!string.IsNullOrWhiteSpace(target))
+            sb.Append(" target=\"").Append(System.Web.HttpUtility.HtmlEncode(target)).Append("\"");
+        if (!string.IsNullOrWhiteSpace(rel))
+            sb.Append(" rel=\"").Append(System.Web.HttpUtility.HtmlEncode(rel)).Append("\"");
+        sb.Append(">").Append(text);
+        if (includeArrow)
+        {
+            sb.Append("<svg class=\"nav-dropdown-arrow\" viewBox=\"0 0 12 12\" width=\"10\" height=\"10\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M3 5l3 3 3-3\"/></svg>");
+        }
+        sb.Append("</a>");
     }
 
     private static string BuildActionHtml(IReadOnlyList<NavAction> actions)

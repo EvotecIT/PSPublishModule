@@ -352,13 +352,14 @@ public static partial class WebApiDocsGenerator
 
     private sealed class NavItem
     {
-        public NavItem(string href, string text, bool external, string? target = null, string? rel = null)
+        public NavItem(string href, string text, bool external, string? target = null, string? rel = null, List<NavItem>? items = null)
         {
             Href = href;
             Text = text;
             External = external;
             Target = target;
             Rel = rel;
+            Items = items ?? new List<NavItem>();
         }
 
         public string Href { get; }
@@ -366,5 +367,6 @@ public static partial class WebApiDocsGenerator
         public bool External { get; }
         public string? Target { get; }
         public string? Rel { get; }
+        public List<NavItem> Items { get; }
     }
 }

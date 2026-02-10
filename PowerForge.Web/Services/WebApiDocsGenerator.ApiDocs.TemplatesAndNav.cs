@@ -290,19 +290,33 @@ public static partial class WebApiDocsGenerator
             if (item.ValueKind != JsonValueKind.Object)
                 continue;
 
-            var href = ReadString(item, "Url", "url", "Href", "href");
-            var text = ReadString(item, "Text", "text", "Title", "title");
-            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(text))
-                continue;
-
-            var target = ReadString(item, "Target", "target");
-            var rel = ReadString(item, "Rel", "rel");
-            var external = ReadBool(item, "External", "external");
-            external |= IsExternal(href);
-
-            list.Add(new NavItem(href, text, external, target, rel));
+            var parsed = ParseAnyNavItem(item);
+            if (parsed is not null)
+                list.Add(parsed);
         }
         return list;
+    }
+
+    private static NavItem? ParseAnyNavItem(JsonElement item)
+    {
+        if (item.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var href = ReadString(item, "Url", "url", "Href", "href");
+        var text = ReadString(item, "Text", "text", "Title", "title");
+        if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var target = ReadString(item, "Target", "target");
+        var rel = ReadString(item, "Rel", "rel");
+        var external = ReadBool(item, "External", "external");
+        external |= IsExternal(href);
+
+        var children = new List<NavItem>();
+        if (TryGetProperty(item, "Items", out var childItems) && childItems.ValueKind == JsonValueKind.Array)
+            children = ParseAnyNavItems(childItems);
+
+        return new NavItem(href, text, external, target, rel, children);
     }
 
     private static Dictionary<string, List<NavItem>> MergeMenus(
@@ -550,49 +564,10 @@ public static partial class WebApiDocsGenerator
     }
 
     private static List<NavItem> ParseNavItems(JsonElement itemsProp)
-    {
-        var list = new List<NavItem>();
-        foreach (var item in itemsProp.EnumerateArray())
-        {
-            var href = item.TryGetProperty("href", out var hrefProp) && hrefProp.ValueKind == JsonValueKind.String
-                ? hrefProp.GetString()
-                : null;
-            var text = item.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String
-                ? textProp.GetString()
-                : null;
-            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(text))
-                continue;
-            list.Add(new NavItem(href!, text!, IsExternal(href!)));
-        }
-        return list;
-    }
+        => ParseAnyNavItems(itemsProp);
 
     private static List<NavItem> ParseSiteNavItems(JsonElement itemsProp)
-    {
-        var list = new List<NavItem>();
-        foreach (var item in itemsProp.EnumerateArray())
-        {
-            var href = item.TryGetProperty("Url", out var urlProp) && urlProp.ValueKind == JsonValueKind.String
-                ? urlProp.GetString()
-                : null;
-            var text = item.TryGetProperty("Title", out var titleProp) && titleProp.ValueKind == JsonValueKind.String
-                ? titleProp.GetString()
-                : null;
-            if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(text))
-                continue;
-
-            var target = item.TryGetProperty("Target", out var targetProp) && targetProp.ValueKind == JsonValueKind.String
-                ? targetProp.GetString()
-                : null;
-            var rel = item.TryGetProperty("Rel", out var relProp) && relProp.ValueKind == JsonValueKind.String
-                ? relProp.GetString()
-                : null;
-            var external = item.TryGetProperty("External", out var extProp) && extProp.ValueKind == JsonValueKind.True;
-            external |= IsExternal(href!);
-            list.Add(new NavItem(href!, text!, external, target, rel));
-        }
-        return list;
-    }
+        => ParseAnyNavItems(itemsProp);
 
     private static List<NavAction> ParseSiteNavActions(JsonElement itemsProp)
     {
