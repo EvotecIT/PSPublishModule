@@ -16,6 +16,32 @@ param(
     [switch] $SignIncludeExe
 )
 
+$oldConsoleOutputEncoding = $null
+$oldConsoleInputEncoding = $null
+$oldConsoleCodePage = $null
+
+$i = [char]0x2139    # ℹ
+$ok = [char]0x2705   # ✅
+
+try {
+    # When PowerForge.Cli.exe is invoked from Windows PowerShell, native stdout decoding frequently
+    # breaks for Unicode unless the console is switched to UTF-8. Keep this local to self-build.
+    if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
+        $oldConsoleOutputEncoding = [Console]::OutputEncoding
+        $oldConsoleInputEncoding = [Console]::InputEncoding
+        $oldConsoleCodePage = $oldConsoleOutputEncoding.CodePage
+
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [Console]::OutputEncoding = $utf8
+        [Console]::InputEncoding = $utf8
+
+        # Switch the console codepage too (PowerShell native output decoding depends on it).
+        & cmd /c "chcp 65001 > nul" | Out-Null
+    }
+} catch {
+    # best effort only
+}
+
 $repoRoot = (Resolve-Path -LiteralPath ([IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '..', '..')))).Path
 $cliProject = Join-Path -Path $repoRoot -ChildPath 'PowerForge.Cli\PowerForge.Cli.csproj'
 $moduleProject = Join-Path -Path $repoRoot -ChildPath 'PSPublishModule\PSPublishModule.csproj'
@@ -29,7 +55,7 @@ if ($Framework -eq 'auto') {
 }
 
 if (-not $NoBuild) {
-    Write-Host "ℹ️ Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
+    Write-Host "$i Building PowerForge CLI ($Framework, $Configuration)" -ForegroundColor DarkGray
 
     $buildArgs = @('build', $cliProject, '-c', $Configuration, '-f', $Framework, '--nologo')
     if ($PSBoundParameters.ContainsKey('Verbose')) {
@@ -40,10 +66,10 @@ if (-not $NoBuild) {
         $buildArgs += @('--verbosity', 'quiet')
         $buildOutput = & dotnet @buildArgs 2>&1
         if ($LASTEXITCODE -ne 0) { $buildOutput | Out-Host; exit $LASTEXITCODE }
-        Write-Host "✅ Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
+        Write-Host "$ok Built PowerForge CLI ($Framework, $Configuration)" -ForegroundColor Green
     }
 
-    Write-Host "ℹ️ Building PSPublishModule ($Framework, $Configuration)" -ForegroundColor DarkGray
+    Write-Host "$i Building PSPublishModule ($Framework, $Configuration)" -ForegroundColor DarkGray
     $moduleArgs = @('build', $moduleProject, '-c', $Configuration, '-f', $Framework, '--nologo')
     if ($PSBoundParameters.ContainsKey('Verbose')) {
         $moduleArgs += @('--verbosity', 'minimal')
@@ -53,7 +79,7 @@ if (-not $NoBuild) {
         $moduleArgs += @('--verbosity', 'quiet')
         $moduleOutput = & dotnet @moduleArgs 2>&1
         if ($LASTEXITCODE -ne 0) { $moduleOutput | Out-Host; exit $LASTEXITCODE }
-        Write-Host "✅ Built PSPublishModule ($Framework, $Configuration)" -ForegroundColor Green
+        Write-Host "$ok Built PSPublishModule ($Framework, $Configuration)" -ForegroundColor Green
     }
 }
 
@@ -103,4 +129,11 @@ try {
     if ($configPath -and (Test-Path -LiteralPath $configPath)) {
         try { Remove-Item -LiteralPath $configPath -Force -ErrorAction SilentlyContinue } catch { }
     }
+
+    # Restore console settings (best-effort).
+    try {
+        if ($oldConsoleOutputEncoding) { [Console]::OutputEncoding = $oldConsoleOutputEncoding }
+        if ($oldConsoleInputEncoding) { [Console]::InputEncoding = $oldConsoleInputEncoding }
+        if ($oldConsoleCodePage) { & cmd /c ("chcp {0} > nul" -f $oldConsoleCodePage) | Out-Null }
+    } catch { }
 }
