@@ -55,7 +55,7 @@ Example `pipeline.json`:
       "sarif": true,
       "baseline": "./.powerforge/audit-baseline.json",
       "failOnNewIssues": true,
-      "maxTotalFiles": 800,
+      "maxTotalFiles": 2000,
       "failOnCategories": "budget"
     }
   ]
@@ -90,3 +90,4 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
   - For `apiDocs`, include required fragments and a CSS selector contract.
 - Add budgets only when you can defend them:
   - `maxTotalFiles` is a simple early warning for accidental output explosion.
+  - Sites with API references can legitimately exceed 800 files (per-type pages add up quickly). Set a budget that reflects the site's expected scale (example: 2000-5000) or exclude known large outputs from budgets via `budgetExclude` (for example `api/**`).
