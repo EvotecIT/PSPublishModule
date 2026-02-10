@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Text;
 using Spectre.Console;
 
@@ -6,7 +7,11 @@ namespace PSPublishModule;
 
 internal static class ConsoleEncodingHelper
 {
-    private static bool _attempted;
+    // Thread-safe "run once" gate, since UI/Logger can be called from multiple threads.
+    private static int _attempted;
+
+    // Cache result of "can safely render unicode" check: -1 unknown, 0 false, 1 true.
+    private static int _shouldRenderUnicode = -1;
 
     /// <summary>
     /// Ensures the console output encoding is UTF-8 when we render Unicode via Spectre.Console.
@@ -15,8 +20,7 @@ internal static class ConsoleEncodingHelper
     /// </summary>
     public static void TryEnableUtf8Console()
     {
-        if (_attempted) return;
-        _attempted = true;
+        if (Interlocked.CompareExchange(ref _attempted, 1, 0) != 0) return;
 
         try
         {
@@ -41,16 +45,21 @@ internal static class ConsoleEncodingHelper
 
     public static bool ShouldRenderUnicode()
     {
+        var cached = Volatile.Read(ref _shouldRenderUnicode);
+        if (cached >= 0) return cached == 1;
+
         TryEnableUtf8Console();
         try
         {
             if (!AnsiConsole.Profile.Capabilities.Unicode) return false;
-            return Console.OutputEncoding.CodePage == Encoding.UTF8.CodePage;
+            var ok = Console.OutputEncoding.CodePage == Encoding.UTF8.CodePage;
+            Interlocked.CompareExchange(ref _shouldRenderUnicode, ok ? 1 : 0, -1);
+            return ok;
         }
         catch
         {
+            Interlocked.CompareExchange(ref _shouldRenderUnicode, 0, -1);
             return false;
         }
     }
 }
-
