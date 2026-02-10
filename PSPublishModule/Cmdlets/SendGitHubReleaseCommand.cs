@@ -315,6 +315,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         }
         catch
         {
+            // Best-effort parse only. If GitHub changes the error schema (or returns non-JSON), just treat it as non-matching.
             return false;
         }
     }
