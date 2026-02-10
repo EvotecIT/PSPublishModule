@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-02-09
+Last updated: 2026-02-10
 
 This document is the single source of truth for:
 
@@ -79,8 +79,13 @@ Legend:
 
 - **Have**: Menus + actions + regions + profiles + auto menus (rich model).
   - Docs: `Docs/PowerForge.Web.ContentSpec.md` (Navigation section)
-- **Partial**: Themes frequently hardcode a docs sidebar and/or API header/footer, ignoring profiles/surfaces; this is the main source of regressions.
-- **Missing**: One canonical “reference renderer” output (JSON) for navigation surfaces that themes and agents can rely on.
+- **Have**: Navigation surfaces: `Navigation.Surfaces` projects common patterns into stable runtime surfaces (`navigation.surfaces`).
+  - Code: `PowerForge.Web/Models/NavigationSpec.cs`, `PowerForge.Web/Services/WebSiteBuilder.Navigation.cs`
+- **Have**: Scriban reference renderer helpers exposed as `pf`:
+  - `pf.nav_links`, `pf.nav_actions`, `pf.menu_tree`
+  - Code: `PowerForge.Web/Services/ScribanThemeHelpers.cs`, `PowerForge.Web/Services/ScribanTemplateEngine.cs`
+- **Partial**: Many existing themes still hardcode sidebars and/or index-based menu rendering (e.g. `navigation.menus[0]`), causing drift/regressions across sites.
+- **Partial**: One canonical “reference renderer” output (JSON) for navigation surfaces for non-Scriban consumers (scripts, external renderers) is not yet standardized end-to-end.
 
 ### Shortcodes + Data-driven Blocks
 
@@ -136,12 +141,14 @@ Legend:
 
 Goal: themes/agents stop guessing and API/docs nav stops drifting.
 
-- Define/standardize surfaces: `main`, `docs`, `api`, `products` (minimum).
-- Generate a single engine-owned JSON payload (reference renderer input) from `site.json` navigation.
-- Verify:
-  - warn in dev, fail in CI when `features` require a surface but site/theme doesn’t provide it.
-- Provide theme guidance:
-  - “render this JSON structure” instead of “copy/paste hardcoded sidebar HTML”.
+- Completed (engine-side building blocks):
+  - Surfaces runtime projection: `Navigation.Surfaces` -> `navigation.surfaces`
+  - Scriban `pf.*` reference renderer helpers
+- Remaining:
+  - Standardize surface names (minimum: `main`, `docs`, `api`, `products`) in starter docs.
+  - Generate an engine-owned JSON payload suitable as a stable reference renderer input for non-Scriban consumers.
+  - Verify:
+    - warn in dev, fail in CI when `features` require a surface but site/theme doesn’t provide it.
 
 ### M2: Blog UX Defaults + Feed Parity (Next)
 

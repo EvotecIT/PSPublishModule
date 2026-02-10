@@ -1,6 +1,6 @@
 # Agent Guide (PSPublishModule / PowerForge.Web + Websites)
 
-Last updated: 2026-02-09
+Last updated: 2026-02-10
 
 This file is the "start here" context for any agent working on the PowerForge.Web engine and the three websites that use it.
 
@@ -73,6 +73,8 @@ need per-user global skill installs.
 - CI/release should fail on regressions; dev should warn and summarize:
   - Verify: use baselines + `failOnNewWarnings:true` in CI.
   - Audit: use baselines + `failOnNewIssues:true` in CI.
+- Prefer stable theme helpers over ad-hoc rendering:
+  - Scriban: use `pf.nav_links` / `pf.nav_actions` / `pf.menu_tree` (avoid `navigation.menus[0]`).
 - Commit frequently. Avoid "big bang" diffs that mix unrelated changes.
 
 ## Quality Gates (Pattern)

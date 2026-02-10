@@ -1,6 +1,6 @@
 # PowerForge.Web Agent Handoff (Websites Engine)
 
-Last updated: 2026-02-09
+Last updated: 2026-02-10
 
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
 Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX.Website**, **IntelligenceX Website**.
@@ -47,6 +47,12 @@ PowerForge navigation is more capable than most themes currently render:
 - Auto menus: `Navigation.Auto[]` can generate menus from folder structure with `MaxDepth`.
 
 Key doc: `Docs\PowerForge.Web.ContentSpec.md` (`## Navigation` section).
+
+Theme best practice (Scriban):
+- Prefer stable, engine-owned helpers over index-based loops:
+  - `{{ pf.nav_links "main" }}` for top nav links
+  - `{{ pf.nav_actions }}` for header actions
+  - `{{ pf.menu_tree "docs" 4 }}` for nested sidebar trees
 
 ### API docs
 
