@@ -178,21 +178,29 @@ public static partial class WebSiteVerifier
         if (selectors.Length == 0)
             return;
 
-        var hrefs = (contract.CssHrefs ?? Array.Empty<string>())
+        var explicitHrefs = (contract.CssHrefs ?? Array.Empty<string>())
             .Where(h => !string.IsNullOrWhiteSpace(h))
             .Select(h => h.Trim())
             .ToArray();
 
+        var hrefs = explicitHrefs;
+        var inferred = false;
         if (hrefs.Length == 0)
         {
             var sampleRoute = ResolveFeatureSampleRoute(feature);
             hrefs = ResolveCssHrefsForRoute(spec, themeRoot, loader, manifest, sampleRoute);
+            inferred = hrefs.Length > 0;
         }
 
         if (hrefs.Length == 0)
         {
             warnings.Add($"Theme CSS contract: feature '{feature}' declares requiredCssSelectors but no CSS hrefs could be determined to validate.");
             return;
+        }
+
+        if (explicitHrefs.Length == 0 && inferred)
+        {
+            warnings.Add($"Theme CSS contract: feature '{feature}' declares requiredCssSelectors but does not declare cssHrefs; using best-effort href inference from asset registry. Add featureContracts.{feature}.cssHrefs for deterministic checks.");
         }
 
         var cssPaths = hrefs

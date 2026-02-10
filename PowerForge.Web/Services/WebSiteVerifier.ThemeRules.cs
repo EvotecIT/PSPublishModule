@@ -62,10 +62,28 @@ public static partial class WebSiteVerifier
         // Best-practice nudge: for high-drift features, encourage explicit contracts in schemaVersion 2 themes.
         if (schemaVersion >= 2)
         {
-            if (enabled.Contains("apidocs") && !HasFeatureContract(manifest, "apidocs"))
+            if (enabled.Contains("apidocs"))
             {
-                warnings.Add($"Best practice: site enables 'apiDocs' but theme '{manifest.Name}' does not define featureContracts.apiDocs. " +
-                             "Add requiredPartials (api-header/api-footer) and requiredCssSelectors to prevent regressions across sites.");
+                var apiContract = TryGetFeatureContract(manifest, "apidocs");
+                if (apiContract is null)
+                {
+                    warnings.Add($"Theme contract: site enables 'apiDocs' but theme '{manifest.Name}' does not define featureContracts.apiDocs. " +
+                                 "Add requiredPartials (api-header/api-footer), cssHrefs (feature entrypoints), and requiredCssSelectors to prevent regressions across sites.");
+                }
+                else
+                {
+                    if ((apiContract.RequiredCssSelectors ?? Array.Empty<string>()).Length == 0)
+                    {
+                        warnings.Add($"Theme contract: theme '{manifest.Name}' featureContracts.apiDocs does not declare requiredCssSelectors. " +
+                                     "Add a small selector list for API reference UI to detect styling drift.");
+                    }
+
+                    if ((apiContract.CssHrefs ?? Array.Empty<string>()).Length == 0)
+                    {
+                        warnings.Add($"Theme contract: theme '{manifest.Name}' featureContracts.apiDocs does not declare cssHrefs (CSS entrypoints). " +
+                                     "Declare which CSS files style API reference pages so CSS contract checks are deterministic.");
+                    }
+                }
             }
 
             if (enabled.Contains("docs") && !HasFeatureContract(manifest, "docs"))
@@ -109,6 +127,27 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Theme contract: site uses feature 'docs' but theme '{manifest.Name}' does not provide a 'docs' layout.");
             }
         }
+    }
+
+    private static ThemeFeatureContractSpec? TryGetFeatureContract(ThemeManifest manifest, string feature)
+    {
+        if (manifest is null || string.IsNullOrWhiteSpace(feature))
+            return null;
+        if (manifest.FeatureContracts is null || manifest.FeatureContracts.Count == 0)
+            return null;
+
+        var key = NormalizeFeatureName(feature);
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        foreach (var kvp in manifest.FeatureContracts)
+        {
+            var candidate = NormalizeFeatureName(kvp.Key);
+            if (string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase))
+                return kvp.Value;
+        }
+
+        return null;
     }
 
 
