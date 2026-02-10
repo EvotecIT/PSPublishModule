@@ -15,8 +15,30 @@ public sealed class NavigationRuntime
     /// <summary>Resolved footer model.</summary>
     public NavigationFooter? Footer { get; set; }
 
+    /// <summary>
+    /// Optional named navigation surfaces projecting commonly-used menus into stable, theme-friendly shapes
+    /// (for example: main top bar, docs sidebar, products switcher).
+    /// </summary>
+    public NavigationSurfaceRuntime[] Surfaces { get; set; } = Array.Empty<NavigationSurfaceRuntime>();
+
     /// <summary>Selected navigation profile name (if any).</summary>
     public string? ActiveProfile { get; set; }
+}
+
+/// <summary>Resolved navigation surface.</summary>
+public sealed class NavigationSurfaceRuntime
+{
+    /// <summary>Surface identifier (for example: main, docs, products, apidocs).</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Primary/top navigation menu for this surface.</summary>
+    public NavigationMenu? Primary { get; set; }
+
+    /// <summary>Sidebar navigation menu for this surface (for example: docs).</summary>
+    public NavigationMenu? Sidebar { get; set; }
+
+    /// <summary>Products switcher menu for this surface.</summary>
+    public NavigationMenu? Products { get; set; }
 }
 
 /// <summary>Resolved menu with navigation items.</summary>

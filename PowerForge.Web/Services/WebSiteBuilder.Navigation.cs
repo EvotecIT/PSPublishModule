@@ -433,8 +433,43 @@ public static partial class WebSiteBuilder
         nav.Actions = BuildMenuItems(effectiveActions, context, spec.LinkRules);
         nav.Regions = BuildRegions(effectiveRegions, nav.Menus, nav.Actions, context, spec.LinkRules);
         nav.Footer = BuildFooter(effectiveFooter, nav.Menus, context, spec.LinkRules);
+        nav.Surfaces = BuildSurfaces(navSpec, nav.Menus);
 
         return nav;
     }
-}
 
+    private static NavigationSurfaceRuntime[] BuildSurfaces(NavigationSpec spec, NavigationMenu[] menus)
+    {
+        if (spec?.Surfaces is null || spec.Surfaces.Length == 0)
+            return Array.Empty<NavigationSurfaceRuntime>();
+
+        var map = menus
+            .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.Name))
+            .ToDictionary(m => m.Name.Trim(), StringComparer.OrdinalIgnoreCase);
+
+        var surfaces = new List<NavigationSurfaceRuntime>();
+        foreach (var surface in spec.Surfaces)
+        {
+            if (surface is null || string.IsNullOrWhiteSpace(surface.Name))
+                continue;
+
+            var primaryName = string.IsNullOrWhiteSpace(surface.PrimaryMenu) ? "main" : surface.PrimaryMenu.Trim();
+            var sidebarName = string.IsNullOrWhiteSpace(surface.SidebarMenu) ? null : surface.SidebarMenu.Trim();
+            var productsName = string.IsNullOrWhiteSpace(surface.ProductsMenu) ? null : surface.ProductsMenu.Trim();
+
+            map.TryGetValue(primaryName, out var primary);
+            var sidebar = sidebarName is not null && map.TryGetValue(sidebarName, out var s) ? s : null;
+            var products = productsName is not null && map.TryGetValue(productsName, out var p) ? p : null;
+
+            surfaces.Add(new NavigationSurfaceRuntime
+            {
+                Name = surface.Name.Trim(),
+                Primary = primary,
+                Sidebar = sidebar,
+                Products = products
+            });
+        }
+
+        return surfaces.ToArray();
+    }
+}

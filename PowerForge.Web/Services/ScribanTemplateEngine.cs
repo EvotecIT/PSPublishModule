@@ -2,7 +2,6 @@ using Scriban;
 using Scriban.Runtime;
 using Scriban.Parsing;
 using System.Threading.Tasks;
-
 namespace PowerForge.Web;
 
 internal sealed class ScribanTemplateEngine : ITemplateEngine
@@ -64,6 +63,18 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         globals.Add("base_url", context.Site.BaseUrl ?? string.Empty);
         globals.Add("current_path", context.CurrentPath);
 
+        // Expose stable, snake_case helpers for themes.
+        // Scriban does not support importing instance methods from an object directly (MethodInstance is obsolete),
+        // so we register explicit delegates.
+        var helpers = new ScribanThemeHelpers(context);
+        var pf = new ScriptObject();
+        pf.Import("menu", new Func<string?, NavigationMenu?>(helpers.Menu));
+        pf.Import("surface", new Func<string?, NavigationSurfaceRuntime?>(helpers.Surface));
+        pf.Import("nav_actions", new Func<string>(helpers.NavActions));
+        pf.Add("nav_links", new PfNavLinksFunction(helpers));
+        pf.Add("menu_tree", new PfMenuTreeFunction(helpers));
+        globals.Add("pf", pf);
+
         var templateContext = new TemplateContext
         {
             TemplateLoader = new InlineTemplateLoader(partialResolver),
@@ -72,6 +83,82 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         templateContext.PushGlobal(globals);
 
         return parsed.Render(templateContext);
+    }
+
+    private sealed class PfNavLinksFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfNavLinksFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 0;
+        public int ParameterCount => 2;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "menu_name", "main"),
+                1 => new ScriptParameterInfo(typeof(int), "max_depth", 1),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var menu = arguments.Count > 0 ? arguments[0]?.ToString() : "main";
+            var depthArg = arguments.Count > 1 ? arguments[1] : null;
+            var depth = ScribanThemeHelpers.ParseInt(depthArg, 1);
+            return _helpers.NavLinks(menu, depth);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
+    }
+
+    private sealed class PfMenuTreeFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfMenuTreeFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 0;
+        public int ParameterCount => 2;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "menu_name", "main"),
+                1 => new ScriptParameterInfo(typeof(int), "max_depth", 3),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var menu = arguments.Count > 0 ? arguments[0]?.ToString() : "main";
+            var depthArg = arguments.Count > 1 ? arguments[1] : null;
+            var depth = ScribanThemeHelpers.ParseInt(depthArg, 3);
+            return _helpers.MenuTree(menu, depth);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
     }
 
     private static object? ToScriptValue(object? value)

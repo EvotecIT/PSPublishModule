@@ -185,11 +185,7 @@ Use this post as a starting point for changelogs, release notes, and engineering
   <div class=""pf-container pf-header-inner"">
     <div class=""pf-brand"">{{ site.name }}</div>
     <nav class=""pf-nav"">
-      {{ if navigation.menus && navigation.menus.size > 0 }}
-        {{ for link in navigation.menus[0].items }}
-          <a href=""{{ link.url }}"">{{ link.title }}</a>
-        {{ end }}
-      {{ end }}
+      {{ pf.nav_links ""main"" }}
     </nav>
   </div>
 </header>

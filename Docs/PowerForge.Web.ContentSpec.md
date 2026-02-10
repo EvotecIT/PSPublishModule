@@ -418,6 +418,39 @@ Navigation lives in `site.json` under `Navigation`:
 
 Templates receive a computed `navigation` object with active states.
 
+Best practice (theme rendering):
+- Use menu names (e.g. `main`, `docs`) rather than index-based access (`navigation.menus[0]`) so your theme is deterministic across sites.
+- In Scriban themes you can use built-in helpers exposed as `pf`:
+  - `{{ pf.nav_links "main" }}` renders the main menu as a flat list of `<a>` elements (supports `is-active` / `is-ancestor` classes).
+  - `{{ pf.nav_actions }}` renders `Navigation.Actions` as links/buttons.
+  - `{{ pf.menu_tree "docs" 4 }}` renders a nested `<ul>` tree for sidebar menus.
+
+### Navigation surfaces (stable projections)
+If your site defines `Navigation.Surfaces`, the runtime `navigation` object also exposes `navigation.surfaces` as named projections.
+This helps themes avoid hard-coding assumptions like "docs sidebar == menu named docs" and supports multi-surface headers (main/products/docs).
+Example:
+```json
+{
+  "Navigation": {
+    "Surfaces": [
+      { "Name": "main", "PrimaryMenu": "main" },
+      { "Name": "docs", "PrimaryMenu": "main", "SidebarMenu": "docs" },
+      { "Name": "products", "PrimaryMenu": "main", "ProductsMenu": "products" }
+    ]
+  }
+}
+```
+In Scriban you can then do:
+```scriban
+{{ if navigation.surfaces && navigation.surfaces.size > 0 }}
+  {{ for s in navigation.surfaces }}
+    {{ if s.name == "docs" && s.sidebar }}
+      {{ for link in s.sidebar.items }} ... {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+```
+
 ### Default auto navigation
 If `Navigation` is **omitted**, PowerForge.Web generates sensible defaults:
 - A `docs` menu from the `docs` collection (or any collection whose output starts with `/docs`).
