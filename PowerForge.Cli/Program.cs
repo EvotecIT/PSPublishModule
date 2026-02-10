@@ -233,7 +233,7 @@ internal static partial class Program
                 }
 
                 logger.Success($"Installed {spec.Name} {res.Version}");
-                foreach (var path in res.InstalledPaths) logger.Info($" â†’ {path}");
+                foreach (var path in res.InstalledPaths) logger.Info($" \u2192 {path}");
                 if (res.PrunedPaths.Count > 0) logger.Warn($"Pruned versions: {res.PrunedPaths.Count}");
                 return 0;
             }

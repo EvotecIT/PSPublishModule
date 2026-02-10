@@ -436,15 +436,15 @@ internal static partial class Program
         var unicode = AnsiConsole.Profile.Capabilities.Unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
 
-        AnsiConsole.Write(new Rule($"[green]{(unicode ? "âœ…" : "OK")} Summary[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[green]{(unicode ? "\u2705" : "OK")} Summary[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        table.AddRow($"{(unicode ? "ðŸ“¦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
-        table.AddRow($"{(unicode ? "ðŸ§ª" : "*")} Staging", Esc(res.BuildResult.StagingPath));
+        table.AddRow($"{(unicode ? "\U0001F4E6" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(res.Plan.ResolvedVersion)}[/]");
+        table.AddRow($"{(unicode ? "\U0001F9EA" : "*")} Staging", Esc(res.BuildResult.StagingPath));
 
         var fileConsistencySettings = res.Plan.FileConsistencySettings;
         if (fileConsistencySettings?.Enable == true)
@@ -460,12 +460,12 @@ internal static partial class Program
                     var issues = CountFileConsistencyIssues(res.FileConsistencyReport, fileConsistencySettings);
                     var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
                     table.AddRow(
-                        $"{(unicode ? "ðŸ”Ž" : "*")} File consistency",
+                        $"{(unicode ? "\U0001F50E" : "*")} File consistency",
                         $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
                 }
                 else
                 {
-                    table.AddRow($"{(unicode ? "ðŸ”Ž" : "*")} File consistency", "[grey]Disabled[/]");
+                    table.AddRow($"{(unicode ? "\U0001F50E" : "*")} File consistency", "[grey]Disabled[/]");
                 }
             }
 
@@ -478,41 +478,41 @@ internal static partial class Program
                     var issues = CountFileConsistencyIssues(res.ProjectRootFileConsistencyReport, fileConsistencySettings);
                     var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
                     table.AddRow(
-                        $"{(unicode ? "ðŸ”Ž" : "*")} File consistency (project)",
+                        $"{(unicode ? "\U0001F50E" : "*")} File consistency (project)",
                         $"{StatusMarkup(status)} [grey]{compliance:0.0}% compliant[/]");
                 }
                 else
                 {
-                    table.AddRow($"{(unicode ? "ðŸ”Ž" : "*")} File consistency (project)", "[grey]Disabled[/]");
+                    table.AddRow($"{(unicode ? "\U0001F50E" : "*")} File consistency (project)", "[grey]Disabled[/]");
                 }
             }
         }
         else
         {
-            table.AddRow($"{(unicode ? "ðŸ”Ž" : "*")} File consistency", "[grey]Disabled[/]");
+            table.AddRow($"{(unicode ? "\U0001F50E" : "*")} File consistency", "[grey]Disabled[/]");
         }
 
         if (res.CompatibilityReport is not null)
         {
             var s = res.CompatibilityReport.Summary;
             table.AddRow(
-                $"{(unicode ? "ðŸ”Ž" : "*")} Compatibility",
+                $"{(unicode ? "\U0001F50E" : "*")} Compatibility",
                 $"{StatusMarkup(s.Status)} [grey]{s.CrossCompatibilityPercentage:0.0}% cross-compatible[/]");
         }
         else
         {
-            table.AddRow($"{(unicode ? "ðŸ”Ž" : "*")} Compatibility", "[grey]Disabled[/]");
+            table.AddRow($"{(unicode ? "\U0001F50E" : "*")} Compatibility", "[grey]Disabled[/]");
         }
 
         if (res.ValidationReport is not null)
         {
             table.AddRow(
-                $"{(unicode ? "ðŸ”Ž" : "*")} Module validation",
+                $"{(unicode ? "\U0001F50E" : "*")} Module validation",
                 $"{StatusMarkup(res.ValidationReport.Status)} [grey]{Esc(res.ValidationReport.Summary)}[/]");
         }
         else
         {
-            table.AddRow($"{(unicode ? "ðŸ”Ž" : "*")} Module validation", "[grey]Disabled[/]");
+            table.AddRow($"{(unicode ? "\U0001F50E" : "*")} Module validation", "[grey]Disabled[/]");
         }
 
         if (res.Plan.Formatting is not null)
@@ -529,42 +529,42 @@ internal static partial class Program
             }
 
             table.AddRow(
-                $"{(unicode ? "ðŸŽ¨" : "*")} Formatting",
+                $"{(unicode ? "\U0001F3A8" : "*")} Formatting",
                 $"{StatusMarkup(status)} [grey]{string.Join(", ", parts)}[/]");
         }
         else
         {
-            table.AddRow($"{(unicode ? "ðŸŽ¨" : "*")} Formatting", "[grey]Disabled[/]");
+            table.AddRow($"{(unicode ? "\U0001F3A8" : "*")} Formatting", "[grey]Disabled[/]");
         }
 
         if (res.Plan.SignModule)
         {
             if (res.SigningResult is null)
             {
-                table.AddRow($"{(unicode ? "ðŸ”" : "*")} Signing", "[yellow]Enabled[/]");
+                table.AddRow($"{(unicode ? "\U0001F50F" : "*")} Signing", "[yellow]Enabled[/]");
             }
             else
             {
                 var s = res.SigningResult;
                 var value =
                     $"{SigningStatusMarkup(s.Success)} [grey]signed [green]{s.SignedTotal}[/] (new [green]{s.SignedNew}[/], re [green]{s.Resigned}[/]), already [grey]{s.AlreadySignedOther}[/] 3p/[grey]{s.AlreadySignedByThisCert}[/] ours, failed [red]{s.Failed}[/][/]";
-                table.AddRow($"{(unicode ? "ðŸ”" : "*")} Signing", value);
+                table.AddRow($"{(unicode ? "\U0001F50F" : "*")} Signing", value);
             }
         }
         else
         {
-            table.AddRow($"{(unicode ? "ðŸ”" : "*")} Signing", "[grey]Disabled[/]");
+            table.AddRow($"{(unicode ? "\U0001F50F" : "*")} Signing", "[grey]Disabled[/]");
         }
 
         if (res.ArtefactResults is { Length: > 0 })
-            table.AddRow($"{(unicode ? "ðŸ“¦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
+            table.AddRow($"{(unicode ? "\U0001F4E6" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
         else
-            table.AddRow($"{(unicode ? "ðŸ“¦" : "*")} Artefacts", "[grey]None[/]");
+            table.AddRow($"{(unicode ? "\U0001F4E6" : "*")} Artefacts", "[grey]None[/]");
 
         if (res.InstallResult is not null)
-            table.AddRow($"{(unicode ? "ðŸ“¥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
+            table.AddRow($"{(unicode ? "\U0001F4E5" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
-            table.AddRow($"{(unicode ? "ðŸ“¥" : "*")} Install", "[grey]Disabled[/]");
+            table.AddRow($"{(unicode ? "\U0001F4E5" : "*")} Install", "[grey]Disabled[/]");
 
         AnsiConsole.Write(table);
 
@@ -611,10 +611,9 @@ internal static partial class Program
 
         if (res.InstallResult is not null && res.InstallResult.InstalledPaths is { Count: > 0 })
         {
-            AnsiConsole.MarkupLine($"[grey]{(unicode ? "ðŸ“" : "*")} Installed paths:[/]");
+            AnsiConsole.MarkupLine($"[grey]{(unicode ? "\U0001F4CD" : "*")} Installed paths:[/]");
             foreach (var path in res.InstallResult.InstalledPaths)
-                AnsiConsole.MarkupLine($"  [grey]{(unicode ? "â†’" : "->")}[/] {Esc(path)}");
+                AnsiConsole.MarkupLine($"  [grey]{(unicode ? "\u2192" : "->")}[/] {Esc(path)}");
         }
     }
 }
-
