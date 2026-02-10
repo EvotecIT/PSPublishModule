@@ -145,6 +145,7 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 ```
 Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
+- `title`: used for both `<title>` and the visible API overview `<h1>` (important for multi-API sites)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
 - Critical CSS (optional):
   - `injectCriticalCss: true` inlines `assetRegistry.criticalCss` from `site.json` into API pages (requires `config`)
@@ -179,6 +180,7 @@ Notes:
 - `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
+- `quickStartTypes` (aliases: `quickstartTypes`, `quick-start-types`) accepts comma-separated simple type names for the "Quick Start" and "Main API" sections
 
 ##### Template overrides
 You can fully control the API docs layout by providing a template root or per-file overrides.

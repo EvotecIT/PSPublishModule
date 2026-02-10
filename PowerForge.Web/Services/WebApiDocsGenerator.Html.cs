@@ -115,9 +115,9 @@ public static partial class WebApiDocsGenerator
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl);
-        var sidebarHtml = BuildDocsSidebar(types, baseUrl, string.Empty, docsHomeUrl);
+        var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
-        var overviewHtml = BuildDocsOverview(types, baseUrl);
+        var overviewHtml = BuildDocsOverview(options, types, baseUrl);
         var slugMap = BuildTypeSlugMap(types);
         var typeIndex = BuildTypeIndex(types);
         var derivedMap = BuildDerivedTypeMap(types, typeIndex);
@@ -140,7 +140,7 @@ public static partial class WebApiDocsGenerator
 
         foreach (var type in types)
         {
-            var sidebar = BuildDocsSidebar(types, baseUrl, type.Slug, docsHomeUrl);
+            var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, GetDefaultCodeLanguage(options));
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
@@ -405,7 +405,7 @@ public static partial class WebApiDocsGenerator
         "AztecCode"
     };
 
-    private static string BuildDocsSidebar(IReadOnlyList<ApiTypeModel> types, string baseUrl, string activeSlug, string docsHomeUrl)
+    private static string BuildDocsSidebar(WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, string baseUrl, string activeSlug, string docsHomeUrl)
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
@@ -475,7 +475,8 @@ public static partial class WebApiDocsGenerator
           sb.AppendLine("    </div>");
           sb.AppendLine("    <nav class=\"sidebar-nav\">");
 
-        var mainTypes = GetMainTypes(types);
+        var mainTypes = GetMainTypes(types, options);
+        var mainTypeNames = new HashSet<string>(mainTypes.Select(static t => t.Name), StringComparer.OrdinalIgnoreCase);
         if (mainTypes.Count > 0)
         {
             sb.AppendLine("      <div class=\"nav-section\">");
@@ -496,7 +497,7 @@ public static partial class WebApiDocsGenerator
         }
 
         var grouped = types
-            .Where(t => !IsMainType(t.Name))
+            .Where(t => !mainTypeNames.Contains(t.Name))
             .GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
         foreach (var group in grouped)
@@ -546,14 +547,15 @@ public static partial class WebApiDocsGenerator
                $"<span class=\"type-icon {kind}\">{icon}</span><span class=\"type-name\">{name}</span></a>";
     }
 
-    private static string BuildDocsOverview(IReadOnlyList<ApiTypeModel> types, string baseUrl)
+    private static string BuildDocsOverview(WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, string baseUrl)
     {
         var sb = new StringBuilder();
+        var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? "API Reference" : options.Title.Trim();
         sb.AppendLine("    <div class=\"api-overview\">");
-        sb.AppendLine("      <h1>API Reference</h1>");
+        sb.AppendLine($"      <h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
         sb.AppendLine("      <p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
 
-        var mainTypes = GetMainTypes(types);
+        var mainTypes = GetMainTypes(types, options);
         if (mainTypes.Count > 0)
         {
             sb.AppendLine("      <section class=\"quick-start\">");

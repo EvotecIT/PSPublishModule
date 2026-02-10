@@ -288,20 +288,91 @@ public static partial class WebApiDocsGenerator
         return lastDot >= 0 ? normalized.Substring(lastDot + 1) : normalized;
     }
 
-    private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types)
+    private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types, WebApiDocsOptions options)
     {
+        if (types.Count == 0)
+            return Array.Empty<ApiTypeModel>();
+
         var results = new List<ApiTypeModel>();
-        foreach (var name in MainTypeOrder)
-        {
-            var type = types.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
-            if (type != null)
-                results.Add(type);
-        }
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1) Explicit step-level quickstart types (highest precedence).
+        AddMainTypeMatches(results, seen, types, options.QuickStartTypeNames);
+        if (results.Count > 0)
+            return results;
+
+        // 2) Built-in curated defaults (keeps existing behavior for CodeGlyphX).
+        AddMainTypeMatches(results, seen, types, MainTypeOrder);
+        if (results.Count > 0)
+            return results;
+
+        // 3) Generic fallback: pick short, likely entry-point names from top namespaces.
+        var candidates = types
+            .Where(static t => string.Equals(t.Kind, "Class", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(t.Kind, "Struct", StringComparison.OrdinalIgnoreCase))
+            .Select(type => new
+            {
+                Type = type,
+                Score = ScoreMainTypeCandidate(type)
+            })
+            .OrderByDescending(static x => x.Score)
+            .ThenBy(static x => x.Type.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .Select(static x => x.Type)
+            .ToList();
+
+        results.AddRange(candidates);
         return results;
     }
 
-    private static bool IsMainType(string name)
-        => MainTypeOrder.Contains(name, StringComparer.OrdinalIgnoreCase);
+    private static void AddMainTypeMatches(
+        List<ApiTypeModel> results,
+        HashSet<string> seen,
+        IReadOnlyList<ApiTypeModel> types,
+        IEnumerable<string> preferredNames)
+    {
+        foreach (var name in preferredNames)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var type = types.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (type is null)
+                continue;
+
+            if (seen.Add(type.FullName))
+                results.Add(type);
+        }
+    }
+
+    private static int ScoreMainTypeCandidate(ApiTypeModel type)
+    {
+        var score = 0;
+        var name = type.Name ?? string.Empty;
+
+        if (name.Length <= 12) score += 12;
+        if (name.Length <= 20) score += 6;
+
+        if (name.EndsWith("Options", StringComparison.OrdinalIgnoreCase)) score -= 12;
+        if (name.EndsWith("Settings", StringComparison.OrdinalIgnoreCase)) score -= 12;
+        if (name.EndsWith("Extensions", StringComparison.OrdinalIgnoreCase)) score -= 18;
+        if (name.EndsWith("Builder", StringComparison.OrdinalIgnoreCase)) score -= 10;
+        if (name.EndsWith("Result", StringComparison.OrdinalIgnoreCase)) score -= 8;
+        if (name.EndsWith("Exception", StringComparison.OrdinalIgnoreCase)) score -= 18;
+        if (name.EndsWith("Attribute", StringComparison.OrdinalIgnoreCase)) score -= 14;
+
+        if (!string.IsNullOrWhiteSpace(type.Summary)) score += 5;
+
+        var ns = type.Namespace ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(ns))
+        {
+            var depth = ns.Split('.', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (depth <= 2) score += 8;
+            else if (depth == 3) score += 4;
+        }
+
+        return score;
+    }
 
     private static string GetShortNamespace(string ns)
     {

@@ -44,6 +44,7 @@ internal static partial class WebCliCommandHandlers
         var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
         var includeTypes = ReadOptionList(subArgs, "--include-type");
         var excludeTypes = ReadOptionList(subArgs, "--exclude-type");
+        var quickStartTypes = ReadOptionList(subArgs, "--quickstart-types", "--quick-start-types");
         var suppressWarnings = ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings").ToArray();
 
         var apiType = ApiDocsType.CSharp;
@@ -95,6 +96,8 @@ internal static partial class WebCliCommandHandlers
             options.IncludeTypeNames.AddRange(includeTypes);
         if (excludeTypes.Count > 0)
             options.ExcludeTypeNames.AddRange(excludeTypes);
+        if (quickStartTypes.Count > 0)
+            options.QuickStartTypeNames.AddRange(quickStartTypes);
 
         var result = WebApiDocsGenerator.Generate(options);
         var filteredWarnings = WebVerifyPolicy.FilterWarnings(result.Warnings, suppressWarnings);

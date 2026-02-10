@@ -101,6 +101,11 @@ public sealed class WebApiDocsOptions
     public List<string> IncludeTypeNames { get; } = new();
     /// <summary>Optional list of type full names to exclude.</summary>
     public List<string> ExcludeTypeNames { get; } = new();
+    /// <summary>
+    /// Optional preferred type names shown in the API "Quick Start" and sidebar "Main API" sections.
+    /// Values are matched case-insensitively against type simple names.
+    /// </summary>
+    public List<string> QuickStartTypeNames { get; } = new();
 }
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>

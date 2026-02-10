@@ -312,6 +312,10 @@
         "excludeNamespace": { "type": "string" },
         "includeType": { "type": "string" },
         "excludeType": { "type": "string" },
+        "quickStartTypes": { "type": "string", "description": "Comma-separated type names used for the API Quick Start / Main API sections." },
+        "quickstartTypes": { "type": "string", "description": "Alias of quickStartTypes." },
+        "quick-start-types": { "type": "string", "description": "Alias of quickStartTypes." },
+        "quickstart-types": { "type": "string", "description": "Alias of quickStartTypes." },
         "failOnWarnings": { "type": "boolean" },
         "suppressWarnings": { "type": "array", "items": { "type": "string" } },
         "warningPreviewCount": { "type": "integer", "minimum": 0 }

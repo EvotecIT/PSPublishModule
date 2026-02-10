@@ -35,6 +35,11 @@ Optional critical CSS:
 - In the pipeline `apidocs` step, use `injectCriticalCss: true` (requires `config`) to inline `assetRegistry.criticalCss` from `site.json` into API pages.
 - Or use `criticalCssPath` to inline a single CSS file.
 
+Overview identity and quick start:
+- `title` is used as both document title and visible API overview heading (`<h1>`).
+- `quickStartTypes` (aliases: `quickstartTypes`, `quick-start-types`) accepts comma-separated type names for the "Quick Start" and "Main API" sections.
+- CLI equivalent: `--quickstart-types TypeA,TypeB`.
+
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
 - `navContextPath` (defaults to `/`)
   - Set this when you want API pages to match a specific `Navigation.Profile` (for example `"/api/"`).
@@ -251,6 +256,7 @@ referenced type exists in the generated API docs.
 Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 (for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
 Each command is treated as a "type" with parameter sets rendered as methods.
+Current scope is command help only; `about_*` conceptual topics are not yet projected into API pages.
 
 ## Usage scenarios
 
