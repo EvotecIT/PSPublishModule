@@ -1,6 +1,6 @@
 # PowerForge.Web Website Starter (Golden Path)
 
-Last updated: 2026-02-09
+Last updated: 2026-02-10
 
 This is the canonical, short "how we build sites" document meant to prevent:
 - half-cooked themes,
@@ -20,6 +20,8 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 - Always keep escape hatches scoped:
   - baselines for legacy noise
   - do not blanket-ignore whole categories without a written reason
+- Always prefer stable, engine-owned theme helpers over ad-hoc rendering:
+  - Scriban: use `pf.nav_links` / `pf.nav_actions` / `pf.menu_tree` (avoid `navigation.menus[0]`).
 
 ## Step-by-Step
 
@@ -57,6 +59,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 6. API docs rule:
    - API pages must use the same global CSS as normal pages plus API-specific CSS.
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
+   - If your site uses `Navigation.Profiles` and you want API pages to select an `/api/` profile override for nav token injection, set `navContextPath: "/api/"` on the apidocs pipeline step.
 
 ## Optional: CDN Cache Purge (Cloudflare)
 
