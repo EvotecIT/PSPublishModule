@@ -197,6 +197,60 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_WarnsWhenNavTokensPresentButNavJsonPathNotSet()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-required-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var headerPath = Path.Combine(root, "api-header.html");
+        File.WriteAllText(headerPath, "<header>{{NAV_LINKS}}</header>");
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            HeaderHtmlPath = headerPath
+            // NavJsonPath intentionally not set.
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, w => w.Contains("[PFWEB.APIDOCS.NAV.REQUIRED]", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("NAV_*", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_UsesNavigationProfiles_WhenNavJsonIsSiteJson()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-navprofile-" + Guid.NewGuid().ToString("N"));
@@ -376,6 +430,60 @@ public class WebApiDocsGeneratorContractTests
         {
             var result = WebApiDocsGenerator.Generate(options);
             Assert.DoesNotContain(result.Warnings, w => w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_IncludesCriticalCssHtml_WhenProvided()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-criticalcss-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CriticalCssHtml = "<style>.pf-critical-test{color:red;}</style>"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+            Assert.Contains(".pf-critical-test", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

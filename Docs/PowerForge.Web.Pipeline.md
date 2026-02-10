@@ -146,6 +146,9 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
+- Critical CSS (optional):
+  - `injectCriticalCss: true` inlines `assetRegistry.criticalCss` from `site.json` into API pages (requires `config`)
+  - `criticalCssPath` (or `criticalCss`) inlines a single CSS file into API pages
 - `config` (recommended) enables best-practice defaults.
   - If `config` is omitted, the pipeline will use `./site.json` when it exists at the pipeline root.
   - if `nav` is not set, it prefers `static/<dataRoot>/site-nav.json` (when present), otherwise falls back to `config`
@@ -219,6 +222,7 @@ Notes:
 ##### Template tokens
 Common tokens (all templates):
 - `{{CSS}}` – stylesheet link or inline fallback CSS
+- `{{CRITICAL_CSS}}` – optional critical CSS HTML injected into `<head>` (typically `<style>...</style>`)
 - `{{HEADER}}` / `{{FOOTER}}` – injected header/footer fragments (optional)
 
 Simple templates:

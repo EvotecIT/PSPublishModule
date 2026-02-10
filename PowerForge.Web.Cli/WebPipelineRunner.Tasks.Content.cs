@@ -18,6 +18,8 @@ internal static partial class WebPipelineRunner
         WebConsoleLogger? logger,
         WebPipelineStepResult stepResult)
     {
+        string? injectedCriticalCssHtml = null;
+
         var typeText = GetString(step, "type");
         var xml = ResolvePath(baseDir, GetString(step, "xml"));
         var help = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
@@ -27,6 +29,8 @@ internal static partial class WebPipelineRunner
         var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url") ?? "/api";
         var format = GetString(step, "format");
         var css = GetString(step, "css") ?? GetString(step, "cssHref") ?? GetString(step, "css-href");
+        var criticalCssPath = ResolvePath(baseDir, GetString(step, "criticalCssPath") ?? GetString(step, "critical-css-path") ?? GetString(step, "criticalCss") ?? GetString(step, "critical-css"));
+        var injectCriticalCss = GetBool(step, "injectCriticalCss") ?? GetBool(step, "inject-critical-css") ?? false;
         var header = ResolvePath(baseDir, GetString(step, "headerHtml") ?? GetString(step, "header-html"));
         var footer = ResolvePath(baseDir, GetString(step, "footerHtml") ?? GetString(step, "footer-html"));
         var template = GetString(step, "template");
@@ -122,6 +126,22 @@ internal static partial class WebPipelineRunner
             }
 
             TryResolveApiFragmentsFromTheme(configPath, ref header, ref footer);
+
+            if (injectCriticalCss)
+            {
+                try
+                {
+                    var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                    var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                    injectedCriticalCssHtml = RenderCriticalCssHtml(spec.AssetRegistry, plan.RootPath);
+                    if (!string.IsNullOrWhiteSpace(injectedCriticalCssHtml))
+                        criticalCssPath = null; // avoid accidental double-injection if both are set
+                }
+                catch
+                {
+                    // Best-effort: critical CSS injection is optional.
+                }
+            }
         }
 
         var options = new WebApiDocsOptions
@@ -135,6 +155,8 @@ internal static partial class WebPipelineRunner
             BaseUrl = baseUrl,
             Format = format,
             CssHref = css,
+            CriticalCssHtml = injectedCriticalCssHtml,
+            CriticalCssPath = criticalCssPath,
             HeaderHtmlPath = header,
             FooterHtmlPath = footer,
             Template = template,
@@ -219,6 +241,32 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+    }
+
+    private static string RenderCriticalCssHtml(AssetRegistrySpec? assets, string rootPath)
+    {
+        if (assets?.CriticalCss is null || assets.CriticalCss.Length == 0)
+            return string.Empty;
+        if (string.IsNullOrWhiteSpace(rootPath))
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var css in assets.CriticalCss)
+        {
+            if (css is null || string.IsNullOrWhiteSpace(css.Path))
+                continue;
+
+            var fullPath = Path.IsPathRooted(css.Path)
+                ? css.Path
+                : Path.Combine(rootPath, css.Path);
+            if (!File.Exists(fullPath))
+                continue;
+
+            sb.Append("<style>");
+            sb.Append(File.ReadAllText(fullPath));
+            sb.AppendLine("</style>");
+        }
+        return sb.ToString();
     }
 
     private static void ExecuteChangelog(JsonElement step, string baseDir, WebPipelineStepResult stepResult)

@@ -28,6 +28,7 @@ public static partial class WebApiDocsGenerator
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
+        var criticalCss = ResolveCriticalCss(options, warnings);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = string.IsNullOrWhiteSpace(cssLinks)
@@ -44,6 +45,7 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
             ["FOOTER"] = footer,
@@ -79,6 +81,7 @@ public static partial class WebApiDocsGenerator
             {
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
+                ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
                 ["FOOTER"] = footer,
@@ -102,6 +105,7 @@ public static partial class WebApiDocsGenerator
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
+        var criticalCss = ResolveCriticalCss(options, warnings);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = string.IsNullOrWhiteSpace(cssLinks)
@@ -122,6 +126,7 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
             ["FOOTER"] = footer,
@@ -143,6 +148,7 @@ public static partial class WebApiDocsGenerator
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
+                ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
                 ["FOOTER"] = footer,
@@ -253,6 +259,35 @@ public static partial class WebApiDocsGenerator
         var preview = string.Join(", ", missing.Take(6));
         var more = missing.Length > 6 ? $" (+{missing.Length - 6} more)" : string.Empty;
         warnings.Add($"API docs CSS contract: combined CSS ({string.Join(", ", checkedHrefs)}) is missing expected selectors: {preview}{more}.");
+    }
+
+    private static string ResolveCriticalCss(WebApiDocsOptions options, List<string> warnings)
+    {
+        if (options is null) return string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(options.CriticalCssHtml))
+            return options.CriticalCssHtml!;
+
+        if (string.IsNullOrWhiteSpace(options.CriticalCssPath))
+            return string.Empty;
+
+        try
+        {
+            var path = Path.GetFullPath(options.CriticalCssPath);
+            if (!File.Exists(path))
+            {
+                warnings?.Add($"API docs: critical CSS not found: {options.CriticalCssPath}.");
+                return string.Empty;
+            }
+
+            var css = File.ReadAllText(path);
+            return WrapStyle(css);
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"API docs: failed to read critical CSS '{options.CriticalCssPath}' ({ex.GetType().Name}: {ex.Message}).");
+            return string.Empty;
+        }
     }
 
     private static string BuildCssLinks(string? cssHref)

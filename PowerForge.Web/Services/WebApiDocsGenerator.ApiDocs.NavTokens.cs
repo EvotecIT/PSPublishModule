@@ -9,6 +9,20 @@ public static partial class WebApiDocsGenerator
 {
     private static void ApplyNavTokens(WebApiDocsOptions options, List<string> warnings, ref string header, ref string footer)
     {
+        // Fail-fast (in CI via apidocs failOnWarnings): if fragments expect nav injection but the step
+        // forgot to provide navJsonPath, we should emit a deterministic warning instead of silently
+        // producing API pages without navigation.
+        var needsNavTokens =
+            ContainsTemplateToken(header, "NAV_LINKS") ||
+            ContainsTemplateToken(header, "NAV_ACTIONS") ||
+            ContainsTemplateToken(footer, "NAV_LINKS") ||
+            ContainsTemplateToken(footer, "NAV_ACTIONS");
+        if (needsNavTokens && string.IsNullOrWhiteSpace(options.NavJsonPath))
+        {
+            warnings?.Add("API docs nav required: header/footer fragments contain {{NAV_*}} placeholders but NavJsonPath is not set. Set apidocs.nav (or apidocs.config) so navigation can be injected.");
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(options.NavJsonPath)) return;
 
         var navPath = Path.GetFullPath(options.NavJsonPath);
@@ -22,12 +36,7 @@ public static partial class WebApiDocsGenerator
         {
             // If the site provides custom header/footer fragments but forgets to include navigation placeholders,
             // nav injection will be a no-op and API pages may render without expected site navigation.
-            var hasNavToken =
-                ContainsTemplateToken(header, "NAV_LINKS") ||
-                ContainsTemplateToken(header, "NAV_ACTIONS") ||
-                ContainsTemplateToken(footer, "NAV_LINKS") ||
-                ContainsTemplateToken(footer, "NAV_ACTIONS");
-            if (!hasNavToken)
+            if (!needsNavTokens)
             {
                 warnings?.Add("API docs nav: header/footer fragments do not contain {{NAV_LINKS}} or {{NAV_ACTIONS}} placeholders; nav injection may be empty.");
             }
@@ -163,4 +172,3 @@ public static partial class WebApiDocsGenerator
         return sb.ToString();
     }
 }
-

@@ -38,6 +38,16 @@ public sealed class WebApiDocsOptions
     public string? Format { get; set; }
     /// <summary>Optional stylesheet href for HTML output.</summary>
     public string? CssHref { get; set; }
+    /// <summary>
+    /// Optional critical CSS HTML injected into the &lt;head&gt; of generated API pages.
+    /// Intended to match site-wide critical styles so API reference pages don't look "unstyled" during initial paint.
+    /// </summary>
+    public string? CriticalCssHtml { get; set; }
+    /// <summary>
+    /// Optional path to a critical CSS file to inline into the &lt;head&gt; of generated API pages.
+    /// If <see cref="CriticalCssHtml"/> is set, it takes precedence.
+    /// </summary>
+    public string? CriticalCssPath { get; set; }
     /// <summary>Optional path to header HTML fragment.</summary>
     public string? HeaderHtmlPath { get; set; }
     /// <summary>Optional path to footer HTML fragment.</summary>
@@ -517,6 +527,9 @@ public static partial class WebApiDocsGenerator
         var trimmed = warning.TrimStart();
         if (trimmed.StartsWith("[", StringComparison.Ordinal))
             return warning;
+
+        if (trimmed.StartsWith("API docs nav required:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.NAV.REQUIRED] " + warning;
 
         if (trimmed.StartsWith("API docs CSS contract:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.CSS.CONTRACT] " + warning;

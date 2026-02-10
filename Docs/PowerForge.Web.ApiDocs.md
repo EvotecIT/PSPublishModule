@@ -25,9 +25,15 @@ To customize templates, copy the embedded defaults from:
 ## Common tokens (all templates)
 
 - `{{CSS}}` injects a stylesheet link or inline fallback CSS.
+- `{{CRITICAL_CSS}}` injects optional critical CSS HTML into `<head>` (typically `<style>...</style>`).
 - `{{HEADER}}` / `{{FOOTER}}` are optional HTML fragments.
 
 When `nav`/`navJsonPath` is set and `headerHtml`/`footerHtml` are not provided, the generator falls back to embedded header/footer fragments so API pages still include basic site navigation. Provide explicit fragments to fully control branding and markup.
+If your fragments include `{{NAV_*}}` placeholders but you forgot to provide `nav`/`navJsonPath`, the generator emits `[PFWEB.APIDOCS.NAV.REQUIRED]` and (by default) the pipeline fails in CI.
+
+Optional critical CSS:
+- In the pipeline `apidocs` step, use `injectCriticalCss: true` (requires `config`) to inline `assetRegistry.criticalCss` from `site.json` into API pages.
+- Or use `criticalCssPath` to inline a single CSS file.
 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
 - `navContextPath` (defaults to `baseUrl`, e.g. `/api`)
@@ -44,6 +50,7 @@ To prevent API regressions (generator adds new UI but the theme does not style i
   "featureContracts": {
     "apiDocs": {
       "requiredPartials": ["api-header", "api-footer"],
+      "cssHrefs": ["/css/app.css", "/css/api-docs.css"],
       "requiredCssSelectors": [
         ".api-layout", ".api-sidebar", ".api-content",
         ".sidebar-toggle", ".type-item", ".filter-button",
