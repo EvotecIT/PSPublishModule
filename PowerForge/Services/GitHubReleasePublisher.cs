@@ -102,13 +102,42 @@ public sealed class GitHubReleasePublisher
         var response = SharedClient.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
         var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
+        {
+            // Idempotency: reruns frequently hit "tag already exists" (release already created).
+            if ((int)response.StatusCode == 422 && IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
+            {
+                _logger.Warn($"GitHub release for tag '{tagName}' already exists; reusing existing release and continuing.");
+                return GetReleaseByTag(owner, repo, token, tagName);
+            }
+
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
+        }
 
         var parsed = Deserialize<CreateReleaseResponse>(responseText);
         var html = parsed.HtmlUrl ?? string.Empty;
         var upload = parsed.UploadUrl ?? string.Empty;
         if (string.IsNullOrWhiteSpace(upload))
             throw new InvalidOperationException("GitHub release creation succeeded but upload_url was empty.");
+
+        return (html, upload);
+    }
+
+    private (string HtmlUrl, string UploadUrl) GetReleaseByTag(string owner, string repo, string token, string tagName)
+    {
+        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = SharedClient.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
+
+        var parsed = Deserialize<CreateReleaseResponse>(responseText);
+        var html = parsed.HtmlUrl ?? string.Empty;
+        var upload = parsed.UploadUrl ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(upload))
+            throw new InvalidOperationException($"GitHub get-release-by-tag succeeded for '{tagName}' but upload_url was empty.");
 
         return (html, upload);
     }
@@ -132,7 +161,16 @@ public sealed class GitHubReleasePublisher
             var resp = SharedClient.SendAsync(req).ConfigureAwait(false).GetAwaiter().GetResult();
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode)
+            {
+                // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
+                if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
+                {
+                    _logger.Warn($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                    continue;
+                }
+
                 throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
+            }
         }
     }
 
@@ -194,6 +232,24 @@ public sealed class GitHubReleasePublisher
         return t.Length > 4000 ? t.Substring(0, 4000) + "..." : t;
     }
 
+    private static bool IsAlreadyExistsValidationError(string? responseJson, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(responseJson)) return false;
+        try
+        {
+            var parsed = Deserialize<GitHubValidationErrorResponse>(responseJson!);
+            var errors = parsed.Errors ?? Array.Empty<GitHubValidationError>();
+            return errors.Any(e =>
+                string.Equals(e.Code, "already_exists", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(e.Field, fieldName, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            // Best-effort parse only. If GitHub changes the error schema (or returns non-JSON), just treat it as non-matching.
+            return false;
+        }
+    }
+
     [DataContract]
     private sealed class CreateReleaseRequest
     {
@@ -227,5 +283,31 @@ public sealed class GitHubReleasePublisher
 
         [DataMember(Name = "upload_url")]
         public string? UploadUrl { get; set; }
+    }
+
+    [DataContract]
+    private sealed class GitHubValidationErrorResponse
+    {
+        [DataMember(Name = "message", EmitDefaultValue = false)]
+        public string? Message { get; set; }
+
+        [DataMember(Name = "errors", EmitDefaultValue = false)]
+        public GitHubValidationError[]? Errors { get; set; }
+    }
+
+    [DataContract]
+    private sealed class GitHubValidationError
+    {
+        [DataMember(Name = "resource", EmitDefaultValue = false)]
+        public string? Resource { get; set; }
+
+        [DataMember(Name = "code", EmitDefaultValue = false)]
+        public string? Code { get; set; }
+
+        [DataMember(Name = "field", EmitDefaultValue = false)]
+        public string? Field { get; set; }
+
+        [DataMember(Name = "message", EmitDefaultValue = false)]
+        public string? Message { get; set; }
     }
 }
