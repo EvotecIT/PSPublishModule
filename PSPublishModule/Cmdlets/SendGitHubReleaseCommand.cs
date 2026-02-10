@@ -162,7 +162,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         }
     }
 
-    private static GitHubReleaseApiResponse CreateRelease(
+    private GitHubReleaseApiResponse CreateRelease(
         string owner,
         string repo,
         string token,
@@ -202,6 +202,13 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
+            // Idempotency: reruns frequently hit "tag already exists" (release already created).
+            if ((int)response.StatusCode == 422 && IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
+            {
+                WriteWarning($"GitHub release for tag '{tagName}' already exists; reusing existing release and continuing.");
+                return GetReleaseByTag(owner, repo, token, tagName);
+            }
+
             throw new InvalidOperationException($"GitHub release creation failed ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
         }
 
@@ -209,7 +216,21 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty);
     }
 
-    private static void UploadAssets(string uploadUrl, string[] assets, string token)
+    private GitHubReleaseApiResponse GetReleaseByTag(string owner, string repo, string token, string tagName)
+    {
+        using var client = CreateHttpClient(token);
+        var uri = new Uri($"https://api.github.com/repos/{owner}/{repo}/releases/tags/{Uri.EscapeDataString(tagName)}");
+
+        var response = client.GetAsync(uri).ConfigureAwait(false).GetAwaiter().GetResult();
+        var responseText = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"GitHub get-release-by-tag failed for '{tagName}' ({(int)response.StatusCode} {response.ReasonPhrase}). {TrimForMessage(responseText)}");
+
+        var parsed = Deserialize<CreateReleaseResponse>(responseText);
+        return new GitHubReleaseApiResponse(parsed.HtmlUrl ?? string.Empty, parsed.UploadUrl ?? string.Empty);
+    }
+
+    private void UploadAssets(string uploadUrl, string[] assets, string token)
     {
         using var client = CreateHttpClient(token);
 
@@ -227,6 +248,13 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
             var respText = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode)
             {
+                // Idempotency: reruns can hit "asset already exists". Prefer to continue rather than failing the whole build.
+                if ((int)resp.StatusCode == 422 && IsAlreadyExistsValidationError(respText, fieldName: "name"))
+                {
+                    WriteWarning($"GitHub release asset '{fileName}' already exists; skipping upload.");
+                    continue;
+                }
+
                 throw new InvalidOperationException($"GitHub asset upload failed for '{fileName}' ({(int)resp.StatusCode} {resp.ReasonPhrase}). {TrimForMessage(respText)}");
             }
         }
@@ -274,6 +302,23 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         return t.Length > 4000 ? t.Substring(0, 4000) + "..." : t;
     }
 
+    private static bool IsAlreadyExistsValidationError(string? responseJson, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(responseJson)) return false;
+        try
+        {
+            var parsed = Deserialize<GitHubValidationErrorResponse>(responseJson!);
+            var errors = parsed.Errors ?? Array.Empty<GitHubValidationError>();
+            return errors.Any(e =>
+                string.Equals(e.Code, "already_exists", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(e.Field, fieldName, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     [DataContract]
     private sealed class CreateReleaseRequest
     {
@@ -307,6 +352,32 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         [DataMember(Name = "upload_url")]
         public string? UploadUrl { get; set; }
+    }
+
+    [DataContract]
+    private sealed class GitHubValidationErrorResponse
+    {
+        [DataMember(Name = "message", EmitDefaultValue = false)]
+        public string? Message { get; set; }
+
+        [DataMember(Name = "errors", EmitDefaultValue = false)]
+        public GitHubValidationError[]? Errors { get; set; }
+    }
+
+    [DataContract]
+    private sealed class GitHubValidationError
+    {
+        [DataMember(Name = "resource", EmitDefaultValue = false)]
+        public string? Resource { get; set; }
+
+        [DataMember(Name = "code", EmitDefaultValue = false)]
+        public string? Code { get; set; }
+
+        [DataMember(Name = "field", EmitDefaultValue = false)]
+        public string? Field { get; set; }
+
+        [DataMember(Name = "message", EmitDefaultValue = false)]
+        public string? Message { get; set; }
     }
 
     private sealed class GitHubReleaseApiResponse
