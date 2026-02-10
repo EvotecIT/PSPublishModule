@@ -96,6 +96,8 @@ Each website should have:
   - `dotnet test .\PSPublishModule.sln -c Release`
 - File size discipline (line limit):
   - `node .\Build\linecount.js . 800`
+  - Optional: check more file types:
+    - `node .\Build\linecount.js --root . --max 800 --ext .cs,.ps1,.md`
 
 ## Commands (PowerShell Module)
 
