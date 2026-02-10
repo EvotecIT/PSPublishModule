@@ -17,6 +17,7 @@ internal static partial class SpectrePipelineConsoleUi
     {
         if (isVerbose) return false;
         if (Console.IsOutputRedirected || Console.IsErrorRedirected) return false;
+        ConsoleEncodingHelper.TryEnableUtf8Console();
         return !ConsoleEnvironment.IsCI && AnsiConsole.Profile.Capabilities.Interactive;
     }
 
@@ -163,7 +164,7 @@ internal static partial class SpectrePipelineConsoleUi
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
         static string Icon(string? s) => Esc(NormalizeIcon(s));
 
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
 
         var title = unicode
             ? $"🛠️ PowerForge • {plan.ModuleName} {plan.ResolvedVersion}"
@@ -246,7 +247,7 @@ internal static partial class SpectrePipelineConsoleUi
 
     private static string GetStepIcon(ModulePipelineStep step)
     {
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
         return step.Kind switch
         {
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
@@ -361,7 +362,7 @@ internal static partial class SpectrePipelineConsoleUi
             _icons = icons ?? throw new ArgumentNullException(nameof(icons));
             _startLookup = startLookup ?? throw new ArgumentNullException(nameof(startLookup));
             _doneLookup = doneLookup ?? throw new ArgumentNullException(nameof(doneLookup));
-            _unicode = AnsiConsole.Profile.Capabilities.Unicode;
+            _unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
         }
 
         public void StepStarting(ModulePipelineStep step)
@@ -417,7 +418,7 @@ internal static partial class SpectrePipelineConsoleUi
 
         // Stop any running step and mark the rest as skipped. This ensures the interactive UI closes cleanly
         // and does not leave indeterminate spinners running when an exception escapes the pipeline runner.
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
         foreach (var entry in tasksByKey)
         {
             var key = entry.Key;

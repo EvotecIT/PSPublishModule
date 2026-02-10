@@ -21,7 +21,7 @@ internal sealed class SpectreConsoleLogger : ILogger
     private static void Write(LogLevel level, string message)
     {
         var safe = Markup.Escape(message ?? string.Empty);
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
 
         var (icon, color) = level switch
         {

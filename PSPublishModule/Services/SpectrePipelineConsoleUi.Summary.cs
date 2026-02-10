@@ -51,7 +51,7 @@ internal static partial class SpectrePipelineConsoleUi
             return count;
         }
 
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
 
         AnsiConsole.Write(new Rule($"[green]{(unicode ? "✅" : "OK")} Summary[/]").LeftJustified());
@@ -339,7 +339,7 @@ internal static partial class SpectrePipelineConsoleUi
 
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
 
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncodingHelper.ShouldRenderUnicode();
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
 
         AnsiConsole.Write(new Rule($"[red]{(unicode ? "❌" : "!!")} Summary[/]").LeftJustified());
