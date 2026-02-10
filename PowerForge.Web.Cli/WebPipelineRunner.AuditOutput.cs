@@ -1,0 +1,323 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using PowerForge.Web;
+
+namespace PowerForge.Web.Cli;
+
+internal static partial class WebPipelineRunner
+{
+    private static string BuildAuditSummary(WebAuditResult result)
+    {
+        var parts = new List<string>
+        {
+            $"pages {result.PageCount}",
+            $"links {result.LinkCount}",
+            $"assets {result.AssetCount}"
+        };
+
+        if (result.TotalFileCount > 0)
+            parts.Insert(0, $"files {result.TotalFileCount}");
+
+        if (result.HtmlSelectedFileCount > 0 && result.HtmlFileCount > 0 && result.HtmlSelectedFileCount != result.HtmlFileCount)
+            parts.Insert(0, $"html-scope {result.HtmlSelectedFileCount}/{result.HtmlFileCount}");
+
+        if (result.BrokenLinkCount > 0)
+            parts.Add($"broken-links {result.BrokenLinkCount}");
+        if (result.MissingAssetCount > 0)
+            parts.Add($"missing-assets {result.MissingAssetCount}");
+        parts.Add($"nav-checked {result.NavCheckedCount}");
+        if (result.NavIgnoredCount > 0)
+            parts.Add($"nav-ignored {result.NavIgnoredCount}");
+        parts.Add($"nav-coverage {result.NavCoveragePercent:0.0}%");
+        if (result.NavMismatchCount > 0)
+            parts.Add($"nav-mismatches {result.NavMismatchCount}");
+        if (result.RequiredRouteCount > 0)
+            parts.Add($"required-routes {result.RequiredRouteCount}");
+        if (result.MissingRequiredRouteCount > 0)
+            parts.Add($"missing-required-routes {result.MissingRequiredRouteCount}");
+        if (result.WarningCount > 0)
+            parts.Add($"warnings {result.WarningCount}");
+        if (result.NewIssueCount > 0)
+            parts.Add($"new {result.NewIssueCount}");
+        if (!string.IsNullOrWhiteSpace(result.SarifPath))
+            parts.Add("sarif");
+
+        return $"Audit ok {string.Join(", ", parts)}";
+    }
+
+    private static string BuildDoctorSummary(
+        WebVerifyResult? verify,
+        WebAuditResult? audit,
+        bool buildExecuted,
+        bool verifyExecuted,
+        bool auditExecuted,
+        string[]? policyFailures = null)
+    {
+        var parts = new List<string>();
+        parts.Add(buildExecuted ? "build" : "no-build");
+        parts.Add(verifyExecuted ? "verify" : "no-verify");
+        parts.Add(auditExecuted ? "audit" : "no-audit");
+
+        if (verify is not null)
+            parts.Add($"verify {verify.Errors.Length}e/{verify.Warnings.Length}w");
+        if (audit is not null)
+            parts.Add($"audit {audit.ErrorCount}e/{audit.WarningCount}w");
+        if (audit is not null && !string.IsNullOrWhiteSpace(audit.SummaryPath))
+            parts.Add("summary");
+        if (audit is not null && !string.IsNullOrWhiteSpace(audit.SarifPath))
+            parts.Add("sarif");
+        if (policyFailures is { Length: > 0 })
+            parts.Add($"verify-policy {policyFailures.Length}");
+
+        return $"Doctor ok {string.Join(", ", parts)}";
+    }
+
+    private static string BuildAuditFailureSummary(WebAuditResult result, int previewCount)
+    {
+        var safePreviewCount = Math.Clamp(previewCount, 0, 50);
+        var headline = BuildAuditFailureHeadline(result);
+        var parts = new List<string>
+        {
+            string.IsNullOrWhiteSpace(headline)
+                ? $"Audit failed ({result.Errors.Length} errors)"
+                : $"Audit failed ({result.Errors.Length} errors): {TruncateForLog(headline, 180)}"
+        };
+
+        // Always include a compact "context line" so failures are diagnosable without opening artifacts.
+        var context = new List<string>();
+        if (result.TotalFileCount > 0)
+            context.Add($"files {result.TotalFileCount}");
+        if (result.HtmlSelectedFileCount > 0 && result.HtmlFileCount > 0 && result.HtmlSelectedFileCount != result.HtmlFileCount)
+            context.Add($"html-scope {result.HtmlSelectedFileCount}/{result.HtmlFileCount}");
+        if (result.PageCount > 0)
+            context.Add($"pages {result.PageCount}");
+        if (result.NavCheckedCount > 0 || result.NavIgnoredCount > 0)
+            context.Add($"nav {result.NavCheckedCount} checked/{result.NavIgnoredCount} ignored ({result.NavCoveragePercent:0.0}%)");
+        if (result.WarningCount > 0)
+            context.Add($"warnings {result.WarningCount}");
+        if (result.NewIssueCount > 0)
+            context.Add($"new {result.NewIssueCount} ({result.NewErrorCount}e/{result.NewWarningCount}w)");
+        if (!string.IsNullOrWhiteSpace(result.BaselinePath))
+            context.Add($"baseline {result.BaselinePath} (known {result.BaselineIssueCount})");
+        if (context.Count > 0)
+            parts.Add(string.Join(", ", context));
+
+        if (!string.IsNullOrWhiteSpace(result.SummaryPath))
+            parts.Add($"summary {result.SummaryPath}");
+        if (!string.IsNullOrWhiteSpace(result.SarifPath))
+            parts.Add($"sarif {result.SarifPath}");
+
+        if (safePreviewCount <= 0 || result.Errors.Length == 0)
+        {
+            // Still include warning samples when the failure is driven by gates (often an error "gate failed"
+            // plus a large set of warnings).
+            if (safePreviewCount > 0 && result.Warnings.Length > 0)
+            {
+                var warnPreviewCount = Math.Min(safePreviewCount, 5);
+                var warnPreview = result.Warnings
+                    .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+                    .Take(warnPreviewCount)
+                    .Select(warning => TruncateForLog(warning, 220))
+                    .ToArray();
+
+                if (warnPreview.Length > 0)
+                {
+                    var warnText = string.Join(" | ", warnPreview);
+                    var warnRemaining = result.Warnings.Length - warnPreview.Length;
+                    if (warnRemaining > 0)
+                        warnText += $" | +{warnRemaining} more";
+
+                    parts.Add($"warnings: {warnText}");
+                }
+            }
+
+            return string.Join(", ", parts);
+        }
+
+        var preview = result.Errors
+            .Where(static error => !string.IsNullOrWhiteSpace(error))
+            .Take(safePreviewCount)
+            .Select(error => TruncateForLog(error, 220))
+            .ToArray();
+
+        if (preview.Length == 0)
+            return string.Join(", ", parts);
+
+        var previewText = string.Join(" | ", preview);
+        var remaining = result.Errors.Length - preview.Length;
+        if (remaining > 0)
+            previewText += $" | +{remaining} more";
+
+        parts.Add($"sample: {previewText}");
+
+        if (result.Warnings.Length > 0)
+        {
+            var warnPreviewCount = Math.Min(safePreviewCount, 5);
+            var warnPreview = result.Warnings
+                .Where(static warning => !string.IsNullOrWhiteSpace(warning))
+                .Take(warnPreviewCount)
+                .Select(warning => TruncateForLog(warning, 220))
+                .ToArray();
+
+            if (warnPreview.Length > 0)
+            {
+                var warnText = string.Join(" | ", warnPreview);
+                var warnRemaining = result.Warnings.Length - warnPreview.Length;
+                if (warnRemaining > 0)
+                    warnText += $" | +{warnRemaining} more";
+
+                parts.Add($"warnings: {warnText}");
+            }
+        }
+
+        if (result.Issues.Length > 0)
+        {
+            var issuePreviewCount = Math.Min(safePreviewCount, 5);
+            if (issuePreviewCount > 0)
+            {
+                var candidateIssues = result.Issues
+                    .Where(static issue => !IsGateIssue(issue))
+                    .ToArray();
+                if (candidateIssues.Length == 0)
+                    candidateIssues = result.Issues;
+
+                var issueSample = candidateIssues
+                    .Where(static issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Take(issuePreviewCount)
+                    .ToArray();
+
+                if (issueSample.Length == 0)
+                {
+                    issueSample = candidateIssues
+                        .Where(static issue => !string.IsNullOrWhiteSpace(issue.Message))
+                        .Take(issuePreviewCount)
+                        .ToArray();
+                }
+
+                if (issueSample.Length > 0)
+                {
+                    var issueText = string.Join(" | ", issueSample.Select(FormatIssueForLog));
+                    var issueRemaining = result.Issues.Length - issueSample.Length;
+                    if (issueRemaining > 0)
+                        issueText += $" | +{issueRemaining} more issues";
+
+                    parts.Add($"issues: {issueText}");
+                }
+            }
+        }
+
+        var categorySummary = BuildAuditCategorySummary(result);
+        if (!string.IsNullOrWhiteSpace(categorySummary))
+            parts.Add(categorySummary);
+
+        return string.Join(", ", parts);
+    }
+
+    private static string? BuildAuditCategorySummary(WebAuditResult result)
+    {
+        if (result is null)
+            return null;
+
+        var issues = result.Issues;
+        if (issues is null || issues.Length == 0)
+            return null;
+
+        var counts = new Dictionary<string, (int Errors, int Warnings)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var issue in issues)
+        {
+            if (issue is null)
+                continue;
+            if (IsGateIssue(issue))
+                continue;
+            if (string.IsNullOrWhiteSpace(issue.Category))
+                continue;
+
+            var category = issue.Category.Trim();
+            if (!counts.TryGetValue(category, out var current))
+                current = (0, 0);
+
+            if (string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                current.Errors++;
+            else
+                current.Warnings++;
+
+            counts[category] = current;
+        }
+
+        if (counts.Count == 0)
+            return null;
+
+        const int top = 6;
+        var topCategories = counts
+            .OrderByDescending(static kvp => kvp.Value.Errors + kvp.Value.Warnings)
+            .ThenBy(static kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(top)
+            .ToArray();
+
+        var parts = topCategories
+            .Select(kvp => $"{kvp.Key} {kvp.Value.Errors}e/{kvp.Value.Warnings}w")
+            .ToList();
+
+        var remaining = counts.Count - topCategories.Length;
+        if (remaining > 0)
+            parts.Add($"+{remaining} more");
+
+        return parts.Count == 0 ? null : $"categories: {string.Join(", ", parts)}";
+    }
+
+    private static string? BuildAuditFailureHeadline(WebAuditResult result)
+    {
+        // Prefer a non-gate error issue because it's usually the root cause (vs. "gate failed").
+        var issue = result.Issues
+            .FirstOrDefault(static i =>
+                string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase) &&
+                !IsGateIssue(i) &&
+                !string.IsNullOrWhiteSpace(i.Message));
+        if (issue is not null)
+            return FormatIssueForLog(issue);
+
+        // Fall back to any error string.
+        var error = result.Errors.FirstOrDefault(static e => !string.IsNullOrWhiteSpace(e));
+        if (!string.IsNullOrWhiteSpace(error))
+            return error;
+
+        // Last resort: any issue message.
+        var any = result.Issues.FirstOrDefault(static i => !string.IsNullOrWhiteSpace(i.Message));
+        if (any is not null)
+            return FormatIssueForLog(any);
+
+        return null;
+    }
+
+    private static bool IsGateIssue(WebAuditIssue issue)
+    {
+        if (string.Equals(issue.Category, "gate", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return issue.Message.StartsWith("Audit gate failed", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string FormatIssueForLog(WebAuditIssue issue)
+    {
+        var severity = string.IsNullOrWhiteSpace(issue.Severity) ? "warning" : issue.Severity;
+        var category = string.IsNullOrWhiteSpace(issue.Category) ? "general" : issue.Category;
+        var location = string.IsNullOrWhiteSpace(issue.Path) ? string.Empty : $" {issue.Path}";
+        var message = string.IsNullOrWhiteSpace(issue.Message) ? "issue reported" : issue.Message;
+        return TruncateForLog($"[{severity}] [{category}]{location} {message}", 220);
+    }
+
+    private static string TruncateForLog(string text, int maxLength)
+    {
+        var normalized = text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (normalized.Length <= maxLength)
+            return normalized;
+
+        return normalized[..Math.Max(0, maxLength - 3)] + "...";
+    }
+}

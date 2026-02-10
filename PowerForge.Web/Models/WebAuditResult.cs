@@ -11,6 +11,8 @@ public sealed class WebAuditResult
     public int HtmlSelectedFileCount { get; set; }
     /// <summary>Total HTML pages scanned.</summary>
     public int PageCount { get; set; }
+    /// <summary>Total files discovered under site root (all extensions).</summary>
+    public int TotalFileCount { get; set; }
     /// <summary>Total internal links checked.</summary>
     public int LinkCount { get; set; }
     /// <summary>Total broken internal links.</summary>

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using PowerForge;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -201,9 +202,21 @@ internal static partial class WebCliCommandHandlers
 
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+        var isCi = ConsoleEnvironment.IsCI;
+        var suppressWarnings = (spec.Verify?.SuppressWarnings ?? Array.Empty<string>())
+            .Concat(ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var verifyBaselineGenerate = HasOption(subArgs, "--verify-baseline-generate");
+        var verifyBaselineUpdate = HasOption(subArgs, "--verify-baseline-update");
+        var verifyBaselinePath = TryGetOptionValue(subArgs, "--verify-baseline");
+        var verifyFailOnNewWarnings = HasOption(subArgs, "--verify-fail-on-new") || HasOption(subArgs, "--verify-fail-on-new-warnings");
+        var verifyWarningSummary = HasOption(subArgs, "--verify-warning-summary") || HasOption(subArgs, "--verify-warning-buckets");
+        var verifyWarningSummaryTopText = TryGetOptionValue(subArgs, "--verify-warning-summary-top") ?? TryGetOptionValue(subArgs, "--verify-warning-buckets-top");
+        var verifyWarningSummaryTop = ParseIntOption(verifyWarningSummaryTopText, 10);
         var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
-        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? false);
-        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? false);
+        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
+        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
 
         if (string.IsNullOrWhiteSpace(outPath))
@@ -220,14 +233,79 @@ internal static partial class WebCliCommandHandlers
             return Fail("Doctor audit requires an existing site root. Use --out with --build or pass --site-root.", outputJson, logger, "web.doctor");
 
         var verify = runVerify ? WebSiteVerifier.Verify(spec, plan) : null;
+        var filteredVerifyWarnings = verify is null
+            ? Array.Empty<string>()
+            : WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
         var (verifySuccess, verifyPolicyFailures) = verify is null
             ? (true, Array.Empty<string>())
             : WebVerifyPolicy.EvaluateOutcome(
                 verify,
                 failOnWarnings,
                 failOnNavLint,
-                failOnThemeContract);
+                failOnThemeContract,
+                suppressWarnings);
+
+        if ((verifyBaselineGenerate || verifyBaselineUpdate || verifyFailOnNewWarnings) && string.IsNullOrWhiteSpace(verifyBaselinePath))
+            verifyBaselinePath = ".powerforge/verify-baseline.json";
+
+        string? verifyBaselineWrittenPath = null;
+        if (verify is not null && !string.IsNullOrWhiteSpace(verifyBaselinePath))
+        {
+            var baselineLoaded = WebVerifyBaselineStore.TryLoadWarningKeys(plan.RootPath, verifyBaselinePath, out _, out var baselineKeys);
+            var baselineSet = baselineLoaded ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
+            var newWarnings = baselineSet is null
+                ? Array.Empty<string>()
+                : filteredVerifyWarnings.Where(w =>
+                    !string.IsNullOrWhiteSpace(w) &&
+                    !baselineSet.Contains(WebVerifyBaselineStore.NormalizeWarningKey(w))).ToArray();
+
+            verify.BaselinePath = verifyBaselinePath;
+            verify.BaselineWarningCount = baselineKeys.Length;
+            verify.NewWarnings = newWarnings;
+            verify.NewWarningCount = newWarnings.Length;
+
+            if (verifyFailOnNewWarnings)
+            {
+                if (!baselineLoaded)
+                {
+                    verifySuccess = false;
+                    verifyPolicyFailures = verifyPolicyFailures
+                        .Concat(new[] { "verify-fail-on-new-warnings enabled but verify baseline could not be loaded (missing/empty/bad path). Generate one with --verify-baseline-generate." })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+                else if (newWarnings.Length > 0)
+                {
+                    verifySuccess = false;
+                    verifyPolicyFailures = verifyPolicyFailures
+                        .Concat(new[] { $"verify-fail-on-new-warnings enabled and verify produced {newWarnings.Length} new warning(s)." })
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                }
+            }
+
+            if (verifyBaselineGenerate || verifyBaselineUpdate)
+            {
+                verifyBaselineWrittenPath = WebVerifyBaselineStore.Write(plan.RootPath, verifyBaselinePath, filteredVerifyWarnings, verifyBaselineUpdate, logger);
+                verify.BaselinePath = verifyBaselineWrittenPath;
+            }
+        }
+
         var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs) : null;
+        if (verify is not null && filteredVerifyWarnings.Length != verify.Warnings.Length)
+        {
+            verify = new WebVerifyResult
+            {
+                Success = verify.Success,
+                Errors = verify.Errors,
+                Warnings = filteredVerifyWarnings,
+                BaselinePath = verify.BaselinePath,
+                BaselineWarningCount = verify.BaselineWarningCount,
+                NewWarningCount = verify.NewWarningCount,
+                NewWarnings = verify.NewWarnings
+            };
+        }
+
         var recommendations = BuildDoctorRecommendations(verify, audit, verifyPolicyFailures);
         var success = verifySuccess && (audit?.Success ?? true);
 
@@ -287,7 +365,19 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Verify executed: {doctorResult.VerifyExecuted}");
         logger.Info($"Audit executed: {doctorResult.AuditExecuted}");
         if (verify is not null)
+        {
             logger.Info($"Verify: {verify.Errors.Length} errors, {verify.Warnings.Length} warnings");
+            if (!string.IsNullOrWhiteSpace(verify.BaselinePath))
+            {
+                logger.Info($"Verify baseline: {verify.BaselinePath} ({verify.BaselineWarningCount} keys)");
+                if (verify.NewWarningCount > 0)
+                    logger.Info($"New verify warnings vs baseline: {verify.NewWarningCount}");
+                if (!string.IsNullOrWhiteSpace(verifyBaselineWrittenPath))
+                    logger.Info($"Verify baseline written: {verifyBaselineWrittenPath}");
+            }
+            if (verifyWarningSummary && verify.Warnings.Length > 0)
+                logger.Info(WebWarningBucketer.BuildTopBucketsSummary(verify.Warnings, verifyWarningSummaryTop));
+        }
         if (audit is not null)
         {
             logger.Info($"Audit: {audit.ErrorCount} errors, {audit.WarningCount} warnings");
@@ -333,6 +423,7 @@ internal static partial class WebCliCommandHandlers
 
         var include = ReadOptionList(subArgs, "--include");
         var exclude = ReadOptionList(subArgs, "--exclude");
+        var budgetExclude = ReadOptionList(subArgs, "--budget-exclude", "--budget-excludes");
         var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
         var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
@@ -383,6 +474,8 @@ internal static partial class WebCliCommandHandlers
         var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
         var maxHtmlFilesText = TryGetOptionValue(subArgs, "--max-html-files") ?? TryGetOptionValue(subArgs, "--max-html");
+        var maxTotalFilesText = TryGetOptionValue(subArgs, "--max-total-files") ?? TryGetOptionValue(subArgs, "--max-files-total");
+        var suppressIssues = ReadOptionList(subArgs, "--suppress-issue", "--suppress-issues");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
@@ -394,8 +487,12 @@ internal static partial class WebCliCommandHandlers
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
         var maxHtmlFiles = ParseIntOption(maxHtmlFilesText, 0);
+        var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePathValue))
-            baselinePathValue = "audit-baseline.json";
+            baselinePathValue = ".powerforge/audit-baseline.json";
+        var baselineRoot = !string.IsNullOrWhiteSpace(configPath)
+            ? (Path.GetDirectoryName(ResolveExistingFilePath(configPath)) ?? Directory.GetCurrentDirectory())
+            : Directory.GetCurrentDirectory();
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
@@ -403,10 +500,14 @@ internal static partial class WebCliCommandHandlers
         var result = WebSiteAuditor.Audit(new WebAuditOptions
         {
             SiteRoot = siteRoot,
+            BaselineRoot = baselineRoot,
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
             MaxHtmlFiles = Math.Max(0, maxHtmlFiles),
+            MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            BudgetExclude = budgetExclude.ToArray(),
+            SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,
@@ -461,7 +562,7 @@ internal static partial class WebCliCommandHandlers
         string? writtenBaselinePath = null;
         if (baselineGenerate || baselineUpdate)
         {
-            writtenBaselinePath = WebAuditBaselineStore.Write(siteRoot, baselinePathValue, result, baselineUpdate, logger);
+            writtenBaselinePath = WebAuditBaselineStore.Write(baselineRoot, baselinePathValue, result, baselineUpdate, logger);
             result.BaselinePath = writtenBaselinePath;
         }
 
@@ -479,21 +580,36 @@ internal static partial class WebCliCommandHandlers
             return result.Success ? 0 : 1;
         }
 
+        var warningPreviewText = TryGetOptionValue(subArgs, "--warning-preview") ?? TryGetOptionValue(subArgs, "--warning-preview-count");
+        var errorPreviewText = TryGetOptionValue(subArgs, "--error-preview") ?? TryGetOptionValue(subArgs, "--error-preview-count");
+        var warningPreviewCount = ParseIntOption(warningPreviewText, 0);
+        var errorPreviewCount = ParseIntOption(errorPreviewText, 0);
+
         if (result.Warnings.Length > 0)
         {
-            foreach (var w in result.Warnings)
+            var max = warningPreviewCount <= 0 ? result.Warnings.Length : Math.Max(0, warningPreviewCount);
+            foreach (var w in result.Warnings.Take(max))
                 logger.Warn(w);
+            var remaining = result.Warnings.Length - max;
+            if (remaining > 0)
+                logger.Info($"Audit warnings: showing {max}/{result.Warnings.Length} (use --warning-preview 0 to show all).");
         }
 
         if (result.Errors.Length > 0)
         {
-            foreach (var e in result.Errors)
+            var max = errorPreviewCount <= 0 ? result.Errors.Length : Math.Max(0, errorPreviewCount);
+            foreach (var e in result.Errors.Take(max))
                 logger.Error(e);
+            var remaining = result.Errors.Length - max;
+            if (remaining > 0)
+                logger.Info($"Audit errors: showing {max}/{result.Errors.Length} (use --error-preview 0 to show all).");
         }
 
         if (result.Success)
-            logger.Success("Web audit passed.");
+        logger.Success("Web audit passed.");
 
+        if (result.TotalFileCount > 0)
+            logger.Info($"Files: {result.TotalFileCount}");
         logger.Info($"Pages: {result.PageCount}");
         logger.Info($"Links: {result.LinkCount} (broken {result.BrokenLinkCount})");
         logger.Info($"Assets: {result.AssetCount} (missing {result.MissingAssetCount})");

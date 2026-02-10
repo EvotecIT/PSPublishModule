@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using PowerForge;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -104,19 +105,99 @@ internal static partial class WebCliCommandHandlers
 
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+        var isCi = ConsoleEnvironment.IsCI;
+        var suppressWarnings = (spec.Verify?.SuppressWarnings ?? Array.Empty<string>())
+            .Concat(ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings"))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var warningPreviewText = TryGetOptionValue(subArgs, "--warning-preview") ?? TryGetOptionValue(subArgs, "--warning-preview-count");
+        var errorPreviewText = TryGetOptionValue(subArgs, "--error-preview") ?? TryGetOptionValue(subArgs, "--error-preview-count");
+        var warningPreviewCount = ParseIntOption(warningPreviewText, 0);
+        var errorPreviewCount = ParseIntOption(errorPreviewText, 0);
+        var warningSummary = HasOption(subArgs, "--warning-summary") || HasOption(subArgs, "--warning-buckets");
+        var warningSummaryTopText = TryGetOptionValue(subArgs, "--warning-summary-top") ?? TryGetOptionValue(subArgs, "--warning-buckets-top");
+        var warningSummaryTop = ParseIntOption(warningSummaryTopText, 10);
+        var baselineGenerate = HasOption(subArgs, "--baseline-generate");
+        var baselineUpdate = HasOption(subArgs, "--baseline-update");
+        var baselinePathValue = TryGetOptionValue(subArgs, "--baseline");
+        var failOnNewWarnings = HasOption(subArgs, "--fail-on-new") || HasOption(subArgs, "--fail-on-new-warnings");
         var failOnWarnings = HasOption(subArgs, "--fail-on-warnings") || (spec.Verify?.FailOnWarnings ?? false);
-        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? false);
-        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? false);
+        var failOnNavLint = HasOption(subArgs, "--fail-on-nav-lint") || (spec.Verify?.FailOnNavLint ?? isCi);
+        var failOnThemeContract = HasOption(subArgs, "--fail-on-theme-contract") || (spec.Verify?.FailOnThemeContract ?? isCi);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
         var verify = WebSiteVerifier.Verify(spec, plan);
+        var filteredWarnings = WebVerifyPolicy.FilterWarnings(verify.Warnings, suppressWarnings);
         var (verifySuccess, verifyPolicyFailures) = WebVerifyPolicy.EvaluateOutcome(
             verify,
             failOnWarnings,
             failOnNavLint,
-            failOnThemeContract);
+            failOnThemeContract,
+            suppressWarnings);
+
+        if ((baselineGenerate || baselineUpdate || failOnNewWarnings) && string.IsNullOrWhiteSpace(baselinePathValue))
+            baselinePathValue = ".powerforge/verify-baseline.json";
+
+        var baselineLoaded = false;
+        var baselineKeys = Array.Empty<string>();
+        if (baselineGenerate || baselineUpdate || failOnNewWarnings || !string.IsNullOrWhiteSpace(baselinePathValue))
+            baselineLoaded = WebVerifyBaselineStore.TryLoadWarningKeys(plan.RootPath, baselinePathValue, out _, out baselineKeys);
+
+        var baselineSet = baselineLoaded ? new HashSet<string>(baselineKeys, StringComparer.OrdinalIgnoreCase) : null;
+        var newWarnings = baselineSet is null
+            ? Array.Empty<string>()
+            : filteredWarnings.Where(w =>
+                !string.IsNullOrWhiteSpace(w) &&
+                !baselineSet.Contains(WebVerifyBaselineStore.NormalizeWarningKey(w))).ToArray();
+
+        if (!string.IsNullOrWhiteSpace(baselinePathValue))
+            verify.BaselinePath = baselinePathValue;
+        verify.BaselineWarningCount = baselineKeys.Length;
+        verify.NewWarnings = newWarnings;
+        verify.NewWarningCount = newWarnings.Length;
+
+        if (failOnNewWarnings)
+        {
+            if (!baselineLoaded)
+            {
+                verifySuccess = false;
+                verifyPolicyFailures = verifyPolicyFailures
+                    .Concat(new[] { "fail-on-new-warnings enabled but verify baseline could not be loaded (missing/empty/bad path). Generate one with --baseline-generate." })
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            else if (newWarnings.Length > 0)
+            {
+                verifySuccess = false;
+                verifyPolicyFailures = verifyPolicyFailures
+                    .Concat(new[] { $"fail-on-new-warnings enabled and verify produced {newWarnings.Length} new warning(s)." })
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+        }
+
+        string? writtenBaselinePath = null;
+        if (baselineGenerate || baselineUpdate)
+        {
+            writtenBaselinePath = WebVerifyBaselineStore.Write(plan.RootPath, baselinePathValue, filteredWarnings, baselineUpdate, logger);
+            verify.BaselinePath = writtenBaselinePath;
+        }
 
         if (outputJson)
         {
+            if (filteredWarnings.Length != verify.Warnings.Length)
+            {
+                verify = new WebVerifyResult
+                {
+                    Success = verify.Success,
+                    Errors = verify.Errors,
+                    Warnings = filteredWarnings,
+                    BaselinePath = verify.BaselinePath,
+                    BaselineWarningCount = verify.BaselineWarningCount,
+                    NewWarningCount = verify.NewWarningCount,
+                    NewWarnings = verify.NewWarnings
+                };
+            }
+
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
             {
                 SchemaVersion = outputSchemaVersion,
@@ -132,15 +213,23 @@ internal static partial class WebCliCommandHandlers
             return verifySuccess ? 0 : 1;
         }
 
-        if (verify.Warnings.Length > 0)
+        if (filteredWarnings.Length > 0)
         {
-            foreach (var warning in verify.Warnings)
+            var max = warningPreviewCount <= 0 ? filteredWarnings.Length : Math.Max(0, warningPreviewCount);
+            foreach (var warning in filteredWarnings.Take(max))
                 logger.Warn(warning);
+            var remaining = filteredWarnings.Length - max;
+            if (remaining > 0)
+                logger.Info($"Verify warnings: showing {max}/{filteredWarnings.Length} (use --warning-preview 0 to show all).");
         }
         if (verify.Errors.Length > 0)
         {
-            foreach (var error in verify.Errors)
+            var max = errorPreviewCount <= 0 ? verify.Errors.Length : Math.Max(0, errorPreviewCount);
+            foreach (var error in verify.Errors.Take(max))
                 logger.Error(error);
+            var remaining = verify.Errors.Length - max;
+            if (remaining > 0)
+                logger.Info($"Verify errors: showing {max}/{verify.Errors.Length} (use --error-preview 0 to show all).");
         }
         if (verifyPolicyFailures.Length > 0)
         {
@@ -151,6 +240,19 @@ internal static partial class WebCliCommandHandlers
         if (verifySuccess)
             logger.Success("Web verify passed.");
 
+        if (!string.IsNullOrWhiteSpace(verify.BaselinePath))
+        {
+            logger.Info($"Verify baseline: {verify.BaselinePath} ({verify.BaselineWarningCount} keys)");
+            if (verify.NewWarningCount > 0)
+                logger.Info($"New verify warnings vs baseline: {verify.NewWarningCount}");
+            if (!string.IsNullOrWhiteSpace(writtenBaselinePath))
+                logger.Info($"Verify baseline written: {writtenBaselinePath}");
+        }
+
+        if (warningSummary && filteredWarnings.Length > 0)
+            logger.Info(WebWarningBucketer.BuildTopBucketsSummary(filteredWarnings, warningSummaryTop));
+
+        logger.Info($"Verify: {verify.Errors.Length} errors, {filteredWarnings.Length} warnings");
         return verifySuccess ? 0 : 1;
     }
 
@@ -393,6 +495,15 @@ internal static partial class WebCliCommandHandlers
 
         var onlyTasks = ReadOptionList(subArgs, "--only");
         var skipTasks = ReadOptionList(subArgs, "--skip");
+
+        // Dev mode should be a fast feedback loop by default. Users can still opt-in to heavy tasks
+        // by using --only or explicitly omitting --dev.
+        if (devMode && onlyTasks.Count == 0 && skipTasks.Count == 0)
+        {
+            skipTasks.Add("optimize");
+            skipTasks.Add("audit");
+        }
+
         if (watch)
         {
             if (outputJson)

@@ -9,12 +9,12 @@ Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
 Schema:
-- `Schemas/powerforge.web.pipelinespec.schema.json`
+- `schemas/powerforge.web.pipelinespec.schema.json`
 
 Minimal pipeline:
 ```json
 {
-  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
+  "$schema": "./schemas/powerforge.web.pipelinespec.schema.json",
   "steps": [
     {
       "task": "build",
@@ -30,7 +30,7 @@ Minimal pipeline:
 `powerforge-web pipeline` supports a few command-line flags to speed up local iteration:
 
 - `--fast`: applies safe performance-focused overrides (for example, scopes optimize/audit when possible and disables expensive rendered checks).
-- `--dev`: implies `--fast` and sets pipeline mode to `dev` (printed in the pipeline log).
+- `--dev`: implies `--fast`, sets pipeline mode to `dev`, and skips `optimize` + `audit` unless you explicitly include them via `--only`.
 - `--mode <name>`: sets a pipeline mode label used for step filtering (see "Step modes" below).
 - `--only <task[,task...]>`: run only the specified tasks.
 - `--skip <task[,task...]>`: skip the specified tasks.
@@ -81,13 +81,24 @@ Validates content + routing consistency from the site config.
   "config": "./site.json",
   "failOnWarnings": true,
   "failOnNavLint": true,
-  "failOnThemeContract": true
+  "failOnThemeContract": true,
+  "baseline": "./.powerforge/verify-baseline.json",
+  "failOnNewWarnings": true
 }
 ```
 Notes:
 - Emits warnings for missing titles, duplicate routes, missing assets, and TOC coverage.
 - By default fails only when errors are found.
 - `failOnWarnings`, `failOnNavLint`, and `failOnThemeContract` can enforce stricter quality gates.
+- `suppressWarnings` (array of strings) filters warnings before printing and before policy evaluation (use codes like `PFWEB.NAV.LINT` or `re:...`).
+- Baselines:
+  - `baseline`: path to a baseline file (must resolve under the site root)
+  - `baselineGenerate`: write a baseline from current warnings
+  - `baselineUpdate`: merge current warnings into an existing baseline
+  - `failOnNewWarnings`: fail only when warnings not present in baseline are produced (recommended for CI)
+- Failure previews (pipeline output):
+  - `warningPreviewCount`: number of warnings included in the thrown failure summary
+  - `errorPreviewCount`: number of errors included in the thrown failure summary
 
 #### doctor
 Runs build/verify/audit as one health-check step.
@@ -108,6 +119,12 @@ Runs build/verify/audit as one health-check step.
 ```
 Notes:
 - Supports the same strict verify flags as `verify`.
+- Supports `suppressWarnings` to filter verify warnings before policy evaluation.
+- Supports `suppressIssues` to filter audit issues before counts/gates and before writing summary/SARIF.
+- Supports verify baselines (prefix `verify*` to avoid confusion with audit baselines):
+  - `verifyBaseline`: path to a verify baseline file
+  - `verifyBaselineGenerate` / `verifyBaselineUpdate`
+  - `verifyFailOnNewWarnings`: fail only when verify emits new warnings vs baseline
 - Supports audit controls (`requiredRoutes`, `navRequiredLinks`, `checkHeadingOrder`, `checkLinkPurpose`, etc.).
 
 #### apidocs
@@ -115,6 +132,7 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 ```json
 {
   "task": "apidocs",
+  "config": "./site.json",
   "xml": "./Artifacts/generated/MyLib.xml",
   "assembly": "./Artifacts/generated/MyLib.dll",
   "out": "./Artifacts/site/api",
@@ -128,6 +146,13 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - HTML mode can include `headerHtml` + `footerHtml` fragments
+- Critical CSS (optional):
+  - `injectCriticalCss: true` inlines `assetRegistry.criticalCss` from `site.json` into API pages (requires `config`)
+  - `criticalCssPath` (or `criticalCss`) inlines a single CSS file into API pages
+- `config` (recommended) enables best-practice defaults.
+  - If `config` is omitted, the pipeline will use `./site.json` when it exists at the pipeline root.
+  - if `nav` is not set, it prefers `static/<dataRoot>/site-nav.json` (when present), otherwise falls back to `config`
+  - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` + `api-footer.html` (when present), otherwise falls back to `header.html` + `footer.html`
 - `template`: `simple` (default) or `docs` (sidebar layout)
 - `type`: `CSharp` (default) or `PowerShell` (uses PowerShell help XML)
 - `templateRoot` lets you override built-in templates/assets by placing files like
@@ -142,6 +167,16 @@ Notes:
   - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
+- `navContextPath` / `navContextCollection` / `navContextLayout` / `navContextProject`:
+  - optional context used to select `Navigation.Profiles` when injecting nav tokens
+  - default behavior: profile selection uses the site root (`/`) unless you set `navContextPath` explicitly
+  - if you want API pages to use an `/api/` profile override, set `navContextPath: "/api/"` on the apidocs step
+- `failOnWarnings`: fail the pipeline step when API docs emits warnings
+  - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
+- `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
+  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`
+- If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
+- `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 
@@ -189,6 +224,7 @@ Notes:
 ##### Template tokens
 Common tokens (all templates):
 - `{{CSS}}` – stylesheet link or inline fallback CSS
+- `{{CRITICAL_CSS}}` – optional critical CSS HTML injected into `<head>` (typically `<style>...</style>`)
 - `{{HEADER}}` / `{{FOOTER}}` – injected header/footer fragments (optional)
 
 Simple templates:
@@ -373,6 +409,9 @@ Notes:
 - Static checks run by default; set `rendered: true` to enable Playwright checks.
 - `renderedInclude` / `renderedExclude` are comma-separated glob patterns (paths are relative to `siteRoot`).
 - `summary: true` writes `audit-summary.json` under `siteRoot` unless `summaryPath` is provided.
+- `maxTotalFiles` can be used as a guardrail to keep site outputs from silently ballooning (for example, too many generated assets).
+  - Use `budgetExclude` (comma-separated globs) to exclude folders like `api/**` from the file-count budget without excluding them from the HTML audit scope.
+- `suppressIssues` (array of strings) filters audit issues before counts/gates and before printing/writing artifacts (use codes like `PFAUDIT.BUDGET` or `re:...`).
 - Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
@@ -443,12 +482,12 @@ Publish specs wrap a typical build + publish flow into a single config.
 Paths are resolved relative to the publish JSON file location.
 
 Schema:
-- `Schemas/powerforge.web.publishspec.schema.json`
+- `schemas/powerforge.web.publishspec.schema.json`
 
 Minimal publish:
 ```json
 {
-  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",
@@ -466,7 +505,7 @@ Minimal publish:
 Full publish with overlay + optimize:
 ```json
 {
-  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",

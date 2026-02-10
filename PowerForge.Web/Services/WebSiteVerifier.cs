@@ -104,6 +104,7 @@ public static partial class WebSiteVerifier
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
         ValidateThemeContract(spec, plan, warnings);
+        ValidateThemeFeatureContract(spec, plan, warnings);
         ValidateLayoutHooks(spec, plan, warnings);
         ValidateThemeTokens(spec, plan, warnings);
         ValidatePrismAssets(spec, plan, warnings);
@@ -115,12 +116,52 @@ public static partial class WebSiteVerifier
         ValidateSiteNavExport(spec, plan, warnings);
         ValidateNotFoundAssetBundles(spec, routes.Keys, warnings);
 
+        var normalizedWarnings = warnings
+            .Where(static w => !string.IsNullOrWhiteSpace(w))
+            .Select(NormalizeWarningCode)
+            .ToArray();
+
         return new WebVerifyResult
         {
             Success = errors.Count == 0,
             Errors = errors.ToArray(),
-            Warnings = warnings.ToArray()
+            Warnings = normalizedWarnings
         };
+    }
+
+    private static string NormalizeWarningCode(string warning)
+    {
+        if (string.IsNullOrWhiteSpace(warning))
+            return string.Empty;
+
+        var trimmed = warning.TrimStart();
+        if (trimmed.StartsWith("[", StringComparison.Ordinal))
+            return warning;
+
+        if (trimmed.StartsWith("Navigation lint:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.NAV.LINT] " + warning;
+
+        if (trimmed.StartsWith("Markdown hygiene:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.MD.HYGIENE] " + warning;
+
+        if (trimmed.StartsWith("Data file '", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.DATA.VALIDATION] " + warning;
+
+        if (trimmed.StartsWith("Collection '", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.COLLECTION] " + warning;
+
+        if (trimmed.StartsWith("Theme CSS contract:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.THEME.CSS.CONTRACT] " + warning;
+
+        if (trimmed.StartsWith("Best practice:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.BESTPRACTICE] " + warning;
+
+        if (trimmed.StartsWith("Theme contract:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("Theme '", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("theme manifest", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.THEME.CONTRACT] " + warning;
+
+        return warning;
     }
 
     private static string BuildRoute(string baseOutput, string slug, TrailingSlashMode slashMode)

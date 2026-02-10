@@ -19,11 +19,11 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
         Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
-        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--output json]");
+        Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
-        Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--output json]");
+        Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
@@ -41,13 +41,15 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
         Console.WriteLine("                     [--nav-optional]");
-        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>]");
+        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--max-total-files <n>]");
         Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
         Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
         Console.WriteLine("                     [--no-network-hints] [--no-render-blocking] [--max-head-blocking <n>]");
         Console.WriteLine("                     [--no-default-exclude]");
         Console.WriteLine("                     [--summary] [--summary-path <file>] [--summary-max <n>]");
         Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
+        Console.WriteLine("                     [--warning-preview <n>] [--error-preview <n>]");
+        Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
         Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
         Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
@@ -57,6 +59,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
+        Console.WriteLine("                     [--suppress-warning <pattern>]");
         Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--documented-only]");
         Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
@@ -81,6 +84,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
         Console.WriteLine("                     [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
+        Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
+        Console.WriteLine("                     [--purge-everything] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
     }
 
     internal static int Fail(string message, bool outputJson, WebConsoleLogger logger, string command)
@@ -250,6 +255,8 @@ internal static class WebCliHelpers
         var checkNetworkHints = !HasOption(argv, "--no-network-hints");
         var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
+        var maxTotalFilesText = TryGetOptionValue(argv, "--max-total-files") ?? TryGetOptionValue(argv, "--max-files-total");
+        var suppressIssues = ReadOptionList(argv, "--suppress-issue", "--suppress-issues");
 
         if (requiredRoutes.Count == 0)
             requiredRoutes.Add("/404.html");
@@ -260,6 +267,7 @@ internal static class WebCliHelpers
         var summaryMax = ParseIntOption(summaryMaxText, 10);
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
+        var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
@@ -270,6 +278,8 @@ internal static class WebCliHelpers
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,
+            MaxTotalFiles = Math.Max(0, maxTotalFiles),
+            SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,
@@ -317,6 +327,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Fix `verify` errors first; they indicate broken site configuration or portability contracts.");
             if (ContainsText(verify.Warnings, "Theme contract:"))
                 recommendations.Add("Resolve theme contract warnings (schemaVersion, engine, manifest path, and portable asset paths) to keep themes reusable across repos.");
+            if (ContainsText(verify.Warnings, "Theme CSS contract:"))
+                recommendations.Add("Resolve theme CSS contract warnings (missing selectors / missing CSS entrypoints) to prevent visual regressions across sites.");
             if (ContainsText(verify.Warnings, "schemaVersion") || ContainsText(verify.Warnings, "contractVersion"))
                 recommendations.Add("Standardize all themes on `schemaVersion: 2` and keep only one version field in theme manifests.");
             if (ContainsText(verify.Warnings, "theme manifest"))

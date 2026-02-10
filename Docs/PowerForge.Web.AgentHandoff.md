@@ -1,9 +1,14 @@
 # PowerForge.Web Agent Handoff (Websites Engine)
 
-Last updated: 2026-02-08
+Last updated: 2026-02-10
 
 This doc is a short, high-signal handoff for an agent working on the PowerForge-powered websites engine.
 Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**, **CodeGlyphX**, **HtmlForgeX.Website**, **IntelligenceX Website**.
+
+Start here:
+- `AGENTS.md` (repo + website paths and working agreements)
+- `Docs\PowerForge.Web.Roadmap.md` (Have/Partial/Missing + milestones)
+- `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract pattern)
 
 ## Repos / Paths
 
@@ -12,9 +17,16 @@ Scope for ongoing work (per maintainer request): **PowerForge/PSPublishModule**,
   - Web engine: `PowerForge.Web`
   - Docs: `Docs\PowerForge.Web.*.md`
 - CodeGlyphX repo (website + library): `C:\Support\GitHub\CodeMatrix` (remote: `EvotecIT/CodeGlyphX`)
-  - Website: `Website\` or `CodeGlyphX.Website\` (depends on branch/history)
+  - Website: `C:\Support\GitHub\CodeMatrix\Website`
 - IntelligenceX repo (website): `C:\Support\GitHub\IntelligenceX\Website`
 - HtmlForgeX website repo: `C:\Support\GitHub\HtmlForgeX.Website`
+
+## Recent Changes (2026-02-09)
+
+- Audit baselines can live under repo root (for example `./.powerforge/audit-baseline.json`) instead of under `_site`.
+- Audit baselines use hashed issue keys to avoid huge baseline files that fail to load.
+- Verify baselines support an "empty baseline" (0 keys) for `failOnNewWarnings` (baseline present = contract is enabled).
+- Windows CSS contract check: root-relative hrefs like `/css/app.css` are treated as web-root paths (not disk-rooted paths).
 
 ## Current Capabilities (What Exists)
 
@@ -36,17 +48,43 @@ PowerForge navigation is more capable than most themes currently render:
 
 Key doc: `Docs\PowerForge.Web.ContentSpec.md` (`## Navigation` section).
 
+Theme best practice (Scriban):
+- Prefer stable, engine-owned helpers over index-based loops:
+  - `{{ pf.nav_links "main" }}` for top nav links
+  - `{{ pf.nav_actions }}` for header actions
+  - `{{ pf.menu_tree "docs" 4 }}` for nested sidebar trees
+
 ### API docs
 
 - API docs generator supports optional source links:
   - `sourceRoot` + `sourceUrl` pattern (requires PDB/source info).
   - Broken "Edit on GitHub" links typically mean `sourceRoot`/`sourceUrl` aren't aligned with repo layout (monorepo/subfolder cases).
+- Pipeline `apidocs` step tries to keep navigation consistent by default:
+  - if `config` is not set, it will use `./site.json` when present at the pipeline root (prevents missing nav/theme drift)
+  - if `headerHtml`/`footerHtml` are not set, it prefers theme `partials/api-header.html` + `api-footer.html`
+  - if those are missing, it falls back to theme `partials/header.html` + `footer.html` (so API reference pages don't lose site nav)
 Key doc: `Docs\PowerForge.Web.ApiDocs.md`.
 
 ### Verify / lint
 
 - Verify includes: navigation lint, theme contract checks, not-found checks, markdown hygiene warnings.
 - There is a markdown hygiene fixer step (`markdown-fix`) (dry-run and apply).
+- Verify supports baselines to keep CI stable while fixing legacy warnings:
+  - `powerforge-web verify --baseline-generate` writes `./.powerforge/verify-baseline.json` by default
+  - `--fail-on-new` / `failOnNewWarnings` fails only on newly introduced verify warnings
+- Verify baselines normalize keys by stripping any leading `[CODE]` prefix (so adding/changing warning codes does not break baselines).
+
+### Audit / budgets
+
+- Audit supports:
+  - baselines (`.powerforge/audit-baseline.json`) + `failOnNewIssues`
+  - output budgets (example: `maxTotalFiles` + `failOnCategories: "budget"`)
+  - issue suppression via `suppressIssues` (patterns/codes like `PFAUDIT.BUDGET`)
+- Audit output is designed to be high-signal on failures:
+  - compact context line (files/pages/nav/warnings/new)
+  - error samples + warning samples
+  - category summary (top issue categories)
+- Missing navigation is aggregated into a single warning with count + sample pages (prevents log spam on large sites).
 
 ### Audit artifacts path bug (fixed upstream)
 
@@ -77,8 +115,10 @@ This is primarily a theme-side limitation, not an engine limitation.
 
 Pipeline currently summarizes failures, but often does not surface enough context (which file/URL, which rule) without opening artifacts.
 
-Target improvement:
-- On `audit` failure: print top N errors (URL/path + short message), and print the exact resolved artifact paths.
+Status:
+- Mostly addressed (compact failure summaries + samples + category summaries).
+Remaining:
+- Print resolved absolute paths for summary/SARIF on failures (helpful for CI log users).
 
 ### 3) Website build performance in dev loops
 
@@ -117,8 +157,8 @@ From a website repo:
 
 ## Next Tasks (If You Pick Up Work)
 
-1. HtmlForgeX: confirm audit no longer fails after updating PSPublishModule binaries used by the site.
-2. Improve audit failure output in `PowerForge.Web.Cli` (print top errors + artifact paths).
+1. HtmlForgeX: confirm audit + CI mode gates pass end-to-end with baselines and `--mode ci` (verify + audit).
+2. Improve audit failure output in `PowerForge.Web.Cli` (print resolved absolute artifact paths + top issues with URL/path).
 3. Add docs/examples for multi-product IA using `Navigation.Profiles` + `Regions` (goal: help Claude/agents create unique sites).
 4. Fix/standardize API docs source links for monorepo/subfolder repos (IntelligenceX/CodeGlyphX).
-
+5. Add output budgets (example: `audit.maxTotalFiles`) when site outputs start ballooning (keeps surprises down across sites).

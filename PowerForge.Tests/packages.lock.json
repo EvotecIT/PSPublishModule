@@ -843,6 +843,12 @@
           "Scriban": "[5.11.0, )",
           "YamlDotNet": "[15.1.2, )"
         }
+      },
+      "powerforge.web.cli": {
+        "type": "Project",
+        "dependencies": {
+          "PowerForge.Web": "[1.0.0, )"
+        }
       }
     }
   }

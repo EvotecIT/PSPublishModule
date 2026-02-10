@@ -45,10 +45,308 @@ public static partial class WebSiteBuilder
             actions = MapMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>()),
             regions = MapRegions(spec.Navigation?.Regions ?? Array.Empty<NavigationRegionSpec>()),
             footerModel = MapFooter(spec.Navigation?.Footer),
-            profiles = MapProfiles(spec.Navigation?.Profiles ?? Array.Empty<NavigationProfileSpec>())
+            profiles = MapProfiles(spec.Navigation?.Profiles ?? Array.Empty<NavigationProfileSpec>()),
+            surfaces = MapSurfaces(spec, menuSpecs)
         };
 
         WriteAllTextIfChanged(outputPath, JsonSerializer.Serialize(payload, WebJson.Options));
+    }
+
+    private static object? MapSurfaces(SiteSpec spec, MenuSpec[] menuSpecs)
+    {
+        if (spec is null)
+            return null;
+
+        var navSpec = spec.Navigation;
+        if (navSpec is null)
+            return null;
+
+        var surfaces = ResolveSurfaceSpecs(spec, menuSpecs);
+        if (surfaces.Length == 0)
+            return null;
+
+        var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (var surface in surfaces)
+        {
+            if (surface is null || string.IsNullOrWhiteSpace(surface.Name))
+                continue;
+
+            var name = surface.Name.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var contextPath = NormalizeRouteForMatch(string.IsNullOrWhiteSpace(surface.Path) ? "/" : surface.Path);
+            var contextCollection = surface.Collection ?? InferSurfaceCollection(spec, name) ?? string.Empty;
+            var contextLayout = surface.Layout ?? InferSurfaceLayout(name) ?? string.Empty;
+            var contextProject = surface.Project ?? string.Empty;
+            var context = new NavRenderContext(contextPath, contextCollection, contextLayout, contextProject);
+
+            var activeProfile = ResolveNavigationProfile(navSpec, context);
+
+            var effectiveMenus = MergeMenus(
+                menuSpecs,
+                activeProfile?.Menus ?? Array.Empty<MenuSpec>(),
+                activeProfile?.InheritMenus ?? true);
+
+            var effectiveActions = MergeItems(
+                navSpec.Actions,
+                activeProfile?.Actions ?? Array.Empty<MenuItemSpec>(),
+                activeProfile?.InheritActions ?? true);
+
+            var effectiveRegions = MergeRegions(
+                navSpec.Regions,
+                activeProfile?.Regions ?? Array.Empty<NavigationRegionSpec>(),
+                activeProfile?.InheritRegions ?? true);
+
+            var effectiveFooter = MergeFooter(
+                navSpec.Footer,
+                activeProfile?.Footer,
+                activeProfile?.InheritFooter ?? true);
+
+            var fullMenuMap = effectiveMenus.ToDictionary(
+                m => m.Name,
+                m => MapMenuItems(m.Items),
+                StringComparer.OrdinalIgnoreCase);
+
+            var primaryMenuName = string.IsNullOrWhiteSpace(surface.PrimaryMenu) ? "main" : surface.PrimaryMenu.Trim();
+            var sidebarMenuName = string.IsNullOrWhiteSpace(surface.SidebarMenu) ? null : surface.SidebarMenu.Trim();
+            var productsMenuName = string.IsNullOrWhiteSpace(surface.ProductsMenu) ? null : surface.ProductsMenu.Trim();
+
+            var includeMenus = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(primaryMenuName))
+                includeMenus.Add(primaryMenuName);
+            if (!string.IsNullOrWhiteSpace(sidebarMenuName))
+                includeMenus.Add(sidebarMenuName!);
+            if (!string.IsNullOrWhiteSpace(productsMenuName))
+                includeMenus.Add(productsMenuName!);
+
+            foreach (var menu in effectiveMenus)
+            {
+                if (menu is null || string.IsNullOrWhiteSpace(menu.Name))
+                    continue;
+                if (menu.Name.StartsWith("footer", StringComparison.OrdinalIgnoreCase))
+                    includeMenus.Add(menu.Name);
+            }
+
+            var menuSubset = new Dictionary<string, object[]>(StringComparer.OrdinalIgnoreCase);
+            foreach (var menuName in includeMenus)
+            {
+                if (string.IsNullOrWhiteSpace(menuName))
+                    continue;
+                if (fullMenuMap.TryGetValue(menuName, out var items))
+                    menuSubset[menuName] = items;
+            }
+
+            var primaryItems = menuSubset.TryGetValue(primaryMenuName, out var primaryResolved)
+                ? primaryResolved
+                : Array.Empty<object>();
+
+            object[]? sidebarItems = null;
+            if (!string.IsNullOrWhiteSpace(sidebarMenuName) && menuSubset.TryGetValue(sidebarMenuName!, out var sidebarResolved))
+                sidebarItems = sidebarResolved;
+
+            object[]? productsItems = null;
+            if (!string.IsNullOrWhiteSpace(productsMenuName) && menuSubset.TryGetValue(productsMenuName!, out var productsResolved))
+                productsItems = productsResolved;
+
+            var footerMenus = menuSubset
+                .Where(kvp => kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+
+            result[name] = new
+            {
+                context = new
+                {
+                    path = contextPath,
+                    collection = string.IsNullOrWhiteSpace(contextCollection) ? null : contextCollection,
+                    layout = string.IsNullOrWhiteSpace(contextLayout) ? null : contextLayout,
+                    project = string.IsNullOrWhiteSpace(contextProject) ? null : contextProject
+                },
+                profile = activeProfile?.Name,
+                primaryMenu = primaryMenuName,
+                sidebarMenu = sidebarMenuName,
+                productsMenu = productsMenuName,
+                primary = primaryItems,
+                sidebar = sidebarItems,
+                products = productsItems,
+                menus = menuSubset.Count > 0 ? menuSubset : null,
+                footer = footerMenus.Count > 0 ? footerMenus : null,
+                actions = MapMenuItems(effectiveActions),
+                regions = MapRegions(effectiveRegions),
+                footerModel = MapFooter(effectiveFooter)
+            };
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static NavigationSurfaceSpec[] ResolveSurfaceSpecs(SiteSpec spec, MenuSpec[] menuSpecs)
+    {
+        var navSpec = spec.Navigation;
+        if (navSpec is null)
+            return Array.Empty<NavigationSurfaceSpec>();
+
+        var map = new Dictionary<string, NavigationSurfaceSpec>(StringComparer.OrdinalIgnoreCase);
+        foreach (var surface in navSpec.Surfaces ?? Array.Empty<NavigationSurfaceSpec>())
+        {
+            if (surface is null || string.IsNullOrWhiteSpace(surface.Name))
+                continue;
+            map[surface.Name.Trim()] = surface;
+        }
+
+        var enabledFeatures = NormalizeFeatures(spec.Features);
+        var hasDocs = enabledFeatures.Contains("docs") ||
+                      menuSpecs.Any(m => string.Equals(m.Name, "docs", StringComparison.OrdinalIgnoreCase)) ||
+                      (spec.Collections is not null && spec.Collections.Any(c => c is not null &&
+                          !string.IsNullOrWhiteSpace(c.Output) &&
+                          c.Output.StartsWith("/docs", StringComparison.OrdinalIgnoreCase)));
+        var hasApi = enabledFeatures.Contains("apidocs") || ContainsRouteBundleMatch(spec.AssetRegistry, "/api/**") ||
+                     menuSpecs.Any(m => m.Items is not null && ContainsUrlPrefix(m.Items, "/api"));
+        var hasProducts = menuSpecs.Any(m => string.Equals(m.Name, "products", StringComparison.OrdinalIgnoreCase));
+
+        AddSurfaceIfMissing(map, new NavigationSurfaceSpec
+        {
+            Name = "main",
+            Path = "/",
+            PrimaryMenu = "main"
+        });
+
+        if (hasDocs)
+        {
+            var hasDocsMenu = menuSpecs.Any(m => string.Equals(m.Name, "docs", StringComparison.OrdinalIgnoreCase));
+            AddSurfaceIfMissing(map, new NavigationSurfaceSpec
+            {
+                Name = "docs",
+                Path = "/docs/",
+                Collection = "docs",
+                Layout = "docs",
+                PrimaryMenu = "main",
+                SidebarMenu = hasDocsMenu ? "docs" : null
+            });
+        }
+
+        if (hasApi)
+        {
+            AddSurfaceIfMissing(map, new NavigationSurfaceSpec
+            {
+                Name = "apidocs",
+                Path = "/api/",
+                Layout = "apiDocs",
+                PrimaryMenu = "main"
+            });
+        }
+
+        if (hasProducts)
+        {
+            AddSurfaceIfMissing(map, new NavigationSurfaceSpec
+            {
+                Name = "products",
+                Path = "/",
+                PrimaryMenu = "main",
+                ProductsMenu = "products"
+            });
+        }
+
+        return map.Values.ToArray();
+    }
+
+    private static void AddSurfaceIfMissing(Dictionary<string, NavigationSurfaceSpec> map, NavigationSurfaceSpec surface)
+    {
+        if (map is null || surface is null || string.IsNullOrWhiteSpace(surface.Name))
+            return;
+        var key = surface.Name.Trim();
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+        if (!map.ContainsKey(key))
+            map[key] = surface;
+    }
+
+    private static HashSet<string> NormalizeFeatures(string[]? features)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (features is null || features.Length == 0)
+            return set;
+
+        foreach (var feature in features)
+        {
+            var normalized = NormalizeFeatureName(feature);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                set.Add(normalized);
+        }
+
+        return set;
+    }
+
+    private static string NormalizeFeatureName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (trimmed.Equals("apiDocs", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("apidocs", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("api", StringComparison.OrdinalIgnoreCase))
+            return "apidocs";
+
+        if (trimmed.Equals("notFound", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("404", StringComparison.OrdinalIgnoreCase))
+            return "notfound";
+
+        return trimmed.ToLowerInvariant();
+    }
+
+    private static bool ContainsRouteBundleMatch(AssetRegistrySpec? assets, string match)
+    {
+        if (assets?.RouteBundles is null || assets.RouteBundles.Length == 0)
+            return false;
+
+        foreach (var mapping in assets.RouteBundles)
+        {
+            if (mapping is null || string.IsNullOrWhiteSpace(mapping.Match))
+                continue;
+            if (string.Equals(mapping.Match.Trim(), match, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUrlPrefix(MenuItemSpec[] items, string prefix)
+    {
+        if (items is null || items.Length == 0) return false;
+        foreach (var item in items)
+        {
+            if (item is null) continue;
+            if (!string.IsNullOrWhiteSpace(item.Url) && item.Url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (ContainsUrlPrefix(item.Items, prefix))
+                return true;
+        }
+        return false;
+    }
+
+    private static string? InferSurfaceCollection(SiteSpec spec, string name)
+    {
+        if (spec is null || string.IsNullOrWhiteSpace(name))
+            return null;
+
+        if (name.Equals("docs", StringComparison.OrdinalIgnoreCase))
+            return "docs";
+        if (name.Equals("blog", StringComparison.OrdinalIgnoreCase))
+            return "blog";
+        return null;
+    }
+
+    private static string? InferSurfaceLayout(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        if (name.Equals("docs", StringComparison.OrdinalIgnoreCase))
+            return "docs";
+        if (name.Equals("apidocs", StringComparison.OrdinalIgnoreCase) || name.Equals("api", StringComparison.OrdinalIgnoreCase))
+            return "apiDocs";
+        return null;
     }
 
     private static object[] MapMenuItems(MenuItemSpec[] items)

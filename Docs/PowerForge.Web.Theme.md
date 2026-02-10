@@ -53,7 +53,7 @@ themes/
 
 ## Theme manifest (`theme.manifest.json`)
 Theme manifest defines identity, engine, inheritance, and assets.
-Schema: `Schemas/powerforge.web.themespec.schema.json`.
+Schema: `schemas/powerforge.web.themespec.schema.json`.
 ```json
 {
   "name": "codeglyphx",
@@ -61,6 +61,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
   "version": "1.0.0",
   "author": "Evotec",
   "engine": "scriban",
+  "features": ["docs", "apiDocs", "blog", "search"],
   "extends": "base",
   "defaultLayout": "page",
   "layouts": {
@@ -102,6 +103,38 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 }
 ```
 
+## Feature Contracts (catch regressions across sites)
+If you want "DocFX/Hugo-tier" predictability across multiple sites, add `featureContracts` to your theme manifest.
+This allows the engine to verify that when a site enables a feature (e.g. `apiDocs`), the theme actually provides
+the expected layouts/partials/slots and that your CSS contains critical selectors.
+
+Example:
+```json
+{
+  "name": "mytheme",
+  "schemaVersion": 2,
+  "engine": "scriban",
+  "features": ["docs", "apiDocs"],
+  "featureContracts": {
+    "apiDocs": {
+      "requiredPartials": ["api-header", "api-footer"],
+      "requiredCssSelectors": [".api-layout", ".api-sidebar", ".api-content"]
+    },
+    "docs": {
+      "requiredLayouts": ["docs"]
+    }
+  }
+}
+```
+Notes:
+- `requiredPartials` and `requiredLayouts` are validated using theme resolution (including `extends`).
+- `requiredSlots` ensures `slots.<name>` exists and resolves to a real partial file.
+- `requiredSurfaces` is only enforced when the site explicitly defines `Navigation.Surfaces`.
+- `requiredCssSelectors` is validated by scanning local CSS files:
+  - if `cssHrefs` is provided, those hrefs are scanned
+  - otherwise, the engine infers CSS from route bundles for representative routes (`/docs/`, `/api/`, `/blog/`)
+  - remote CSS (`http/https`) is skipped (best-effort)
+
 ### Manifest rules
 - `schemaVersion` defaults to `1`; use `2` for strict portable contract validation.
 - Legacy `contractVersion` is still read for compatibility, but new themes should use `schemaVersion`.
@@ -114,6 +147,40 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
 - `layoutsPath`, `partialsPath`, `assetsPath`, mapped `layouts`/`partials`, and theme `assets` bundle paths should be relative (not rooted paths, no `..`).
 - `slots` map named hook points to partial files. Layouts can render these hooks consistently across themes.
 - For `schemaVersion: 2`, set `defaultLayout`, `scriptsPath`, and explicit `slots` to maximize theme portability.
+
+## Theme Dependency Model (Base Theme + Product Theme)
+
+PowerForge.Web theme inheritance is **filesystem-only** and intentionally simple:
+
+- A theme can optionally `extends` another theme.
+- The base theme is resolved relative to the current theme folder (sibling under the same `themes/` root by default).
+- There is no package manager or remote resolution: if you want shared behavior, you typically **vendor** the base theme into each website repo.
+
+Pragmatic best practice for multi-site setups:
+
+- Keep a small number of base themes (ideally 1).
+- Keep product themes thin: branding, a few layouts/partials overrides, and token overrides.
+- Use verify/audit contracts to stop silent drift across sites.
+
+### Tokens and CSS Variable Naming (Avoid Theme-Name Coupling)
+
+The engine exposes design tokens at `data.theme.tokens` (merged across `extends`).
+Themes then map those tokens into CSS variables, typically via a `theme-tokens` partial.
+
+To reduce surprises when you rename or swap base themes:
+
+- Prefer a **stable** CSS variable prefix like `--pf-*` for your design system contract.
+- Avoid using the base theme name as the prefix (for example `--nova-*`) as the long-term contract, because it couples CSS to the theme folder name.
+
+You can keep backwards compatibility by emitting aliases in `theme-tokens`:
+
+```css
+/* recommended: stable contract */
+--pf-accent: {{ data.theme.tokens.color.accent }};
+
+/* optional: legacy alias for older CSS */
+--nova-accent: var(--pf-accent);
+```
 
 ## Asset copying + output paths
 PowerForge.Web copies theme assets during `build`:

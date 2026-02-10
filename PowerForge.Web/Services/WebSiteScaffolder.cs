@@ -5,6 +5,7 @@ namespace PowerForge.Web;
 /// <summary>Scaffolds a starter site with content and theme.</summary>
 public static class WebSiteScaffolder
 {
+    private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/schemas/";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
@@ -117,6 +118,14 @@ Use this post as a starting point for changelogs, release notes, and engineering
             Name = themeName,
             SchemaVersion = 2,
             Engine = engine,
+            Features = new[] { "docs", "blog" },
+            FeatureContracts = new Dictionary<string, ThemeFeatureContractSpec>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["docs"] = new ThemeFeatureContractSpec
+                {
+                    RequiredLayouts = new[] { "docs" }
+                }
+            },
             DefaultLayout = "base",
             LayoutsPath = "layouts",
             PartialsPath = "partials",
@@ -159,7 +168,7 @@ Use this post as a starting point for changelogs, release notes, and engineering
                 : null
         };
         var manifestJson = JsonSerializer.Serialize(manifest, WebJson.Options);
-        manifestJson = InsertSchema(manifestJson, "./Schemas/powerforge.web.themespec.schema.json");
+        manifestJson = InsertSchema(manifestJson, DefaultSchemaBaseUrl + "powerforge.web.themespec.schema.json");
         created += WriteFile(Path.Combine(themeRoot, "theme.manifest.json"), manifestJson);
 
         var layout = isScriban
@@ -176,11 +185,7 @@ Use this post as a starting point for changelogs, release notes, and engineering
   <div class=""pf-container pf-header-inner"">
     <div class=""pf-brand"">{{ site.name }}</div>
     <nav class=""pf-nav"">
-      {{ if navigation.menus && navigation.menus.size > 0 }}
-        {{ for link in navigation.menus[0].items }}
-          <a href=""{{ link.url }}"">{{ link.title }}</a>
-        {{ end }}
-      {{ end }}
+      {{ pf.nav_links ""main"" }}
     </nav>
   </div>
 </header>
@@ -282,6 +287,7 @@ a { color: inherit; text-decoration: none; }
             ContentRoot = "content",
             ThemesRoot = "themes",
             DataRoot = "data",
+            Features = new[] { "docs", "blog" },
             Collections = new[]
             {
                 new CollectionSpec
@@ -342,6 +348,16 @@ a { color: inherit; text-decoration: none; }
                             new MenuItemSpec { Title = "Blog", Url = "/blog/" }
                         }
                     }
+                },
+                Auto = new[]
+                {
+                    new NavigationAutoSpec
+                    {
+                        Collection = "docs",
+                        Menu = "docs",
+                        MaxDepth = 3,
+                        IncludeIndex = true
+                    }
                 }
             },
             AssetRegistry = new AssetRegistrySpec
@@ -388,8 +404,62 @@ a { color: inherit; text-decoration: none; }
         };
 
         var siteJson = JsonSerializer.Serialize(siteSpec, WebJson.Options);
-        siteJson = InsertSchema(siteJson, "./Schemas/powerforge.web.sitespec.schema.json");
+        siteJson = InsertSchema(siteJson, DefaultSchemaBaseUrl + "powerforge.web.sitespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "site.json"), siteJson);
+
+        // Provide a ready-to-run pipeline with dev/ci modes and baseline paths under .powerforge.
+        var pipelineJson = InsertSchema(
+            """
+            {
+              "steps": [
+                { "task": "build", "config": "./site.json", "out": "./_site", "clean": true },
+
+                { "task": "verify", "id": "verify-dev", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
+                { "task": "verify", "id": "verify-ci", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
+
+                { "task": "audit", "id": "audit-ci", "siteRoot": "./_site", "modes": ["ci"], "summary": true, "sarif": true, "baseline": "./.powerforge/audit-baseline.json", "failOnNewIssues": true }
+              ]
+            }
+            """,
+            DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
+        created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
+
+        var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
+        Directory.CreateDirectory(powerforgeRoot);
+
+        created += WriteFile(Path.Combine(fullOutput, "README.md"),
+@$"# {name}
+
+Starter site scaffolded by PowerForge.Web.
+
+## Quick start
+
+Local dev loop:
+
+```powershell
+powerforge-web pipeline --config .\pipeline.json --mode dev
+```
+
+CI mode (strict, but stable via baselines):
+
+```powershell
+powerforge-web pipeline --config .\pipeline.json --mode ci
+```
+
+## Baselines (recommended workflow)
+
+Generate baselines once the site is in a good state:
+
+```powershell
+powerforge-web verify --config .\site.json --baseline-generate
+powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline.json --baseline-generate
+```
+
+Commit the generated files under `.powerforge/` so CI can run `failOnNewWarnings` / `failOnNewIssues`.
+
+Schema refs:
+- The scaffold uses `$schema` URLs pointing at the PSPublishModule `main` branch so they work outside this repo.
+");
 
         return new WebScaffoldResult
         {

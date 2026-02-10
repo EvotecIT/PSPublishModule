@@ -34,7 +34,8 @@
         { "$ref": "#/$defs/AuditStep" },
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
-        { "$ref": "#/$defs/OverlayStep" }
+        { "$ref": "#/$defs/OverlayStep" },
+        { "$ref": "#/$defs/CloudflareStep" }
       ]
     },
     "BuildStep": {
@@ -74,10 +75,19 @@
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
         "config": { "type": "string" },
+        "suppressWarnings": { "type": "array", "items": { "type": "string" } },
         "failOnWarnings": { "type": "boolean" },
         "failOnNavLint": { "type": "boolean" },
         "failOnNavLintWarnings": { "type": "boolean" },
-        "failOnThemeContract": { "type": "boolean" }
+        "failOnThemeContract": { "type": "boolean" },
+        "baseline": { "type": "string", "description": "Path to a verify baseline file (relative to pipeline json unless absolute). Must resolve under site root." },
+        "baselinePath": { "type": "string", "description": "Alias for baseline." },
+        "baselineGenerate": { "type": "boolean", "description": "When true, write the verify baseline file from current warnings." },
+        "baselineUpdate": { "type": "boolean", "description": "When true, merge current warnings into an existing verify baseline file." },
+        "failOnNewWarnings": { "type": "boolean", "description": "When true, fail only when verify emits warnings not present in baseline." },
+        "failOnNew": { "type": "boolean", "description": "Alias for failOnNewWarnings." },
+        "warningPreviewCount": { "type": "integer", "minimum": 0, "description": "How many warnings to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." },
+        "errorPreviewCount": { "type": "integer", "minimum": 0, "description": "How many errors to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." }
       },
       "required": ["task", "config"]
     },
@@ -105,12 +115,17 @@
         "noBuild": { "type": "boolean" },
         "noVerify": { "type": "boolean" },
         "noAudit": { "type": "boolean" },
+        "suppressWarnings": { "type": "array", "items": { "type": "string" } },
         "failOnWarnings": { "type": "boolean" },
         "failOnNavLint": { "type": "boolean" },
         "failOnNavLintWarnings": { "type": "boolean" },
         "failOnThemeContract": { "type": "boolean" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
+        "maxTotalFiles": { "type": "integer", "minimum": 0, "description": "Maximum allowed total file count under siteRoot (0 disables)." },
+        "max-total-files": { "type": "integer", "minimum": 0, "description": "Alias for maxTotalFiles." },
+        "suppressIssues": { "type": "array", "items": { "type": "string" }, "description": "Audit issue suppressions (same matching rules as audit step). Supports codes like PFAUDIT.BUDGET plus substring/wildcard/re:... matching." },
+        "suppress-issues": { "type": "array", "items": { "type": "string" }, "description": "Alias for suppressIssues." },
         "noDefaultExclude": { "type": "boolean" },
         "ignoreNav": { "type": "string" },
         "ignore-nav": { "type": "string" },
@@ -162,7 +177,16 @@
         "checkRenderBlocking": { "type": "boolean" },
         "maxHeadBlockingResources": { "type": "integer", "minimum": 0 },
         "max-head-blocking": { "type": "integer", "minimum": 0 },
-        "errorPreviewCount": { "type": "integer", "minimum": 0 }
+        "errorPreviewCount": { "type": "integer", "minimum": 0 },
+
+        "verifyBaseline": { "type": "string", "description": "Path to a verify baseline file used by the embedded verify run. Must resolve under site root." },
+        "verifyBaselinePath": { "type": "string", "description": "Alias for verifyBaseline." },
+        "verifyBaselineGenerate": { "type": "boolean", "description": "When true, write the verify baseline file from current verify warnings." },
+        "verifyBaselineUpdate": { "type": "boolean", "description": "When true, merge current verify warnings into an existing baseline file." },
+        "verifyFailOnNewWarnings": { "type": "boolean", "description": "When true, fail only when verify emits warnings not present in baseline." },
+        "verifyFailOnNew": { "type": "boolean", "description": "Alias for verifyFailOnNewWarnings." },
+        "verifyWarningPreviewCount": { "type": "integer", "minimum": 0, "description": "How many verify warnings to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." },
+        "verifyErrorPreviewCount": { "type": "integer", "minimum": 0, "description": "How many verify errors to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." }
       },
       "required": ["task", "config"]
     },
@@ -189,6 +213,42 @@
       },
       "required": ["task"]
     },
+    "CloudflareStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "cloudflare" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "zoneId": { "type": "string" },
+        "zone-id": { "type": "string" },
+        "tokenEnv": { "type": "string", "description": "Env var name containing a Cloudflare API token (recommended). Defaults to CLOUDFLARE_API_TOKEN." },
+        "token-env": { "type": "string", "description": "Alias for tokenEnv." },
+        "token": { "type": "string", "description": "Inline API token (discouraged; prefer tokenEnv and CI secrets)." },
+        "baseUrl": { "type": "string", "description": "Base URL used to combine with paths (required when using paths)." },
+        "base-url": { "type": "string", "description": "Alias for baseUrl." },
+        "paths": { "type": "string", "description": "Comma-separated paths to purge (combined with baseUrl)." },
+        "path": { "type": "string", "description": "Alias for paths." },
+        "urls": { "type": "string", "description": "Comma-separated full URLs to purge." },
+        "url": { "type": "string", "description": "Alias for urls." },
+        "purgeEverything": { "type": "boolean" },
+        "purge-everything": { "type": "boolean" },
+        "dryRun": { "type": "boolean" },
+        "dry-run": { "type": "boolean" }
+      },
+      "required": ["task"],
+      "anyOf": [
+        { "required": ["zoneId"] },
+        { "required": ["zone-id"] }
+      ]
+    },
     "ApiDocsStep": {
       "type": "object",
       "additionalProperties": false,
@@ -202,6 +262,7 @@
         "only-modes": { "type": "array", "items": { "type": "string" } },
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "config": { "type": "string" },
         "type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
         "xml": { "type": "string" },
         "help": { "type": "string" },
@@ -213,6 +274,12 @@
         "baseUrl": { "type": "string" },
         "format": { "type": "string", "enum": ["json", "hybrid", "html", "both"] },
         "css": { "type": "string" },
+        "criticalCss": { "type": "string", "description": "Path to a critical CSS file to inline into API pages." },
+        "critical-css": { "type": "string", "description": "Path to a critical CSS file to inline into API pages." },
+        "criticalCssPath": { "type": "string", "description": "Path to a critical CSS file to inline into API pages." },
+        "critical-css-path": { "type": "string", "description": "Path to a critical CSS file to inline into API pages." },
+        "injectCriticalCss": { "type": "boolean", "description": "When true and config is provided, inline assetRegistry.criticalCss from site.json into API pages." },
+        "inject-critical-css": { "type": "boolean", "description": "When true and config is provided, inline assetRegistry.criticalCss from site.json into API pages." },
         "headerHtml": { "type": "string" },
         "footerHtml": { "type": "string" },
         "template": { "type": "string" },
@@ -234,10 +301,20 @@
         "includeUndocumented": { "type": "boolean" },
         "nav": { "type": "string" },
         "navJson": { "type": "string" },
+        "navContextPath": { "type": "string" },
+        "navContextCollection": { "type": "string" },
+        "navContextLayout": { "type": "string" },
+        "navContextProject": { "type": "string" },
+        "siteName": { "type": "string" },
+        "brandUrl": { "type": "string" },
+        "brandIcon": { "type": "string" },
         "includeNamespace": { "type": "string" },
         "excludeNamespace": { "type": "string" },
         "includeType": { "type": "string" },
-        "excludeType": { "type": "string" }
+        "excludeType": { "type": "string" },
+        "failOnWarnings": { "type": "boolean" },
+        "suppressWarnings": { "type": "array", "items": { "type": "string" } },
+        "warningPreviewCount": { "type": "integer", "minimum": 0 }
       },
       "required": ["task", "out"]
     },
@@ -423,8 +500,12 @@
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
+        "budgetExclude": { "type": "string", "description": "Comma-separated glob patterns to exclude from budget counters (for example api/**). Does not affect the HTML audit scope." },
+        "budget-exclude": { "type": "string", "description": "Alias for budgetExclude." },
         "maxHtmlFiles": { "type": "integer", "minimum": 0 },
         "max-html-files": { "type": "integer", "minimum": 0 },
+        "maxTotalFiles": { "type": "integer", "minimum": 0, "description": "Maximum allowed total file count under siteRoot (0 disables)." },
+        "max-total-files": { "type": "integer", "minimum": 0, "description": "Alias for maxTotalFiles." },
         "scopeFromBuildUpdated": {
           "type": "boolean",
           "description": "When true, if include is not set, scope the audit to the HTML files updated by the most recent build step (when siteRoot matches build out). In --fast mode this behavior is enabled by default; set this to false to disable."
@@ -511,6 +592,12 @@
         "checkUtf8": { "type": "boolean" },
         "checkMetaCharset": { "type": "boolean" },
         "checkUnicodeReplacementChars": { "type": "boolean" },
+        "suppressIssues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Issue suppressions (do not emit, do not count, do not gate). Supports codes like PFAUDIT.BUDGET plus substring/wildcard/re:... matching."
+        },
+        "suppress-issues": { "type": "array", "items": { "type": "string" }, "description": "Alias for suppressIssues." },
         "baselineGenerate": { "type": "boolean" },
         "baselineUpdate": { "type": "boolean" }
       },

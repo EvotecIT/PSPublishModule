@@ -17,11 +17,46 @@ public sealed class NavigationSpec
     /// <summary>Optional footer configuration with column groups and links.</summary>
     public NavigationFooterSpec? Footer { get; set; }
 
+    /// <summary>
+    /// Optional named navigation "surfaces" used to provide stable, theme-friendly navigation projections
+    /// (for example: top bar main, docs sidebar docs, product switcher products).
+    /// Surfaces are also exported into data/site-nav.json for external consumers (API docs, scripts, etc.).
+    /// </summary>
+    public NavigationSurfaceSpec[] Surfaces { get; set; } = Array.Empty<NavigationSurfaceSpec>();
+
     /// <summary>Optional profile overrides selected by route/collection/layout/project.</summary>
     public NavigationProfileSpec[] Profiles { get; set; } = Array.Empty<NavigationProfileSpec>();
 
     /// <summary>Auto-generated menus derived from content structure.</summary>
     public NavigationAutoSpec[] Auto { get; set; } = Array.Empty<NavigationAutoSpec>();
+}
+
+/// <summary>Defines a named navigation surface and how to resolve it (profile context + menu bindings).</summary>
+public sealed class NavigationSurfaceSpec
+{
+    /// <summary>Surface name (for example: main, docs, products, apidocs).</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Optional context route/path used for profile selection (for example: /docs/ or /api/).</summary>
+    public string? Path { get; set; }
+
+    /// <summary>Optional collection name used for profile selection.</summary>
+    public string? Collection { get; set; }
+
+    /// <summary>Optional layout name used for profile selection.</summary>
+    public string? Layout { get; set; }
+
+    /// <summary>Optional project slug used for profile selection.</summary>
+    public string? Project { get; set; }
+
+    /// <summary>Menu name to treat as primary/top navigation (defaults to 'main').</summary>
+    public string? PrimaryMenu { get; set; }
+
+    /// <summary>Optional menu name to treat as sidebar navigation (for example: 'docs').</summary>
+    public string? SidebarMenu { get; set; }
+
+    /// <summary>Optional menu name to treat as product switcher navigation (for example: 'products').</summary>
+    public string? ProductsMenu { get; set; }
 }
 
 /// <summary>Defines a named menu and its items.</summary>
