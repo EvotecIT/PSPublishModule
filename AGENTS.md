@@ -52,6 +52,7 @@ Recommended environment variable (makes site scripts deterministic):
 2. `Docs\PowerForge.Web.AgentHandoff.md` (high-signal handoff + commands)
 3. `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract, baselines, budgets)
 4. `Docs\PowerForge.Web.WebsiteStarter.md` (golden path for building new sites without surprises)
+5. `Docs\PowerForge.Web.Parity.md` (rough parity notes vs DocFX/Hugo/Astro/etc.)
 
 Reference docs (as needed):
 - `Docs\PowerForge.Web.ContentSpec.md` (content model + navigation)
