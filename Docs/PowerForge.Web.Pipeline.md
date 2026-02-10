@@ -168,7 +168,9 @@ Notes:
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
 - `navContextPath` / `navContextCollection` / `navContextLayout` / `navContextProject`:
-  - optional context used to select `Navigation.Profiles` when injecting nav tokens (default `navContextPath` = `baseUrl`)
+  - optional context used to select `Navigation.Profiles` when injecting nav tokens
+  - default behavior: profile selection uses the site root (`/`) unless you set `navContextPath` explicitly
+  - if you want API pages to use an `/api/` profile override, set `navContextPath: "/api/"` on the apidocs step
 - `failOnWarnings`: fail the pipeline step when API docs emits warnings
   - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
 - `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)

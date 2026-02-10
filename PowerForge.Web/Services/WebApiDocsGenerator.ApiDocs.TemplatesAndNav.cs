@@ -208,7 +208,9 @@ public static partial class WebApiDocsGenerator
 
     private static NavContext BuildNavContext(WebApiDocsOptions options)
     {
-        var path = NormalizeContextPath(options.NavContextPath ?? options.BaseUrl);
+        // Profile selection should be explicit: default to "/" so API pages inherit the site's primary navigation.
+        // Sites that want /api-specific profile overrides should set navContextPath on the apidocs step.
+        var path = NormalizeContextPath(options.NavContextPath);
         var collection = options.NavContextCollection ?? string.Empty;
         var layout = options.NavContextLayout ?? string.Empty;
         var project = options.NavContextProject ?? string.Empty;

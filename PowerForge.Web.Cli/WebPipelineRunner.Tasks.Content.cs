@@ -174,7 +174,9 @@ internal static partial class WebPipelineRunner
             SourceUrlPattern = sourceUrl,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = nav,
-            NavContextPath = navContextPath ?? baseUrl,
+            // Default to root context for profile selection to avoid accidental "API header has different nav"
+            // when sites define /api profiles that override menus. Sites that want /api-specific menus can set navContextPath explicitly.
+            NavContextPath = navContextPath,
             NavContextCollection = navContextCollection,
             NavContextLayout = navContextLayout,
             NavContextProject = navContextProject,

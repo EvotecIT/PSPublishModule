@@ -36,7 +36,8 @@ Optional critical CSS:
 - Or use `criticalCssPath` to inline a single CSS file.
 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
-- `navContextPath` (defaults to `baseUrl`, e.g. `/api`)
+- `navContextPath` (defaults to `/`)
+  - Set this when you want API pages to match a specific `Navigation.Profile` (for example `"/api/"`).
 - optionally `navContextLayout` / `navContextCollection` / `navContextProject`
  so the generator can select the same profile your theme uses. For best results, point `nav` at `site-nav.json` (the nav export) when available.
 
