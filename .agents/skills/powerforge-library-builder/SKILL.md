@@ -6,6 +6,7 @@ description: Build, version, pack, sign, and publish multi-project .NET librarie
 # PowerForge Library Builder
 
 Use this skill for repository/package pipelines (`Invoke-ProjectBuild`), including NuGet + GitHub release workflows.
+Prefer one entrypoint script: `Build/Build-Project.ps1`.
 
 ## Golden Path (Do This In Order)
 
@@ -18,6 +19,8 @@ Use this skill for repository/package pipelines (`Invoke-ProjectBuild`), includi
    - Use `PlanOnly` or cmdlet `-Plan` first.
 4. Execute build/pack/sign path.
    - Ensure staging/output paths are deterministic.
+   - Keep `Build-Project.ps1` minimal (param pass-through + `Invoke-ProjectBuild` call).
+   - Do not keep legacy wrapper scripts (`Build-AllPackages.ps1`, `Publish-*.ps1`, `Update-Version.ps1`) unless explicitly required.
 5. Publish NuGet with explicit fail-fast and duplicate policy.
 6. Publish GitHub release with explicit tag policy.
    - Choose `Single` or `PerProject` intentionally.
@@ -42,6 +45,12 @@ dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj -c Release
 ```
 
 ## Decision Rules
+
+- Standard script surface for repos:
+  - Keep `Build/Build-Project.ps1` and `Build/project.build.json`.
+  - Remove obsolete wrapper scripts once migration is complete.
+- Keep `Build-Project.ps1` simple:
+  - avoid custom coercion/helper blocks when normal nullable bool parameters and splatting are enough.
 
 - If projects have mixed versions in `Single` release mode:
   - set `GitHubPrimaryProject` or use date/timestamp tags by template.
