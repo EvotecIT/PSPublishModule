@@ -7,6 +7,7 @@
   var emptyLabel = document.querySelector('.sidebar-empty');
   var kindButtons = Array.prototype.slice.call(document.querySelectorAll('.filter-button'));
   var namespaceSelect = document.querySelector('#api-namespace');
+  var namespaceCombo = null;
   var countLabel = document.querySelector('.sidebar-count');
   var expandAllBtn = document.querySelector('.sidebar-expand-all');
   var collapseAllBtn = document.querySelector('.sidebar-collapse-all');
@@ -88,6 +89,181 @@
   var activeNamespace = '';
   var activeMemberKind = '';
   var totalTypes = countLabel ? parseInt(countLabel.dataset.total || '0', 10) : 0;
+  namespaceCombo = initNamespaceCombobox(namespaceSelect);
+
+  function initNamespaceCombobox(select) {
+    if (!select) return null;
+    if (select.dataset.enhancedCombobox === 'true') return null;
+    var options = Array.prototype.slice.call(select.options || []);
+    if (!options.length) return null;
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'pf-combobox';
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'pf-combobox-trigger';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-label', 'Namespace filter');
+
+    var panel = document.createElement('div');
+    panel.className = 'pf-combobox-panel';
+    panel.hidden = true;
+    var list = document.createElement('div');
+    list.className = 'pf-combobox-list';
+    list.setAttribute('role', 'listbox');
+    list.tabIndex = -1;
+    panel.appendChild(list);
+
+    var optionButtons = [];
+
+    function closePanel() {
+      wrapper.classList.remove('open');
+      panel.hidden = true;
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function openPanel() {
+      wrapper.classList.add('open');
+      panel.hidden = false;
+      trigger.setAttribute('aria-expanded', 'true');
+      var selected = getSelectedOptionButton();
+      if (selected) {
+        selected.focus();
+        selected.scrollIntoView({ block: 'nearest' });
+      } else if (optionButtons.length) {
+        optionButtons[0].focus();
+      }
+    }
+
+    function getSelectedOptionButton() {
+      for (var i = 0; i < optionButtons.length; i++) {
+        if (optionButtons[i].classList.contains('active')) return optionButtons[i];
+      }
+      return null;
+    }
+
+    function moveFocus(direction) {
+      if (!optionButtons.length) return;
+      var current = document.activeElement;
+      var index = optionButtons.indexOf(current);
+      if (index < 0) {
+        var selected = getSelectedOptionButton();
+        index = selected ? optionButtons.indexOf(selected) : 0;
+      }
+      var next = index + direction;
+      if (next < 0) next = optionButtons.length - 1;
+      if (next >= optionButtons.length) next = 0;
+      optionButtons[next].focus();
+      optionButtons[next].scrollIntoView({ block: 'nearest' });
+    }
+
+    function syncFromSelect() {
+      var selected = options.find(function(opt) { return opt.value === select.value; });
+      if (!selected) {
+        selected = select.options[select.selectedIndex] || options[0];
+      }
+      if (!selected) return;
+
+      trigger.textContent = selected.textContent || selected.label || '';
+      optionButtons.forEach(function(btn) {
+        var isActive = btn.dataset.value === selected.value;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+    }
+
+    function setValue(value) {
+      if (select.value === value) return;
+      select.value = value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    options.forEach(function(option) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pf-combobox-option';
+      btn.dataset.value = option.value || '';
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', 'false');
+      btn.textContent = option.textContent || option.label || '';
+      if (option.disabled) btn.disabled = true;
+      btn.addEventListener('click', function() {
+        if (btn.disabled) return;
+        setValue(btn.dataset.value || '');
+        closePanel();
+        trigger.focus();
+      });
+      list.appendChild(btn);
+      optionButtons.push(btn);
+    });
+
+    trigger.addEventListener('click', function() {
+      if (wrapper.classList.contains('open')) {
+        closePanel();
+      } else {
+        openPanel();
+      }
+    });
+
+    trigger.addEventListener('keydown', function(event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!wrapper.classList.contains('open')) openPanel();
+        moveFocus(event.key === 'ArrowDown' ? 1 : -1);
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (wrapper.classList.contains('open')) closePanel();
+        else openPanel();
+      }
+      if (event.key === 'Escape') closePanel();
+    });
+
+    list.addEventListener('keydown', function(event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveFocus(event.key === 'ArrowDown' ? 1 : -1);
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        if (optionButtons.length) optionButtons[0].focus();
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        if (optionButtons.length) optionButtons[optionButtons.length - 1].focus();
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        var focused = document.activeElement;
+        if (focused && focused.classList.contains('pf-combobox-option')) {
+          event.preventDefault();
+          focused.click();
+        }
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closePanel();
+        trigger.focus();
+      }
+    });
+
+    document.addEventListener('click', function(event) {
+      if (!wrapper.contains(event.target)) closePanel();
+    });
+
+    select.dataset.enhancedCombobox = 'true';
+    select.classList.add('pf-enhanced-native');
+    select.insertAdjacentElement('afterend', wrapper);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(panel);
+    syncFromSelect();
+
+    return { sync: syncFromSelect };
+  }
+
+  function syncNamespaceCombobox() {
+    if (namespaceCombo && typeof namespaceCombo.sync === 'function') namespaceCombo.sync();
+  }
 
   function loadState() {
     var hash = window.location.hash || '';
@@ -207,6 +383,7 @@
   if (namespaceSelect) {
     namespaceSelect.addEventListener('change', function() {
       activeNamespace = namespaceSelect.value || '';
+      syncNamespaceCombobox();
       applyFilter(filterInput ? filterInput.value : '');
     });
   }
@@ -221,6 +398,7 @@
       if (namespaceSelect) {
         namespaceSelect.value = '';
       }
+      syncNamespaceCombobox();
       kindButtons.forEach(function(b) { b.classList.remove('active'); });
       if (kindButtons.length) {
         kindButtons[0].classList.add('active');
@@ -435,6 +613,7 @@
     (activeBtn || kindButtons[0]).classList.add('active');
   }
   if (namespaceSelect) namespaceSelect.value = activeNamespace || '';
+  syncNamespaceCombobox();
   if (memberKindButtons.length) {
     memberKindButtons.forEach(function(b) { b.classList.remove('active'); });
     var activeMemberBtn = memberKindButtons.find(function(b) { return (b.dataset.memberKind || '') === activeMemberKind; });

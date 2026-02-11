@@ -33,6 +33,21 @@ body.pf-api-docs a:hover{color:var(--pf-accent,#a78bfa)}
 .filter-button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.75rem;cursor:pointer}
 .filter-button.active{background:#1f2937;border-color:var(--pf-accent,#a78bfa);color:#e6e9f3}
 .namespace-select{width:100%;padding:6px 8px;border-radius:10px;border:1px solid rgba(148,163,184,.3);background:#0f172a;color:#e6e9f3}
+body.pf-api-docs .namespace-select.pf-enhanced-native{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
+body.pf-api-docs .pf-combobox{position:relative}
+body.pf-api-docs .pf-combobox-trigger{position:relative;width:100%;padding:6px 30px 6px 10px;border-radius:10px;border:1px solid rgba(148,163,184,.3);background:#0f172a;color:#e6e9f3;font-size:.82rem;line-height:1.2;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.pf-api-docs .pf-combobox-trigger:focus-visible{outline:2px solid var(--pf-accent,#a78bfa);outline-offset:1px}
+body.pf-api-docs .pf-combobox-trigger::after{content:"";position:absolute;right:10px;top:50%;width:8px;height:8px;border-right:2px solid #94a3b8;border-bottom:2px solid #94a3b8;transform:translateY(-65%) rotate(45deg);transition:transform .15s ease}
+body.pf-api-docs .pf-combobox.open .pf-combobox-trigger::after{transform:translateY(-40%) rotate(225deg)}
+body.pf-api-docs .pf-combobox-panel{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:70;background:#0f172a;border:1px solid rgba(148,163,184,.24);border-radius:10px;box-shadow:0 16px 28px rgba(2,6,23,.55);padding:4px}
+body.pf-api-docs .pf-combobox-list{max-height:min(280px,42vh);overflow:auto;display:grid;gap:2px;padding-right:2px;scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.35) rgba(15,23,42,.8)}
+body.pf-api-docs .pf-combobox-list::-webkit-scrollbar{width:8px}
+body.pf-api-docs .pf-combobox-list::-webkit-scrollbar-track{background:rgba(15,23,42,.75);border-radius:999px}
+body.pf-api-docs .pf-combobox-list::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.48),rgba(148,163,184,.28));border-radius:999px;border:1px solid rgba(148,163,184,.24)}
+body.pf-api-docs .pf-combobox-list::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(167,139,250,.55),rgba(148,163,184,.35))}
+body.pf-api-docs .pf-combobox-option{display:block;width:100%;padding:7px 8px;border:0;border-radius:8px;background:transparent;color:#e6e9f3;font-size:.82rem;line-height:1.25;text-align:left;cursor:pointer}
+body.pf-api-docs .pf-combobox-option:hover,body.pf-api-docs .pf-combobox-option:focus-visible{background:rgba(167,139,250,.18);color:#f5f3ff;outline:none}
+body.pf-api-docs .pf-combobox-option.active{background:rgba(167,139,250,.24);color:#f5f3ff}
 .sidebar-count{font-size:.75rem;color:#94a3b8;margin:8px 0 12px}
 .sidebar-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .sidebar-tools button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.7rem;cursor:pointer}
