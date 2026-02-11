@@ -33,13 +33,30 @@ public class WebApiDocsGeneratorPowerShellTests
                         <command:name>New-SampleCmdlet</command:name>
                         <command:parameter required="true" globbing="false" pipelineInput="false" position="named">
                           <maml:name>Name</maml:name>
-                          <maml:description>
-                            <maml:para>Name value.</maml:para>
-                          </maml:description>
                           <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                        <command:parameter required="false" defaultValue="General" globbing="false" pipelineInput="false" position="named">
+                          <maml:name>Category</maml:name>
+                          <command:parameterValue required="false">string</command:parameterValue>
                         </command:parameter>
                       </command:syntaxItem>
                     </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true" globbing="false" pipelineInput="false" position="named">
+                        <maml:name>Name</maml:name>
+                        <maml:description>
+                          <maml:para>Name value from command parameters.</maml:para>
+                        </maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="false" defaultValue="General" globbing="false" pipelineInput="false" position="named">
+                        <maml:name>Category</maml:name>
+                        <maml:description>
+                          <maml:para>Category from command parameters.</maml:para>
+                        </maml:description>
+                        <command:parameterValue required="false">string</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
                     <command:examples>
                       <command:example>
                         <maml:title>----------  Example 1: Basic usage.  ----------</maml:title>
@@ -87,12 +104,18 @@ public class WebApiDocsGeneratorPowerShellTests
             var methods = rootElement.GetProperty("methods");
             var parameters = methods[0].GetProperty("parameters");
             Assert.False(parameters[0].GetProperty("isOptional").GetBoolean());
+            Assert.Equal("Name value from command parameters.", parameters[0].GetProperty("summary").GetString());
+            Assert.True(parameters[1].GetProperty("isOptional").GetBoolean());
+            Assert.Equal("General", parameters[1].GetProperty("defaultValue").GetString());
+            Assert.Equal("Category from command parameters.", parameters[1].GetProperty("summary").GetString());
 
             var htmlPath = Path.Combine(outputPath, "new-samplecmdlet", "index.html");
             Assert.True(File.Exists(htmlPath));
             var html = File.ReadAllText(htmlPath);
             Assert.Contains("type-examples", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
+            Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);
+            Assert.Contains("Category from command parameters.", html, StringComparison.Ordinal);
         }
         finally
         {

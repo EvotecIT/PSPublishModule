@@ -142,6 +142,7 @@ public static partial class WebApiDocsGenerator
             };
 
             var syntax = command.Element(commandNs + "syntax");
+            var commandParameterMap = BuildPowerShellParameterMap(command, commandNs, mamlNs, devNs);
             if (syntax is not null)
             {
                 foreach (var syntaxItem in syntax.Elements(commandNs + "syntaxItem"))
@@ -155,12 +156,21 @@ public static partial class WebApiDocsGenerator
                     foreach (var parameter in syntaxItem.Elements(commandNs + "parameter"))
                     {
                         var paramName = parameter.Element(mamlNs + "name")?.Value?.Trim() ?? string.Empty;
+                        commandParameterMap.TryGetValue(paramName, out var commandParameter);
                         var paramSummary = JoinParagraphs(parameter.Element(mamlNs + "description"), mamlNs);
+                        if (string.IsNullOrWhiteSpace(paramSummary))
+                            paramSummary = commandParameter?.Summary;
                         var paramType = parameter.Element(commandNs + "parameterValue")?.Value?.Trim();
                         if (string.IsNullOrWhiteSpace(paramType))
                             paramType = parameter.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(paramType))
+                            paramType = commandParameter?.Type;
                         var isRequired = bool.TryParse(parameter.Attribute("required")?.Value, out var required) && required;
+                        if (!isRequired && commandParameter is not null)
+                            isRequired = commandParameter.Required;
                         var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(defaultValue))
+                            defaultValue = commandParameter?.DefaultValue;
 
                         member.Parameters.Add(new ApiParameterModel
                         {
@@ -246,6 +256,43 @@ public static partial class WebApiDocsGenerator
         return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
     }
 
+    private static Dictionary<string, PowerShellParameterInfo> BuildPowerShellParameterMap(
+        XElement command,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
+    {
+        var map = new Dictionary<string, PowerShellParameterInfo>(StringComparer.OrdinalIgnoreCase);
+        var parameters = command.Element(commandNs + "parameters");
+        if (parameters is null)
+            return map;
+
+        foreach (var parameter in parameters.Elements(commandNs + "parameter"))
+        {
+            var name = parameter.Element(mamlNs + "name")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var summary = JoinParagraphs(parameter.Element(mamlNs + "description"), mamlNs);
+            var type = parameter.Element(commandNs + "parameterValue")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(type))
+                type = parameter.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+
+            var required = bool.TryParse(parameter.Attribute("required")?.Value, out var parsedRequired) && parsedRequired;
+            var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
+
+            map[name] = new PowerShellParameterInfo
+            {
+                Summary = summary,
+                Type = type,
+                Required = required,
+                DefaultValue = defaultValue
+            };
+        }
+
+        return map;
+    }
+
     private static string? JoinReturnValues(XElement command, XNamespace commandNs, XNamespace mamlNs)
     {
         var values = command.Element(commandNs + "returnValues");
@@ -322,5 +369,13 @@ public static partial class WebApiDocsGenerator
         var normalized = title.Trim();
         normalized = normalized.Trim('-').Trim();
         return normalized;
+    }
+
+    private sealed class PowerShellParameterInfo
+    {
+        public string? Summary { get; set; }
+        public string? Type { get; set; }
+        public bool Required { get; set; }
+        public string? DefaultValue { get; set; }
     }
 }
