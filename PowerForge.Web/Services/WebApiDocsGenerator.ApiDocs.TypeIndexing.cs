@@ -232,13 +232,30 @@ public static partial class WebApiDocsGenerator
     private static string RenderSourceLink(ApiSourceLink link)
     {
         var suffix = link.Line > 0 ? $":{link.Line}" : string.Empty;
-        var label = System.Web.HttpUtility.HtmlEncode($"{link.Path}{suffix}");
+        var displayPath = NormalizeSourceDisplayPath(link.Path);
+        var label = System.Web.HttpUtility.HtmlEncode($"{displayPath}{suffix}");
         if (!string.IsNullOrWhiteSpace(link.Url))
         {
             var href = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
             return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
         }
         return $"<code>{label}</code>";
+    }
+
+    private static string NormalizeSourceDisplayPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = path.Replace('\\', '/').Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2 && string.Equals(parts[0], parts[1], StringComparison.OrdinalIgnoreCase))
+            return string.Join("/", parts.Skip(1));
+
+        return string.Join("/", parts);
     }
 
     private static string? RenderTypeSourceAction(ApiSourceLink? link)
