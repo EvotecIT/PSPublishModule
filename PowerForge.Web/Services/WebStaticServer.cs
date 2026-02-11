@@ -113,8 +113,8 @@ public static class WebStaticServer
             }
             catch (HttpListenerException ex)
             {
-                var portInUse = IsPortInUse(ex);
-                if (autoPortFallback && portInUse)
+                var portUnavailable = IsPortUnavailableForBinding(ex);
+                if (autoPortFallback && portUnavailable)
                 {
                     lastBindException = ex;
                     try { listener.Close(); } catch { }
@@ -144,13 +144,17 @@ public static class WebStaticServer
         throw new IOException($"Could not start server on {host}:{requestedPort}.");
     }
 
-    private static bool IsPortInUse(HttpListenerException ex)
+    private static bool IsPortUnavailableForBinding(HttpListenerException ex)
     {
         var code = ex.NativeErrorCode;
-        if (code == 183 || code == 10048 || code == 98)
+        if (code == 5 || code == 183 || code == 10048 || code == 98)
             return true;
 
         var message = ex.Message ?? string.Empty;
+        if (message.IndexOf("access is denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("permission denied", StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+
         return message.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||
                message.IndexOf("in use", StringComparison.OrdinalIgnoreCase) >= 0 ||
                message.IndexOf("address already", StringComparison.OrdinalIgnoreCase) >= 0 ||
