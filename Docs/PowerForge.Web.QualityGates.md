@@ -88,6 +88,7 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 - Prefer strict theme contracts over "it renders ok on one site":
   - `theme.manifest.json` should declare `features` and `featureContracts`.
   - For `apiDocs`, include required fragments and a CSS selector contract.
+- With `failOnNavLint:true`, keep `Navigation.Surfaces` explicit for feature-heavy sites (`docs`, `apiDocs`) so nav contracts fail early instead of drifting across page types.
 - Add budgets only when you can defend them:
   - `maxTotalFiles` is a simple early warning for accidental output explosion.
   - Sites with API references can legitimately exceed 800 files (per-type pages add up quickly). Set a budget that reflects the site's expected scale (example: 2000-5000) or exclude known large outputs from budgets via `budgetExclude` (for example `api/**`).

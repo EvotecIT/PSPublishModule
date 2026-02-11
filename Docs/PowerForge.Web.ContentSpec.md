@@ -438,7 +438,8 @@ Best practice (theme rendering):
   - `{{ pf.menu_tree "docs" 4 }}` renders a nested `<ul>` tree for sidebar menus.
 
 ### Navigation surfaces (stable projections)
-If your site defines `Navigation.Surfaces`, the runtime `navigation` object also exposes `navigation.surfaces` as named projections.
+The runtime `navigation` object exposes `navigation.surfaces` as named projections.
+PowerForge can infer defaults (`main`, `docs`, `apidocs`, `products`) from features/menus, but production sites should define `Navigation.Surfaces` explicitly so verify/nav-lint checks stay deterministic.
 This helps themes avoid hard-coding assumptions like "docs sidebar == menu named docs" and supports multi-surface headers (main/products/docs).
 Example:
 ```json

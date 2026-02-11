@@ -121,6 +121,8 @@ public static partial class WebSiteVerifier
         var nav = spec.Navigation;
         if (nav is null) return;
 
+        ValidateNavigationSurfaces(spec, warnings);
+
         var knownRoutes = routes
             .Where(route => !string.IsNullOrWhiteSpace(route))
             .Select(NormalizeRouteForNavigationMatch)
@@ -690,6 +692,10 @@ public static partial class WebSiteVerifier
             {
                 warnings.Add("Navigation lint: site-nav.json does not contain 'surfaces'. Regenerate the nav export so themes and tools can rely on stable nav surfaces (main/docs/apidocs/products).");
             }
+            else
+            {
+                ValidateSiteNavSurfaceShape(spec, surfaces, warnings);
+            }
 
             var menu = nav.Menus.FirstOrDefault(m => string.Equals(m.Name, "main", StringComparison.OrdinalIgnoreCase));
             if (menu is null || menu.Items is null || menu.Items.Length == 0) return;
@@ -730,6 +736,226 @@ public static partial class WebSiteVerifier
         {
             warnings.Add($"Navigation lint: failed to read site-nav.json for navigation consistency: {ex.Message}");
         }
+    }
+
+    private static void ValidateNavigationSurfaces(SiteSpec spec, List<string> warnings)
+    {
+        if (spec is null || warnings is null)
+            return;
+
+        var nav = spec.Navigation;
+        if (nav is null)
+            return;
+
+        var expected = ResolveExpectedSurfaceNames(spec);
+        if (expected.Count == 0)
+            return;
+
+        var declared = nav.Surfaces ?? Array.Empty<NavigationSurfaceSpec>();
+        if (declared.Length == 0)
+        {
+            var expectedPreview = string.Join("/", expected.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase));
+            warnings.Add($"Navigation lint: expected nav surfaces ({expectedPreview}) are not explicitly defined in Navigation.Surfaces. Add explicit surfaces so docs/API/profile navigation stays deterministic across themes and API docs.");
+            return;
+        }
+
+        var byName = new Dictionary<string, NavigationSurfaceSpec>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < declared.Length; i++)
+        {
+            var surface = declared[i];
+            if (surface is null)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(surface.Name))
+            {
+                warnings.Add($"Navigation lint: Navigation.Surfaces[{i}] has an empty surface name.");
+                continue;
+            }
+
+            var normalized = NormalizeSurfaceName(surface.Name);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            if (!byName.TryAdd(normalized, surface))
+            {
+                warnings.Add($"Navigation lint: Navigation.Surfaces defines duplicate surface '{surface.Name}' (normalized '{normalized}').");
+            }
+        }
+
+        foreach (var required in expected)
+        {
+            if (!byName.TryGetValue(required, out var surface) || surface is null)
+            {
+                warnings.Add($"Navigation lint: expected nav surface '{required}' is missing from Navigation.Surfaces.");
+                continue;
+            }
+
+            ValidateNavigationSurfaceContract(required, surface, warnings);
+        }
+    }
+
+    private static void ValidateSiteNavSurfaceShape(SiteSpec spec, JsonElement surfaces, List<string> warnings)
+    {
+        if (spec is null || warnings is null || surfaces.ValueKind != JsonValueKind.Object)
+            return;
+
+        var expected = ResolveExpectedSurfaceNames(spec);
+        if (expected.Count == 0)
+            return;
+
+        var exported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in surfaces.EnumerateObject())
+        {
+            var normalized = NormalizeSurfaceName(property.Name);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                exported.Add(normalized);
+        }
+
+        foreach (var required in expected)
+        {
+            if (!exported.Contains(required))
+            {
+                warnings.Add($"Navigation lint: site-nav.json surfaces are missing expected '{required}' surface. Regenerate nav export so downstream consumers use the same navigation contracts.");
+            }
+        }
+    }
+
+    private static void ValidateNavigationSurfaceContract(string expectedName, NavigationSurfaceSpec surface, List<string> warnings)
+    {
+        if (string.IsNullOrWhiteSpace(expectedName) || surface is null || warnings is null)
+            return;
+
+        var label = string.IsNullOrWhiteSpace(surface.Name) ? expectedName : surface.Name.Trim();
+
+        if (!string.IsNullOrWhiteSpace(surface.Path) &&
+            !surface.Path.Trim().StartsWith("/", StringComparison.Ordinal) &&
+            !IsExternalNavigationUrl(surface.Path))
+        {
+            warnings.Add($"Navigation lint: Navigation.Surfaces['{label}'].Path '{surface.Path}' should be root-relative (for example '/api/').");
+        }
+
+        if (expectedName.Equals("main", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(surface.Path))
+            {
+                var normalized = NormalizeRouteForNavigationMatch(surface.Path);
+                if (!string.Equals(normalized, "/", StringComparison.OrdinalIgnoreCase))
+                    warnings.Add($"Navigation lint: Navigation.Surfaces['{label}'] should target root path '/' for main navigation.");
+            }
+            return;
+        }
+
+        if (expectedName.Equals("docs", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasDocsPath = !string.IsNullOrWhiteSpace(surface.Path) &&
+                              NormalizeRouteForNavigationMatch(surface.Path).StartsWith("/docs/", StringComparison.OrdinalIgnoreCase);
+            var hasDocsCollection = !string.IsNullOrWhiteSpace(surface.Collection) &&
+                                    surface.Collection.Trim().Equals("docs", StringComparison.OrdinalIgnoreCase);
+            var hasDocsLayout = !string.IsNullOrWhiteSpace(surface.Layout) &&
+                                surface.Layout.Trim().Equals("docs", StringComparison.OrdinalIgnoreCase);
+            if (!hasDocsPath && !hasDocsCollection && !hasDocsLayout)
+            {
+                warnings.Add($"Navigation lint: Navigation.Surfaces['{label}'] should target docs context (path '/docs/', collection 'docs', or layout 'docs').");
+            }
+            return;
+        }
+
+        if (expectedName.Equals("apidocs", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasApiPath = !string.IsNullOrWhiteSpace(surface.Path) &&
+                             NormalizeRouteForNavigationMatch(surface.Path).StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
+            var hasApiLayout = NormalizeFeatureName(surface.Layout).Equals("apidocs", StringComparison.OrdinalIgnoreCase);
+            if (!hasApiPath && !hasApiLayout)
+            {
+                warnings.Add($"Navigation lint: Navigation.Surfaces['{label}'] should target API docs context (path '/api/' or layout 'apiDocs').");
+            }
+            return;
+        }
+
+        if (expectedName.Equals("products", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(surface.ProductsMenu))
+            {
+                warnings.Add($"Navigation lint: Navigation.Surfaces['{label}'] should set productsMenu (usually 'products') for stable product switcher rendering.");
+            }
+        }
+    }
+
+    private static HashSet<string> ResolveExpectedSurfaceNames(SiteSpec spec)
+    {
+        var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (spec is null)
+            return expected;
+
+        var nav = spec.Navigation;
+        if (nav is null)
+            return expected;
+
+        var features = NormalizeFeatures(spec.Features);
+        var inferred = InferFeatures(spec);
+        features.UnionWith(inferred);
+
+        var menus = nav.Menus ?? Array.Empty<MenuSpec>();
+        var hasMainMenu = menus.Any(m => m is not null && string.Equals(m.Name, "main", StringComparison.OrdinalIgnoreCase));
+        var hasDocsMenu = menus.Any(m =>
+            m is not null &&
+            (string.Equals(m.Name, "docs", StringComparison.OrdinalIgnoreCase) ||
+             ContainsNavigationUrlPrefix(m.Items, "/docs")));
+        var hasApiLinks = menus.Any(m => m is not null && ContainsNavigationUrlPrefix(m.Items, "/api"));
+        var hasProductsMenu = menus.Any(m => m is not null && string.Equals(m.Name, "products", StringComparison.OrdinalIgnoreCase));
+
+        var needsDocs = features.Contains("docs") || hasDocsMenu;
+        var needsApiDocs = features.Contains("apidocs") || hasApiLinks;
+        var needsProducts = hasProductsMenu;
+        var hasAnyNavigation = menus.Length > 0 ||
+                               (nav.Actions?.Length ?? 0) > 0 ||
+                               (nav.Regions?.Length ?? 0) > 0;
+
+        if (hasAnyNavigation || hasMainMenu || needsDocs || needsApiDocs || needsProducts)
+            expected.Add("main");
+        if (needsDocs)
+            expected.Add("docs");
+        if (needsApiDocs)
+            expected.Add("apidocs");
+        if (needsProducts)
+            expected.Add("products");
+
+        return expected;
+    }
+
+    private static bool ContainsNavigationUrlPrefix(MenuItemSpec[]? items, string prefix)
+    {
+        if (items is null || items.Length == 0 || string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        foreach (var item in items)
+        {
+            if (item is null)
+                continue;
+            if (!string.IsNullOrWhiteSpace(item.Url) &&
+                item.Url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (ContainsNavigationUrlPrefix(item.Items, prefix))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeSurfaceName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (trimmed.Equals("api", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("apiDocs", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("apidocs", StringComparison.OrdinalIgnoreCase))
+            return "apidocs";
+
+        return trimmed.ToLowerInvariant();
     }
 
 }
