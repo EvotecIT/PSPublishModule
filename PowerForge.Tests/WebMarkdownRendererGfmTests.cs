@@ -24,6 +24,27 @@ public class WebMarkdownRendererGfmTests
         Assert.DoesNotContain("<dd>", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_FaqQABoldStyle_RendersStrongInsteadOfLiteralAsterisks()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # FAQ
+
+            ## Auth
+
+            **Q: `auth login` opens a URL but nothing happens.**  
+            A: Ensure the browser can reach the callback URL and try `--print` to paste the code manually.
+
+            **Q: I see `No OpenAI auth bundle found`.**  
+            A: Run `intelligencex auth login` or `intelligencex auth export --format store-base64`.
+            """);
+
+        Assert.Contains("<strong>Q:", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("* *Q", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("**Q:", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(string markdown)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));
