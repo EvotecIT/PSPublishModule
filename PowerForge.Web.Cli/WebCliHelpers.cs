@@ -60,6 +60,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
+        Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
+        Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
         Console.WriteLine("                     [--suppress-warning <pattern>]");
         Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");

@@ -25,6 +25,8 @@ Follow a deterministic "golden path" so agents can build sites without guessing.
 6. Make API docs use site chrome and correct CSS.
    - Provide `api-header`/`api-footer` partials that match the site header/footer structure/classes.
    - Use multi-CSS: `"/css/app.css,/css/api.css"` (or the equivalent for the site).
+   - Emit API coverage report (`coverageReport`) so CI can track documentation completeness.
+   - For PowerShell APIs, wire `psExamplesPath` (or rely on `Examples/` discovery) to enable fallback examples when help XML is sparse.
 7. Add quality gates with an escape hatch.
    - Use baselines for legacy noise; fail only on new issues in CI.
 8. Run locally in dev and ci modes and verify output.
@@ -38,4 +40,3 @@ Follow a deterministic "golden path" so agents can build sites without guessing.
 - `references/blueprint.md`: minimal recommended `site.json`/`pipeline.json`/theme contract patterns.
 - `references/theme-contracts.md`: feature contract checklist (docs/apiDocs/blog/search/404).
 - `references/agent-prompts.md`: copy/paste prompts for Claude/agents (new site, refactor theme, fix api docs).
-
