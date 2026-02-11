@@ -221,6 +221,7 @@ public static partial class WebApiDocsGenerator
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        ValidateSourceUrlPatternConsistency(options, types, warnings);
         ValidateConfiguredQuickStartTypes(types, options, warnings);
 
         var index = new Dictionary<string, object?>
@@ -584,6 +585,8 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.REFLECTION] " + warning;
 
         if (trimmed.StartsWith("Source links disabled:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("SourceUrlPattern repo", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
 
         if (trimmed.StartsWith("Failed to parse PowerShell help:", StringComparison.OrdinalIgnoreCase) ||
