@@ -48,6 +48,12 @@ internal static partial class WebPipelineRunner
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
                         GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
+        var sourceUrlMappings = GetApiDocsSourceUrlMappings(
+            step,
+            "sourceUrlMappings",
+            "source-url-mappings",
+            "sourceMappings",
+            "source-mappings");
         var includeUndocumented = GetBool(step, "includeUndocumented") ?? GetBool(step, "include-undocumented") ?? true;
         var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
         var navContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ??
@@ -186,6 +192,8 @@ internal static partial class WebPipelineRunner
             BrandUrl = brandUrl,
             BrandIcon = brandIcon
         };
+        if (sourceUrlMappings.Length > 0)
+            options.SourceUrlMappings.AddRange(sourceUrlMappings);
 
         var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);
         var excludeList = CliPatternHelper.SplitPatterns(excludeNamespaces);

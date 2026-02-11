@@ -36,6 +36,7 @@ internal static partial class WebCliCommandHandlers
         var bodyClass = TryGetOptionValue(subArgs, "--body-class") ?? TryGetOptionValue(subArgs, "--bodyClass");
         var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
         var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
+        var sourceMapValues = GetOptionValues(subArgs, "--source-map");
         var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
         if (HasOption(subArgs, "--include-undocumented"))
             includeUndocumented = true;
@@ -88,6 +89,15 @@ internal static partial class WebCliCommandHandlers
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = navJson
         };
+        foreach (var sourceMapValue in sourceMapValues)
+        {
+            if (!TryParseApiDocsSourceMap(sourceMapValue, out var mapping))
+            {
+                logger.Warn($"Ignoring invalid --source-map value '{sourceMapValue}'. Expected format: <pathPrefix>=<urlPattern>");
+                continue;
+            }
+            options.SourceUrlMappings.Add(mapping);
+        }
         if (includeNamespaces.Count > 0)
             options.IncludeNamespacePrefixes.AddRange(includeNamespaces);
         if (excludeNamespaces.Count > 0)
@@ -271,6 +281,40 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"llms.json: {result.LlmsJsonPath}");
         logger.Info($"llms-full.txt: {result.LlmsFullPath}");
         return 0;
+    }
+
+    private static bool TryParseApiDocsSourceMap(string? value, out WebApiDocsSourceUrlMapping mapping)
+    {
+        mapping = new WebApiDocsSourceUrlMapping();
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        var separator = trimmed.IndexOf('=');
+        if (separator <= 0 || separator >= trimmed.Length - 1)
+            return false;
+
+        var prefix = trimmed.Substring(0, separator).Trim();
+        var pattern = trimmed.Substring(separator + 1).Trim();
+        if (string.IsNullOrWhiteSpace(prefix) || string.IsNullOrWhiteSpace(pattern))
+            return false;
+
+        var strip = false;
+        if (prefix.EndsWith(":strip", StringComparison.OrdinalIgnoreCase))
+        {
+            prefix = prefix.Substring(0, prefix.Length - ":strip".Length).Trim();
+            strip = true;
+        }
+        if (string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        mapping = new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = prefix,
+            UrlPattern = pattern,
+            StripPathPrefix = strip
+        };
+        return true;
     }
 
     private static int HandleSitemap(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)

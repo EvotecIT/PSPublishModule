@@ -91,6 +91,11 @@ public sealed class WebApiDocsOptions
     public string? SourceRootPath { get; set; }
     /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
     public string? SourceUrlPattern { get; set; }
+    /// <summary>
+    /// Optional source URL mapping rules used for mixed-source API docs.
+    /// The first rule with the longest matching <see cref="WebApiDocsSourceUrlMapping.PathPrefix"/> wins.
+    /// </summary>
+    public List<WebApiDocsSourceUrlMapping> SourceUrlMappings { get; } = new();
     /// <summary>Include undocumented public types when XML docs are partial.</summary>
     public bool IncludeUndocumentedTypes { get; set; } = true;
     /// <summary>Optional list of namespace prefixes to include.</summary>
@@ -106,6 +111,27 @@ public sealed class WebApiDocsOptions
     /// Values are matched case-insensitively against type simple names.
     /// </summary>
     public List<string> QuickStartTypeNames { get; } = new();
+}
+
+/// <summary>Path-based source URL mapping for API source/edit links.</summary>
+public sealed class WebApiDocsSourceUrlMapping
+{
+    /// <summary>
+    /// Relative path prefix used to match discovered source paths (for example: <c>HtmlForgeX.Email/</c>).
+    /// Matching is case-insensitive and slash-normalized.
+    /// </summary>
+    public string PathPrefix { get; set; } = string.Empty;
+
+    /// <summary>
+    /// URL pattern used when the prefix matches. Supports tokens:
+    /// <c>{path}</c>, <c>{line}</c>, <c>{root}</c>, <c>{pathNoRoot}</c>, and <c>{pathNoPrefix}</c>.
+    /// </summary>
+    public string UrlPattern { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, trims <see cref="PathPrefix"/> from <c>{path}</c> for this rule.
+    /// </summary>
+    public bool StripPathPrefix { get; set; }
 }
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>

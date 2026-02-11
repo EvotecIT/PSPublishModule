@@ -176,6 +176,52 @@ internal static partial class WebPipelineRunner
         return list.Count == 0 ? null : list.ToArray();
     }
 
+    private static WebApiDocsSourceUrlMapping[] GetApiDocsSourceUrlMappings(JsonElement element, params string[] names)
+    {
+        if (element.ValueKind != JsonValueKind.Object || names is null || names.Length == 0)
+            return Array.Empty<WebApiDocsSourceUrlMapping>();
+
+        JsonElement array = default;
+        var found = false;
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            if (!element.TryGetProperty(name, out var candidate))
+                continue;
+            if (candidate.ValueKind != JsonValueKind.Array)
+                continue;
+            array = candidate;
+            found = true;
+            break;
+        }
+
+        if (!found)
+            return Array.Empty<WebApiDocsSourceUrlMapping>();
+
+        var results = new List<WebApiDocsSourceUrlMapping>();
+        foreach (var item in array.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var pathPrefix = GetString(item, "pathPrefix") ?? GetString(item, "prefix");
+            var urlPattern = GetString(item, "urlPattern") ?? GetString(item, "url") ?? GetString(item, "sourceUrl");
+            var stripPathPrefix = GetBool(item, "stripPathPrefix") ?? GetBool(item, "stripPrefix") ?? false;
+            if (string.IsNullOrWhiteSpace(pathPrefix) || string.IsNullOrWhiteSpace(urlPattern))
+                continue;
+
+            results.Add(new WebApiDocsSourceUrlMapping
+            {
+                PathPrefix = pathPrefix,
+                UrlPattern = urlPattern,
+                StripPathPrefix = stripPathPrefix
+            });
+        }
+
+        return results.ToArray();
+    }
+
     private static WebSitemapEntry[] GetSitemapEntries(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object) return Array.Empty<WebSitemapEntry>();

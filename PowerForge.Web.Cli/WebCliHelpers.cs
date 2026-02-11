@@ -61,7 +61,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
         Console.WriteLine("                     [--suppress-warning <pattern>]");
-        Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--documented-only]");
+        Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
+        Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
         Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
         Console.WriteLine("                     [--quickstart-types <type[,type]>]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");

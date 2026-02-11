@@ -31,9 +31,7 @@ public static partial class WebApiDocsGenerator
         var criticalCss = ResolveCriticalCss(options, warnings);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
-        var cssBlock = string.IsNullOrWhiteSpace(cssLinks)
-            ? WrapStyle(fallbackCss)
-            : cssLinks;
+        var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var typeLinks = new StringBuilder();
@@ -108,9 +106,7 @@ public static partial class WebApiDocsGenerator
         var criticalCss = ResolveCriticalCss(options, warnings);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
-        var cssBlock = string.IsNullOrWhiteSpace(cssLinks)
-            ? WrapStyle(fallbackCss)
-            : cssLinks;
+        var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
@@ -302,6 +298,16 @@ public static partial class WebApiDocsGenerator
             sb.Append($"<link rel=\"stylesheet\" href=\"{href}\" />");
         }
         return sb.ToString();
+    }
+
+    private static string BuildCssBlockWithFallback(string fallbackCss, string cssLinks)
+    {
+        var fallbackBlock = WrapStyle(fallbackCss);
+        if (string.IsNullOrWhiteSpace(cssLinks))
+            return fallbackBlock;
+        if (string.IsNullOrWhiteSpace(fallbackBlock))
+            return cssLinks;
+        return $"{fallbackBlock}{Environment.NewLine}{cssLinks}";
     }
 
     private static string[] SplitCssHrefs(string? cssHref)

@@ -16,6 +16,10 @@ public static partial class WebApiDocsGenerator
             return;
         if (string.IsNullOrWhiteSpace(options.SourceUrlPattern))
             return;
+        if (options.SourceUrlMappings.Count > 0)
+            return; // Explicit mapping rules own source URL selection.
+        if (options.SourceUrlPattern.IndexOf("{root}", StringComparison.OrdinalIgnoreCase) >= 0)
+            return; // Dynamic repo token already adapts per discovered source root.
         if (!TryExtractGitHubRepoName(options.SourceUrlPattern, out var repoName))
             return;
 
@@ -86,6 +90,9 @@ public static partial class WebApiDocsGenerator
 
         var candidate = pattern
             .Replace("{path}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoRoot}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{pathNoPrefix}", "sample/path.cs", StringComparison.OrdinalIgnoreCase)
+            .Replace("{root}", "SampleRepo", StringComparison.OrdinalIgnoreCase)
             .Replace("{line}", "1", StringComparison.OrdinalIgnoreCase);
         if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri))
             return false;
