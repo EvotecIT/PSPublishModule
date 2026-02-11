@@ -22,7 +22,8 @@ namespace PSPublishModule;
 /// <para>
 /// GitHub tag/release templates support tokens:
 /// <c>{Project}</c>, <c>{Version}</c>, <c>{PrimaryProject}</c>, <c>{PrimaryVersion}</c>, <c>{Repo}</c>,
-/// <c>{Repository}</c>, <c>{Date}</c>, <c>{UtcDate}</c>.
+/// <c>{Repository}</c>, <c>{Date}</c>, <c>{UtcDate}</c>, <c>{DateTime}</c>, <c>{UtcDateTime}</c>,
+/// <c>{Timestamp}</c>, <c>{UtcTimestamp}</c>.
 /// When GitHub release mode is Single and multiple project versions are present, <c>{Version}</c> defaults to
 /// the local date (<c>yyyy.MM.dd</c>) unless a primary project version is available.
 /// </para>
@@ -262,6 +263,10 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
         var nowUtc = DateTime.UtcNow;
         var dateToken = nowLocal.ToString("yyyy.MM.dd");
         var utcDateToken = nowUtc.ToString("yyyy.MM.dd");
+        var dateTimeToken = nowLocal.ToString("yyyy.MM.dd.HHmmss");
+        var utcDateTimeToken = nowUtc.ToString("yyyy.MM.dd.HHmmss");
+        var timestampToken = nowLocal.ToString("yyyyMMddHHmmss");
+        var utcTimestampToken = nowUtc.ToString("yyyyMMddHHmmss");
         var repoName = string.IsNullOrWhiteSpace(config.GitHubRepositoryName)
             ? "repository"
             : config.GitHubRepositoryName!.Trim();
@@ -328,7 +333,11 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                         project.NewVersion ?? project.OldVersion ?? string.Empty,
                         repoName,
                         dateToken,
-                        utcDateToken);
+                        utcDateToken,
+                        dateTimeToken,
+                        utcDateTimeToken,
+                        timestampToken,
+                        utcTimestampToken);
                 }
 
                 var releaseName = string.IsNullOrWhiteSpace(config.GitHubReleaseName)
@@ -341,7 +350,11 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                         project.NewVersion ?? project.OldVersion ?? string.Empty,
                         repoName,
                         dateToken,
-                        utcDateToken);
+                        utcDateToken,
+                        dateTimeToken,
+                        utcDateTimeToken,
+                        timestampToken,
+                        utcTimestampToken);
 
                 var output = sb.Invoke(config.GitHubUsername, config.GitHubRepositoryName, gitHubToken, tag, releaseName, new[] { project.ReleaseZipPath }, config.GitHubIsPreRelease, config.GitHubGenerateReleaseNotes);
                 var status = output.Count > 0 ? output[0]?.BaseObject : null;
@@ -419,7 +432,11 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                         tagVersionToken,
                         repoName,
                         dateToken,
-                        utcDateToken)
+                        utcDateToken,
+                        dateTimeToken,
+                        utcDateTimeToken,
+                        timestampToken,
+                        utcTimestampToken)
                     : $"v{tagVersionToken}");
 
             var releaseName = string.IsNullOrWhiteSpace(config.GitHubReleaseName)
@@ -432,7 +449,11 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                     tagVersionToken,
                     repoName,
                     dateToken,
-                    utcDateToken);
+                    utcDateToken,
+                    dateTimeToken,
+                    utcDateTimeToken,
+                    timestampToken,
+                    utcTimestampToken);
 
             var output = sb.Invoke(config.GitHubUsername, config.GitHubRepositoryName, gitHubToken, tag, releaseName, distinctAssets, config.GitHubIsPreRelease, config.GitHubGenerateReleaseNotes);
             var status = output.Count > 0 ? output[0]?.BaseObject : null;
