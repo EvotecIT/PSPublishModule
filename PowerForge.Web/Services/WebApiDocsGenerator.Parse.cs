@@ -137,7 +137,7 @@ public static partial class WebApiDocsGenerator
                 Name = name!,
                 FullName = name!,
                 Namespace = moduleName ?? string.Empty,
-                Kind = ResolvePowerShellCommandKind(name!, kindHints),
+                Kind = ResolvePowerShellCommandKind(name!, kindHints, details?.Element(commandNs + "commandType")?.Value),
                 Slug = Slugify(name!),
                 Summary = summary,
                 Remarks = remarks
@@ -374,10 +374,13 @@ public static partial class WebApiDocsGenerator
         return normalized;
     }
 
-    private static string ResolvePowerShellCommandKind(string commandName, PowerShellCommandKindHints hints)
+    private static string ResolvePowerShellCommandKind(string commandName, PowerShellCommandKindHints hints, string? commandTypeRaw)
     {
         if (string.IsNullOrWhiteSpace(commandName))
             return "Cmdlet";
+        var commandType = NormalizePowerShellCommandType(commandTypeRaw);
+        if (!string.IsNullOrWhiteSpace(commandType))
+            return commandType;
         if (commandName.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
             return "About";
         if (hints.Aliases.Contains(commandName))
@@ -393,6 +396,27 @@ public static partial class WebApiDocsGenerator
         if (hints.HasSignals)
             return "Command";
         return "Cmdlet";
+    }
+
+    private static string? NormalizePowerShellCommandType(string? commandTypeRaw)
+    {
+        if (string.IsNullOrWhiteSpace(commandTypeRaw))
+            return null;
+
+        var normalized = commandTypeRaw.Trim();
+        if (normalized.Contains('.', StringComparison.Ordinal))
+            normalized = normalized[(normalized.LastIndexOf('.') + 1)..];
+
+        return normalized.ToLowerInvariant() switch
+        {
+            "cmdlet" => "Cmdlet",
+            "function" => "Function",
+            "filter" => "Function",
+            "script" => "Function",
+            "externalscript" => "Function",
+            "alias" => "Alias",
+            _ => null
+        };
     }
 
     private static void AppendPowerShellAboutTopics(
@@ -616,113 +640,6 @@ public static partial class WebApiDocsGenerator
         }
 
         return null;
-    }
-
-    private static PowerShellCommandKindHints LoadPowerShellCommandKindHints(string? manifestPath, List<string> warnings)
-    {
-        var hints = new PowerShellCommandKindHints();
-        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
-            return hints;
-
-        string text;
-        try
-        {
-            text = File.ReadAllText(manifestPath);
-        }
-        catch (Exception ex)
-        {
-            warnings?.Add($"PowerShell manifest metadata unavailable: {Path.GetFileName(manifestPath)} ({ex.GetType().Name}: {ex.Message})");
-            return hints;
-        }
-
-        hints.CmdletsWildcard = ParseManifestExportValues(text, "CmdletsToExport", hints.Cmdlets);
-        hints.FunctionsWildcard = ParseManifestExportValues(text, "FunctionsToExport", hints.Functions);
-        hints.AliasesWildcard = ParseManifestExportValues(text, "AliasesToExport", hints.Aliases);
-
-        var rootModule = ParseManifestScalarValue(text, "RootModule");
-        if (!string.IsNullOrWhiteSpace(rootModule))
-        {
-            var manifestDir = Path.GetDirectoryName(manifestPath) ?? string.Empty;
-            var modulePath = Path.IsPathRooted(rootModule)
-                ? rootModule
-                : Path.Combine(manifestDir, rootModule);
-            if (modulePath.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) && File.Exists(modulePath))
-            {
-                try
-                {
-                    var script = File.ReadAllText(modulePath);
-                    var functionRegex = new Regex(@"(?im)^\s*function\s+(?<name>[A-Za-z_][A-Za-z0-9_-]*)\b",
-                        RegexOptions.Compiled | RegexOptions.CultureInvariant,
-                        RegexTimeout);
-                    foreach (Match match in functionRegex.Matches(script))
-                    {
-                        var functionName = match.Groups["name"].Value.Trim();
-                        if (!string.IsNullOrWhiteSpace(functionName))
-                            hints.Functions.Add(functionName);
-                    }
-                }
-                catch
-                {
-                    // best-effort only
-                }
-            }
-        }
-
-        return hints;
-    }
-
-    private static bool ParseManifestExportValues(string text, string key, ISet<string> values)
-    {
-        var wildcard = false;
-        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
-            return wildcard;
-
-        var pattern = $"(?is)\\b{Regex.Escape(key)}\\b\\s*=\\s*(?<value>@\\((?<list>.*?)\\)|'[^']*'|\"[^\"]*\"|[^\\r\\n#]+)";
-        var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant, RegexTimeout);
-        if (!match.Success)
-            return wildcard;
-
-        var rawValue = match.Groups["value"].Value.Trim();
-        if (rawValue.IndexOf('*') >= 0)
-            wildcard = true;
-
-        var valueRegex = new Regex("['\"](?<value>[^'\"]+)['\"]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
-        foreach (Match valueMatch in valueRegex.Matches(rawValue))
-        {
-            var value = valueMatch.Groups["value"].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value, "*", StringComparison.Ordinal))
-                values.Add(value);
-        }
-
-        return wildcard;
-    }
-
-    private static string? ParseManifestScalarValue(string text, string key)
-    {
-        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
-            return null;
-
-        var pattern = $"(?is)\\b{Regex.Escape(key)}\\b\\s*=\\s*(?<value>'[^']*'|\"[^\"]*\"|[^\\r\\n#]+)";
-        var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant, RegexTimeout);
-        if (!match.Success)
-            return null;
-
-        var raw = match.Groups["value"].Value.Trim();
-        if ((raw.StartsWith("'", StringComparison.Ordinal) && raw.EndsWith("'", StringComparison.Ordinal)) ||
-            (raw.StartsWith("\"", StringComparison.Ordinal) && raw.EndsWith("\"", StringComparison.Ordinal)))
-            return raw[1..^1].Trim();
-        return raw.Trim();
-    }
-
-    private sealed class PowerShellCommandKindHints
-    {
-        public HashSet<string> Cmdlets { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public HashSet<string> Functions { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public HashSet<string> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public bool CmdletsWildcard { get; set; }
-        public bool FunctionsWildcard { get; set; }
-        public bool AliasesWildcard { get; set; }
-        public bool HasSignals => Cmdlets.Count > 0 || Functions.Count > 0 || Aliases.Count > 0 || CmdletsWildcard || FunctionsWildcard || AliasesWildcard;
     }
 
     private sealed class PowerShellParameterInfo

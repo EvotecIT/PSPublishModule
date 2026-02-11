@@ -258,7 +258,9 @@ Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 Each command is treated as a "type" with parameter sets rendered as methods.
 PowerForge classifies command kinds (`Cmdlet` / `Function` / `Alias`) using
 best-effort module metadata discovery (manifest exports + root module functions)
-when available.
+when available. If help XML includes `commandType`, it takes precedence over
+manifest hints. Manifest parsing supports multiline export arrays and inline
+comments.
 
 When `help` points at a directory (or a directory can be inferred from the help
 xml location), `about_*` files are also imported into the API output:
