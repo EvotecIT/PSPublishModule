@@ -84,8 +84,11 @@ GitHub releases
 - `GitHubPrimaryProject`: in single mode, chooses the version used in the tag/name.
   If multiple project versions exist and no primary is available, the tag uses the current date.
 - `GitHubTagTemplate` and `GitHubReleaseName` support tokens:
-  - `{Project}`, `{Version}`, `{PrimaryProject}`, `{PrimaryVersion}`, `{Repo}`, `{Repository}`, `{Date}`, `{UtcDate}`
+  - `{Project}`, `{Version}`, `{PrimaryProject}`, `{PrimaryVersion}`, `{Repo}`, `{Repository}`, `{Date}`, `{UtcDate}`, `{DateTime}`, `{UtcDateTime}`, `{Timestamp}`, `{UtcTimestamp}`
   - `{Date}` and `{UtcDate}` are formatted `yyyy.MM.dd`.
+  - `{DateTime}` and `{UtcDateTime}` are formatted `yyyy.MM.dd.HHmmss`.
+  - `{Timestamp}` and `{UtcTimestamp}` are formatted `yyyyMMddHHmmss`.
+  - Example collision-resistant single-release tag: `"{Repo}-v{UtcTimestamp}"`.
 
 Signing
 - `CertificateThumbprint`, `CertificateStore`, `TimeStampServer` control package signing.

@@ -236,7 +236,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Template for computed GitHub tag names. Supported tokens: {Project}, {Version}, {PrimaryProject}, {PrimaryVersion}, {Repo}, {Repository}, {Date}, {UtcDate}, {DateTime}, {UtcDateTime}, {Timestamp}, {UtcTimestamp}."
     },
     "GitHubIsPreRelease": {
       "type": "boolean"
@@ -251,7 +252,8 @@
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "description": "Template for GitHub release display name. Supports the same tokens as GitHubTagTemplate."
     }
   }
 }

@@ -210,7 +210,11 @@ public sealed partial class InvokeProjectBuildCommand
         string primaryVersion,
         string repo,
         string date,
-        string utcDate)
+        string utcDate,
+        string dateTime,
+        string utcDateTime,
+        string timestamp,
+        string utcTimestamp)
     {
         if (string.IsNullOrWhiteSpace(template)) return template;
         return template
@@ -221,7 +225,11 @@ public sealed partial class InvokeProjectBuildCommand
             .Replace("{Repo}", repo ?? string.Empty)
             .Replace("{Repository}", repo ?? string.Empty)
             .Replace("{Date}", date ?? string.Empty)
-            .Replace("{UtcDate}", utcDate ?? string.Empty);
+            .Replace("{UtcDate}", utcDate ?? string.Empty)
+            .Replace("{DateTime}", dateTime ?? string.Empty)
+            .Replace("{UtcDateTime}", utcDateTime ?? string.Empty)
+            .Replace("{Timestamp}", timestamp ?? string.Empty)
+            .Replace("{UtcTimestamp}", utcTimestamp ?? string.Empty);
     }
 
     private static void WriteGitHubSummary(
@@ -314,4 +322,3 @@ public sealed partial class InvokeProjectBuildCommand
         public string? GitHubPrimaryProject { get; set; }
     }
 }
-
