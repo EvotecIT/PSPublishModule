@@ -185,6 +185,8 @@ Notes:
   - `coverageReport`: write coverage JSON (default: `coverage.json` under apidocs output)
   - `generateCoverageReport`: enable/disable coverage report generation (default: `true`)
   - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellParameterSummaryPercent`
+  - source coverage thresholds (0-100): `minTypeSourcePathPercent`, `minTypeSourceUrlPercent`, `minMemberSourcePathPercent`, `minMemberSourceUrlPercent`, `minPowerShellSourcePathPercent`, `minPowerShellSourceUrlPercent`
+  - source quality max-count thresholds (>=0): `maxTypeSourceInvalidUrlCount`, `maxMemberSourceInvalidUrlCount`, `maxPowerShellSourceInvalidUrlCount`, `maxTypeSourceUnresolvedTemplateCount`, `maxMemberSourceUnresolvedTemplateCount`, `maxPowerShellSourceUnresolvedTemplateCount`, `maxTypeSourceRepoMismatchHints`, `maxMemberSourceRepoMismatchHints`, `maxPowerShellSourceRepoMismatchHints`
   - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
   - `coveragePreviewCount`: max failed coverage metrics shown in logs
   - PowerShell-only example inputs: `psExamplesPath`, `generatePowerShellFallbackExamples`, `powerShellFallbackExampleLimit`

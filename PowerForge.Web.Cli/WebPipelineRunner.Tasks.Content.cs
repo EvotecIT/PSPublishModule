@@ -300,19 +300,34 @@ internal static partial class WebPipelineRunner
     private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
     {
         var thresholds = new List<ApiDocsCoverageThreshold>();
-        AddCoverageThreshold(thresholds, step, "minTypeSummaryPercent", "min-type-summary-percent", "types.summary.percent", "Type summary coverage");
-        AddCoverageThreshold(thresholds, step, "minTypeRemarksPercent", "min-type-remarks-percent", "types.remarks.percent", "Type remarks coverage");
-        AddCoverageThreshold(thresholds, step, "minTypeCodeExamplesPercent", "min-type-code-examples-percent", "types.codeExamples.percent", "Type code examples coverage");
-        AddCoverageThreshold(thresholds, step, "minMemberSummaryPercent", "min-member-summary-percent", "members.summary.percent", "Member summary coverage");
-        AddCoverageThreshold(thresholds, step, "minMemberCodeExamplesPercent", "min-member-code-examples-percent", "members.codeExamples.percent", "Member code examples coverage");
-        AddCoverageThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
-        AddCoverageThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
-        AddCoverageThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
-        AddCoverageThreshold(thresholds, step, "minPowerShellParameterSummaryPercent", "min-powershell-parameter-summary-percent", "powershell.parameters.percent", "PowerShell parameter summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSummaryPercent", "min-type-summary-percent", "types.summary.percent", "Type summary coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeRemarksPercent", "min-type-remarks-percent", "types.remarks.percent", "Type remarks coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeCodeExamplesPercent", "min-type-code-examples-percent", "types.codeExamples.percent", "Type code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSummaryPercent", "min-member-summary-percent", "members.summary.percent", "Member summary coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberCodeExamplesPercent", "min-member-code-examples-percent", "members.codeExamples.percent", "Member code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellParameterSummaryPercent", "min-powershell-parameter-summary-percent", "powershell.parameters.percent", "PowerShell parameter summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourcePathPercent", "min-type-source-path-percent", "source.types.path.percent", "Type source path coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourceUrlPercent", "min-type-source-url-percent", "source.types.url.percent", "Type source URL coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourcePathPercent", "min-member-source-path-percent", "source.members.path.percent", "Member source path coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourceUrlPercent", "min-member-source-url-percent", "source.members.url.percent", "Member source URL coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourcePathPercent", "min-powershell-source-path-percent", "source.powershell.path.percent", "PowerShell command source path coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourceUrlPercent", "min-powershell-source-url-percent", "source.powershell.url.percent", "PowerShell command source URL coverage", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceInvalidUrlCount", "max-type-source-invalid-url-count", "source.types.invalidUrl.count", "Type source invalid URL count");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceInvalidUrlCount", "max-member-source-invalid-url-count", "source.members.invalidUrl.count", "Member source invalid URL count");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceInvalidUrlCount", "max-powershell-source-invalid-url-count", "source.powershell.invalidUrl.count", "PowerShell command source invalid URL count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceUnresolvedTemplateCount", "max-type-source-unresolved-template-count", "source.types.unresolvedTemplateToken.count", "Type source unresolved template token count");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceUnresolvedTemplateCount", "max-member-source-unresolved-template-count", "source.members.unresolvedTemplateToken.count", "Member source unresolved template token count");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceUnresolvedTemplateCount", "max-powershell-source-unresolved-template-count", "source.powershell.unresolvedTemplateToken.count", "PowerShell command source unresolved template token count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceRepoMismatchHints", "max-type-source-repo-mismatch-hints", "source.types.repoMismatchHints.count", "Type source repo-mismatch hints");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceRepoMismatchHints", "max-member-source-repo-mismatch-hints", "source.members.repoMismatchHints.count", "Member source repo-mismatch hints");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceRepoMismatchHints", "max-powershell-source-repo-mismatch-hints", "source.powershell.repoMismatchHints.count", "PowerShell command source repo-mismatch hints", powerShellCommandMetric: true);
         return thresholds;
     }
 
-    private static void AddCoverageThreshold(
+    private static void AddCoverageMinPercentThreshold(
         List<ApiDocsCoverageThreshold> thresholds,
         JsonElement step,
         string primaryName,
@@ -332,7 +347,36 @@ internal static partial class WebPipelineRunner
         {
             Label = label,
             MetricPath = metricPath,
-            MinPercent = value.Value,
+            TargetValue = value.Value,
+            Comparison = ApiDocsCoverageComparison.Minimum,
+            FormatAsPercent = true,
+            SkipWhenNoPowerShellCommands = powerShellCommandMetric
+        });
+    }
+
+    private static void AddCoverageMaxThreshold(
+        List<ApiDocsCoverageThreshold> thresholds,
+        JsonElement step,
+        string primaryName,
+        string aliasName,
+        string metricPath,
+        string label,
+        bool powerShellCommandMetric = false)
+    {
+        var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
+        if (!value.HasValue)
+            return;
+
+        if (value.Value < 0)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be greater than or equal to 0.");
+
+        thresholds.Add(new ApiDocsCoverageThreshold
+        {
+            Label = label,
+            MetricPath = metricPath,
+            TargetValue = value.Value,
+            Comparison = ApiDocsCoverageComparison.Maximum,
+            FormatAsPercent = false,
             SkipWhenNoPowerShellCommands = powerShellCommandMetric
         });
     }
@@ -373,14 +417,23 @@ internal static partial class WebPipelineRunner
                 continue;
             }
 
-            if (actual + 0.0001 < threshold.MinPercent)
+            if (threshold.Comparison == ApiDocsCoverageComparison.Minimum && actual + 0.0001 < threshold.TargetValue)
             {
-                failures.Add($"{threshold.Label}: {actual:0.##}% is below required {threshold.MinPercent:0.##}%.");
+                failures.Add($"{threshold.Label}: {FormatCoverageValue(actual, threshold.FormatAsPercent)} is below required {FormatCoverageValue(threshold.TargetValue, threshold.FormatAsPercent)}.");
+            }
+            else if (threshold.Comparison == ApiDocsCoverageComparison.Maximum && actual - threshold.TargetValue > 0.0001)
+            {
+                failures.Add($"{threshold.Label}: {FormatCoverageValue(actual, threshold.FormatAsPercent)} exceeds allowed {FormatCoverageValue(threshold.TargetValue, threshold.FormatAsPercent)}.");
             }
         }
 
         headline = failures.FirstOrDefault();
         return failures;
+    }
+
+    private static string FormatCoverageValue(double value, bool asPercent)
+    {
+        return asPercent ? $"{value:0.##}%" : $"{value:0.##}";
     }
 
     private static bool TryGetJsonDoubleByPath(JsonElement root, string path, out double value)
@@ -408,8 +461,16 @@ internal static partial class WebPipelineRunner
     {
         public string Label { get; init; } = string.Empty;
         public string MetricPath { get; init; } = string.Empty;
-        public double MinPercent { get; init; }
+        public double TargetValue { get; init; }
+        public ApiDocsCoverageComparison Comparison { get; init; } = ApiDocsCoverageComparison.Minimum;
+        public bool FormatAsPercent { get; init; } = true;
         public bool SkipWhenNoPowerShellCommands { get; init; }
+    }
+
+    private enum ApiDocsCoverageComparison
+    {
+        Minimum,
+        Maximum
     }
 
     private static string RenderCriticalCssHtml(AssetRegistrySpec? assets, string rootPath)
