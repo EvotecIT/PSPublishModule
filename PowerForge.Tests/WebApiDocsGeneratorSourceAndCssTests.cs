@@ -100,6 +100,10 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("href=\"/css/api.css\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(".type-chip{display:inline-flex", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(".chip-icon{display:inline-flex", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("id=\"api-namespace\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("initNamespaceCombobox", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(".pf-combobox-list::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("initNavDropdowns", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
