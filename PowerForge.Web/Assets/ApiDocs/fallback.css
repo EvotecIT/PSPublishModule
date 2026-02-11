@@ -3,9 +3,12 @@ body.pf-api-docs a{color:inherit;text-decoration:none}
 body.pf-api-docs a:hover{color:var(--pf-accent,#a78bfa)}
 body.pf-api-docs .nav-dropdown{position:relative}
 body.pf-api-docs .nav-dropdown-trigger{display:inline-flex;align-items:center;gap:.35rem}
+body.pf-api-docs .nav-dropdown-trigger.nav-dropdown-trigger-button{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:6px 8px;border-radius:8px}
+body.pf-api-docs .nav-dropdown-trigger.nav-dropdown-trigger-button:hover{background:rgba(167,139,250,.14);color:#f5f3ff}
 body.pf-api-docs .nav-dropdown-arrow{width:.72rem;height:.72rem;opacity:.75;transition:transform .15s ease}
 body.pf-api-docs .nav-dropdown-menu{position:absolute;top:calc(100% + 4px);left:0;display:grid;gap:2px;min-width:180px;padding:6px;background:#0f172a;border:1px solid rgba(148,163,184,.24);border-radius:10px;box-shadow:0 16px 28px rgba(2,6,23,.45);opacity:0;visibility:hidden;transform:translateY(4px);transition:opacity .15s ease,visibility .15s ease,transform .15s ease;z-index:70}
 body.pf-api-docs .nav-dropdown-menu a{display:block;padding:6px 8px;border-radius:8px;white-space:nowrap}
+body.pf-api-docs .nav-dropdown-menu .nav-dropdown-label{display:block;padding:6px 8px;font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8}
 body.pf-api-docs .nav-dropdown-menu a:hover{background:rgba(167,139,250,.16);color:#f5f3ff}
 body.pf-api-docs .nav-dropdown:hover .nav-dropdown-menu,
 body.pf-api-docs .nav-dropdown:focus-within .nav-dropdown-menu,

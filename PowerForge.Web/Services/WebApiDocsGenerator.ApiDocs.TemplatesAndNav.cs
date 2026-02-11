@@ -120,7 +120,15 @@ public static partial class WebApiDocsGenerator
             return nav;
         }
 
-        if (root.TryGetProperty("primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array)
+        // Backward compatibility: older site-nav exports may provide a top-level "menus" object
+        // without "menuModels". Parse that shape so API nav injection remains stable.
+        if (TryGetProperty(root, "menus", out var menusProp) && menusProp.ValueKind == JsonValueKind.Object)
+        {
+            var menuMap = ParseMenusObjectMap(menusProp);
+            ApplyMenusToNav(nav, menuMap);
+        }
+
+        if (root.TryGetProperty("primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array && nav.Primary.Count == 0)
         {
             nav.Primary = ParseNavItems(primaryProp);
         }
@@ -139,6 +147,25 @@ public static partial class WebApiDocsGenerator
             nav.Actions = ParseSiteNavActions(actionsProp);
 
         return nav;
+    }
+
+    private static Dictionary<string, List<NavItem>> ParseMenusObjectMap(JsonElement menusProp)
+    {
+        var map = new Dictionary<string, List<NavItem>>(StringComparer.OrdinalIgnoreCase);
+        if (menusProp.ValueKind != JsonValueKind.Object)
+            return map;
+
+        foreach (var property in menusProp.EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(property.Name))
+                continue;
+            if (property.Value.ValueKind != JsonValueKind.Array)
+                continue;
+
+            map[property.Name] = ParseAnyNavItems(property.Value);
+        }
+
+        return map;
     }
 
     private static void ParseSiteNavigation(JsonElement navElement, WebApiDocsOptions options, NavConfig nav)
@@ -304,17 +331,24 @@ public static partial class WebApiDocsGenerator
 
         var href = ReadString(item, "Url", "url", "Href", "href");
         var text = ReadString(item, "Text", "text", "Title", "title");
-        if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(text))
+
+        var children = new List<NavItem>();
+        if (TryGetProperty(item, "Items", out var childItems) && childItems.ValueKind == JsonValueKind.Array)
+            children = ParseAnyNavItems(childItems);
+
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        // Allow non-link parent nodes when they carry children.
+        // This is common in docs menus where section headers act as dropdown labels.
+        if (string.IsNullOrWhiteSpace(href) && children.Count == 0)
             return null;
 
         var target = ReadString(item, "Target", "target");
         var rel = ReadString(item, "Rel", "rel");
         var external = ReadBool(item, "External", "external");
-        external |= IsExternal(href);
-
-        var children = new List<NavItem>();
-        if (TryGetProperty(item, "Items", out var childItems) && childItems.ValueKind == JsonValueKind.Array)
-            children = ParseAnyNavItems(childItems);
+        if (!string.IsNullOrWhiteSpace(href))
+            external |= IsExternal(href);
 
         return new NavItem(href, text, external, target, rel, children);
     }

@@ -10,9 +10,12 @@
   .pf-api-nav-links a:hover{opacity:1;background:rgba(245,158,11,0.10)}
   .pf-api-nav-links .nav-dropdown{position:relative}
   .pf-api-nav-links .nav-dropdown-trigger{display:inline-flex;align-items:center;gap:4px}
+  .pf-api-nav-links .nav-dropdown-trigger.nav-dropdown-trigger-button{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:6px 8px;border-radius:8px}
+  .pf-api-nav-links .nav-dropdown-trigger.nav-dropdown-trigger-button:hover{background:rgba(245,158,11,0.10)}
   .pf-api-nav-links .nav-dropdown-arrow{width:10px;height:10px;opacity:.7;transition:transform .15s ease}
   .pf-api-nav-links .nav-dropdown-menu{position:absolute;top:100%;left:0;min-width:180px;padding:6px;background:rgba(11,15,26,.96);border:1px solid rgba(148,163,184,.25);border-radius:10px;box-shadow:0 16px 30px rgba(0,0,0,.35);opacity:0;visibility:hidden;transform:translateY(4px);transition:opacity .15s ease,visibility .15s ease,transform .15s ease;z-index:30}
   .pf-api-nav-links .nav-dropdown-menu a{display:block;white-space:nowrap}
+  .pf-api-nav-links .nav-dropdown-menu .nav-dropdown-label{display:block;padding:6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
   .pf-api-nav-links .nav-dropdown:hover .nav-dropdown-menu,
   .pf-api-nav-links .nav-dropdown:focus-within .nav-dropdown-menu,
   .pf-api-nav-links .nav-dropdown.open .nav-dropdown-menu{opacity:1;visibility:visible;transform:translateY(0)}
