@@ -12,7 +12,9 @@ public class WebShortcodeMediaTests
             {{< youtube id="dQw4w9WgXcQ" start="42" size="md" >}}
             """);
 
-        Assert.Contains("youtube-nocookie.com/embed/dQw4w9WgXcQ", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("data-pf-youtube-url=\"https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-media-youtube-lite-v1", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("start=42", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("aspect-ratio:16/9", html, StringComparison.OrdinalIgnoreCase);
     }
@@ -22,12 +24,15 @@ public class WebShortcodeMediaTests
     {
         var html = BuildSinglePageSite(
             """
-            {{< screenshot src="/images/dashboard.png" alt="Dashboard" caption="Overview" size="sm" >}}
+            {{< screenshot src="/images/dashboard.png" alt="Dashboard" caption="Overview" size="sm" srcset="/images/dashboard-640.png 640w, /images/dashboard.png 1200w" sizes="(max-width: 900px) 100vw, 900px" fetchpriority="low" >}}
             """);
 
         Assert.Contains("class=\"pf-screenshot", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("max-width:420px", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("srcset=\"/images/dashboard-640.png 640w, /images/dashboard.png 1200w\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("sizes=\"(max-width: 900px) 100vw, 900px\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("fetchpriority=\"low\"", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("<figcaption", html, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -69,7 +74,9 @@ public class WebShortcodeMediaTests
             """);
 
         Assert.Contains("class=\"twitter-tweet\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("data-pf-x-embed", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("platform.twitter.com/widgets.js", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-media-x-embed-v1", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("https://x.com/evotecit/status/1234567890", html, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -83,6 +90,32 @@ public class WebShortcodeMediaTests
 
         Assert.Contains("youtube-nocookie.com/embed/dQw4w9WgXcQ", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("start=9", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_RendersYouTubeLiteScript_OnlyOnce_PerPage()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< youtube id="dQw4w9WgXcQ" >}}
+            {{< youtube id="kXYiU_JCYtU" >}}
+            """);
+
+        var occurrences = CountOccurrences(html, "pf-media-youtube-lite-v1");
+        Assert.Equal(1, occurrences);
+    }
+
+    [Fact]
+    public void Build_RendersXWidgetScript_OnlyOnce_PerPage()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< x url="https://x.com/evotecit/status/1234567890" >}}
+            {{< x url="https://x.com/evotecit/status/9876543210" >}}
+            """);
+
+        var occurrences = CountOccurrences(html, "pf-media-x-embed-v1");
+        Assert.Equal(1, occurrences);
     }
 
     private static string BuildSinglePageSite(string markdown, Action<string>? setup = null)
@@ -113,7 +146,7 @@ public class WebShortcodeMediaTests
                 <!doctype html>
                 <html>
                 <head><title>{{TITLE}}</title></head>
-                <body>{{CONTENT}}</body>
+                <body>{{CONTENT}}{{EXTRA_SCRIPTS}}</body>
                 </html>
                 """);
             File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
@@ -160,5 +193,21 @@ public class WebShortcodeMediaTests
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    private static int CountOccurrences(string text, string token)
+    {
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(token))
+            return 0;
+
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(token, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            count++;
+            index += token.Length;
+        }
+
+        return count;
     }
 }

@@ -4,6 +4,136 @@ namespace PowerForge.Web;
 
 internal static partial class ShortcodeDefaults
 {
+    private const string MediaMetaScriptsKey = "extra_scripts";
+    private const string MediaScriptRegistryKey = "__pf_media_script_registry";
+    private const string YouTubeLiteScriptMarker = "pf-media-youtube-lite-v1";
+    private const string XEmbedScriptMarker = "pf-media-x-embed-v1";
+
+    private const string YouTubeLiteBootstrapScript = """
+<script>
+/* pf-media-youtube-lite-v1 */
+(function(){
+  if (window.__pfYoutubeLiteInit) return;
+  window.__pfYoutubeLiteInit = true;
+  function activate(frame){
+    if (!frame || frame.dataset.pfYoutubeMounted === "1") return;
+    var src = frame.getAttribute("data-pf-youtube-url");
+    if (!src) return;
+    var title = frame.getAttribute("data-pf-youtube-title") || "YouTube video";
+    var iframe = document.createElement("iframe");
+    iframe.src = src;
+    iframe.title = title;
+    iframe.loading = "lazy";
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
+    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    iframe.style.position = "absolute";
+    iframe.style.inset = "0";
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "0";
+    frame.innerHTML = "";
+    frame.appendChild(iframe);
+    frame.dataset.pfYoutubeMounted = "1";
+  }
+  function bind(frame){
+    if (!frame || frame.dataset.pfYoutubeBound === "1") return;
+    frame.dataset.pfYoutubeBound = "1";
+    frame.setAttribute("role", "button");
+    frame.setAttribute("tabindex", "0");
+    frame.addEventListener("click", function(){ activate(frame); });
+    frame.addEventListener("keydown", function(e){
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate(frame);
+      }
+    });
+  }
+  function init(root){
+    var scope = root || document;
+    var nodes = scope.querySelectorAll("[data-pf-youtube-lite]");
+    for (var i = 0; i < nodes.length; i++) bind(nodes[i]);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function(){ init(document); });
+  } else {
+    init(document);
+  }
+})();
+</script>
+""";
+
+    private const string XEmbedBootstrapScript = """
+<script>
+/* pf-media-x-embed-v1 */
+(function(){
+  if (window.__pfXEmbedsInit) return;
+  window.__pfXEmbedsInit = true;
+  var twitterScriptRequested = false;
+  function requestTwitterScript(onReady){
+    if (window.twttr && window.twttr.widgets && typeof window.twttr.widgets.load === "function") {
+      onReady();
+      return;
+    }
+    if (!twitterScriptRequested) {
+      twitterScriptRequested = true;
+      var s = document.createElement("script");
+      s.async = true;
+      s.src = "https://platform.twitter.com/widgets.js";
+      s.charset = "utf-8";
+      s.onload = onReady;
+      document.head.appendChild(s);
+      return;
+    }
+    var tries = 0;
+    var timer = setInterval(function(){
+      tries++;
+      if (window.twttr && window.twttr.widgets && typeof window.twttr.widgets.load === "function") {
+        clearInterval(timer);
+        onReady();
+      } else if (tries > 80) {
+        clearInterval(timer);
+      }
+    }, 100);
+  }
+  function hydrate(target){
+    requestTwitterScript(function(){
+      if (window.twttr && window.twttr.widgets && typeof window.twttr.widgets.load === "function") {
+        window.twttr.widgets.load(target || document);
+      }
+    });
+  }
+  function attach(node){
+    if (!node || node.dataset.pfXBound === "1") return;
+    node.dataset.pfXBound = "1";
+    if ("IntersectionObserver" in window) {
+      var observer = new IntersectionObserver(function(entries){
+        for (var i = 0; i < entries.length; i++) {
+          if (!entries[i].isIntersecting) continue;
+          observer.disconnect();
+          hydrate(node);
+          break;
+        }
+      }, { rootMargin: "350px 0px" });
+      observer.observe(node);
+      return;
+    }
+    hydrate(node);
+  }
+  function init(root){
+    var scope = root || document;
+    var nodes = scope.querySelectorAll("[data-pf-x-embed]");
+    for (var i = 0; i < nodes.length; i++) attach(nodes[i]);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function(){ init(document); });
+  } else {
+    init(document);
+  }
+})();
+</script>
+""";
+
     private static readonly Dictionary<string, int> ScreenshotWidthBySize = new(StringComparer.OrdinalIgnoreCase)
     {
         ["xs"] = 320,
@@ -47,10 +177,19 @@ internal static partial class ShortcodeDefaults
         var modestBranding = ReadBoolAttr(attrs, defaultValue: true, "modestbranding");
         var rel = ReadBoolAttr(attrs, defaultValue: false, "rel");
         var noCookie = ReadBoolAttr(attrs, defaultValue: true, "nocookie", "noCookie");
+        var lite = ReadBoolAttr(attrs, defaultValue: true, "lite");
         var ratio = NormalizeRatio(ReadAttr(attrs, "ratio", "aspect"), "16/9");
         var title = ReadAttr(attrs, "title");
         if (string.IsNullOrWhiteSpace(title))
             title = "YouTube video";
+        var poster = ReadAttr(attrs, "poster", "thumbnail", "thumb");
+        if (string.IsNullOrWhiteSpace(poster))
+            poster = $"https://i.ytimg.com/vi/{Uri.EscapeDataString(videoId)}/hqdefault.jpg";
+        var loading = NormalizeLoading(ReadAttr(attrs, "loading"), "lazy");
+        var fetchPriority = NormalizeFetchPriority(ReadAttr(attrs, "fetchpriority", "priority"), "low");
+        var buttonLabel = ReadAttr(attrs, "buttonLabel", "button");
+        if (string.IsNullOrWhiteSpace(buttonLabel))
+            buttonLabel = "Play video";
 
         var query = new List<string>();
         if (start is > 0) query.Add("start=" + start.Value);
@@ -73,9 +212,26 @@ internal static partial class ShortcodeDefaults
         var className = JoinClassTokens("pf-media pf-media-youtube", ReadAttr(attrs, "class"), ResolveSizeClass(attrs, "lg"));
         var style = BuildContainerStyle(attrs, "lg", "center");
 
+        if (lite)
+        {
+            EnsurePageScript(context, YouTubeLiteScriptMarker, YouTubeLiteBootstrapScript);
+            return $@"<div class=""{System.Web.HttpUtility.HtmlEncode(className)}"" style=""{System.Web.HttpUtility.HtmlEncode(style)}"">
+  <div class=""pf-media-frame pf-media-youtube-lite"" data-pf-youtube-lite data-pf-youtube-url=""{System.Web.HttpUtility.HtmlEncode(url)}"" data-pf-youtube-title=""{System.Web.HttpUtility.HtmlEncode(title)}"" style=""position:relative;width:100%;aspect-ratio:{System.Web.HttpUtility.HtmlEncode(ratio)};overflow:hidden;border-radius:14px;background:#0b0b0f;cursor:pointer;"">
+    <img src=""{System.Web.HttpUtility.HtmlEncode(poster)}"" alt=""{System.Web.HttpUtility.HtmlEncode(title)}"" loading=""{System.Web.HttpUtility.HtmlEncode(loading)}"" decoding=""async"" fetchpriority=""{System.Web.HttpUtility.HtmlEncode(fetchPriority)}"" style=""position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;"" />
+    <span aria-hidden=""true"" style=""position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.1) 0%,rgba(0,0,0,.55) 100%);""></span>
+    <button type=""button"" aria-label=""{System.Web.HttpUtility.HtmlEncode(buttonLabel)}"" style=""position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:.58rem .95rem;border-radius:999px;border:1px solid rgba(255,255,255,.34);background:rgba(0,0,0,.62);color:#fff;font-weight:600;cursor:pointer;"">{System.Web.HttpUtility.HtmlEncode(buttonLabel)}</button>
+  </div>
+  <noscript>
+    <div class=""pf-media-frame"" style=""position:relative;width:100%;aspect-ratio:{System.Web.HttpUtility.HtmlEncode(ratio)};overflow:hidden;border-radius:14px;background:#0b0b0f;"">
+      <iframe src=""{System.Web.HttpUtility.HtmlEncode(url)}"" title=""{System.Web.HttpUtility.HtmlEncode(title)}"" loading=""lazy"" referrerpolicy=""strict-origin-when-cross-origin"" allow=""accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"" allowfullscreen style=""position:absolute;inset:0;width:100%;height:100%;border:0;""></iframe>
+    </div>
+  </noscript>
+</div>";
+        }
+
         return $@"<div class=""{System.Web.HttpUtility.HtmlEncode(className)}"" style=""{System.Web.HttpUtility.HtmlEncode(style)}"">
   <div class=""pf-media-frame"" style=""position:relative;width:100%;aspect-ratio:{System.Web.HttpUtility.HtmlEncode(ratio)};overflow:hidden;border-radius:14px;background:#0b0b0f;"">
-    <iframe src=""{System.Web.HttpUtility.HtmlEncode(url)}"" title=""{System.Web.HttpUtility.HtmlEncode(title)}"" loading=""lazy"" referrerpolicy=""strict-origin-when-cross-origin"" allow=""accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"" allowfullscreen style=""position:absolute;inset:0;width:100%;height:100%;border:0;""></iframe>
+    <iframe src=""{System.Web.HttpUtility.HtmlEncode(url)}"" title=""{System.Web.HttpUtility.HtmlEncode(title)}"" loading=""{System.Web.HttpUtility.HtmlEncode(loading)}"" referrerpolicy=""strict-origin-when-cross-origin"" allow=""accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"" allowfullscreen style=""position:absolute;inset:0;width:100%;height:100%;border:0;""></iframe>
   </div>
 </div>";
     }
@@ -107,11 +263,12 @@ internal static partial class ShortcodeDefaults
         if (dnt)
             extraData.Append(" data-dnt=\"true\"");
 
+        EnsurePageScript(context, XEmbedScriptMarker, XEmbedBootstrapScript);
+
         return $@"<div class=""{System.Web.HttpUtility.HtmlEncode(className)}"" style=""{System.Web.HttpUtility.HtmlEncode(style)}"">
-  <blockquote class=""twitter-tweet""{extraData}>
+  <blockquote class=""twitter-tweet"" data-pf-x-embed{extraData}>
     <a href=""{System.Web.HttpUtility.HtmlEncode(url)}"">View post on X</a>
   </blockquote>
-  <script async src=""https://platform.twitter.com/widgets.js"" charset=""utf-8""></script>
 </div>";
     }
 
@@ -192,6 +349,11 @@ internal static partial class ShortcodeDefaults
         var ratio = NormalizeRatio(ReadAttr(attrs, "ratio", "aspect"), string.Empty);
         var width = ReadIntAttr(attrs, "width", "w");
         var height = ReadIntAttr(attrs, "height", "h");
+        var srcSet = ReadAttr(attrs, "srcset");
+        var sizes = ReadAttr(attrs, "sizes");
+        var loading = NormalizeLoading(ReadAttr(attrs, "loading"), "lazy");
+        var decoding = NormalizeDecoding(ReadAttr(attrs, "decoding"), "async");
+        var fetchPriority = NormalizeFetchPriority(ReadAttr(attrs, "fetchpriority", "priority"), "auto");
 
         var className = JoinClassTokens("pf-screenshot", ReadAttr(attrs, "class"), ResolveSizeClass(attrs, "lg"));
         var style = BuildContainerStyle(attrs, "lg", "center");
@@ -206,6 +368,11 @@ internal static partial class ShortcodeDefaults
             height,
             ratio,
             objectFit,
+            srcSet,
+            sizes,
+            loading,
+            decoding,
+            fetchPriority,
             inCollection: false);
     }
 
@@ -253,6 +420,11 @@ internal static partial class ShortcodeDefaults
             var ratio = NormalizeRatio(ReadMapAttr(map, "ratio", "aspect"), string.Empty);
             var width = ReadMapIntAttr(map, "width", "w");
             var height = ReadMapIntAttr(map, "height", "h");
+            var srcSet = ReadMapAttr(map, "srcset");
+            var sizes = ReadMapAttr(map, "sizes");
+            var loading = NormalizeLoading(ReadMapAttr(map, "loading"), "lazy");
+            var decoding = NormalizeDecoding(ReadMapAttr(map, "decoding"), "async");
+            var fetchPriority = NormalizeFetchPriority(ReadMapAttr(map, "fetchpriority", "priority"), "auto");
             var size = ReadMapAttr(map, "size");
 
             var itemClass = JoinClassTokens("pf-screenshot-item", ResolveSizeClass(size));
@@ -269,6 +441,11 @@ internal static partial class ShortcodeDefaults
                 height,
                 ratio,
                 objectFit,
+                srcSet,
+                sizes,
+                loading,
+                decoding,
+                fetchPriority,
                 inCollection: true));
             sb.AppendLine("  </div>");
         }
@@ -287,6 +464,11 @@ internal static partial class ShortcodeDefaults
         int? height,
         string ratio,
         string objectFit,
+        string srcSet,
+        string sizes,
+        string loading,
+        string decoding,
+        string fetchPriority,
         bool inCollection)
     {
         var imgStyle = new StringBuilder();
@@ -298,7 +480,14 @@ internal static partial class ShortcodeDefaults
 
         var widthAttr = width is > 0 ? $" width=\"{width.Value}\"" : string.Empty;
         var heightAttr = height is > 0 ? $" height=\"{height.Value}\"" : string.Empty;
-        var img = $@"<img src=""{System.Web.HttpUtility.HtmlEncode(src)}"" alt=""{System.Web.HttpUtility.HtmlEncode(alt)}"" loading=""lazy"" decoding=""async""{widthAttr}{heightAttr} style=""{System.Web.HttpUtility.HtmlEncode(imgStyle.ToString())}"" />";
+        var srcSetAttr = string.IsNullOrWhiteSpace(srcSet) ? string.Empty : $@" srcset=""{System.Web.HttpUtility.HtmlEncode(srcSet)}""";
+        var sizesAttr = string.IsNullOrWhiteSpace(sizes) ? string.Empty : $@" sizes=""{System.Web.HttpUtility.HtmlEncode(sizes)}""";
+        var loadingAttr = string.IsNullOrWhiteSpace(loading) ? string.Empty : $@" loading=""{System.Web.HttpUtility.HtmlEncode(loading)}""";
+        var decodingAttr = string.IsNullOrWhiteSpace(decoding) ? string.Empty : $@" decoding=""{System.Web.HttpUtility.HtmlEncode(decoding)}""";
+        var fetchPriorityAttr = string.IsNullOrWhiteSpace(fetchPriority) || fetchPriority.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : $@" fetchpriority=""{System.Web.HttpUtility.HtmlEncode(fetchPriority)}""";
+        var img = $@"<img src=""{System.Web.HttpUtility.HtmlEncode(src)}"" alt=""{System.Web.HttpUtility.HtmlEncode(alt)}""{loadingAttr}{decodingAttr}{fetchPriorityAttr}{srcSetAttr}{sizesAttr}{widthAttr}{heightAttr} style=""{System.Web.HttpUtility.HtmlEncode(imgStyle.ToString())}"" />";
         var body = string.IsNullOrWhiteSpace(link)
             ? img
             : $@"<a href=""{System.Web.HttpUtility.HtmlEncode(link)}"" target=""_blank"" rel=""noopener"">{img}</a>";
@@ -579,5 +768,98 @@ internal static partial class ShortcodeDefaults
             return "image";
 
         return "iframe";
+    }
+
+    private static void EnsurePageScript(ShortcodeRenderContext context, string marker, string scriptHtml)
+    {
+        if (context?.FrontMatter?.Meta is null || string.IsNullOrWhiteSpace(marker) || string.IsNullOrWhiteSpace(scriptHtml))
+            return;
+
+        var meta = context.FrontMatter.Meta;
+        var existing = GetMetaString(meta, MediaMetaScriptsKey);
+        if (!string.IsNullOrWhiteSpace(existing) &&
+            existing.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!meta.TryGetValue(MediaScriptRegistryKey, out var registryObj) ||
+            registryObj is not HashSet<string> registry)
+        {
+            registry = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            meta[MediaScriptRegistryKey] = registry;
+        }
+
+        if (!registry.Add(marker))
+            return;
+
+        AppendMetaHtml(meta, MediaMetaScriptsKey, scriptHtml);
+    }
+
+    private static void AppendMetaHtml(Dictionary<string, object?> meta, string key, string html)
+    {
+        if (meta is null || string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(html))
+            return;
+
+        if (!meta.TryGetValue(key, out var existing) || existing is null)
+        {
+            meta[key] = html.Trim();
+            return;
+        }
+
+        var prior = existing switch
+        {
+            string s => s,
+            IEnumerable<object?> list => string.Join(Environment.NewLine, list.Select(static i => i?.ToString()).Where(static s => !string.IsNullOrWhiteSpace(s))),
+            _ => existing.ToString() ?? string.Empty
+        };
+
+        if (string.IsNullOrWhiteSpace(prior))
+        {
+            meta[key] = html.Trim();
+            return;
+        }
+
+        if (prior.Contains(html, StringComparison.Ordinal))
+            return;
+
+        meta[key] = prior.TrimEnd() + Environment.NewLine + html.Trim();
+    }
+
+    private static string GetMetaString(Dictionary<string, object?> meta, string key)
+    {
+        if (meta is null || string.IsNullOrWhiteSpace(key))
+            return string.Empty;
+        if (!meta.TryGetValue(key, out var value) || value is null)
+            return string.Empty;
+
+        return value switch
+        {
+            string s => s,
+            IEnumerable<object?> list => string.Join(Environment.NewLine, list.Select(static i => i?.ToString()).Where(static s => !string.IsNullOrWhiteSpace(s))),
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
+    private static string NormalizeLoading(string value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized is "lazy" or "eager" ? normalized : fallback;
+    }
+
+    private static string NormalizeDecoding(string value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized is "sync" or "async" or "auto" ? normalized : fallback;
+    }
+
+    private static string NormalizeFetchPriority(string value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized is "high" or "low" or "auto" ? normalized : fallback;
     }
 }

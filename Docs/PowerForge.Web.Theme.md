@@ -331,6 +331,12 @@ Screenshot sizing notes:
 - `size`: `xs|sm|md|lg|xl|full` (defaults to `lg` for single screenshot, `xl` container for galleries)
 - `align`: `left|center|right`
 - Optional dimensions (`width`, `height`, `ratio`) improve aspect-ratio stability and reduce layout shift.
+- Responsive image attributes are supported: `srcset`, `sizes`, `loading`, `decoding`, `fetchpriority`.
+
+Media performance notes:
+- `youtube` defaults to **lite mode** (`lite="true"`): thumbnail + play button hydrates iframe on interaction.
+- Set `lite="false"` when immediate iframe render is required.
+- `x`/`tweet` embeds inject a single per-page bootstrap script and lazy-load the X widget when embeds approach viewport.
 
 Edit links:
 - When `site.json` defines `EditLinks`, pages expose `page.edit_url`.
