@@ -181,6 +181,13 @@ Notes:
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 - `quickStartTypes` (aliases: `quickstartTypes`, `quick-start-types`) accepts comma-separated simple type names for the "Quick Start" and "Main API" sections
+- API coverage reports and gates:
+  - `coverageReport`: write coverage JSON (default: `coverage.json` under apidocs output)
+  - `generateCoverageReport`: enable/disable coverage report generation (default: `true`)
+  - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellParameterSummaryPercent`
+  - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
+  - `coveragePreviewCount`: max failed coverage metrics shown in logs
+  - PowerShell-only example inputs: `psExamplesPath`, `generatePowerShellFallbackExamples`, `powerShellFallbackExampleLimit`
 
 ##### Template overrides
 You can fully control the API docs layout by providing a template root or per-file overrides.

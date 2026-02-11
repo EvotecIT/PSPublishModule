@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -80,6 +82,9 @@ internal static partial class WebPipelineRunner
         var ciStrictDefaults = ConsoleEnvironment.IsCI && !isDev;
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
         var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+        var coveragePreviewCount = GetInt(step, "coveragePreviewCount") ?? GetInt(step, "coverage-preview") ?? (isDev ? 2 : 5);
+        var coverageThresholds = GetApiDocsCoverageThresholds(step);
+        var failOnCoverage = GetBool(step, "failOnCoverage") ?? GetBool(step, "fail-on-coverage") ?? (coverageThresholds.Count > 0);
 
         var apiType = ApiDocsType.CSharp;
         if (!string.IsNullOrWhiteSpace(typeText) &&
@@ -264,8 +269,147 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        if (coverageThresholds.Count > 0)
+        {
+            var coverageFailures = EvaluateApiDocsCoverageThresholds(res.CoveragePath, coverageThresholds, out var coverageHeadline);
+            if (coverageFailures.Count > 0)
+            {
+                note += $" (coverage: {coverageFailures.Count} issue(s))";
+                logger?.Warn($"{label}: apidocs coverage threshold failures: {coverageFailures.Count}");
+
+                var previewLimit = Math.Clamp(coveragePreviewCount, 0, 20);
+                if (previewLimit > 0)
+                {
+                    foreach (var failure in coverageFailures.Take(previewLimit))
+                        logger?.Warn($"{label}: {failure}");
+
+                    var remaining = coverageFailures.Count - previewLimit;
+                    if (remaining > 0)
+                        logger?.Warn($"{label}: (+{remaining} more coverage issues)");
+                }
+
+                if (failOnCoverage)
+                    throw new InvalidOperationException(coverageHeadline ?? "API docs coverage thresholds failed.");
+            }
+        }
+
         stepResult.Success = true;
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+    }
+
+    private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
+    {
+        var thresholds = new List<ApiDocsCoverageThreshold>();
+        AddCoverageThreshold(thresholds, step, "minTypeSummaryPercent", "min-type-summary-percent", "types.summary.percent", "Type summary coverage");
+        AddCoverageThreshold(thresholds, step, "minTypeRemarksPercent", "min-type-remarks-percent", "types.remarks.percent", "Type remarks coverage");
+        AddCoverageThreshold(thresholds, step, "minTypeCodeExamplesPercent", "min-type-code-examples-percent", "types.codeExamples.percent", "Type code examples coverage");
+        AddCoverageThreshold(thresholds, step, "minMemberSummaryPercent", "min-member-summary-percent", "members.summary.percent", "Member summary coverage");
+        AddCoverageThreshold(thresholds, step, "minMemberCodeExamplesPercent", "min-member-code-examples-percent", "members.codeExamples.percent", "Member code examples coverage");
+        AddCoverageThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
+        AddCoverageThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
+        AddCoverageThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
+        AddCoverageThreshold(thresholds, step, "minPowerShellParameterSummaryPercent", "min-powershell-parameter-summary-percent", "powershell.parameters.percent", "PowerShell parameter summary coverage", powerShellCommandMetric: true);
+        return thresholds;
+    }
+
+    private static void AddCoverageThreshold(
+        List<ApiDocsCoverageThreshold> thresholds,
+        JsonElement step,
+        string primaryName,
+        string aliasName,
+        string metricPath,
+        string label,
+        bool powerShellCommandMetric = false)
+    {
+        var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
+        if (!value.HasValue)
+            return;
+
+        if (value.Value is < 0 or > 100)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be between 0 and 100.");
+
+        thresholds.Add(new ApiDocsCoverageThreshold
+        {
+            Label = label,
+            MetricPath = metricPath,
+            MinPercent = value.Value,
+            SkipWhenNoPowerShellCommands = powerShellCommandMetric
+        });
+    }
+
+    private static List<string> EvaluateApiDocsCoverageThresholds(
+        string? coveragePath,
+        IReadOnlyList<ApiDocsCoverageThreshold> thresholds,
+        out string? headline)
+    {
+        headline = null;
+        var failures = new List<string>();
+        if (thresholds.Count == 0)
+            return failures;
+
+        if (string.IsNullOrWhiteSpace(coveragePath) || !File.Exists(coveragePath))
+        {
+            var message = "API docs coverage report not found; cannot evaluate coverage thresholds. Enable GenerateCoverageReport or set coverageReport path.";
+            failures.Add(message);
+            headline = message;
+            return failures;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(coveragePath));
+        var root = doc.RootElement;
+
+        var commandCount = 0;
+        if (TryGetJsonDoubleByPath(root, "powershell.commandCount", out var commandCountRaw))
+            commandCount = (int)Math.Round(commandCountRaw);
+
+        foreach (var threshold in thresholds)
+        {
+            if (threshold.SkipWhenNoPowerShellCommands && commandCount <= 0)
+                continue;
+
+            if (!TryGetJsonDoubleByPath(root, threshold.MetricPath, out var actual))
+            {
+                failures.Add($"{threshold.Label}: metric '{threshold.MetricPath}' is missing from coverage report.");
+                continue;
+            }
+
+            if (actual + 0.0001 < threshold.MinPercent)
+            {
+                failures.Add($"{threshold.Label}: {actual:0.##}% is below required {threshold.MinPercent:0.##}%.");
+            }
+        }
+
+        headline = failures.FirstOrDefault();
+        return failures;
+    }
+
+    private static bool TryGetJsonDoubleByPath(JsonElement root, string path, out double value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var current = root;
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(part, out current))
+                return false;
+        }
+
+        if (current.ValueKind == JsonValueKind.Number && current.TryGetDouble(out value))
+            return true;
+        if (current.ValueKind == JsonValueKind.String &&
+            double.TryParse(current.GetString(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value))
+            return true;
+        return false;
+    }
+
+    private sealed class ApiDocsCoverageThreshold
+    {
+        public string Label { get; init; } = string.Empty;
+        public string MetricPath { get; init; } = string.Empty;
+        public double MinPercent { get; init; }
+        public bool SkipWhenNoPowerShellCommands { get; init; }
     }
 
     private static string RenderCriticalCssHtml(AssetRegistrySpec? assets, string rootPath)

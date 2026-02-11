@@ -30,6 +30,8 @@ internal static partial class WebPipelineRunner
         "templateRoot", "templateIndex", "templateType",
         "templateDocsIndex", "templateDocsType",
         "docsScript", "searchScript",
+        "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path",
+        "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path",
         "headerHtml", "footerHtml", "quickstart", "extra",
         "htmlOutput", "htmlTemplate", "cachePath", "profilePath"
     };
