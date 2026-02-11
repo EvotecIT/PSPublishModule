@@ -67,6 +67,8 @@ This repo ships agent skills under `.agents/skills` so new contributors/agents d
 need per-user global skill installs.
 
 - Website scaffolding skill: `.agents/skills/powerforge-website-starter`
+- Module pipeline skill: `.agents/skills/powerforge-module-builder`
+- Library/release pipeline skill: `.agents/skills/powerforge-library-builder`
 
 ## Working Agreements (Best Practices)
 

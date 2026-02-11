@@ -54,14 +54,17 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
         Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
         Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
+        Console.WriteLine("                     (if the requested port is busy, serve will try the next available port)");
         Console.WriteLine("  powerforge-web apidocs --type csharp --xml <file> --out <dir> [--assembly <file>] [--title <text>] [--base-url <url>] [--docs-home <url>] [--sidebar <left|right>] [--body-class <class>]");
         Console.WriteLine("  powerforge-web apidocs --type powershell --help-path <file|dir> --out <dir> [--title <text>] [--base-url <url>] [--docs-home <url>] [--sidebar <left|right>] [--body-class <class>]");
         Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
         Console.WriteLine("                     [--suppress-warning <pattern>]");
-        Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--documented-only]");
+        Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
+        Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
         Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
+        Console.WriteLine("                     [--quickstart-types <type[,type]>]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
         Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
         Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");

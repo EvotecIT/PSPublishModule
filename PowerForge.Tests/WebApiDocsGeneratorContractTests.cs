@@ -330,6 +330,91 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_RendersNestedNavigationAsDropdown_WhenMenuHasChildren()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-nested-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var siteJsonPath = Path.Combine(root, "site.json");
+        File.WriteAllText(siteJsonPath,
+            """
+            {
+              "Name": "TestSite",
+              "Navigation": {
+                "Menus": [
+                  {
+                    "Name": "main",
+                    "Items": [
+                      { "Title": "Home", "Url": "/" },
+                      {
+                        "Title": "Docs",
+                        "Url": "/docs/",
+                        "Items": [
+                          { "Title": "Guide", "Url": "/docs/guide/" },
+                          { "Title": "API", "Url": "/docs/api/" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = siteJsonPath
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("class=\"nav-dropdown\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"nav-dropdown-trigger\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("class=\"nav-dropdown-menu\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/guide/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/api/\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_WarnsWhenCssMissingExpectedSelectors()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-" + Guid.NewGuid().ToString("N"));
@@ -408,6 +493,11 @@ public class WebApiDocsGeneratorContractTests
             .api-layout{}
             .api-sidebar{}
             .api-content{}
+            .api-overview{}
+            .type-chips{}
+            .type-chip{}
+            .chip-icon{}
+            .sidebar-count{}
             .sidebar-toggle{}
             .type-item{}
             .filter-button{}
@@ -430,6 +520,110 @@ public class WebApiDocsGeneratorContractTests
         {
             var result = WebApiDocsGenerator.Generate(options);
             Assert.DoesNotContain(result.Warnings, w => w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenQuickStartTypeNamesDoNotMatchTypes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-quickstart-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.QuickStartTypeNames.Add("MissingType");
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, w => w.Contains("[PFWEB.APIDOCS.QUICKSTART]", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("quickStartTypes", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_InferDocsHomeFromApiBaseUrl_WhenDocsHomeNotProvided()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-docshome-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api/powershell"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("href=\"/docs/powershell/\" class=\"back-link\"", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

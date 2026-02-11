@@ -110,15 +110,22 @@ public static partial class WebApiDocsGenerator
         private readonly Stream _stream;
         private readonly MetadataReader _reader;
         private readonly string? _sourceRoot;
-        private readonly string? _pattern;
+        private readonly string? _defaultPattern;
+        private readonly IReadOnlyList<SourceUrlMappingRule> _sourceUrlMappings;
 
-        private SourceLinkContext(MetadataReaderProvider provider, Stream stream, string? sourceRoot, string? pattern)
+        private SourceLinkContext(
+            MetadataReaderProvider provider,
+            Stream stream,
+            string? sourceRoot,
+            string? defaultPattern,
+            IReadOnlyList<SourceUrlMappingRule> sourceUrlMappings)
         {
             _provider = provider;
             _stream = stream;
             _reader = provider.GetMetadataReader();
             _sourceRoot = sourceRoot;
-            _pattern = pattern;
+            _defaultPattern = defaultPattern;
+            _sourceUrlMappings = sourceUrlMappings ?? Array.Empty<SourceUrlMappingRule>();
         }
 
         public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings)
@@ -166,7 +173,8 @@ public static partial class WebApiDocsGenerator
                     pattern = null;
                 }
 
-                return new SourceLinkContext(provider, stream, root, pattern);
+                var mappings = BuildSourceUrlMappings(options.SourceUrlMappings, warnings);
+                return new SourceLinkContext(provider, stream, root, pattern, mappings);
             }
             catch (Exception ex)
             {
@@ -257,10 +265,223 @@ public static partial class WebApiDocsGenerator
                 }
             }
             resolved = resolved.Replace('\\', '/');
-            var url = string.IsNullOrWhiteSpace(_pattern)
-                ? null
-                : _pattern.Replace("{path}", resolved).Replace("{line}", line.ToString());
+            var url = BuildSourceUrl(resolved, line);
             return new ApiSourceLink { Path = resolved, Line = line, Url = url };
+        }
+
+        private string? BuildSourceUrl(string resolvedPath, int line)
+        {
+            if (string.IsNullOrWhiteSpace(resolvedPath))
+                return null;
+
+            var normalizedPath = NormalizeSourcePath(resolvedPath);
+            var root = GetFirstPathSegment(normalizedPath);
+            var pathNoRoot = RemoveFirstPathSegment(normalizedPath);
+
+            var mapping = MatchSourceUrlMapping(normalizedPath);
+            var pathNoPrefix = mapping is null
+                ? normalizedPath
+                : TrimMappedPrefix(normalizedPath, mapping.PathPrefix);
+            var effectivePath = mapping is { StripPathPrefix: true } ? pathNoPrefix : normalizedPath;
+
+            var pattern = mapping?.UrlPattern;
+            if (string.IsNullOrWhiteSpace(pattern))
+                pattern = _defaultPattern;
+            if (string.IsNullOrWhiteSpace(pattern))
+                return null;
+
+            pattern = TryApplyGitHubRepoAutoFix(pattern, root, normalizedPath);
+
+            return pattern
+                .Replace("{path}", effectivePath, StringComparison.OrdinalIgnoreCase)
+                .Replace("{line}", line.ToString(), StringComparison.OrdinalIgnoreCase)
+                .Replace("{root}", root, StringComparison.OrdinalIgnoreCase)
+                .Replace("{pathNoRoot}", pathNoRoot, StringComparison.OrdinalIgnoreCase)
+                .Replace("{pathNoPrefix}", pathNoPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private SourceUrlMappingRule? MatchSourceUrlMapping(string normalizedPath)
+        {
+            if (_sourceUrlMappings.Count == 0 || string.IsNullOrWhiteSpace(normalizedPath))
+                return null;
+
+            foreach (var mapping in _sourceUrlMappings)
+            {
+                if (string.IsNullOrWhiteSpace(mapping.PathPrefix))
+                    continue;
+                if (PathMatchesPrefix(normalizedPath, mapping.PathPrefix))
+                    return mapping;
+            }
+
+            return null;
+        }
+
+        private static IReadOnlyList<SourceUrlMappingRule> BuildSourceUrlMappings(
+            IReadOnlyList<WebApiDocsSourceUrlMapping> mappings,
+            List<string> warnings)
+        {
+            if (mappings is null || mappings.Count == 0)
+                return Array.Empty<SourceUrlMappingRule>();
+
+            var rules = new List<SourceUrlMappingRule>();
+            foreach (var mapping in mappings)
+            {
+                if (mapping is null)
+                    continue;
+
+                var pathPrefix = NormalizePathPrefix(mapping.PathPrefix);
+                if (string.IsNullOrWhiteSpace(pathPrefix))
+                {
+                    warnings?.Add("API docs: sourceUrlMappings entry ignored because pathPrefix is empty.");
+                    continue;
+                }
+
+                var pattern = mapping.UrlPattern?.Trim();
+                if (string.IsNullOrWhiteSpace(pattern))
+                {
+                    warnings?.Add($"API docs: sourceUrlMappings entry for '{pathPrefix}' ignored because urlPattern is empty.");
+                    continue;
+                }
+
+                rules.Add(new SourceUrlMappingRule(pathPrefix, pattern, mapping.StripPathPrefix));
+            }
+
+            if (rules.Count == 0)
+                return Array.Empty<SourceUrlMappingRule>();
+
+            return rules
+                .OrderByDescending(static r => r.PathPrefix.Length)
+                .ToArray();
+        }
+
+        private static string NormalizeSourcePath(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+            return value.Replace('\\', '/').Trim().Trim('/');
+        }
+
+        private static string NormalizePathPrefix(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+            return value.Replace('\\', '/').Trim().Trim('/');
+        }
+
+        private static bool PathMatchesPrefix(string path, string prefix)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(prefix))
+                return false;
+            if (string.Equals(path, prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+            return path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string TrimMappedPrefix(string path, string prefix)
+        {
+            if (!PathMatchesPrefix(path, prefix))
+                return path;
+            if (string.Equals(path, prefix, StringComparison.OrdinalIgnoreCase))
+                return string.Empty;
+            return path.Substring(prefix.Length + 1);
+        }
+
+        private static string GetFirstPathSegment(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+            var slash = path.IndexOf('/', StringComparison.Ordinal);
+            return slash < 0 ? path : path.Substring(0, slash);
+        }
+
+        private static string RemoveFirstPathSegment(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+            var slash = path.IndexOf('/', StringComparison.Ordinal);
+            return slash < 0 ? string.Empty : path.Substring(slash + 1);
+        }
+
+        private static string TryApplyGitHubRepoAutoFix(string pattern, string rootSegment, string normalizedPath)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                return pattern;
+            if (string.IsNullOrWhiteSpace(rootSegment))
+                return pattern;
+            if (!HasDuplicatedRootSegment(normalizedPath))
+                return pattern;
+            if (!TryExtractGitHubRepoName(pattern, out var repoName))
+                return pattern;
+            if (string.Equals(repoName, rootSegment, StringComparison.OrdinalIgnoreCase))
+                return pattern;
+            if (pattern.IndexOf("{root}", StringComparison.OrdinalIgnoreCase) >= 0)
+                return pattern;
+
+            return TryReplaceGitHubRepoName(pattern, repoName, rootSegment, out var updatedPattern)
+                ? updatedPattern
+                : pattern;
+        }
+
+        private static bool HasDuplicatedRootSegment(string path)
+        {
+            var normalized = NormalizeSourcePath(path);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return false;
+            var firstSlash = normalized.IndexOf('/', StringComparison.Ordinal);
+            if (firstSlash <= 0)
+                return false;
+            var secondSlash = normalized.IndexOf('/', firstSlash + 1);
+            if (secondSlash < 0)
+                return false;
+
+            var first = normalized.Substring(0, firstSlash);
+            var second = normalized.Substring(firstSlash + 1, secondSlash - firstSlash - 1);
+            return string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool TryReplaceGitHubRepoName(string pattern, string existingRepo, string newRepo, out string updated)
+        {
+            updated = pattern;
+            if (string.IsNullOrWhiteSpace(pattern) ||
+                string.IsNullOrWhiteSpace(existingRepo) ||
+                string.IsNullOrWhiteSpace(newRepo))
+                return false;
+
+            var marker = "github.com/";
+            var markerIndex = pattern.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0)
+                return false;
+
+            var ownerStart = markerIndex + marker.Length;
+            var ownerEnd = pattern.IndexOf('/', ownerStart);
+            if (ownerEnd < 0)
+                return false;
+
+            var repoStart = ownerEnd + 1;
+            var repoEnd = pattern.IndexOf('/', repoStart);
+            if (repoEnd < 0)
+                return false;
+
+            var repoSegment = pattern.Substring(repoStart, repoEnd - repoStart);
+            if (!string.Equals(repoSegment, existingRepo, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            updated = pattern.Substring(0, repoStart) + newRepo + pattern.Substring(repoEnd);
+            return true;
+        }
+
+        private sealed class SourceUrlMappingRule
+        {
+            public SourceUrlMappingRule(string pathPrefix, string urlPattern, bool stripPathPrefix)
+            {
+                PathPrefix = pathPrefix;
+                UrlPattern = urlPattern;
+                StripPathPrefix = stripPathPrefix;
+            }
+
+            public string PathPrefix { get; }
+            public string UrlPattern { get; }
+            public bool StripPathPrefix { get; }
         }
 
         public void Dispose()
@@ -352,13 +573,14 @@ public static partial class WebApiDocsGenerator
 
     private sealed class NavItem
     {
-        public NavItem(string href, string text, bool external, string? target = null, string? rel = null)
+        public NavItem(string href, string text, bool external, string? target = null, string? rel = null, List<NavItem>? items = null)
         {
             Href = href;
             Text = text;
             External = external;
             Target = target;
             Rel = rel;
+            Items = items ?? new List<NavItem>();
         }
 
         public string Href { get; }
@@ -366,5 +588,6 @@ public static partial class WebApiDocsGenerator
         public bool External { get; }
         public string? Target { get; }
         public string? Rel { get; }
+        public List<NavItem> Items { get; }
     }
 }

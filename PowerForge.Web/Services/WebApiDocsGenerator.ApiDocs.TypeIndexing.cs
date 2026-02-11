@@ -288,20 +288,119 @@ public static partial class WebApiDocsGenerator
         return lastDot >= 0 ? normalized.Substring(lastDot + 1) : normalized;
     }
 
-    private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types)
+    private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types, WebApiDocsOptions options)
     {
+        if (types.Count == 0)
+            return Array.Empty<ApiTypeModel>();
+
         var results = new List<ApiTypeModel>();
-        foreach (var name in MainTypeOrder)
-        {
-            var type = types.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
-            if (type != null)
-                results.Add(type);
-        }
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1) Explicit step-level quickstart types (highest precedence).
+        AddMainTypeMatches(results, seen, types, options.QuickStartTypeNames);
+        if (results.Count > 0)
+            return results;
+
+        // 2) Built-in curated defaults (keeps existing behavior for CodeGlyphX).
+        AddMainTypeMatches(results, seen, types, MainTypeOrder);
+        if (results.Count > 0)
+            return results;
+
+        // 3) Generic fallback: pick short, likely entry-point names from top namespaces.
+        var candidates = types
+            .Where(static t => string.Equals(t.Kind, "Class", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(t.Kind, "Struct", StringComparison.OrdinalIgnoreCase))
+            .Select(type => new
+            {
+                Type = type,
+                Score = ScoreMainTypeCandidate(type)
+            })
+            .OrderByDescending(static x => x.Score)
+            .ThenBy(static x => x.Type.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .Select(static x => x.Type)
+            .ToList();
+
+        results.AddRange(candidates);
         return results;
     }
 
-    private static bool IsMainType(string name)
-        => MainTypeOrder.Contains(name, StringComparer.OrdinalIgnoreCase);
+    private static void ValidateConfiguredQuickStartTypes(IReadOnlyList<ApiTypeModel> types, WebApiDocsOptions options, List<string> warnings)
+    {
+        if (types is null || options is null || warnings is null)
+            return;
+        if (options.QuickStartTypeNames.Count == 0)
+            return;
+
+        var available = new HashSet<string>(
+            types
+                .Where(static t => !string.IsNullOrWhiteSpace(t.Name))
+                .Select(static t => t.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var missing = options.QuickStartTypeNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(name => !available.Contains(name))
+            .ToList();
+
+        if (missing.Count == 0)
+            return;
+
+        var preview = string.Join(", ", missing.Take(8));
+        var suffix = missing.Count > 8 ? $" (+{missing.Count - 8} more)" : string.Empty;
+        warnings.Add($"API docs: quickStartTypes configured names not found in generated types: {preview}{suffix}.");
+    }
+
+    private static void AddMainTypeMatches(
+        List<ApiTypeModel> results,
+        HashSet<string> seen,
+        IReadOnlyList<ApiTypeModel> types,
+        IEnumerable<string> preferredNames)
+    {
+        foreach (var name in preferredNames)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var type = types.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (type is null)
+                continue;
+
+            if (seen.Add(type.FullName))
+                results.Add(type);
+        }
+    }
+
+    private static int ScoreMainTypeCandidate(ApiTypeModel type)
+    {
+        var score = 0;
+        var name = type.Name ?? string.Empty;
+
+        if (name.Length <= 12) score += 12;
+        if (name.Length <= 20) score += 6;
+
+        if (name.EndsWith("Options", StringComparison.OrdinalIgnoreCase)) score -= 12;
+        if (name.EndsWith("Settings", StringComparison.OrdinalIgnoreCase)) score -= 12;
+        if (name.EndsWith("Extensions", StringComparison.OrdinalIgnoreCase)) score -= 18;
+        if (name.EndsWith("Builder", StringComparison.OrdinalIgnoreCase)) score -= 10;
+        if (name.EndsWith("Result", StringComparison.OrdinalIgnoreCase)) score -= 8;
+        if (name.EndsWith("Exception", StringComparison.OrdinalIgnoreCase)) score -= 18;
+        if (name.EndsWith("Attribute", StringComparison.OrdinalIgnoreCase)) score -= 14;
+
+        if (!string.IsNullOrWhiteSpace(type.Summary)) score += 5;
+
+        var ns = type.Namespace ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(ns))
+        {
+            var depth = ns.Split('.', StringSplitOptions.RemoveEmptyEntries).Length;
+            if (depth <= 2) score += 8;
+            else if (depth == 3) score += 4;
+        }
+
+        return score;
+    }
 
     private static string GetShortNamespace(string ns)
     {
@@ -426,17 +525,64 @@ public static partial class WebApiDocsGenerator
     private static string EnsureTrailingSlash(string url)
         => url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";
 
-      private static string NormalizeDocsHomeUrl(string? url)
+      private static string NormalizeDocsHomeUrl(string? url, string? baseUrl)
       {
           if (string.IsNullOrWhiteSpace(url))
-              return "/docs/";
-        var trimmed = url.Trim();
-        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            return EnsureTrailingSlash(trimmed);
-        if (!trimmed.StartsWith("/"))
-            trimmed = "/" + trimmed;
+              return InferDocsHomeUrlFromBaseUrl(baseUrl);
+
+          var trimmed = url.Trim();
+          if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+              trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+              return EnsureTrailingSlash(trimmed);
+
+          if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+              trimmed = "/" + trimmed;
+
           return EnsureTrailingSlash(trimmed);
+      }
+
+      private static string InferDocsHomeUrlFromBaseUrl(string? baseUrl)
+      {
+          if (string.IsNullOrWhiteSpace(baseUrl))
+              return "/docs/";
+
+          var trimmed = baseUrl.Trim();
+          if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute) &&
+              (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
+          {
+              var inferredPath = InferDocsPathFromApiPath(absolute.AbsolutePath);
+              var builder = new UriBuilder(absolute)
+              {
+                  Path = EnsureTrailingSlash(inferredPath),
+                  Query = string.Empty,
+                  Fragment = string.Empty
+              };
+              return builder.Uri.ToString();
+          }
+
+          if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+              trimmed = "/" + trimmed;
+
+          return EnsureTrailingSlash(InferDocsPathFromApiPath(trimmed));
+      }
+
+      private static string InferDocsPathFromApiPath(string apiPath)
+      {
+          if (string.IsNullOrWhiteSpace(apiPath))
+              return "/docs/";
+
+          var normalized = apiPath.Trim();
+          if (!normalized.StartsWith("/", StringComparison.Ordinal))
+              normalized = "/" + normalized;
+
+          if (!normalized.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+              return "/docs/";
+
+          if (normalized.Length > 4 && normalized[4] != '/')
+              return "/docs/";
+
+          var suffix = normalized.Length > 4 ? normalized.Substring(4) : string.Empty;
+          return $"/docs{suffix}";
       }
 
       private static string ResolveBodyClass(string? value)

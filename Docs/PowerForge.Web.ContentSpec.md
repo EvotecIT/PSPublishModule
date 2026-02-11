@@ -80,6 +80,10 @@ meta.eyebrow: Documentation
 # Getting Started
 ```
 
+Markdown parsing target is GitHub-like flavor (GFM-style) for predictable docs behavior.
+Notably, definition-list parsing is disabled by default, so prose like `Q:` / `A:` does not
+silently turn into `<dl>/<dt>/<dd>` structures.
+
 Supported fields:
 - `title`, `description`, `date`
 - `tags`, `aliases`

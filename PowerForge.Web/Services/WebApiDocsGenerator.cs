@@ -91,6 +91,11 @@ public sealed class WebApiDocsOptions
     public string? SourceRootPath { get; set; }
     /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
     public string? SourceUrlPattern { get; set; }
+    /// <summary>
+    /// Optional source URL mapping rules used for mixed-source API docs.
+    /// The first rule with the longest matching <see cref="WebApiDocsSourceUrlMapping.PathPrefix"/> wins.
+    /// </summary>
+    public List<WebApiDocsSourceUrlMapping> SourceUrlMappings { get; } = new();
     /// <summary>Include undocumented public types when XML docs are partial.</summary>
     public bool IncludeUndocumentedTypes { get; set; } = true;
     /// <summary>Optional list of namespace prefixes to include.</summary>
@@ -101,6 +106,32 @@ public sealed class WebApiDocsOptions
     public List<string> IncludeTypeNames { get; } = new();
     /// <summary>Optional list of type full names to exclude.</summary>
     public List<string> ExcludeTypeNames { get; } = new();
+    /// <summary>
+    /// Optional preferred type names shown in the API "Quick Start" and sidebar "Main API" sections.
+    /// Values are matched case-insensitively against type simple names.
+    /// </summary>
+    public List<string> QuickStartTypeNames { get; } = new();
+}
+
+/// <summary>Path-based source URL mapping for API source/edit links.</summary>
+public sealed class WebApiDocsSourceUrlMapping
+{
+    /// <summary>
+    /// Relative path prefix used to match discovered source paths (for example: <c>HtmlForgeX.Email/</c>).
+    /// Matching is case-insensitive and slash-normalized.
+    /// </summary>
+    public string PathPrefix { get; set; } = string.Empty;
+
+    /// <summary>
+    /// URL pattern used when the prefix matches. Supports tokens:
+    /// <c>{path}</c>, <c>{line}</c>, <c>{root}</c>, <c>{pathNoRoot}</c>, and <c>{pathNoPrefix}</c>.
+    /// </summary>
+    public string UrlPattern { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, trims <see cref="PathPrefix"/> from <c>{path}</c> for this rule.
+    /// </summary>
+    public bool StripPathPrefix { get; set; }
 }
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
@@ -116,7 +147,22 @@ public static partial class WebApiDocsGenerator
 
     // Minimal selector contract: enough to catch "API generator added new structure but theme CSS didn't follow".
     private static readonly string[] RequiredSelectorsSimple = { ".pf-api", ".pf-api-search", ".pf-api-types", ".pf-api-type", ".pf-api-section" };
-    private static readonly string[] RequiredSelectorsDocs = { ".api-layout", ".api-sidebar", ".api-content", ".sidebar-toggle", ".type-item", ".filter-button", ".member-card", ".member-signature" };
+    private static readonly string[] RequiredSelectorsDocs =
+    {
+        ".api-layout",
+        ".api-sidebar",
+        ".api-content",
+        ".api-overview",
+        ".type-chips",
+        ".type-chip",
+        ".chip-icon",
+        ".sidebar-count",
+        ".sidebar-toggle",
+        ".type-item",
+        ".filter-button",
+        ".member-card",
+        ".member-signature"
+    };
     /// <summary>Generates API documentation output.</summary>
     /// <param name="options">Generation options.</param>
     /// <returns>Result payload describing generated artifacts.</returns>
@@ -200,6 +246,10 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        ValidateSourceUrlPatternConsistency(options, types, warnings);
+        ValidateConfiguredQuickStartTypes(types, options, warnings);
+
         var index = new Dictionary<string, object?>
         {
             ["title"] = options.Title,
@@ -534,6 +584,9 @@ public static partial class WebApiDocsGenerator
         if (trimmed.StartsWith("API docs CSS contract:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.CSS.CONTRACT] " + warning;
 
+        if (trimmed.StartsWith("API docs: quickStartTypes", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.QUICKSTART] " + warning;
+
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;
 
@@ -558,6 +611,8 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.REFLECTION] " + warning;
 
         if (trimmed.StartsWith("Source links disabled:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("SourceUrlPattern repo", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
 
         if (trimmed.StartsWith("Failed to parse PowerShell help:", StringComparison.OrdinalIgnoreCase) ||

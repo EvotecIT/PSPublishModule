@@ -13,6 +13,34 @@ public static class WebStaticServer
     /// <param name="token">Cancellation token to stop the server.</param>
     /// <param name="log">Optional log callback.</param>
     public static void Serve(string rootPath, string host, int port, CancellationToken token, Action<string>? log = null)
+        => ServeCore(rootPath, host, port, token, log, autoPortFallback: false, maxPortAttempts: 1);
+
+    /// <summary>
+    /// Starts a blocking static file server and, when the requested port is busy, tries subsequent ports.
+    /// </summary>
+    /// <param name="rootPath">Root directory to serve.</param>
+    /// <param name="host">Host/IP to bind.</param>
+    /// <param name="port">Preferred port to bind.</param>
+    /// <param name="token">Cancellation token to stop the server.</param>
+    /// <param name="log">Optional log callback.</param>
+    /// <param name="maxPortAttempts">Maximum number of sequential ports to try.</param>
+    public static void ServeWithPortFallback(
+        string rootPath,
+        string host,
+        int port,
+        CancellationToken token,
+        Action<string>? log = null,
+        int maxPortAttempts = 20)
+        => ServeCore(rootPath, host, port, token, log, autoPortFallback: true, maxPortAttempts: maxPortAttempts);
+
+    private static void ServeCore(
+        string rootPath,
+        string host,
+        int port,
+        CancellationToken token,
+        Action<string>? log,
+        bool autoPortFallback,
+        int maxPortAttempts)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
@@ -21,40 +49,112 @@ public static class WebStaticServer
         if (!Directory.Exists(basePath))
             throw new DirectoryNotFoundException($"Directory does not exist: {basePath}");
 
-        var prefix = $"http://{host}:{port}/";
-        using var listener = new HttpListener();
-        listener.Prefixes.Add(prefix);
-        listener.Start();
+        var attempts = Math.Max(1, maxPortAttempts);
+        var requestedPort = port <= 0 ? 8080 : port;
+        if (requestedPort > 65535)
+            throw new ArgumentOutOfRangeException(nameof(port), port, "Port must be between 1 and 65535.");
 
-        log?.Invoke($"Serving {basePath}");
-        log?.Invoke($"Listening on {prefix} (Ctrl+C to stop)");
-
-        token.Register(() =>
+        var (listener, boundPort) = StartListener(host, requestedPort, autoPortFallback, attempts);
+        using (listener)
         {
-            try { listener.Close(); } catch { }
-        });
+            var prefix = $"http://{host}:{boundPort}/";
+            log?.Invoke($"Serving {basePath}");
+            if (boundPort != requestedPort)
+                log?.Invoke($"Requested port {requestedPort} is busy. Using {boundPort}.");
+            log?.Invoke($"Listening on {prefix} (Ctrl+C to stop)");
 
-        while (!token.IsCancellationRequested)
+            token.Register(() =>
+            {
+                try { listener.Close(); } catch { }
+            });
+
+            while (!token.IsCancellationRequested)
+            {
+                HttpListenerContext? context = null;
+                try
+                {
+                    context = listener.GetContext();
+                }
+                catch (HttpListenerException)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+
+                if (context is null)
+                    continue;
+
+                _ = Task.Run(() => HandleRequest(context, basePath), token);
+            }
+        }
+    }
+
+    private static (HttpListener Listener, int BoundPort) StartListener(string host, int requestedPort, bool autoPortFallback, int attempts)
+    {
+        HttpListenerException? lastBindException = null;
+
+        for (var attempt = 0; attempt < attempts; attempt++)
         {
-            HttpListenerContext? context = null;
+            var candidatePort = requestedPort + attempt;
+            if (candidatePort > 65535)
+                break;
+
+            var listener = new HttpListener();
+            var prefix = $"http://{host}:{candidatePort}/";
+            listener.Prefixes.Add(prefix);
+
             try
             {
-                context = listener.GetContext();
+                listener.Start();
+                return (listener, candidatePort);
             }
-            catch (HttpListenerException)
+            catch (HttpListenerException ex)
             {
-                break;
+                var portInUse = IsPortInUse(ex);
+                if (autoPortFallback && portInUse)
+                {
+                    lastBindException = ex;
+                    try { listener.Close(); } catch { }
+                    if (attempt + 1 < attempts)
+                        continue;
+                    break;
+                }
+
+                try { listener.Close(); } catch { }
+                throw;
             }
-            catch (ObjectDisposedException)
+            catch
             {
-                break;
+                try { listener.Close(); } catch { }
+                throw;
             }
-
-            if (context is null)
-                continue;
-
-            _ = Task.Run(() => HandleRequest(context, basePath), token);
         }
+
+        if (lastBindException is not null)
+        {
+            throw new IOException(
+                $"Could not start server on {host}:{requestedPort} after trying {attempts} ports. " +
+                "Use --port to select a different range.",
+                lastBindException);
+        }
+
+        throw new IOException($"Could not start server on {host}:{requestedPort}.");
+    }
+
+    private static bool IsPortInUse(HttpListenerException ex)
+    {
+        var code = ex.NativeErrorCode;
+        if (code == 183 || code == 10048 || code == 98)
+            return true;
+
+        var message = ex.Message ?? string.Empty;
+        return message.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("in use", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("address already", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               message.IndexOf("conflict", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static void HandleRequest(HttpListenerContext context, string basePath)

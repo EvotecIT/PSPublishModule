@@ -48,6 +48,12 @@ internal static partial class WebPipelineRunner
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
                         GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
+        var sourceUrlMappings = GetApiDocsSourceUrlMappings(
+            step,
+            "sourceUrlMappings",
+            "source-url-mappings",
+            "sourceMappings",
+            "source-mappings");
         var includeUndocumented = GetBool(step, "includeUndocumented") ?? GetBool(step, "include-undocumented") ?? true;
         var nav = ResolvePath(baseDir, GetString(step, "nav") ?? GetString(step, "navJson") ?? GetString(step, "nav-json"));
         var navContextPath = GetString(step, "navContextPath") ?? GetString(step, "nav-context-path") ??
@@ -59,6 +65,8 @@ internal static partial class WebPipelineRunner
         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
         var includeTypes = GetString(step, "includeType") ?? GetString(step, "include-type");
         var excludeTypes = GetString(step, "excludeType") ?? GetString(step, "exclude-type");
+        var quickStartTypes = GetString(step, "quickStartTypes") ?? GetString(step, "quickstartTypes") ??
+                              GetString(step, "quick-start-types") ?? GetString(step, "quickstart-types");
         var siteName = GetString(step, "siteName") ?? GetString(step, "site-name");
         var brandUrl = GetString(step, "brandUrl") ?? GetString(step, "brand-url");
         var brandIcon = GetString(step, "brandIcon") ?? GetString(step, "brand-icon");
@@ -184,6 +192,8 @@ internal static partial class WebPipelineRunner
             BrandUrl = brandUrl,
             BrandIcon = brandIcon
         };
+        if (sourceUrlMappings.Length > 0)
+            options.SourceUrlMappings.AddRange(sourceUrlMappings);
 
         var includeList = CliPatternHelper.SplitPatterns(includeNamespaces);
         var excludeList = CliPatternHelper.SplitPatterns(excludeNamespaces);
@@ -197,6 +207,9 @@ internal static partial class WebPipelineRunner
             options.IncludeTypeNames.AddRange(includeTypeList);
         if (excludeTypeList.Length > 0)
             options.ExcludeTypeNames.AddRange(excludeTypeList);
+        var quickStartTypeList = CliPatternHelper.SplitPatterns(quickStartTypes);
+        if (quickStartTypeList.Length > 0)
+            options.QuickStartTypeNames.AddRange(quickStartTypeList);
 
         var res = WebApiDocsGenerator.Generate(options);
         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
