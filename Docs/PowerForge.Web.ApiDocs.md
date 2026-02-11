@@ -326,5 +326,8 @@ Notes:
 - For deterministic output, point to a specific file.
 - `coverageReport` defaults to `coverage.json` under API output and includes completeness metrics (summary/remarks/examples/member docs).
 - Coverage report also includes source-link metrics (`source.types`, `source.members`, `source.powershell`) with URL/path coverage and broken-link hints (invalid URLs, unresolved template tokens, repo mismatch hints).
+- Source-link diagnostics also emit `[PFWEB.APIDOCS.SOURCE]` warnings for common misconfigurations:
+  - `sourceUrlMappings` prefixes that never match discovered source paths
+  - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)
 - PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.

@@ -179,8 +179,9 @@ Notes:
 - `failOnWarnings`: fail the pipeline step when API docs emits warnings
   - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
 - `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
-  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`
+  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
+- Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
 - `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)

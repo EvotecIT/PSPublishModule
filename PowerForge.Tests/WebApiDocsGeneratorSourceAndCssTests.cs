@@ -207,6 +207,87 @@ public class WebApiDocsGeneratorSourceAndCssTests
         }
     }
 
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSourceUrlMappingPrefixDoesNotMatchDiscoveredPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-unmatched-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source mapping warning test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source mapping warning test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "DefinitelyMissingPrefix",
+            UrlPattern = "https://example.invalid/blob/main/{path}#L{line}"
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("sourceurlmappings entry for 'DefinitelyMissingPrefix'", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("did not match any discovered source paths", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_WarnsWhenSourceUrlPatternLikelyDuplicatesPathPrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-source-duplication-hint-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source duplication warning test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source duplication warning test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            SourceUrlPattern = "https://github.com/example/PowerForge.Web/blob/main/PowerForge.Web/{path}#L{line}",
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("detected likely duplicated path prefixes in GitHub source URLs", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string? ResolveGitRoot(string path)
     {
         var current = Path.GetDirectoryName(path);

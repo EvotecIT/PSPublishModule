@@ -655,6 +655,8 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("SourceUrlPattern repo", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("API docs source:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.SOURCE] " + warning;
 
         if (trimmed.StartsWith("Failed to parse PowerShell help:", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("Multiple PowerShell help files found", StringComparison.OrdinalIgnoreCase))
