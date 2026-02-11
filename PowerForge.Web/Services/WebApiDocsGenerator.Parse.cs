@@ -98,6 +98,8 @@ public static partial class WebApiDocsGenerator
         var moduleName = Path.GetFileNameWithoutExtension(resolved) ?? string.Empty;
         if (moduleName.EndsWith("-help", StringComparison.OrdinalIgnoreCase))
             moduleName = moduleName[..^5];
+        if (moduleName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            moduleName = moduleName[..^4];
         apiDoc.AssemblyName = moduleName;
 
         XDocument doc;
@@ -157,17 +159,23 @@ public static partial class WebApiDocsGenerator
                         var paramType = parameter.Element(commandNs + "parameterValue")?.Value?.Trim();
                         if (string.IsNullOrWhiteSpace(paramType))
                             paramType = parameter.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+                        var isRequired = bool.TryParse(parameter.Attribute("required")?.Value, out var required) && required;
+                        var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
 
                         member.Parameters.Add(new ApiParameterModel
                         {
                             Name = paramName,
                             Type = paramType,
-                            Summary = paramSummary
+                            Summary = paramSummary,
+                            IsOptional = !isRequired,
+                            DefaultValue = string.IsNullOrWhiteSpace(defaultValue) ? null : defaultValue
                         });
                     }
                     type.Methods.Add(member);
                 }
             }
+
+            AppendPowerShellExamples(type, command, commandNs, mamlNs, devNs);
 
             apiDoc.Types[type.FullName] = type;
         }
@@ -248,5 +256,71 @@ public static partial class WebApiDocsGenerator
             .Select(text => text!)
             .ToList();
         return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
+    }
+
+    private static void AppendPowerShellExamples(
+        ApiTypeModel type,
+        XElement command,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
+    {
+        if (type is null || command is null)
+            return;
+
+        var examples = command.Element(commandNs + "examples");
+        if (examples is null)
+            return;
+
+        foreach (var example in examples.Elements(commandNs + "example"))
+        {
+            var narrativeParts = new List<string>();
+            var title = NormalizePowerShellExampleTitle(example.Element(mamlNs + "title")?.Value);
+            if (!string.IsNullOrWhiteSpace(title))
+                narrativeParts.Add(title);
+
+            var introduction = JoinParagraphs(example.Element(mamlNs + "introduction"), mamlNs);
+            if (!string.IsNullOrWhiteSpace(introduction))
+                narrativeParts.Add(introduction);
+
+            var code = example.Element(devNs + "code")?.Value;
+            if (string.IsNullOrWhiteSpace(code))
+                code = example.Element(commandNs + "code")?.Value;
+            code = code?.Trim();
+
+            var remarks = JoinParagraphs(example.Element(devNs + "remarks"), mamlNs);
+            if (string.IsNullOrWhiteSpace(remarks))
+                remarks = JoinParagraphs(example.Element(mamlNs + "remarks"), mamlNs);
+            if (!string.IsNullOrWhiteSpace(remarks))
+                narrativeParts.Add(remarks);
+
+            if (narrativeParts.Count > 0)
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "text",
+                    Text = string.Join(Environment.NewLine + Environment.NewLine, narrativeParts)
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "code",
+                    Text = code
+                });
+            }
+        }
+    }
+
+    private static string NormalizePowerShellExampleTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return string.Empty;
+
+        var normalized = title.Trim();
+        normalized = normalized.Trim('-').Trim();
+        return normalized;
     }
 }

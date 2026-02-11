@@ -569,6 +569,48 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_IgnoresHeadingOrderSkipsInFooterChrome()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-heading-order-footer-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <h1>Home</h1>
+                    <h2>Overview</h2>
+                  </main>
+                  <footer>
+                    <h4>Documentation</h4>
+                  </footer>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("heading-order", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_WarnsWhenSameLinkLabelPointsToMultipleDestinations()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-" + Guid.NewGuid().ToString("N"));

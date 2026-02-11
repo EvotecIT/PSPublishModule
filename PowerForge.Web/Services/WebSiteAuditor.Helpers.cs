@@ -278,7 +278,7 @@ public static partial class WebSiteAuditor
         string relativePath,
         Action<string, string, string?, string, string?> addIssue)
     {
-        var headings = doc.QuerySelectorAll("h1,h2,h3,h4,h5,h6")
+        var headings = EnumerateHeadingCandidates(doc)
             .Select(heading => new
             {
                 Element = heading,
@@ -309,6 +309,55 @@ public static partial class WebSiteAuditor
                 $"heading-order:{index}:{previousLevel}:{current.Level}");
             previousLevel = current.Level;
         }
+    }
+
+    private static IEnumerable<AngleSharp.Dom.IElement> EnumerateHeadingCandidates(AngleSharp.Dom.IDocument doc)
+    {
+        if (doc.Body is null)
+            return Enumerable.Empty<AngleSharp.Dom.IElement>();
+
+        var mainScopes = doc.QuerySelectorAll("main,[role='main']")
+            .Where(scope => !IsElementHidden(scope))
+            .ToArray();
+        if (mainScopes.Length > 0)
+        {
+            return mainScopes
+                .SelectMany(scope => scope.QuerySelectorAll("h1,h2,h3,h4,h5,h6"))
+                .Where(heading => !IsWithinExcludedHeadingScope(heading));
+        }
+
+        return doc.Body.QuerySelectorAll("h1,h2,h3,h4,h5,h6")
+            .Where(heading => !IsWithinExcludedHeadingScope(heading));
+    }
+
+    private static bool IsWithinExcludedHeadingScope(AngleSharp.Dom.IElement heading)
+    {
+        if (heading is null)
+            return true;
+
+        if (IsElementHidden(heading))
+            return true;
+
+        var parent = heading.ParentElement;
+        while (parent is not null)
+        {
+            if (IsElementHidden(parent))
+                return true;
+
+            var tagName = parent.TagName;
+            if (tagName.Equals("HEADER", StringComparison.OrdinalIgnoreCase) ||
+                tagName.Equals("FOOTER", StringComparison.OrdinalIgnoreCase) ||
+                tagName.Equals("NAV", StringComparison.OrdinalIgnoreCase) ||
+                tagName.Equals("ASIDE", StringComparison.OrdinalIgnoreCase) ||
+                tagName.Equals("TEMPLATE", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            parent = parent.ParentElement;
+        }
+
+        return false;
     }
 
     private static void ValidateLinkPurposeConsistency(
