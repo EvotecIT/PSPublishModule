@@ -45,6 +45,8 @@ If your site uses `Navigation.Profiles` (route/layout specific menus), set:
   - Set this when you want API pages to match a specific `Navigation.Profile` (for example `"/api/"`).
 - optionally `navContextLayout` / `navContextCollection` / `navContextProject`
  so the generator can select the same profile your theme uses. For best results, point `nav` at `site-nav.json` (the nav export) when available.
+- optionally `navSurface` (pipeline) / `--nav-surface` (CLI)
+  - Forces API docs to consume a specific `site-nav.json` surface (for example `apidocs`, `docs`, `main`) when present.
 
 ## Best practice: enforce CSS + fragments with featureContracts
 To prevent API regressions (generator adds new UI but the theme does not style it), define a theme-level contract in `theme.manifest.json`:

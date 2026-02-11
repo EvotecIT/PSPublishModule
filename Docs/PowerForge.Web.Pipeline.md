@@ -169,6 +169,9 @@ Notes:
   - `sourcePathPrefix` prepends a stable prefix to resolved source paths before URL token expansion (useful for mixed-repo or nested-source layouts)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
+- `navSurface`:
+  - optional explicit surface name from `site-nav.json.surfaces` (for example `apidocs`, `docs`, `main`)
+  - when set, API docs navigation tokens are sourced from that surface
 - `navContextPath` / `navContextCollection` / `navContextLayout` / `navContextProject`:
   - optional context used to select `Navigation.Profiles` when injecting nav tokens
   - default behavior: profile selection uses the site root (`/`) unless you set `navContextPath` explicitly

@@ -69,6 +69,8 @@ internal static partial class WebPipelineRunner
         var navContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection");
         var navContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout");
         var navContextProject = GetString(step, "navContextProject") ?? GetString(step, "nav-context-project");
+        var navSurfaceName = GetString(step, "navSurface") ?? GetString(step, "nav-surface") ??
+                             GetString(step, "navSurfaceName") ?? GetString(step, "nav-surface-name");
         var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
         var includeTypes = GetString(step, "includeType") ?? GetString(step, "include-type");
@@ -205,6 +207,7 @@ internal static partial class WebPipelineRunner
             NavContextCollection = navContextCollection,
             NavContextLayout = navContextLayout,
             NavContextProject = navContextProject,
+            NavSurfaceName = navSurfaceName,
             SiteName = siteName,
             BrandUrl = brandUrl,
             BrandIcon = brandIcon

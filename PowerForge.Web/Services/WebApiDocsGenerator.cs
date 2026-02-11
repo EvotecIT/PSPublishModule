@@ -65,6 +65,11 @@ public sealed class WebApiDocsOptions
     public string? NavContextLayout { get; set; }
     /// <summary>Optional navigation context project slug used for profile matching.</summary>
     public string? NavContextProject { get; set; }
+    /// <summary>
+    /// Optional navigation surface name used when NavJsonPath points to site-nav.json with "surfaces".
+    /// When set, API docs nav injection prefers that surface over context-based inference.
+    /// </summary>
+    public string? NavSurfaceName { get; set; }
     /// <summary>Optional site display name override.</summary>
     public string? SiteName { get; set; }
     /// <summary>Optional brand URL override.</summary>
