@@ -15,6 +15,7 @@ public class WebShortcodeMediaTests
         Assert.Contains("data-pf-youtube-url=\"https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=42", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("pf-media-youtube-lite-v1", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("pf-media-base-v1", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("start=42", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("aspect-ratio:16/9", html, StringComparison.OrdinalIgnoreCase);
     }
@@ -118,6 +119,19 @@ public class WebShortcodeMediaTests
         Assert.Equal(1, occurrences);
     }
 
+    [Fact]
+    public void Build_RendersMediaBaseCss_OnlyOnce_PerPage()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< screenshot src="/images/a.png" >}}
+            {{< youtube id="dQw4w9WgXcQ" >}}
+            """);
+
+        var occurrences = CountOccurrences(html, "pf-media-base-v1");
+        Assert.Equal(1, occurrences);
+    }
+
     private static string BuildSinglePageSite(string markdown, Action<string>? setup = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-shortcode-media-" + Guid.NewGuid().ToString("N"));
@@ -145,7 +159,7 @@ public class WebShortcodeMediaTests
                 """
                 <!doctype html>
                 <html>
-                <head><title>{{TITLE}}</title></head>
+                <head><title>{{TITLE}}</title>{{EXTRA_CSS}}</head>
                 <body>{{CONTENT}}{{EXTRA_SCRIPTS}}</body>
                 </html>
                 """);

@@ -4,10 +4,24 @@ namespace PowerForge.Web;
 
 internal static partial class ShortcodeDefaults
 {
+    private const string MediaMetaCssKey = "extra_css";
     private const string MediaMetaScriptsKey = "extra_scripts";
-    private const string MediaScriptRegistryKey = "__pf_media_script_registry";
+    private const string MediaBaseCssMarker = "pf-media-base-v1";
     private const string YouTubeLiteScriptMarker = "pf-media-youtube-lite-v1";
     private const string XEmbedScriptMarker = "pf-media-x-embed-v1";
+
+    private const string MediaBaseCss = """
+<style>
+/* pf-media-base-v1 */
+.pf-media,.pf-screenshot,.pf-screenshots{width:100%}
+.pf-media-frame iframe,.pf-media-frame img{display:block}
+.pf-media-youtube-lite:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
+.pf-media-youtube-lite button{pointer-events:none;backdrop-filter:blur(2px)}
+.pf-screenshots-strip{scroll-snap-type:x proximity}
+.pf-screenshots-strip .pf-screenshot-item{scroll-snap-align:start}
+.pf-screenshot a{display:block}
+</style>
+""";
 
     private const string YouTubeLiteBootstrapScript = """
 <script>
@@ -146,6 +160,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderMedia(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var kind = ReadAttr(attrs, "kind", "type", "provider");
         if (string.IsNullOrWhiteSpace(kind))
             kind = InferMediaKind(ReadAttr(attrs, "src", "url", "href"));
@@ -164,6 +179,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderYouTube(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var idOrUrl = ReadAttr(attrs, "id", "video", "src", "url", "href");
         var videoId = ExtractYouTubeVideoId(idOrUrl);
         if (string.IsNullOrWhiteSpace(videoId))
@@ -238,6 +254,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderXPost(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var url = ReadAttr(attrs, "url", "src", "href");
         var status = ReadAttr(attrs, "status", "id");
         var user = ReadAttr(attrs, "user", "author");
@@ -274,6 +291,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderVideo(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var src = ReadAttr(attrs, "src", "url", "href");
         if (string.IsNullOrWhiteSpace(src))
             return string.Empty;
@@ -316,6 +334,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderIFrame(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var src = ReadAttr(attrs, "src", "url", "href");
         if (string.IsNullOrWhiteSpace(src))
             return string.Empty;
@@ -336,6 +355,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderScreenshot(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var src = ReadAttr(attrs, "src", "image", "url", "href");
         if (string.IsNullOrWhiteSpace(src))
             return string.Empty;
@@ -378,6 +398,7 @@ internal static partial class ShortcodeDefaults
 
     internal static string RenderScreenshots(ShortcodeRenderContext context, Dictionary<string, string> attrs)
     {
+        EnsureMediaBaseCss(context);
         var shots = ShortcodeProcessor.ResolveList(context.Data, attrs)?.ToList();
         if (shots is null || shots.Count == 0)
         {
@@ -770,28 +791,31 @@ internal static partial class ShortcodeDefaults
         return "iframe";
     }
 
+    private static void EnsureMediaBaseCss(ShortcodeRenderContext context)
+    {
+        EnsurePageMetaBlock(context, MediaMetaCssKey, MediaBaseCssMarker, MediaBaseCss);
+    }
+
     private static void EnsurePageScript(ShortcodeRenderContext context, string marker, string scriptHtml)
     {
-        if (context?.FrontMatter?.Meta is null || string.IsNullOrWhiteSpace(marker) || string.IsNullOrWhiteSpace(scriptHtml))
+        EnsurePageMetaBlock(context, MediaMetaScriptsKey, marker, scriptHtml);
+    }
+
+    private static void EnsurePageMetaBlock(ShortcodeRenderContext context, string metaKey, string marker, string html)
+    {
+        if (context?.FrontMatter?.Meta is null ||
+            string.IsNullOrWhiteSpace(metaKey) ||
+            string.IsNullOrWhiteSpace(marker) ||
+            string.IsNullOrWhiteSpace(html))
             return;
 
         var meta = context.FrontMatter.Meta;
-        var existing = GetMetaString(meta, MediaMetaScriptsKey);
+        var existing = GetMetaString(meta, metaKey);
         if (!string.IsNullOrWhiteSpace(existing) &&
             existing.Contains(marker, StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!meta.TryGetValue(MediaScriptRegistryKey, out var registryObj) ||
-            registryObj is not HashSet<string> registry)
-        {
-            registry = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            meta[MediaScriptRegistryKey] = registry;
-        }
-
-        if (!registry.Add(marker))
-            return;
-
-        AppendMetaHtml(meta, MediaMetaScriptsKey, scriptHtml);
+        AppendMetaHtml(meta, metaKey, html);
     }
 
     private static void AppendMetaHtml(Dictionary<string, object?> meta, string key, string html)
