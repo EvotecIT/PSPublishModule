@@ -89,6 +89,11 @@ public sealed class WebApiDocsOptions
     public string? SearchScriptPath { get; set; }
     /// <summary>Optional root path for source link generation.</summary>
     public string? SourceRootPath { get; set; }
+    /// <summary>
+    /// Optional path prefix prepended to resolved source paths before URL token expansion.
+    /// Useful when generated source paths need a stable repo-relative prefix in mixed-repo layouts.
+    /// </summary>
+    public string? SourcePathPrefix { get; set; }
     /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
     public string? SourceUrlPattern { get; set; }
     /// <summary>

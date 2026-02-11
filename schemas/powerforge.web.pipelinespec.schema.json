@@ -297,6 +297,8 @@
           "bodyClass": { "type": "string" },
           "body-class": { "type": "string" },
           "sourceRoot": { "type": "string" },
+        "sourcePathPrefix": { "type": "string" },
+        "source-path-prefix": { "type": "string" },
         "sourceUrl": { "type": "string" },
         "includeUndocumented": { "type": "boolean" },
         "nav": { "type": "string" },

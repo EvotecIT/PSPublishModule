@@ -35,6 +35,7 @@ internal static partial class WebCliCommandHandlers
         var sidebarPosition = TryGetOptionValue(subArgs, "--sidebar") ?? TryGetOptionValue(subArgs, "--sidebar-position");
         var bodyClass = TryGetOptionValue(subArgs, "--body-class") ?? TryGetOptionValue(subArgs, "--bodyClass");
         var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
+        var sourcePathPrefix = TryGetOptionValue(subArgs, "--source-path-prefix");
         var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
         var coverageReport = TryGetOptionValue(subArgs, "--coverage-report");
         var generateCoverageReport = !HasOption(subArgs, "--no-coverage-report");
@@ -94,6 +95,7 @@ internal static partial class WebCliCommandHandlers
             SidebarPosition = sidebarPosition,
             BodyClass = bodyClass,
             SourceRootPath = sourceRoot,
+            SourcePathPrefix = sourcePathPrefix,
             SourceUrlPattern = sourceUrl,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = navJson,

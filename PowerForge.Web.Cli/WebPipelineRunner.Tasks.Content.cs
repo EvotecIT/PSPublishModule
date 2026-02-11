@@ -48,6 +48,7 @@ internal static partial class WebPipelineRunner
         var sidebar = GetString(step, "sidebar") ?? GetString(step, "sidebarPosition") ?? GetString(step, "sidebar-position");
         var bodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class");
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
+        var sourcePathPrefix = GetString(step, "sourcePathPrefix") ?? GetString(step, "source-path-prefix");
         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
                         GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
         var coverageReportPath = ResolvePath(baseDir, GetString(step, "coverageReport") ?? GetString(step, "coverage-report") ?? GetString(step, "coverageReportPath") ?? GetString(step, "coverage-report-path"));
@@ -189,6 +190,7 @@ internal static partial class WebPipelineRunner
             SidebarPosition = sidebar,
             BodyClass = bodyClass,
             SourceRootPath = sourceRoot,
+            SourcePathPrefix = sourcePathPrefix,
             SourceUrlPattern = sourceUrl,
             GenerateCoverageReport = generateCoverageReport,
             CoverageReportPath = coverageReportPath,

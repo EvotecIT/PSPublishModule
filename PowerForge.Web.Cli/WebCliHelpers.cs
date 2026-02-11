@@ -63,7 +63,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
         Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
         Console.WriteLine("                     [--suppress-warning <pattern>]");
-        Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
+        Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
         Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
         Console.WriteLine("                     [--quickstart-types <type[,type]>]");

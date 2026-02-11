@@ -166,6 +166,7 @@ Notes:
   - `sidebar` (`left` or `right`) controls the docs sidebar position (`template: docs`)
   - `bodyClass` sets the `<body>` class on API docs pages (default `pf-api-docs`)
   - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
+  - `sourcePathPrefix` prepends a stable prefix to resolved source paths before URL token expansion (useful for mixed-repo or nested-source layouts)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
 - `navContextPath` / `navContextCollection` / `navContextLayout` / `navContextProject`:

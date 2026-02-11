@@ -110,6 +110,7 @@ public static partial class WebApiDocsGenerator
         private readonly Stream _stream;
         private readonly MetadataReader _reader;
         private readonly string? _sourceRoot;
+        private readonly string? _sourcePathPrefix;
         private readonly string? _defaultPattern;
         private readonly IReadOnlyList<SourceUrlMappingRule> _sourceUrlMappings;
 
@@ -117,6 +118,7 @@ public static partial class WebApiDocsGenerator
             MetadataReaderProvider provider,
             Stream stream,
             string? sourceRoot,
+            string? sourcePathPrefix,
             string? defaultPattern,
             IReadOnlyList<SourceUrlMappingRule> sourceUrlMappings)
         {
@@ -124,6 +126,7 @@ public static partial class WebApiDocsGenerator
             _stream = stream;
             _reader = provider.GetMetadataReader();
             _sourceRoot = sourceRoot;
+            _sourcePathPrefix = NormalizePathPrefix(sourcePathPrefix ?? string.Empty);
             _defaultPattern = defaultPattern;
             _sourceUrlMappings = sourceUrlMappings ?? Array.Empty<SourceUrlMappingRule>();
         }
@@ -174,7 +177,7 @@ public static partial class WebApiDocsGenerator
                 }
 
                 var mappings = BuildSourceUrlMappings(options.SourceUrlMappings, warnings);
-                return new SourceLinkContext(provider, stream, root, pattern, mappings);
+                return new SourceLinkContext(provider, stream, root, options.SourcePathPrefix, pattern, mappings);
             }
             catch (Exception ex)
             {
@@ -275,14 +278,16 @@ public static partial class WebApiDocsGenerator
                 return null;
 
             var normalizedPath = NormalizeSourcePath(resolvedPath);
-            var root = GetFirstPathSegment(normalizedPath);
-            var pathNoRoot = RemoveFirstPathSegment(normalizedPath);
-
             var mapping = MatchSourceUrlMapping(normalizedPath);
             var pathNoPrefix = mapping is null
                 ? normalizedPath
                 : TrimMappedPrefix(normalizedPath, mapping.PathPrefix);
-            var effectivePath = mapping is { StripPathPrefix: true } ? pathNoPrefix : normalizedPath;
+
+            var prefixedPath = ApplySourcePathPrefix(normalizedPath, _sourcePathPrefix);
+            var prefixedPathNoPrefix = ApplySourcePathPrefix(pathNoPrefix, _sourcePathPrefix);
+            var root = GetFirstPathSegment(prefixedPath);
+            var pathNoRoot = RemoveFirstPathSegment(prefixedPath);
+            var effectivePath = mapping is { StripPathPrefix: true } ? prefixedPathNoPrefix : prefixedPath;
 
             var pattern = mapping?.UrlPattern;
             if (string.IsNullOrWhiteSpace(pattern))
@@ -290,14 +295,25 @@ public static partial class WebApiDocsGenerator
             if (string.IsNullOrWhiteSpace(pattern))
                 return null;
 
-            pattern = TryApplyGitHubRepoAutoFix(pattern, root, normalizedPath);
+            pattern = TryApplyGitHubRepoAutoFix(pattern, root, prefixedPath);
 
             return pattern
                 .Replace("{path}", effectivePath, StringComparison.OrdinalIgnoreCase)
                 .Replace("{line}", line.ToString(), StringComparison.OrdinalIgnoreCase)
                 .Replace("{root}", root, StringComparison.OrdinalIgnoreCase)
                 .Replace("{pathNoRoot}", pathNoRoot, StringComparison.OrdinalIgnoreCase)
-                .Replace("{pathNoPrefix}", pathNoPrefix, StringComparison.OrdinalIgnoreCase);
+                .Replace("{pathNoPrefix}", prefixedPathNoPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ApplySourcePathPrefix(string path, string? prefix)
+        {
+            var normalizedPath = NormalizeSourcePath(path);
+            var normalizedPrefix = NormalizePathPrefix(prefix ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(normalizedPath) || string.IsNullOrWhiteSpace(normalizedPrefix))
+                return normalizedPath;
+            if (PathMatchesPrefix(normalizedPath, normalizedPrefix))
+                return normalizedPath;
+            return $"{normalizedPrefix}/{normalizedPath}";
         }
 
         private SourceUrlMappingRule? MatchSourceUrlMapping(string normalizedPath)
