@@ -546,11 +546,11 @@ public static partial class WebApiDocsGenerator
         var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
         var name = System.Web.HttpUtility.HtmlEncode(type.Name);
         var kind = NormalizeKind(type.Kind);
-        var icon = GetTypeIcon(type.Kind);
+        var icon = RenderApiGlyphSpan($"type-icon {kind}", "type-icon-glyph", GetTypeIcon(type.Kind));
         var ns = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
         var href = BuildDocsTypeUrl(baseUrl, type.Slug);
         return $"          <a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\">" +
-               $"<span class=\"type-icon {kind}\">{icon}</span><span class=\"type-name\">{name}</span></a>";
+               $"{icon}<span class=\"type-name\">{name}</span></a>";
     }
 
     private static string BuildDocsOverview(WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, string baseUrl)
@@ -572,9 +572,10 @@ public static partial class WebApiDocsGenerator
             {
                 var summary = Truncate(StripCrefTokens(type.Summary), 100);
                 var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+                var quickIcon = RenderApiGlyphSpan($"type-icon large {NormalizeKind(type.Kind)}", "type-icon-glyph", GetTypeIcon(type.Kind));
                 sb.AppendLine($"          <a href=\"{quickHref}\" class=\"quick-card\">");
                 sb.AppendLine("            <div class=\"quick-card-header\">");
-                sb.AppendLine($"              <span class=\"type-icon large {NormalizeKind(type.Kind)}\">{GetTypeIcon(type.Kind)}</span>");
+                sb.AppendLine($"              {quickIcon}");
                 sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(type.Name)}</strong>");
                 sb.AppendLine("            </div>");
                 if (!string.IsNullOrWhiteSpace(summary))
@@ -605,8 +606,9 @@ public static partial class WebApiDocsGenerator
                 var kind = NormalizeKind(type.Kind);
                 var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
                 var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
+                var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
                 sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\">");
-                sb.AppendLine($"              <span class=\"chip-icon\">{GetTypeIcon(type.Kind)}</span>");
+                sb.AppendLine($"              {chipIcon}");
                 sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</span>");
                 sb.AppendLine("            </a>");
             }
@@ -616,5 +618,13 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine("      </section>");
         sb.AppendLine("    </div>");
         return sb.ToString().TrimEnd();
+    }
+
+    private static string RenderApiGlyphSpan(string containerClass, string glyphClass, string glyph)
+    {
+        var safeContainer = System.Web.HttpUtility.HtmlEncode(containerClass ?? string.Empty);
+        var safeGlyphClass = System.Web.HttpUtility.HtmlEncode(glyphClass ?? string.Empty);
+        var safeGlyph = System.Web.HttpUtility.HtmlEncode(glyph ?? string.Empty);
+        return $"<span class=\"{safeContainer}\"><span class=\"{safeGlyphClass}\">{safeGlyph}</span></span>";
     }
 }

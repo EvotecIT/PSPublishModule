@@ -772,4 +772,226 @@ public partial class WebSiteVerifierTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Verify_WarnsWhenApiHeaderDoesNotUseNavLinksToken()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-apidocs-header-navlinks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feature-test-navlinks");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "api-header.html"), "<header><a href=\"/\">Home</a></header>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "api-footer.html"), "<footer>{{YEAR}}</footer>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feature-test-navlinks",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier API Header NavLinks Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feature-test-navlinks",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("does not contain '{{NAV_LINKS}}'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenApiHeaderMissingNavActionsTokenButActionsConfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-apidocs-header-actions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feature-test-actions");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "api-header.html"), "<header>{{NAV_LINKS}}</header>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "api-footer.html"), "<footer>{{YEAR}}</footer>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feature-test-actions",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier API Header Actions Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feature-test-actions",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Navigation = new NavigationSpec
+                {
+                    Actions = new[]
+                    {
+                        new MenuItemSpec
+                        {
+                            Title = "Install",
+                            Url = "https://example.test/install",
+                            External = true
+                        }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("does not contain '{{NAV_ACTIONS}}'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenApiDocsFallbackHeaderContainsScribanNavExpressions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-apidocs-fallback-scriban-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feature-test-fallback-scriban");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "header.html"), "<header>{{ pf.nav_links \"main\" }}</header>");
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "footer.html"), "<footer>{{ site.name }}</footer>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feature-test-fallback-scriban",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier API Header Fallback Scriban Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feature-test-fallback-scriban",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("contains Scriban navigation expressions", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }

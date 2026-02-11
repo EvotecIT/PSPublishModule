@@ -117,6 +117,8 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Best practice: site uses feature 'apiDocs' but theme '{manifest.Name}' does not provide api-header/api-footer fragments. " +
                              "PowerForge will fall back to header/footer when available; add api-header/api-footer for better control over API reference layout.");
             }
+
+            ValidateApiDocsHeaderContract(spec, manifest, apiHeader, fallbackHeader, hasApiFragments, hasFallbackFragments, warnings);
         }
 
         if (enabled.Contains("docs"))
@@ -148,6 +150,76 @@ public static partial class WebSiteVerifier
         }
 
         return null;
+    }
+
+    private static void ValidateApiDocsHeaderContract(
+        SiteSpec spec,
+        ThemeManifest manifest,
+        string? apiHeaderPath,
+        string? fallbackHeaderPath,
+        bool hasApiFragments,
+        bool hasFallbackFragments,
+        List<string> warnings)
+    {
+        if (spec is null || manifest is null || warnings is null)
+            return;
+
+        var headerPath = hasApiFragments ? apiHeaderPath : hasFallbackFragments ? fallbackHeaderPath : null;
+        if (string.IsNullOrWhiteSpace(headerPath) || !File.Exists(headerPath))
+            return;
+
+        string header;
+        try
+        {
+            header = File.ReadAllText(headerPath);
+        }
+        catch
+        {
+            return;
+        }
+
+        var fragmentLabel = hasApiFragments ? "api-header" : "header (fallback for apiDocs)";
+        var hasNavLinksToken = ContainsApiDocsToken(header, "NAV_LINKS");
+        var hasNavActionsToken = ContainsApiDocsToken(header, "NAV_ACTIONS");
+        var hasScribanNavExpressions = ContainsScribanNavExpressions(header);
+        var hasConfiguredActions = spec.Navigation?.Actions is { Length: > 0 };
+
+        if (!hasNavLinksToken)
+        {
+            warnings.Add($"Theme contract: theme '{manifest.Name}' {fragmentLabel} does not contain '{{{{NAV_LINKS}}}}'. " +
+                         "API reference pages may drift from site navigation.");
+        }
+
+        if (hasConfiguredActions && !hasNavActionsToken)
+        {
+            warnings.Add($"Theme contract: theme '{manifest.Name}' {fragmentLabel} does not contain '{{{{NAV_ACTIONS}}}}' " +
+                         "but site navigation defines actions. API header actions may diverge.");
+        }
+
+        if (hasScribanNavExpressions)
+        {
+            warnings.Add($"Theme contract: theme '{manifest.Name}' {fragmentLabel} contains Scriban navigation expressions " +
+                         "(for example pf.nav_links/navigation.menus). API docs fragments are static HTML and must use NAV tokens.");
+        }
+    }
+
+    private static bool ContainsApiDocsToken(string html, string token)
+    {
+        if (string.IsNullOrWhiteSpace(html) || string.IsNullOrWhiteSpace(token))
+            return false;
+        return html.IndexOf("{{" + token + "}}", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool ContainsScribanNavExpressions(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return false;
+
+        return html.IndexOf("pf.nav_links", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               html.IndexOf("pf.nav_actions", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               html.IndexOf("pf.menu_tree", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               html.IndexOf("navigation.menus", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               html.IndexOf("navigation.actions", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
 
