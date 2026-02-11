@@ -161,6 +161,17 @@ public static partial class WebApiDocsGenerator
                 return $"<a href=\"{safeHref}\" target=\"_blank\" rel=\"noopener\">{safeLabel}</a>";
             return $"<a href=\"{safeHref}\">{safeLabel}</a>";
         });
+        linked = AboutTokenRegex.Replace(linked, match =>
+        {
+            var token = match.Value;
+            if (!slugMap.TryGetValue(token, out var slug))
+                return token;
+
+            var href = BuildDocsTypeUrl(baseUrl, slug);
+            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
+            var safeLabel = System.Web.HttpUtility.HtmlEncode(token);
+            return $"<a href=\"{safeHref}\">{safeLabel}</a>";
+        });
         return linked;
     }
 
@@ -417,10 +428,15 @@ public static partial class WebApiDocsGenerator
             "Interface" => "I",
             "Enum" => "E",
             "Delegate" => "D",
+            "Cmdlet" => "PS",
+            "Function" => "Fn",
+            "Alias" => "Al",
+            "About" => "?",
+            "Command" => "PS",
             _ => "T"
         };
 
-    private static readonly string[] KindOrder = { "class", "struct", "interface", "enum", "delegate" };
+    private static readonly string[] KindOrder = { "class", "struct", "interface", "enum", "delegate", "cmdlet", "function", "alias", "about", "command" };
 
       private static List<KindFilter> BuildKindFilters(IReadOnlyList<ApiTypeModel> types)
       {
@@ -445,6 +461,11 @@ public static partial class WebApiDocsGenerator
               "interface" => $"Interfaces ({count})",
               "enum" => $"Enums ({count})",
               "delegate" => $"Delegates ({count})",
+              "cmdlet" => $"Cmdlets ({count})",
+              "function" => $"Functions ({count})",
+              "alias" => $"Aliases ({count})",
+              "about" => $"About ({count})",
+              "command" => $"Commands ({count})",
               _ => $"Types ({count})"
           };
 

@@ -101,6 +101,8 @@ public static partial class WebApiDocsGenerator
         if (moduleName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             moduleName = moduleName[..^4];
         apiDoc.AssemblyName = moduleName;
+        var manifestPath = TryResolvePowerShellModuleManifestPath(resolved, moduleName);
+        var kindHints = LoadPowerShellCommandKindHints(manifestPath, warnings);
 
         XDocument doc;
         try
@@ -135,7 +137,7 @@ public static partial class WebApiDocsGenerator
                 Name = name!,
                 FullName = name!,
                 Namespace = moduleName ?? string.Empty,
-                Kind = "Cmdlet",
+                Kind = ResolvePowerShellCommandKind(name!, kindHints),
                 Slug = Slugify(name!),
                 Summary = summary,
                 Remarks = remarks
@@ -190,6 +192,7 @@ public static partial class WebApiDocsGenerator
             apiDoc.Types[type.FullName] = type;
         }
 
+        AppendPowerShellAboutTopics(apiDoc, helpPath, resolved, moduleName ?? string.Empty, manifestPath, warnings);
         return apiDoc;
     }
 
@@ -369,6 +372,357 @@ public static partial class WebApiDocsGenerator
         var normalized = title.Trim();
         normalized = normalized.Trim('-').Trim();
         return normalized;
+    }
+
+    private static string ResolvePowerShellCommandKind(string commandName, PowerShellCommandKindHints hints)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return "Cmdlet";
+        if (commandName.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
+            return "About";
+        if (hints.Aliases.Contains(commandName))
+            return "Alias";
+        if (hints.Functions.Contains(commandName))
+            return "Function";
+        if (hints.Cmdlets.Contains(commandName))
+            return "Cmdlet";
+        if (hints.FunctionsWildcard && !hints.CmdletsWildcard)
+            return "Function";
+        if (hints.CmdletsWildcard && !hints.FunctionsWildcard)
+            return "Cmdlet";
+        if (hints.HasSignals)
+            return "Command";
+        return "Cmdlet";
+    }
+
+    private static void AppendPowerShellAboutTopics(
+        ApiDocModel apiDoc,
+        string inputHelpPath,
+        string resolvedHelpPath,
+        string moduleName,
+        string? manifestPath,
+        List<string> warnings)
+    {
+        var existing = new HashSet<string>(apiDoc.Types.Keys, StringComparer.OrdinalIgnoreCase);
+        foreach (var file in ResolvePowerShellAboutTopicFiles(inputHelpPath, resolvedHelpPath, manifestPath))
+        {
+            var aboutName = GetAboutTopicNameFromFile(file);
+            if (string.IsNullOrWhiteSpace(aboutName))
+                continue;
+            if (existing.Contains(aboutName))
+                continue;
+
+            string content;
+            try
+            {
+                content = File.ReadAllText(file);
+            }
+            catch (Exception ex)
+            {
+                warnings?.Add($"PowerShell about topic skipped: {Path.GetFileName(file)} ({ex.GetType().Name}: {ex.Message})");
+                continue;
+            }
+
+            var normalized = NormalizePowerShellAboutText(content);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            var summary = GetPowerShellAboutSummary(normalized, aboutName);
+            var remarks = GetPowerShellAboutRemarks(normalized, aboutName);
+
+            var type = new ApiTypeModel
+            {
+                Name = aboutName,
+                FullName = aboutName,
+                Namespace = moduleName ?? string.Empty,
+                Kind = "About",
+                Slug = Slugify(aboutName),
+                Summary = summary,
+                Remarks = remarks
+            };
+
+            apiDoc.Types[type.FullName] = type;
+            existing.Add(type.FullName);
+        }
+    }
+
+    private static IReadOnlyList<string> ResolvePowerShellAboutTopicFiles(string inputHelpPath, string resolvedHelpPath, string? manifestPath)
+    {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(inputHelpPath) && Directory.Exists(inputHelpPath))
+            roots.Add(Path.GetFullPath(inputHelpPath));
+
+        var helpDir = Path.GetDirectoryName(resolvedHelpPath);
+        if (!string.IsNullOrWhiteSpace(helpDir) && Directory.Exists(helpDir))
+        {
+            roots.Add(Path.GetFullPath(helpDir));
+            var parent = Directory.GetParent(helpDir);
+            if (parent is not null && parent.Exists)
+                roots.Add(parent.FullName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(manifestPath))
+        {
+            var manifestDir = Path.GetDirectoryName(manifestPath);
+            if (!string.IsNullOrWhiteSpace(manifestDir) && Directory.Exists(manifestDir))
+                roots.Add(Path.GetFullPath(manifestDir));
+        }
+
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in roots)
+        {
+            foreach (var pattern in new[] { "about_*.help.txt", "about_*.txt", "about_*.md", "about_*.markdown" })
+            {
+                IEnumerable<string> matches;
+                try
+                {
+                    matches = Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var match in matches)
+                    files.Add(match);
+            }
+        }
+
+        return files.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string? GetAboutTopicNameFromFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var fileName = Path.GetFileName(path);
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        var name = fileName.EndsWith(".help.txt", StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^".help.txt".Length]
+            : Path.GetFileNameWithoutExtension(fileName);
+
+        if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return name;
+    }
+
+    private static string NormalizePowerShellAboutText(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+        var normalized = content.Replace("\uFEFF", string.Empty, StringComparison.Ordinal)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Trim();
+        return normalized;
+    }
+
+    private static string? GetPowerShellAboutSummary(string text, string aboutName)
+    {
+        var lines = text.Split('\n')
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+        if (lines.Count == 0)
+            return null;
+
+        foreach (var line in lines)
+        {
+            var normalized = line.TrimStart('#').Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+            if (string.Equals(normalized, aboutName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(normalized, "TOPIC", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(normalized, "SHORT DESCRIPTION", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(normalized, "LONG DESCRIPTION", StringComparison.OrdinalIgnoreCase))
+                continue;
+            return normalized;
+        }
+
+        return lines[0];
+    }
+
+    private static string? GetPowerShellAboutRemarks(string text, string aboutName)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n')
+            .Select(x => x.TrimEnd())
+            .ToList();
+
+        if (lines.Count > 0)
+        {
+            var first = lines[0].TrimStart('#').Trim();
+            if (string.Equals(first, aboutName, StringComparison.OrdinalIgnoreCase))
+                lines.RemoveAt(0);
+        }
+
+        var remarks = string.Join(Environment.NewLine, lines).Trim();
+        return string.IsNullOrWhiteSpace(remarks) ? null : remarks;
+    }
+
+    private static string? TryResolvePowerShellModuleManifestPath(string resolvedHelpPath, string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(resolvedHelpPath))
+            return null;
+
+        var startDir = Path.GetDirectoryName(resolvedHelpPath);
+        if (string.IsNullOrWhiteSpace(startDir))
+            return null;
+
+        var directories = new List<string>();
+        var current = Path.GetFullPath(startDir);
+        for (var depth = 0; depth < 6 && !string.IsNullOrWhiteSpace(current); depth++)
+        {
+            directories.Add(current);
+            var parent = Directory.GetParent(current);
+            if (parent is null)
+                break;
+            if (string.Equals(parent.FullName, current, StringComparison.OrdinalIgnoreCase))
+                break;
+            current = parent.FullName;
+        }
+
+        foreach (var dir in directories)
+        {
+            if (string.IsNullOrWhiteSpace(moduleName))
+                continue;
+            var exact = Path.Combine(dir, moduleName + ".psd1");
+            if (File.Exists(exact))
+                return exact;
+        }
+
+        foreach (var dir in directories)
+        {
+            string[] manifests;
+            try
+            {
+                manifests = Directory.GetFiles(dir, "*.psd1", SearchOption.TopDirectoryOnly);
+            }
+            catch
+            {
+                continue;
+            }
+            if (manifests.Length == 1)
+                return manifests[0];
+        }
+
+        return null;
+    }
+
+    private static PowerShellCommandKindHints LoadPowerShellCommandKindHints(string? manifestPath, List<string> warnings)
+    {
+        var hints = new PowerShellCommandKindHints();
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+            return hints;
+
+        string text;
+        try
+        {
+            text = File.ReadAllText(manifestPath);
+        }
+        catch (Exception ex)
+        {
+            warnings?.Add($"PowerShell manifest metadata unavailable: {Path.GetFileName(manifestPath)} ({ex.GetType().Name}: {ex.Message})");
+            return hints;
+        }
+
+        hints.CmdletsWildcard = ParseManifestExportValues(text, "CmdletsToExport", hints.Cmdlets);
+        hints.FunctionsWildcard = ParseManifestExportValues(text, "FunctionsToExport", hints.Functions);
+        hints.AliasesWildcard = ParseManifestExportValues(text, "AliasesToExport", hints.Aliases);
+
+        var rootModule = ParseManifestScalarValue(text, "RootModule");
+        if (!string.IsNullOrWhiteSpace(rootModule))
+        {
+            var manifestDir = Path.GetDirectoryName(manifestPath) ?? string.Empty;
+            var modulePath = Path.IsPathRooted(rootModule)
+                ? rootModule
+                : Path.Combine(manifestDir, rootModule);
+            if (modulePath.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) && File.Exists(modulePath))
+            {
+                try
+                {
+                    var script = File.ReadAllText(modulePath);
+                    var functionRegex = new Regex(@"(?im)^\s*function\s+(?<name>[A-Za-z_][A-Za-z0-9_-]*)\b",
+                        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+                        RegexTimeout);
+                    foreach (Match match in functionRegex.Matches(script))
+                    {
+                        var functionName = match.Groups["name"].Value.Trim();
+                        if (!string.IsNullOrWhiteSpace(functionName))
+                            hints.Functions.Add(functionName);
+                    }
+                }
+                catch
+                {
+                    // best-effort only
+                }
+            }
+        }
+
+        return hints;
+    }
+
+    private static bool ParseManifestExportValues(string text, string key, ISet<string> values)
+    {
+        var wildcard = false;
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
+            return wildcard;
+
+        var pattern = $"(?is)\\b{Regex.Escape(key)}\\b\\s*=\\s*(?<value>@\\((?<list>.*?)\\)|'[^']*'|\"[^\"]*\"|[^\\r\\n#]+)";
+        var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant, RegexTimeout);
+        if (!match.Success)
+            return wildcard;
+
+        var rawValue = match.Groups["value"].Value.Trim();
+        if (rawValue.IndexOf('*') >= 0)
+            wildcard = true;
+
+        var valueRegex = new Regex("['\"](?<value>[^'\"]+)['\"]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+        foreach (Match valueMatch in valueRegex.Matches(rawValue))
+        {
+            var value = valueMatch.Groups["value"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value, "*", StringComparison.Ordinal))
+                values.Add(value);
+        }
+
+        return wildcard;
+    }
+
+    private static string? ParseManifestScalarValue(string text, string key)
+    {
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(key))
+            return null;
+
+        var pattern = $"(?is)\\b{Regex.Escape(key)}\\b\\s*=\\s*(?<value>'[^']*'|\"[^\"]*\"|[^\\r\\n#]+)";
+        var match = Regex.Match(text, pattern, RegexOptions.CultureInvariant, RegexTimeout);
+        if (!match.Success)
+            return null;
+
+        var raw = match.Groups["value"].Value.Trim();
+        if ((raw.StartsWith("'", StringComparison.Ordinal) && raw.EndsWith("'", StringComparison.Ordinal)) ||
+            (raw.StartsWith("\"", StringComparison.Ordinal) && raw.EndsWith("\"", StringComparison.Ordinal)))
+            return raw[1..^1].Trim();
+        return raw.Trim();
+    }
+
+    private sealed class PowerShellCommandKindHints
+    {
+        public HashSet<string> Cmdlets { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> Functions { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool CmdletsWildcard { get; set; }
+        public bool FunctionsWildcard { get; set; }
+        public bool AliasesWildcard { get; set; }
+        public bool HasSignals => Cmdlets.Count > 0 || Functions.Count > 0 || Aliases.Count > 0 || CmdletsWildcard || FunctionsWildcard || AliasesWildcard;
     }
 
     private sealed class PowerShellParameterInfo

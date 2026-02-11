@@ -209,42 +209,45 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("      </section>");
         }
 
-          var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
-          sb.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
-          sb.AppendLine("        <div class=\"member-filter\">");
-          sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
-          sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
-          sb.AppendLine("        </div>");
-          sb.AppendLine("        <div class=\"member-kind-filter\">");
-          sb.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
-          if (type.Constructors.Count > 0)
-              sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
-          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods ({type.Methods.Count})</button>");
-          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
-          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
-          sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
-          if (type.ExtensionMethods.Count > 0)
-              sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
-        sb.AppendLine("        </div>");
-          sb.AppendLine("        <label class=\"member-toggle\">");
-          sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
-          sb.AppendLine("          Show inherited");
-          sb.AppendLine("        </label>");
-          sb.AppendLine("        <div class=\"member-actions\">");
-          sb.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
-          sb.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
-          sb.AppendLine("          <button class=\"member-reset\" type=\"button\">Reset</button>");
-          sb.AppendLine("        </div>");
-          sb.AppendLine("      </div>");
+        var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
+        if (totalMembers > 0)
+        {
+            sb.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
+            sb.AppendLine("        <div class=\"member-filter\">");
+            sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
+            sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
+            sb.AppendLine("        </div>");
+            sb.AppendLine("        <div class=\"member-kind-filter\">");
+            sb.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
+            if (type.Constructors.Count > 0)
+                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
+            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods ({type.Methods.Count})</button>");
+            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
+            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
+            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
+            if (type.ExtensionMethods.Count > 0)
+                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
+            sb.AppendLine("        </div>");
+            sb.AppendLine("        <label class=\"member-toggle\">");
+            sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
+            sb.AppendLine("          Show inherited");
+            sb.AppendLine("        </label>");
+            sb.AppendLine("        <div class=\"member-actions\">");
+            sb.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
+            sb.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
+            sb.AppendLine("          <button class=\"member-reset\" type=\"button\">Reset</button>");
+            sb.AppendLine("        </div>");
+            sb.AppendLine("      </div>");
 
-        var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-        AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: "methods");
-        AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
-        AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
-        AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
-        if (type.ExtensionMethods.Count > 0)
-            AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+            var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+            AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: "methods");
+            AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
+            AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
+            AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
+            if (type.ExtensionMethods.Count > 0)
+                AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+        }
 
         sb.AppendLine("    </article>");
         return sb.ToString().TrimEnd();

@@ -256,7 +256,18 @@ referenced type exists in the generated API docs.
 Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 (for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
 Each command is treated as a "type" with parameter sets rendered as methods.
-Current scope is command help only; `about_*` conceptual topics are not yet projected into API pages.
+PowerForge classifies command kinds (`Cmdlet` / `Function` / `Alias`) using
+best-effort module metadata discovery (manifest exports + root module functions)
+when available.
+
+When `help` points at a directory (or a directory can be inferred from the help
+xml location), `about_*` files are also imported into the API output:
+- `about_*.help.txt`
+- `about_*.txt`
+- `about_*.md` / `about_*.markdown`
+
+Imported `about_*` topics render as `About` entries and are linkable from command
+remarks (for example `about_CommonParameters`).
 
 ## Usage scenarios
 

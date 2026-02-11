@@ -123,4 +123,154 @@ public class WebApiDocsGeneratorPowerShellTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Generate_PowerShellHelp_ClassifiesCmdletFunctionAndAliasFromManifest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-kinds-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-US", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleFunction</command:name>
+                      <maml:description><maml:para>Invokes data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax><command:syntaxItem><command:name>Invoke-SampleFunction</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                  <command:command>
+                    <command:details>
+                      <command:name>ss</command:name>
+                      <maml:description><maml:para>Alias command.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax><command:syntaxItem><command:name>ss</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport   = @('Get-SampleCmdlet')
+                    FunctionsToExport = @('Invoke-SampleFunction')
+                    AliasesToExport   = @('ss')
+                    RootModule        = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"),
+                """
+                function Invoke-SampleFunction {
+                    [CmdletBinding()]
+                    param()
+                }
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(3, result.TypeCount);
+
+            using var cmdletJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "get-samplecmdlet.json")));
+            using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
+            using var aliasJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "ss.json")));
+
+            Assert.Equal("Cmdlet", cmdletJson.RootElement.GetProperty("kind").GetString());
+            Assert.Equal("Function", functionJson.RootElement.GetProperty("kind").GetString());
+            Assert.Equal("Alias", aliasJson.RootElement.GetProperty("kind").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_ImportsAboutTopicsAndLinksThemFromRemarks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-about-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "en-US", "Sample.Module-help.xml");
+            Directory.CreateDirectory(Path.GetDirectoryName(helpPath)!);
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleCmdlet</command:name>
+                      <maml:description><maml:para>Gets data.</maml:para></maml:description>
+                    </command:details>
+                    <maml:description>
+                      <maml:para>For more details, see about_SampleTopic.</maml:para>
+                    </maml:description>
+                    <command:syntax><command:syntaxItem><command:name>Get-SampleCmdlet</command:name></command:syntaxItem></command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "about_SampleTopic.help.txt"),
+                """
+                # about_SampleTopic
+
+                Describes sample topic behavior.
+
+                Use this topic to learn extra details.
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = root,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "html"
+            };
+
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(2, result.TypeCount);
+
+            using var aboutJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "about-sampletopic.json")));
+            Assert.Equal("About", aboutJson.RootElement.GetProperty("kind").GetString());
+            Assert.Equal("about_SampleTopic", aboutJson.RootElement.GetProperty("name").GetString());
+
+            var commandHtml = File.ReadAllText(Path.Combine(outputPath, "get-samplecmdlet", "index.html"));
+            Assert.Contains("href=\"/api/powershell/about-sampletopic/\"", commandHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }
