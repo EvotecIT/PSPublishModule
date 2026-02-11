@@ -140,6 +140,11 @@ body.pf-api-docs .pf-combobox-option.active{background:rgba(167,139,250,.24);col
 .member-group-body{display:grid;gap:8px;margin-top:8px}
 .member-card pre{background:#0b1220;border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 12px;overflow:auto}
 .member-card pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e6e9f3}
+.param-name{font-weight:700}
+.param-meta{display:inline-flex;flex-wrap:wrap;gap:6px;vertical-align:middle;margin-left:8px}
+.param-meta-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:.7rem;line-height:1.2;background:#111827;border:1px solid rgba(148,163,184,.28);color:#cbd5e1}
+.param-meta-chip.required{background:#1f2937;border-color:rgba(34,197,94,.45);color:#86efac}
+.param-meta-chip.optional{background:#1f2937;border-color:rgba(245,158,11,.45);color:#fcd34d}
 .member-attributes,.type-meta-attributes .type-meta-list{display:flex;flex-wrap:wrap;gap:6px}
 .member-attributes code,.type-meta-list code{background:#0b1220;border:1px solid rgba(148,163,184,.2);border-radius:999px;padding:2px 8px;font-size:.75rem;color:#cbd5f5}
 .param-list{margin:6px 0 0;padding:0;display:grid;gap:6px}

@@ -393,7 +393,9 @@ public static partial class WebApiDocsGenerator
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
                         ["isOptional"] = p.IsOptional,
-                        ["defaultValue"] = p.DefaultValue
+                        ["defaultValue"] = p.DefaultValue,
+                        ["position"] = p.Position,
+                        ["pipelineInput"] = p.PipelineInput
                     }).ToList()
                 }).ToList(),
                 ["constructors"] = type.Constructors.Select(m => new Dictionary<string, object?>
@@ -437,7 +439,9 @@ public static partial class WebApiDocsGenerator
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
                         ["isOptional"] = p.IsOptional,
-                        ["defaultValue"] = p.DefaultValue
+                        ["defaultValue"] = p.DefaultValue,
+                        ["position"] = p.Position,
+                        ["pipelineInput"] = p.PipelineInput
                     }).ToList()
                 }).ToList(),
                 ["properties"] = type.Properties.Select(p => new Dictionary<string, object?>

@@ -410,7 +410,7 @@ public static partial class WebApiDocsGenerator
                 var optional = param.IsOptional ? " optional" : string.Empty;
                 var defaultValue = param.DefaultValue;
                 var defaultText = string.IsNullOrWhiteSpace(defaultValue) ? string.Empty : $" = {defaultValue}";
-                sb.AppendLine($"            <dt>{System.Web.HttpUtility.HtmlEncode(param.Name)} <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span></dt>");
+                sb.AppendLine($"            <dt><span class=\"param-name\">{System.Web.HttpUtility.HtmlEncode(param.Name)}</span> <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span>{BuildParameterMetaChips(param)}</dt>");
                 if (!string.IsNullOrWhiteSpace(param.Summary))
                     sb.AppendLine($"            <dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
             }
@@ -524,6 +524,24 @@ public static partial class WebApiDocsGenerator
         }
 
         return $"{prefix}{displayName}".Trim();
+    }
+
+    private static string BuildParameterMetaChips(ApiParameterModel param)
+    {
+        if (param is null)
+            return string.Empty;
+
+        var chips = new List<string>
+        {
+            $"<span class=\"param-meta-chip {(param.IsOptional ? "optional" : "required")}\">{(param.IsOptional ? "optional" : "required")}</span>"
+        };
+
+        if (!string.IsNullOrWhiteSpace(param.Position))
+            chips.Add($"<span class=\"param-meta-chip\">position: {System.Web.HttpUtility.HtmlEncode(param.Position)}</span>");
+        if (!string.IsNullOrWhiteSpace(param.PipelineInput))
+            chips.Add($"<span class=\"param-meta-chip\">pipeline: {System.Web.HttpUtility.HtmlEncode(param.PipelineInput)}</span>");
+
+        return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
     }
 
     private static string BuildMemberPrefix(ApiMemberModel member)

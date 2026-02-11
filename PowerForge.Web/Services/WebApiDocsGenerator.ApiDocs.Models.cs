@@ -83,6 +83,8 @@ public static partial class WebApiDocsGenerator
         public string? Summary { get; set; }
         public bool IsOptional { get; set; }
         public string? DefaultValue { get; set; }
+        public string? Position { get; set; }
+        public string? PipelineInput { get; set; }
     }
 
     private sealed class ApiTypeParameterModel

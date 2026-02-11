@@ -105,9 +105,13 @@ public class WebApiDocsGeneratorPowerShellTests
             var parameters = methods[0].GetProperty("parameters");
             Assert.False(parameters[0].GetProperty("isOptional").GetBoolean());
             Assert.Equal("Name value from command parameters.", parameters[0].GetProperty("summary").GetString());
+            Assert.Equal("named", parameters[0].GetProperty("position").GetString());
+            Assert.Equal("false", parameters[0].GetProperty("pipelineInput").GetString());
             Assert.True(parameters[1].GetProperty("isOptional").GetBoolean());
             Assert.Equal("General", parameters[1].GetProperty("defaultValue").GetString());
             Assert.Equal("Category from command parameters.", parameters[1].GetProperty("summary").GetString());
+            Assert.Equal("named", parameters[1].GetProperty("position").GetString());
+            Assert.Equal("false", parameters[1].GetProperty("pipelineInput").GetString());
 
             var htmlPath = Path.Combine(outputPath, "new-samplecmdlet", "index.html");
             Assert.True(File.Exists(htmlPath));
@@ -116,6 +120,8 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
             Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);
             Assert.Contains("Category from command parameters.", html, StringComparison.Ordinal);
+            Assert.Contains("position: named", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pipeline: false", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

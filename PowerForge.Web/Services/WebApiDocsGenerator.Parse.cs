@@ -173,6 +173,12 @@ public static partial class WebApiDocsGenerator
                         var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
                         if (string.IsNullOrWhiteSpace(defaultValue))
                             defaultValue = commandParameter?.DefaultValue;
+                        var position = parameter.Attribute("position")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(position))
+                            position = commandParameter?.Position;
+                        var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(pipelineInput))
+                            pipelineInput = commandParameter?.PipelineInput;
 
                         member.Parameters.Add(new ApiParameterModel
                         {
@@ -180,7 +186,9 @@ public static partial class WebApiDocsGenerator
                             Type = paramType,
                             Summary = paramSummary,
                             IsOptional = !isRequired,
-                            DefaultValue = string.IsNullOrWhiteSpace(defaultValue) ? null : defaultValue
+                            DefaultValue = string.IsNullOrWhiteSpace(defaultValue) ? null : defaultValue,
+                            Position = string.IsNullOrWhiteSpace(position) ? null : position,
+                            PipelineInput = string.IsNullOrWhiteSpace(pipelineInput) ? null : pipelineInput
                         });
                     }
                     type.Methods.Add(member);
@@ -284,13 +292,17 @@ public static partial class WebApiDocsGenerator
 
             var required = bool.TryParse(parameter.Attribute("required")?.Value, out var parsedRequired) && parsedRequired;
             var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
+            var position = parameter.Attribute("position")?.Value?.Trim();
+            var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
 
             map[name] = new PowerShellParameterInfo
             {
                 Summary = summary,
                 Type = type,
                 Required = required,
-                DefaultValue = defaultValue
+                DefaultValue = defaultValue,
+                Position = position,
+                PipelineInput = pipelineInput
             };
         }
 
@@ -649,5 +661,7 @@ public static partial class WebApiDocsGenerator
         public string? Type { get; set; }
         public bool Required { get; set; }
         public string? DefaultValue { get; set; }
+        public string? Position { get; set; }
+        public string? PipelineInput { get; set; }
     }
 }
