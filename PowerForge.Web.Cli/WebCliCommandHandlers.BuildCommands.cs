@@ -474,7 +474,7 @@ internal static partial class WebCliCommandHandlers
             cts.Cancel();
         };
 
-        WebStaticServer.Serve(servePath, host, port, cts.Token, message => logger.Info(message));
+        WebStaticServer.ServeWithPortFallback(servePath, host, port, cts.Token, message => logger.Info(message));
         return 0;
     }
 
