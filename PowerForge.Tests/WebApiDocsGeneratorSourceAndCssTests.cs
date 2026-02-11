@@ -111,6 +111,59 @@ public class WebApiDocsGeneratorSourceAndCssTests
         }
     }
 
+    [Fact]
+    public void GenerateDocsHtml_SourceUrlMappings_UseMostSpecificPrefix_AndHonorStripPathPrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-specific-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
+
+        var sourceRoot = ResolveGitRoot(assemblyPath) ?? Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web",
+            UrlPattern = "https://example.invalid/root/{path}#L{line}"
+        });
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web/Services",
+            UrlPattern = "https://example.invalid/services/{path}#L{line}",
+            StripPathPrefix = true
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var htmlFiles = Directory.GetFiles(outputPath, "*.html", SearchOption.AllDirectories);
+            Assert.True(htmlFiles.Length > 0, "Expected generated HTML pages.");
+            var html = string.Join(Environment.NewLine, htmlFiles.Select(File.ReadAllText));
+
+            Assert.Contains("https://example.invalid/services/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.invalid/services/PowerForge.Web/Services/", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string? ResolveGitRoot(string path)
     {
         var current = Path.GetDirectoryName(path);
