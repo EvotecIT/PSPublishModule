@@ -308,15 +308,19 @@ Pipeline step:
   "out": "./_site/api",
   "format": "both",
   "template": "docs",
-  "css": "/css/api-docs.css"
+  "css": "/css/api-docs.css",
+  "coverageReport": "./_reports/apidocs-coverage.json",
+  "psExamplesPath": "./Module/Examples"
 }
 ```
 
 CLI:
 ```bash
-powerforge-web apidocs --type powershell --help-path ./Module/en-US/MyModule-help.xml --out ./_site/api --format both --template docs --css /css/api-docs.css
+powerforge-web apidocs --type powershell --help-path ./Module/en-US/MyModule-help.xml --out ./_site/api --format both --template docs --css /css/api-docs.css --coverage-report ./_reports/apidocs-coverage.json --ps-examples ./Module/Examples
 ```
 
 Notes:
 - If `helpPath` points to a directory with multiple `*-help.xml` files, the first one is used.
 - For deterministic output, point to a specific file.
+- `coverageReport` defaults to `coverage.json` under API output and includes completeness metrics (summary/remarks/examples/member docs).
+- PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.

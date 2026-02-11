@@ -105,7 +105,7 @@ Legend:
 ### API Docs
 
 - **Have**: C# XML API docs generator + pipeline integration + source links.
-- **Have**: PowerShell help API docs (command help XML + parameter sets + examples + `about_*` topic import).
+- **Have**: PowerShell help API docs (command help XML + parameter sets + examples + `about_*` topic import + fallback examples + coverage report).
   - Docs: `Docs/PowerForge.Web.ApiDocs.md`
 - **Partial**: Theme/layout contract for API pages (ensuring site nav renders) requires consistent `api-header/api-footer` partials across themes.
 

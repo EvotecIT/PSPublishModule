@@ -48,6 +48,11 @@ internal static partial class WebPipelineRunner
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
                         GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
+        var coverageReportPath = ResolvePath(baseDir, GetString(step, "coverageReport") ?? GetString(step, "coverage-report") ?? GetString(step, "coverageReportPath") ?? GetString(step, "coverage-report-path"));
+        var generateCoverageReport = GetBool(step, "generateCoverageReport") ?? GetBool(step, "generate-coverage-report") ?? true;
+        var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
+        var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
+        var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
         var sourceUrlMappings = GetApiDocsSourceUrlMappings(
             step,
             "sourceUrlMappings",
@@ -180,6 +185,11 @@ internal static partial class WebPipelineRunner
             BodyClass = bodyClass,
             SourceRootPath = sourceRoot,
             SourceUrlPattern = sourceUrl,
+            GenerateCoverageReport = generateCoverageReport,
+            CoverageReportPath = coverageReportPath,
+            GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+            PowerShellExamplesPath = powerShellExamplesPath,
+            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = nav,
             // Default to root context for profile selection to avoid accidental "API header has different nav"

@@ -111,6 +111,27 @@ public sealed class WebApiDocsOptions
     /// Values are matched case-insensitively against type simple names.
     /// </summary>
     public List<string> QuickStartTypeNames { get; } = new();
+    /// <summary>
+    /// Generates a machine-readable coverage report with API documentation completeness stats.
+    /// </summary>
+    public bool GenerateCoverageReport { get; set; } = true;
+    /// <summary>
+    /// Optional coverage report output path. Relative paths are resolved under <see cref="OutputPath"/>.
+    /// Defaults to <c>coverage.json</c> when not set.
+    /// </summary>
+    public string? CoverageReportPath { get; set; }
+    /// <summary>
+    /// Enables fallback code examples for PowerShell commands when help XML does not provide examples.
+    /// </summary>
+    public bool GeneratePowerShellFallbackExamples { get; set; } = true;
+    /// <summary>
+    /// Optional path to PowerShell example scripts (file or directory). When omitted, generator probes common module paths.
+    /// </summary>
+    public string? PowerShellExamplesPath { get; set; }
+    /// <summary>
+    /// Maximum number of fallback code examples imported per PowerShell command.
+    /// </summary>
+    public int PowerShellFallbackExampleLimitPerCommand { get; set; } = 2;
 }
 
 /// <summary>Path-based source URL mapping for API source/edit links.</summary>
@@ -203,7 +224,7 @@ public static partial class WebApiDocsGenerator
         }
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
-            ? ParsePowerShellHelp(helpPath, warnings)
+            ? ParsePowerShellHelp(helpPath, warnings, options)
             : ParseXml(xmlPath, assembly, options);
         var usedReflectionFallback = false;
         if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
@@ -553,6 +574,8 @@ public static partial class WebApiDocsGenerator
             ValidateCssContract(outputPath, options, warnings);
         }
 
+        var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+
         var normalizedWarnings = warnings
             .Where(static w => !string.IsNullOrWhiteSpace(w))
             .Select(NormalizeWarningCode)
@@ -564,6 +587,7 @@ public static partial class WebApiDocsGenerator
             IndexPath = indexPath,
             SearchPath = searchPath,
             TypesPath = typesDir,
+            CoveragePath = coveragePath,
             TypeCount = types.Count,
             UsedReflectionFallback = usedReflectionFallback,
             Warnings = normalizedWarnings
@@ -587,6 +611,8 @@ public static partial class WebApiDocsGenerator
 
         if (trimmed.StartsWith("API docs: quickStartTypes", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.QUICKSTART] " + warning;
+        if (trimmed.StartsWith("API docs coverage:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.COVERAGE] " + warning;
 
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;

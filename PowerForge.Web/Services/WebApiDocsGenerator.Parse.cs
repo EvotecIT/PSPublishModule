@@ -85,7 +85,7 @@ public static partial class WebApiDocsGenerator
         return apiDoc;
     }
 
-    private static ApiDocModel ParsePowerShellHelp(string helpPath, List<string> warnings)
+    private static ApiDocModel ParsePowerShellHelp(string helpPath, List<string> warnings, WebApiDocsOptions options)
     {
         var apiDoc = new ApiDocModel();
         if (string.IsNullOrWhiteSpace(helpPath))
@@ -192,6 +192,7 @@ public static partial class WebApiDocsGenerator
             apiDoc.Types[type.FullName] = type;
         }
 
+        AppendPowerShellFallbackExamples(apiDoc, helpPath, resolved, manifestPath, options, warnings);
         AppendPowerShellAboutTopics(apiDoc, helpPath, resolved, moduleName ?? string.Empty, manifestPath, warnings);
         return apiDoc;
     }

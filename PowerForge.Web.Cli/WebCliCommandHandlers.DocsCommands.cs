@@ -36,6 +36,15 @@ internal static partial class WebCliCommandHandlers
         var bodyClass = TryGetOptionValue(subArgs, "--body-class") ?? TryGetOptionValue(subArgs, "--bodyClass");
         var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
         var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
+        var coverageReport = TryGetOptionValue(subArgs, "--coverage-report");
+        var generateCoverageReport = !HasOption(subArgs, "--no-coverage-report");
+        if (HasOption(subArgs, "--coverage-report-off"))
+            generateCoverageReport = false;
+        var powerShellExamplesPath = TryGetOptionValue(subArgs, "--ps-examples") ?? TryGetOptionValue(subArgs, "--powershell-examples");
+        var generatePowerShellFallbackExamples = !HasOption(subArgs, "--no-ps-fallback-examples");
+        if (HasOption(subArgs, "--ps-fallback-examples-off"))
+            generatePowerShellFallbackExamples = false;
+        var powerShellFallbackLimit = ParseIntOption(TryGetOptionValue(subArgs, "--ps-fallback-limit"), 2);
         var sourceMapValues = GetOptionValues(subArgs, "--source-map");
         var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
         if (HasOption(subArgs, "--include-undocumented"))
@@ -87,7 +96,12 @@ internal static partial class WebCliCommandHandlers
             SourceRootPath = sourceRoot,
             SourceUrlPattern = sourceUrl,
             IncludeUndocumentedTypes = includeUndocumented,
-            NavJsonPath = navJson
+            NavJsonPath = navJson,
+            GenerateCoverageReport = generateCoverageReport,
+            CoverageReportPath = coverageReport,
+            GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+            PowerShellExamplesPath = powerShellExamplesPath,
+            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackLimit > 0 ? powerShellFallbackLimit : 2
         };
         foreach (var sourceMapValue in sourceMapValues)
         {
@@ -130,6 +144,7 @@ internal static partial class WebCliCommandHandlers
                     IndexPath = result.IndexPath,
                     SearchPath = result.SearchPath,
                     TypesPath = result.TypesPath,
+                    CoveragePath = result.CoveragePath,
                     TypeCount = result.TypeCount,
                     UsedReflectionFallback = result.UsedReflectionFallback,
                     Warnings = filteredWarnings

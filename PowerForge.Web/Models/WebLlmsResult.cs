@@ -41,6 +41,8 @@ public sealed class WebApiDocsResult
     public string SearchPath { get; set; } = string.Empty;
     /// <summary>Path to the types index file.</summary>
     public string TypesPath { get; set; } = string.Empty;
+    /// <summary>Path to the coverage report JSON file, when generated.</summary>
+    public string? CoveragePath { get; set; }
     /// <summary>Number of types documented.</summary>
     public int TypeCount { get; set; }
     /// <summary>True when reflection was used to populate types.</summary>
