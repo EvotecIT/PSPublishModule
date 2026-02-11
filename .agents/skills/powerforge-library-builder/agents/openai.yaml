@@ -1,7 +1,9 @@
 display_name: PowerForge Library Builder
-short_description: Deterministic .NET repository build/release with project.build.json, NuGet publish, and GitHub tag policy.
+short_description: Deterministic .NET repository build/release with one Build-Project entrypoint, project.build.json, and explicit GitHub tag policy.
 default_prompt: >-
   Build and publish a multi-project .NET repository with Invoke-ProjectBuild.
-  Validate discovery/versioning first, run plan mode, then execute pack/sign/publish.
+  Standardize to a single Build/Build-Project.ps1 entrypoint and Build/project.build.json.
+  Remove stale wrapper scripts unless explicitly required. Validate discovery/versioning first,
+  run plan mode, then execute pack/sign/publish.
   Configure GitHub release mode, primary project, tag template tokens, and tag conflict
   policy explicitly. Ensure output assets and release metadata match plan.

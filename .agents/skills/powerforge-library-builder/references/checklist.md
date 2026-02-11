@@ -3,12 +3,16 @@
 ## Preflight
 
 1. Confirm target branch/worktree and clean status.
-2. Inspect `Build/project.build.json`:
+2. Confirm script surface is standardized:
+   - `Build/Build-Project.ps1`
+   - `Build/project.build.json`
+   - no stale wrappers (`Build-AllPackages.ps1`, `Publish-*.ps1`, `Update-Version.ps1`).
+3. Inspect `Build/project.build.json`:
    - project discovery filters
    - expected version map
    - staging and output paths
    - publish toggles (`PublishNuget`, `PublishGitHub`).
-3. Verify secrets/token resolution paths before release.
+4. Verify secrets/token resolution paths before release.
 
 ## Plan and Execute
 
