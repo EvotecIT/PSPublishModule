@@ -320,6 +320,18 @@ Project data is available under:
 - `data.projects.<slug>` (all project data)
 - `data.project` (current project's data when rendering that project)
 
+Media shortcodes (built-in):
+- `{{< media ... >}}` generic provider wrapper (`youtube`, `video`, `iframe`, `x`, `screenshot`, `screenshots`)
+- `{{< youtube id=\"...\" start=\"15\" size=\"lg\" >}}`
+- `{{< x url=\"https://x.com/<user>/status/<id>\" size=\"md\" >}}` (alias: `tweet`)
+- `{{< screenshot src=\"/img/feature.png\" caption=\"Dark mode\" size=\"md\" >}}`
+- `{{< screenshots data=\"media.shots\" layout=\"grid|masonry|strip|stack\" columns=\"3\" >}}`
+
+Screenshot sizing notes:
+- `size`: `xs|sm|md|lg|xl|full` (defaults to `lg` for single screenshot, `xl` container for galleries)
+- `align`: `left|center|right`
+- Optional dimensions (`width`, `height`, `ratio`) improve aspect-ratio stability and reduce layout shift.
+
 Edit links:
 - When `site.json` defines `EditLinks`, pages expose `page.edit_url`.
 - Use `{{< edit-link >}}` in markdown to render a consistent "Edit on GitHub" block.

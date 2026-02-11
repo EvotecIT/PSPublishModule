@@ -23,6 +23,12 @@ public static class ShortcodeRegistry
         Register("benchmarks", ShortcodeDefaults.RenderBenchmarks);
         Register("pricing", ShortcodeDefaults.RenderPricing);
         Register("edit-link", ShortcodeDefaults.RenderEditLink);
+        Register("media", ShortcodeDefaults.RenderMedia);
+        Register("youtube", ShortcodeDefaults.RenderYouTube);
+        Register("x", ShortcodeDefaults.RenderXPost);
+        Register("tweet", ShortcodeDefaults.RenderXPost);
+        Register("screenshot", ShortcodeDefaults.RenderScreenshot);
+        Register("screenshots", ShortcodeDefaults.RenderScreenshots);
     }
 
     /// <summary>Registers a shortcode handler.</summary>
@@ -41,7 +47,7 @@ public static class ShortcodeRegistry
         => Handlers.TryGetValue(name, out handler!);
 }
 
-internal static class ShortcodeDefaults
+internal static partial class ShortcodeDefaults
 {
     private static string HtmlAny(IReadOnlyDictionary<string, object?> map, params string[] keys)
     {
