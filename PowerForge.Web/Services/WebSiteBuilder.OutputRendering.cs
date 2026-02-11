@@ -76,7 +76,7 @@ public static partial class WebSiteBuilder
         var fullListItems = ResolveListItems(item, allItems);
         var pagination = ResolvePaginationRuntime(spec, item, fullListItems);
         var listItems = ApplyPagination(fullListItems, pagination);
-        var headHtml = BuildHeadHtml(spec, item, rootPath);
+        var headHtml = BuildHeadHtml(spec, item, allItems, rootPath);
         var bodyClass = BuildBodyClass(spec, item);
         var openGraph = BuildOpenGraphHtml(spec, item);
         var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);

@@ -64,7 +64,7 @@ public static partial class WebSiteBuilder
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
-    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, string rootPath)
+    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems, string rootPath)
     {
         var parts = new List<string>();
         var head = spec.Head;
@@ -92,7 +92,63 @@ public static partial class WebSiteBuilder
             if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
                 parts.Add(File.ReadAllText(resolved));
         }
+
+        var languageAlternates = BuildLanguageAlternateHeadLinks(spec, item, allItems);
+        if (!string.IsNullOrWhiteSpace(languageAlternates))
+            parts.Add(languageAlternates);
+
         return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string BuildLanguageAlternateHeadLinks(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems)
+    {
+        if (spec is null || item is null || allItems is null)
+            return string.Empty;
+
+        var localization = ResolveLocalizationConfig(spec);
+        if (!localization.Enabled || localization.Languages.Length <= 1)
+            return string.Empty;
+
+        var currentLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+        var alternates = new List<(string HrefLang, string Url)>();
+        foreach (var language in localization.Languages)
+        {
+            var route = ResolveLocalizedPageUrl(spec, localization, item, allItems, language.Code, currentLanguage);
+            if (string.IsNullOrWhiteSpace(route))
+                continue;
+
+            var absoluteUrl = ResolveAbsoluteUrl(spec.BaseUrl, route);
+            if (string.IsNullOrWhiteSpace(absoluteUrl))
+                continue;
+
+            alternates.Add((language.Code, absoluteUrl));
+        }
+
+        if (alternates.Count <= 1)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var alternate in alternates
+                     .OrderBy(static value => value.HrefLang, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static value => value.Url, StringComparer.OrdinalIgnoreCase))
+        {
+            sb.AppendLine(
+                $"<link rel=\"alternate\" hreflang=\"{System.Web.HttpUtility.HtmlEncode(alternate.HrefLang)}\" href=\"{System.Web.HttpUtility.HtmlEncode(alternate.Url)}\" />");
+        }
+
+        var defaultLanguage = localization.Languages.FirstOrDefault(static language => language.IsDefault);
+        if (defaultLanguage is not null)
+        {
+            var defaultAlternate = alternates.FirstOrDefault(value =>
+                value.HrefLang.Equals(defaultLanguage.Code, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(defaultAlternate.Url))
+            {
+                sb.AppendLine(
+                    $"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(defaultAlternate.Url)}\" />");
+            }
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     private static string RenderHeadLinks(HeadSpec head)
@@ -776,4 +832,3 @@ public static partial class WebSiteBuilder
         return fullFile.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 }
-

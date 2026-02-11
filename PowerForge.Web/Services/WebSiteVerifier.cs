@@ -64,6 +64,7 @@ public static partial class WebSiteVerifier
                 var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
                 var resolvedLanguage = ResolveItemLanguage(spec, localization, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
+                var translationKey = ResolveTranslationKey(matter, collection.Name, localizedRelativePath);
                 var relativeDir = localizedRelativeDir;
                 CollectTaxonomyTerms(spec.Taxonomies, matter, resolvedLanguage, taxonomyTermsByLanguage, usedTaxonomyNames);
                 var isSectionIndex = IsSectionIndex(file);
@@ -95,7 +96,7 @@ public static partial class WebSiteVerifier
                     list = new List<CollectionRoute>();
                     collectionRoutes[collection.Name] = list;
                 }
-                list.Add(new CollectionRoute(route, file, matter?.Draft ?? false, resolvedLanguage));
+                list.Add(new CollectionRoute(route, file, matter?.Draft ?? false, resolvedLanguage, translationKey));
             }
         }
 
@@ -111,6 +112,7 @@ public static partial class WebSiteVerifier
         ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
+        ValidateLocalizationTranslationMappings(localization, collectionRoutes, warnings);
         ValidateVersioning(spec, warnings);
         ValidateNavigationLint(spec, plan, routes.Keys, warnings);
         ValidateSiteNavExport(spec, plan, warnings);
@@ -160,6 +162,9 @@ public static partial class WebSiteVerifier
             trimmed.StartsWith("Theme '", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("theme manifest", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.THEME.CONTRACT] " + warning;
+
+        if (trimmed.StartsWith("Localization:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.LOCALIZATION] " + warning;
 
         return warning;
     }

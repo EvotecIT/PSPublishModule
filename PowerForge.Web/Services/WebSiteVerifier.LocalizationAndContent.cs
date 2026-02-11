@@ -149,6 +149,27 @@ public static partial class WebSiteVerifier
         return string.Empty;
     }
 
+    private static string ResolveTranslationKey(FrontMatter? matter, string? collectionName, string localizedRelativePath)
+    {
+        if (matter?.Meta is not null)
+        {
+            if (TryGetMetaString(matter.Meta, "translation_key", out var translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "translation.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+            if (TryGetMetaString(matter.Meta, "i18n.key", out translationKey) && !string.IsNullOrWhiteSpace(translationKey))
+                return translationKey.Trim();
+        }
+
+        var collection = string.IsNullOrWhiteSpace(collectionName)
+            ? "content"
+            : collectionName.Trim().ToLowerInvariant();
+        var path = NormalizePath(Path.ChangeExtension(localizedRelativePath, null) ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(path))
+            path = "index";
+        return $"{collection}:{path.ToLowerInvariant()}";
+    }
+
     private static bool TryGetMetaString(Dictionary<string, object?> meta, string key, out string value)
     {
         value = string.Empty;

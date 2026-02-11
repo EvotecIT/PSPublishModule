@@ -17,6 +17,10 @@ public sealed class SearchIndexEntry
     public string[] Tags { get; set; } = Array.Empty<string>();
     /// <summary>Optional project slug.</summary>
     public string? Project { get; set; }
+    /// <summary>Resolved page language (for example en/pl).</summary>
+    public string? Language { get; set; }
+    /// <summary>Optional translation key shared across localized variants.</summary>
+    public string? TranslationKey { get; set; }
     /// <summary>Additional metadata for indexing.</summary>
     public Dictionary<string, object?>? Meta { get; set; }
 }

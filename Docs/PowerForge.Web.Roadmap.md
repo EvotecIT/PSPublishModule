@@ -62,7 +62,7 @@ Legend:
 
 ### Search
 
-- **Have**: Search index generation at `/search/index.json` (for client-side search).
+- **Have**: Search index generation at `/search/index.json` with optional per-language shards (`/search/<lang>/index.json`) for localized sites.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs` (`WriteSearchIndex`)
 - **Partial**: Search UI/UX is theme responsibility; no canonical “search surface” renderer contract yet.
 

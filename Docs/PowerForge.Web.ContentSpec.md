@@ -90,6 +90,7 @@ Supported fields:
 - `slug`, `order`, `draft`
 - `language` / `lang` (page language code when localization is enabled)
 - `translation_key` (shared key used to map the same page across languages)
+  - aliases: `translation.key`, `i18n.key`
 - `layout`, `template`, `collection`
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
@@ -215,6 +216,13 @@ When `DetectFromPath` is enabled, a leading language folder in content paths is 
 - `content/docs/pl/index.md` → `/pl/docs/`
 
 Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
+
+When localization is enabled and at least two languages are configured:
+- Page `<head>` output includes `rel="alternate"` language links (`hreflang`) for localized variants.
+- The default language variant also emits `hreflang="x-default"`.
+- Search output is emitted as:
+  - `/search/index.json` (all languages)
+  - `/search/<language>/index.json` (language shard, for example `/search/pl/index.json`)
 
 ## Collections
 Collections map markdown inputs to output routes:
@@ -627,6 +635,7 @@ Defaults:
 - All generated `.html` files under `_site/` are included.
 - `robots.txt`, `llms.txt`, `llms.json`, `llms-full.txt` are included when present.
 - Paths are normalized to trailing‑slash routes when they map to `index.html`.
+- If localization config exists in `_powerforge/site-spec.json`, sitemap entries include localized alternates (`xhtml:link`, `hreflang`, `x-default`).
 
 Explicit entries:
 - `entries` in the sitemap task override auto‑generated metadata for the same path.

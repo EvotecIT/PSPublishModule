@@ -561,6 +561,8 @@ public static partial class WebSiteBuilder
                 Collection = item.Collection,
                 Tags = item.Tags,
                 Project = item.ProjectSlug,
+                Language = NormalizeLanguageToken(item.Language),
+                TranslationKey = item.TranslationKey,
                 Meta = item.Meta.Count == 0 ? null : item.Meta
             });
         }
@@ -569,6 +571,26 @@ public static partial class WebSiteBuilder
         Directory.CreateDirectory(searchDir);
         var searchPath = Path.Combine(searchDir, "index.json");
         WriteAllTextIfChanged(searchPath, JsonSerializer.Serialize(entries, WebJson.Options));
+
+        // Emit per-language search shards when localization is used to keep client filtering cheap.
+        var languages = entries
+            .Select(static entry => NormalizeLanguageToken(entry.Language))
+            .Where(static language => !string.IsNullOrWhiteSpace(language))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (languages.Length <= 1)
+            return;
+
+        foreach (var language in languages)
+        {
+            var shard = entries
+                .Where(entry => NormalizeLanguageToken(entry.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var shardDir = Path.Combine(searchDir, language);
+            Directory.CreateDirectory(shardDir);
+            var shardPath = Path.Combine(shardDir, "index.json");
+            WriteAllTextIfChanged(shardPath, JsonSerializer.Serialize(shard, WebJson.Options));
+        }
     }
 
     private static void WriteLinkCheckReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)

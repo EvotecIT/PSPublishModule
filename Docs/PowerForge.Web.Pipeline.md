@@ -347,6 +347,7 @@ Generates `sitemap.xml` and (optionally) `sitemap.html`.
   "task": "sitemap",
   "siteRoot": "./Artifacts/site",
   "baseUrl": "https://example.com",
+  "includeLanguageAlternates": true,
   "extraPaths": ["/robots.txt"],
   "html": true,
   "htmlTemplate": "./themes/nova/templates/sitemap.html",
@@ -361,6 +362,7 @@ Notes:
 - By default, **all HTML pages** under `siteRoot` are auto‑included.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
+- `includeLanguageAlternates` (default `true`) emits `xhtml:link` alternates (`hreflang` and `x-default`) when `_powerforge/site-spec.json` contains an enabled `Localization` config.
 
 #### optimize
 Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash assets + generate cache headers.
