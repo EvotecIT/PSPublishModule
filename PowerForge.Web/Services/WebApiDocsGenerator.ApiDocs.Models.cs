@@ -115,6 +115,7 @@ public static partial class WebApiDocsGenerator
         private readonly string? _sourcePathPrefix;
         private readonly string? _defaultPattern;
         private readonly IReadOnlyList<SourceUrlMappingRule> _sourceUrlMappings;
+        private static readonly string[] SupportedSourceUrlTokens = { "path", "line", "root", "pathNoRoot", "pathNoPrefix" };
 
         private SourceLinkContext(
             MetadataReaderProvider provider,
@@ -176,6 +177,10 @@ public static partial class WebApiDocsGenerator
                 {
                     warnings.Add("SourceUrlPattern set without SourceRootPath (and git root not found); source URLs will be omitted.");
                     pattern = null;
+                }
+                else if (!string.IsNullOrWhiteSpace(pattern))
+                {
+                    ValidateSourceUrlTemplatePattern(pattern, "sourceUrl", warnings);
                 }
 
                 var mappings = BuildSourceUrlMappings(options.SourceUrlMappings, warnings);
@@ -350,17 +355,18 @@ public static partial class WebApiDocsGenerator
                 var pathPrefix = NormalizePathPrefix(mapping.PathPrefix);
                 if (string.IsNullOrWhiteSpace(pathPrefix))
                 {
-                    warnings?.Add("API docs: sourceUrlMappings entry ignored because pathPrefix is empty.");
+                    warnings?.Add("API docs source: sourceUrlMappings entry ignored because pathPrefix is empty.");
                     continue;
                 }
 
                 var pattern = mapping.UrlPattern?.Trim();
                 if (string.IsNullOrWhiteSpace(pattern))
                 {
-                    warnings?.Add($"API docs: sourceUrlMappings entry for '{pathPrefix}' ignored because urlPattern is empty.");
+                    warnings?.Add($"API docs source: sourceUrlMappings entry for '{pathPrefix}' ignored because urlPattern is empty.");
                     continue;
                 }
 
+                ValidateSourceUrlTemplatePattern(pattern, $"sourceUrlMappings entry for '{pathPrefix}'", warnings);
                 rules.Add(new SourceUrlMappingRule(pathPrefix, pattern, mapping.StripPathPrefix));
             }
 
@@ -384,6 +390,57 @@ public static partial class WebApiDocsGenerator
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
             return value.Replace('\\', '/').Trim().Trim('/');
+        }
+
+        private static void ValidateSourceUrlTemplatePattern(string pattern, string label, List<string>? warnings)
+        {
+            if (string.IsNullOrWhiteSpace(pattern) || string.IsNullOrWhiteSpace(label))
+                return;
+
+            var tokens = ExtractSourceUrlTokens(pattern);
+            var hasPathToken = tokens.Any(static token =>
+                token.Equals("path", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("pathNoRoot", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("pathNoPrefix", StringComparison.OrdinalIgnoreCase));
+            if (!hasPathToken)
+            {
+                warnings?.Add($"API docs source: {label} does not contain a path token (use {{path}}, {{pathNoRoot}}, or {{pathNoPrefix}}).");
+            }
+
+            var unknown = tokens
+                .Where(token => !SupportedSourceUrlTokens.Any(s => s.Equals(token, StringComparison.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static token => token, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (unknown.Length == 0)
+                return;
+
+            var preview = string.Join(", ", unknown.Select(static token => $"{{{token}}}"));
+            warnings?.Add($"API docs source: {label} contains unsupported token(s): {preview}. Supported tokens: {{path}}, {{line}}, {{root}}, {{pathNoRoot}}, {{pathNoPrefix}}.");
+        }
+
+        private static string[] ExtractSourceUrlTokens(string pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                return Array.Empty<string>();
+
+            var tokens = new List<string>();
+            for (var i = 0; i < pattern.Length; i++)
+            {
+                if (pattern[i] != '{')
+                    continue;
+
+                var end = pattern.IndexOf('}', i + 1);
+                if (end <= i + 1)
+                    continue;
+
+                var name = pattern.Substring(i + 1, end - i - 1).Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    tokens.Add(name);
+                i = end;
+            }
+
+            return tokens.ToArray();
         }
 
         private static bool PathMatchesPrefix(string path, string prefix)
