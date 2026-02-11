@@ -73,6 +73,7 @@ public sealed class PowerShellRunner : IPowerShellRunner
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
         psi.CreateNoWindow = true;
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
         // Build classic argument string for net472

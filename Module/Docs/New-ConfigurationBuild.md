@@ -11,7 +11,7 @@ Allows configuring the build process for a module.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -819,6 +819,36 @@ How many versions to keep per module when using versioned installs.
 
 ```yaml
 Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -VersionedInstallLegacyFlatHandling
+How to handle legacy flat module installs during install.
+
+```yaml
+Type: Nullable`1
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -VersionedInstallPreserveVersions
+Version folders to preserve during install pruning (for example older major versions).
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 

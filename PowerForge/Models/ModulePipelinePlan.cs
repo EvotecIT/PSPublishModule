@@ -183,6 +183,16 @@ public sealed class ModulePipelinePlan
     public string[] InstallRoots { get; }
 
     /// <summary>
+    /// Controls how legacy flat installs should be handled during install.
+    /// </summary>
+    public LegacyFlatModuleHandling InstallLegacyFlatHandling { get; }
+
+    /// <summary>
+    /// Version folder names that should be preserved during pruning.
+    /// </summary>
+    public string[] InstallPreserveVersions { get; }
+
+    /// <summary>
     /// When true, installs missing module dependencies before running the build.
     /// </summary>
     public bool InstallMissingModules { get; }
@@ -256,6 +266,8 @@ public sealed class ModulePipelinePlan
         InstallationStrategy installStrategy,
         int installKeepVersions,
         string[] installRoots,
+        LegacyFlatModuleHandling installLegacyFlatHandling,
+        string[] installPreserveVersions,
         bool installMissingModules,
         bool installMissingModulesForce,
         bool installMissingModulesPrerelease,
@@ -299,6 +311,8 @@ public sealed class ModulePipelinePlan
         InstallStrategy = installStrategy;
         InstallKeepVersions = installKeepVersions;
         InstallRoots = installRoots;
+        InstallLegacyFlatHandling = installLegacyFlatHandling;
+        InstallPreserveVersions = installPreserveVersions ?? Array.Empty<string>();
         InstallMissingModules = installMissingModules;
         InstallMissingModulesForce = installMissingModulesForce;
         InstallMissingModulesPrerelease = installMissingModulesPrerelease;

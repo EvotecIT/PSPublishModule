@@ -43,6 +43,8 @@ public sealed partial class ModulePipelineRunner
         bool localVersioning = false;
         InstallationStrategy? installStrategyFromSegments = null;
         int? keepVersionsFromSegments = null;
+        LegacyFlatModuleHandling? legacyFlatHandlingFromSegments = null;
+        var preserveInstallVersionsFromSegments = new List<string>();
         bool installMissingModules = false;
         bool installMissingModulesForce = false;
         bool installMissingModulesPrerelease = false;
@@ -119,6 +121,9 @@ public sealed partial class ModulePipelineRunner
                     if (b.LocalVersion.HasValue) localVersioning = b.LocalVersion.Value;
                     if (b.VersionedInstallStrategy.HasValue) installStrategyFromSegments = b.VersionedInstallStrategy.Value;
                     if (b.VersionedInstallKeep.HasValue) keepVersionsFromSegments = b.VersionedInstallKeep.Value;
+                    if (b.LegacyFlatHandling.HasValue) legacyFlatHandlingFromSegments = b.LegacyFlatHandling.Value;
+                    if (b.PreserveInstallVersions is { Length: > 0 })
+                        preserveInstallVersionsFromSegments.AddRange(b.PreserveInstallVersions);
                     if (b.InstallMissingModules.HasValue) installMissingModules = b.InstallMissingModules.Value;
                     if (b.InstallMissingModulesForce.HasValue) installMissingModulesForce = b.InstallMissingModulesForce.Value;
                     if (b.InstallMissingModulesPrerelease.HasValue) installMissingModulesPrerelease = b.InstallMissingModulesPrerelease.Value;
@@ -421,6 +426,14 @@ public sealed partial class ModulePipelineRunner
                    ?? keepVersionsFromSegments
                    ?? 3;
         if (keep < 1) keep = 1;
+        var legacyFlatHandling = spec.Install?.LegacyFlatHandling
+                                 ?? legacyFlatHandlingFromSegments
+                                 ?? LegacyFlatModuleHandling.Warn;
+        var preserveInstallVersions = (spec.Install?.PreserveVersions ?? preserveInstallVersionsFromSegments.ToArray())
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var roots = (spec.Install?.Roots ?? Array.Empty<string>())
             .Where(r => !string.IsNullOrWhiteSpace(r))
@@ -555,6 +568,8 @@ public sealed partial class ModulePipelineRunner
             installStrategy: strategy,
             installKeepVersions: keep,
             installRoots: roots,
+            installLegacyFlatHandling: legacyFlatHandling,
+            installPreserveVersions: preserveInstallVersions,
             installMissingModules: installMissingModules,
             installMissingModulesForce: installMissingModulesForce,
             installMissingModulesPrerelease: installMissingModulesPrerelease,

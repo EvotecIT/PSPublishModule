@@ -210,7 +210,11 @@ public sealed partial class InvokeProjectBuildCommand
         string primaryVersion,
         string repo,
         string date,
-        string utcDate)
+        string utcDate,
+        string dateTime,
+        string utcDateTime,
+        string timestamp,
+        string utcTimestamp)
     {
         if (string.IsNullOrWhiteSpace(template)) return template;
         return template
@@ -221,7 +225,37 @@ public sealed partial class InvokeProjectBuildCommand
             .Replace("{Repo}", repo ?? string.Empty)
             .Replace("{Repository}", repo ?? string.Empty)
             .Replace("{Date}", date ?? string.Empty)
-            .Replace("{UtcDate}", utcDate ?? string.Empty);
+            .Replace("{UtcDate}", utcDate ?? string.Empty)
+            .Replace("{DateTime}", dateTime ?? string.Empty)
+            .Replace("{UtcDateTime}", utcDateTime ?? string.Empty)
+            .Replace("{Timestamp}", timestamp ?? string.Empty)
+            .Replace("{UtcTimestamp}", utcTimestamp ?? string.Empty);
+    }
+
+    private static GitHubTagConflictPolicy ParseGitHubTagConflictPolicy(string? value)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return GitHubTagConflictPolicy.Reuse;
+
+        if (Enum.TryParse<GitHubTagConflictPolicy>(text, ignoreCase: true, out var parsed))
+            return parsed;
+
+        return GitHubTagConflictPolicy.Reuse;
+    }
+
+    private static string ApplyTagConflictPolicy(
+        string tag,
+        GitHubTagConflictPolicy policy,
+        string utcTimestampToken)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return tag;
+
+        return policy switch
+        {
+            GitHubTagConflictPolicy.AppendUtcTimestamp => $"{tag}-{utcTimestampToken}",
+            _ => tag
+        };
     }
 
     private static void WriteGitHubSummary(
@@ -312,6 +346,6 @@ public sealed partial class InvokeProjectBuildCommand
         public string? GitHubTagTemplate { get; set; }
         public string? GitHubReleaseMode { get; set; }
         public string? GitHubPrimaryProject { get; set; }
+        public string? GitHubTagConflictPolicy { get; set; }
     }
 }
-

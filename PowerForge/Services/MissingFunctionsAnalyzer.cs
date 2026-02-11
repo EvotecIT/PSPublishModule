@@ -14,6 +14,12 @@ namespace PowerForge;
 /// </summary>
 public sealed class MissingFunctionsAnalyzer
 {
+    private readonly Dictionary<string, CommandInfo?> _currentSessionCommandCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, CommandInfo?> _moduleScopeCommandCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Analyzes a script file or code and returns a typed report with resolved command references and
     /// inlineable helper definitions.
@@ -238,6 +244,8 @@ public sealed class MissingFunctionsAnalyzer
                 continue;
             if (reserved.Contains(name) || redirection.Contains(name))
                 continue;
+            if (!LooksLikeCommandName(name))
+                continue;
 
             set.Add(name);
         }
@@ -251,7 +259,7 @@ public sealed class MissingFunctionsAnalyzer
 
         try
         {
-            var cmd = GetCommandFromCurrentSession(name);
+            var cmd = GetCommandFromCurrentSessionCached(name);
             if (cmd is null)
                 throw new CommandNotFoundException($"The term '{name}' is not recognized as a name of a cmdlet, function, script file, or executable program.");
 
@@ -265,7 +273,7 @@ public sealed class MissingFunctionsAnalyzer
             {
                 isAlias = true;
                 var def = alias.Definition;
-                var resolved = GetCommandFromCurrentSession(def);
+                var resolved = GetCommandFromCurrentSessionCached(def);
                 if (resolved != null)
                     cmd = resolved;
             }
@@ -297,7 +305,7 @@ public sealed class MissingFunctionsAnalyzer
             {
                 try
                 {
-                    var cmd = GetCommandFromModuleScope(modName, name);
+                    var cmd = GetCommandFromModuleScopeCached(modName, name);
                     if (cmd is null)
                         continue;
 
@@ -319,6 +327,42 @@ public sealed class MissingFunctionsAnalyzer
 
             return resolution;
         }
+    }
+
+    private CommandInfo? GetCommandFromCurrentSessionCached(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+        if (_currentSessionCommandCache.TryGetValue(name, out var cached))
+            return cached;
+
+        var resolved = GetCommandFromCurrentSession(name);
+        _currentSessionCommandCache[name] = resolved;
+        return resolved;
+    }
+
+    private CommandInfo? GetCommandFromModuleScopeCached(string moduleName, string commandName)
+    {
+        if (string.IsNullOrWhiteSpace(moduleName) || string.IsNullOrWhiteSpace(commandName))
+            return null;
+
+        var key = moduleName.Trim() + "|" + commandName.Trim();
+        if (_moduleScopeCommandCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var resolved = GetCommandFromModuleScope(moduleName, commandName);
+        _moduleScopeCommandCache[key] = resolved;
+        return resolved;
+    }
+
+    private static bool LooksLikeCommandName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var value = name.Trim();
+        if (value.Length == 0) return false;
+        if (value.IndexOfAny(new[] { '{', '}', '(', ')', ';', '|', '"', '\'' }) >= 0) return false;
+        if (value.Any(char.IsWhiteSpace)) return false;
+        return true;
     }
 
     private static PowerShell CreatePowerShell()

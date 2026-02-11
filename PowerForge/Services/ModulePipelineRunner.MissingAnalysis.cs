@@ -116,6 +116,11 @@ public sealed partial class ModulePipelineRunner
             var name = cmd.Name;
             if (string.IsNullOrWhiteSpace(name))
                 continue;
+            if (!LooksLikeCommandName(name))
+            {
+                _logger.Verbose($"Ignoring unresolved non-command token '{name}'.");
+                continue;
+            }
             if (name.StartsWith("$", StringComparison.Ordinal))
                 continue;
             if (IsBuiltInCommand(name))
@@ -247,6 +252,16 @@ public sealed partial class ModulePipelineRunner
         }
 
         return false;
+    }
+
+    private static bool LooksLikeCommandName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var value = name.Trim();
+        if (value.Length == 0) return false;
+        if (value.IndexOfAny(new[] { '{', '}', '(', ')', ';', '|', '"', '\'' }) >= 0) return false;
+        if (value.Any(char.IsWhiteSpace)) return false;
+        return true;
     }
 
     private static string? TryGetInstallHintForModule(string moduleName)

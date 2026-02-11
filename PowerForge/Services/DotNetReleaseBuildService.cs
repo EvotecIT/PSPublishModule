@@ -335,6 +335,7 @@ public sealed class DotNetReleaseBuildService
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            ProcessStartInfoEncoding.TryApplyUtf8(psi);
             using var p = Process.Start(psi);
             if (p is null) return false;
             p.WaitForExit(5000);
@@ -361,6 +362,7 @@ public sealed class DotNetReleaseBuildService
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
         using var p = Process.Start(psi);
         if (p is null) return 1;

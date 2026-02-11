@@ -86,6 +86,14 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>How many versions to keep per module when using versioned installs.</summary>
     [Parameter] public int VersionedInstallKeep { get; set; }
 
+    /// <summary>How to handle legacy flat module installs during install.</summary>
+    [Parameter]
+    public LegacyFlatModuleHandling? VersionedInstallLegacyFlatHandling { get; set; }
+
+    /// <summary>Version folders to preserve during install pruning (for example older major versions).</summary>
+    [Parameter]
+    public string[]? VersionedInstallPreserveVersions { get; set; }
+
     /// <summary>Install missing module dependencies (Required/External) before build.</summary>
     [Parameter] public SwitchParameter InstallMissingModules { get; set; }
 
@@ -232,6 +240,8 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
 
         if (bound.ContainsKey(nameof(VersionedInstallStrategy))) { EnsureBuildModule(); buildModule!.VersionedInstallStrategy = VersionedInstallStrategy; }
         if (bound.ContainsKey(nameof(VersionedInstallKeep))) { EnsureBuildModule(); buildModule!.VersionedInstallKeep = VersionedInstallKeep; }
+        if (bound.ContainsKey(nameof(VersionedInstallLegacyFlatHandling))) { EnsureBuildModule(); buildModule!.LegacyFlatHandling = VersionedInstallLegacyFlatHandling; }
+        if (bound.ContainsKey(nameof(VersionedInstallPreserveVersions))) { EnsureBuildModule(); buildModule!.PreserveInstallVersions = VersionedInstallPreserveVersions; }
 
         if (bound.ContainsKey(nameof(InstallMissingModules))) { EnsureBuildModule(); buildModule!.InstallMissingModules = InstallMissingModules.IsPresent; }
         if (bound.ContainsKey(nameof(InstallMissingModulesForce))) { EnsureBuildModule(); buildModule!.InstallMissingModulesForce = InstallMissingModulesForce.IsPresent; }

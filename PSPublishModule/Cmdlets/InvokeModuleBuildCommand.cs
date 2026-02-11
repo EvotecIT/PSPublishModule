@@ -239,6 +239,14 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetModern)]
     public string[]? InstallRoots { get; set; }
 
+    /// <summary>How to handle legacy flat installs found under module roots.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public LegacyFlatModuleHandling LegacyFlatHandling { get; set; } = LegacyFlatModuleHandling.Warn;
+
+    /// <summary>Version folders to preserve when pruning installed versions.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    public string[]? PreserveInstallVersions { get; set; }
+
     /// <summary>Keep staging directory after build/install.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     public SwitchParameter KeepStaging { get; set; }
@@ -371,6 +379,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     Strategy = boundParameters?.ContainsKey(nameof(InstallStrategy)) == true ? InstallStrategy : null,
                     KeepVersions = boundParameters?.ContainsKey(nameof(KeepVersions)) == true ? KeepVersions : null,
                     Roots = boundParameters?.ContainsKey(nameof(InstallRoots)) == true ? (InstallRoots ?? Array.Empty<string>()) : null,
+                    LegacyFlatHandling = boundParameters?.ContainsKey(nameof(LegacyFlatHandling)) == true ? LegacyFlatHandling : null,
+                    PreserveVersions = boundParameters?.ContainsKey(nameof(PreserveInstallVersions)) == true ? PreserveInstallVersions : null,
                 },
                 Segments = segments,
             };

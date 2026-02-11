@@ -733,8 +733,8 @@ public sealed partial class ModulePipelineRunner
                     KeepVersions = plan.InstallKeepVersions,
                     Roots = plan.InstallRoots,
                     UpdateManifestToResolvedVersion = spec.Install?.UpdateManifestToResolvedVersion ?? true,
-                    LegacyFlatHandling = spec.Install?.LegacyFlatHandling ?? LegacyFlatModuleHandling.Warn,
-                    PreserveVersions = spec.Install?.PreserveVersions ?? Array.Empty<string>()
+                    LegacyFlatHandling = plan.InstallLegacyFlatHandling,
+                    PreserveVersions = plan.InstallPreserveVersions
                 };
                 installResult = pipeline.InstallFromStaging(installSpec);
                 SafeDone(reporter, installStep);

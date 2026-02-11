@@ -243,6 +243,7 @@ public sealed partial class DotNetPublishPipelineRunner
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);

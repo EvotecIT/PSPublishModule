@@ -11,7 +11,7 @@ Creates a new release for the given GitHub repository and optionally uploads ass
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-GenerateReleaseNotes] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [<CommonParameters>]
+Send-GitHubRelease -GitHubUsername <string> -GitHubRepositoryName <string> -GitHubAccessToken <string> -TagName <string> [-ReleaseName <string>] [-ReleaseNotes <string>] [-GenerateReleaseNotes] [-AssetFilePaths <string[]>] [-Commitish <string>] [-IsDraft <bool>] [-IsPreRelease <bool>] [-ReuseExistingReleaseOnConflict <bool>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -178,6 +178,22 @@ The text describing the contents of the release.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: True
+```
+
+### -ReuseExistingReleaseOnConflict
+When true (default), a 422 tag conflict reuses the existing release.
+When false, the cmdlet fails on existing tags.
+
+```yaml
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 
