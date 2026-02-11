@@ -114,7 +114,7 @@ public static partial class WebApiDocsGenerator
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
-        var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl);
+        var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
         var overviewHtml = BuildDocsOverview(options, types, baseUrl);
@@ -468,7 +468,7 @@ public static partial class WebApiDocsGenerator
               sb.AppendLine("      </div>");
               sb.AppendLine("    </div>");
           }
-          sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} types</div>");
+          sb.AppendLine($"    <div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} types</div>");
           sb.AppendLine("    <div class=\"sidebar-tools\">");
           sb.AppendLine("      <button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
           sb.AppendLine("      <button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
@@ -601,7 +601,7 @@ public static partial class WebApiDocsGenerator
                 var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
                 sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\">");
                 sb.AppendLine($"              <span class=\"chip-icon\">{GetTypeIcon(type.Kind)}</span>");
-                sb.AppendLine($"              {System.Web.HttpUtility.HtmlEncode(type.Name)}");
+                sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</span>");
                 sb.AppendLine("            </a>");
             }
             sb.AppendLine("          </div>");

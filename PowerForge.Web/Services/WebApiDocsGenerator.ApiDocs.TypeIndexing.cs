@@ -325,6 +325,34 @@ public static partial class WebApiDocsGenerator
         return results;
     }
 
+    private static void ValidateConfiguredQuickStartTypes(IReadOnlyList<ApiTypeModel> types, WebApiDocsOptions options, List<string> warnings)
+    {
+        if (types is null || options is null || warnings is null)
+            return;
+        if (options.QuickStartTypeNames.Count == 0)
+            return;
+
+        var available = new HashSet<string>(
+            types
+                .Where(static t => !string.IsNullOrWhiteSpace(t.Name))
+                .Select(static t => t.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var missing = options.QuickStartTypeNames
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(name => !available.Contains(name))
+            .ToList();
+
+        if (missing.Count == 0)
+            return;
+
+        var preview = string.Join(", ", missing.Take(8));
+        var suffix = missing.Count > 8 ? $" (+{missing.Count - 8} more)" : string.Empty;
+        warnings.Add($"API docs: quickStartTypes configured names not found in generated types: {preview}{suffix}.");
+    }
+
     private static void AddMainTypeMatches(
         List<ApiTypeModel> results,
         HashSet<string> seen,
@@ -497,17 +525,64 @@ public static partial class WebApiDocsGenerator
     private static string EnsureTrailingSlash(string url)
         => url.EndsWith("/", StringComparison.Ordinal) ? url : $"{url}/";
 
-      private static string NormalizeDocsHomeUrl(string? url)
+      private static string NormalizeDocsHomeUrl(string? url, string? baseUrl)
       {
           if (string.IsNullOrWhiteSpace(url))
-              return "/docs/";
-        var trimmed = url.Trim();
-        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            return EnsureTrailingSlash(trimmed);
-        if (!trimmed.StartsWith("/"))
-            trimmed = "/" + trimmed;
+              return InferDocsHomeUrlFromBaseUrl(baseUrl);
+
+          var trimmed = url.Trim();
+          if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+              trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+              return EnsureTrailingSlash(trimmed);
+
+          if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+              trimmed = "/" + trimmed;
+
           return EnsureTrailingSlash(trimmed);
+      }
+
+      private static string InferDocsHomeUrlFromBaseUrl(string? baseUrl)
+      {
+          if (string.IsNullOrWhiteSpace(baseUrl))
+              return "/docs/";
+
+          var trimmed = baseUrl.Trim();
+          if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute) &&
+              (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
+          {
+              var inferredPath = InferDocsPathFromApiPath(absolute.AbsolutePath);
+              var builder = new UriBuilder(absolute)
+              {
+                  Path = EnsureTrailingSlash(inferredPath),
+                  Query = string.Empty,
+                  Fragment = string.Empty
+              };
+              return builder.Uri.ToString();
+          }
+
+          if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+              trimmed = "/" + trimmed;
+
+          return EnsureTrailingSlash(InferDocsPathFromApiPath(trimmed));
+      }
+
+      private static string InferDocsPathFromApiPath(string apiPath)
+      {
+          if (string.IsNullOrWhiteSpace(apiPath))
+              return "/docs/";
+
+          var normalized = apiPath.Trim();
+          if (!normalized.StartsWith("/", StringComparison.Ordinal))
+              normalized = "/" + normalized;
+
+          if (!normalized.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+              return "/docs/";
+
+          if (normalized.Length > 4 && normalized[4] != '/')
+              return "/docs/";
+
+          var suffix = normalized.Length > 4 ? normalized.Substring(4) : string.Empty;
+          return $"/docs{suffix}";
       }
 
       private static string ResolveBodyClass(string? value)

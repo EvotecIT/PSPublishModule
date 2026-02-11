@@ -121,7 +121,22 @@ public static partial class WebApiDocsGenerator
 
     // Minimal selector contract: enough to catch "API generator added new structure but theme CSS didn't follow".
     private static readonly string[] RequiredSelectorsSimple = { ".pf-api", ".pf-api-search", ".pf-api-types", ".pf-api-type", ".pf-api-section" };
-    private static readonly string[] RequiredSelectorsDocs = { ".api-layout", ".api-sidebar", ".api-content", ".sidebar-toggle", ".type-item", ".filter-button", ".member-card", ".member-signature" };
+    private static readonly string[] RequiredSelectorsDocs =
+    {
+        ".api-layout",
+        ".api-sidebar",
+        ".api-content",
+        ".api-overview",
+        ".type-chips",
+        ".type-chip",
+        ".chip-icon",
+        ".sidebar-count",
+        ".sidebar-toggle",
+        ".type-item",
+        ".filter-button",
+        ".member-card",
+        ".member-signature"
+    };
     /// <summary>Generates API documentation output.</summary>
     /// <param name="options">Generation options.</param>
     /// <returns>Result payload describing generated artifacts.</returns>
@@ -205,6 +220,9 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        ValidateConfiguredQuickStartTypes(types, options, warnings);
+
         var index = new Dictionary<string, object?>
         {
             ["title"] = options.Title,
@@ -538,6 +556,9 @@ public static partial class WebApiDocsGenerator
 
         if (trimmed.StartsWith("API docs CSS contract:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.CSS.CONTRACT] " + warning;
+
+        if (trimmed.StartsWith("API docs: quickStartTypes", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.QUICKSTART] " + warning;
 
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;

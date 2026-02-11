@@ -39,8 +39,49 @@
     });
   }
 
+  function initNavDropdowns() {
+    var dropdowns = Array.prototype.slice.call(document.querySelectorAll('.nav-dropdown'));
+    if (!dropdowns.length) return;
+
+    dropdowns.forEach(function(dropdown) {
+      if (!(dropdown instanceof HTMLElement) || dropdown.dataset.bound === 'true') return;
+      dropdown.dataset.bound = 'true';
+
+      var trigger = dropdown.querySelector('.nav-dropdown-trigger');
+      if (!(trigger instanceof HTMLElement)) return;
+
+      trigger.setAttribute('aria-haspopup', 'menu');
+      trigger.setAttribute('aria-expanded', 'false');
+
+      function setExpanded(expanded) {
+        trigger.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        dropdown.classList.toggle('open', expanded);
+      }
+
+      dropdown.addEventListener('mouseenter', function() { setExpanded(true); });
+      dropdown.addEventListener('mouseleave', function() { setExpanded(false); });
+      dropdown.addEventListener('focusin', function() { setExpanded(true); });
+      dropdown.addEventListener('focusout', function() {
+        setTimeout(function() {
+          setExpanded(dropdown.contains(document.activeElement));
+        }, 0);
+      });
+      dropdown.addEventListener('keydown', function(event) {
+        if (event.key !== 'Escape') return;
+        setExpanded(false);
+        trigger.focus();
+      });
+    });
+  }
+
   function normalize(text) {
     return (text || '').toLowerCase();
+  }
+
+  function formatCount(value) {
+    var n = parseInt(value, 10);
+    if (!Number.isFinite(n)) return '0';
+    return n.toLocaleString();
   }
 
   var activeKind = '';
@@ -128,7 +169,7 @@
     if (countLabel) {
       var visibleCount = items.filter(function(item) { return item.style.display !== 'none'; }).length;
       var total = totalTypes || items.length;
-      countLabel.textContent = 'Showing ' + visibleCount + ' of ' + total + ' types';
+      countLabel.textContent = 'Showing ' + formatCount(visibleCount) + ' of ' + formatCount(total) + ' types';
     }
     saveState();
   }
@@ -399,6 +440,7 @@
     var activeMemberBtn = memberKindButtons.find(function(b) { return (b.dataset.memberKind || '') === activeMemberKind; });
     (activeMemberBtn || memberKindButtons[0]).classList.add('active');
   }
+  initNavDropdowns();
   applyFilter(filterInput ? filterInput.value : '');
   applyMemberFilter();
 })();
