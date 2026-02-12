@@ -307,6 +307,9 @@ public static partial class WebSiteAuditor
                 ValidateHeadRenderBlocking(doc, relativePath, maxHeadBlockingResources, AddIssue);
             }
 
+            if (options.CheckMediaEmbeds)
+                ValidateMediaEmbeds(doc, relativePath, AddIssue);
+
             if (options.CheckTitles)
             {
                 if (string.IsNullOrWhiteSpace(doc.Title))

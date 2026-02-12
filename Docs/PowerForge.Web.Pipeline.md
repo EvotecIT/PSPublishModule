@@ -440,6 +440,9 @@ Notes:
 - Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
+- `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:
+  - iframe checks: `loading="lazy"`, `title`, external `referrerpolicy`, YouTube nocookie host hint
+  - image checks: loading/decoding hints, intrinsic size/aspect-ratio hints, `srcset` + `sizes` pairing
 - Use `noDefaultExclude` to include partial HTML files like `*.scripts.html`.
 - `renderedBaseUrl` lets you run rendered checks against a running server (otherwise a local server is started).
 - `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.

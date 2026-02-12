@@ -29,7 +29,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
-        Console.WriteLine("                     [--no-heading-order] [--no-link-purpose]");
+        Console.WriteLine("                     [--no-heading-order] [--no-link-purpose] [--no-media]");
         Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
         Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
         Console.WriteLine("                     [--rendered-no-install]");
@@ -257,6 +257,7 @@ internal static class WebCliHelpers
         var checkReplacementChars = !HasOption(argv, "--no-replacement-char-check");
         var checkHeadingOrder = !HasOption(argv, "--no-heading-order");
         var checkLinkPurpose = !HasOption(argv, "--no-link-purpose");
+        var checkMediaEmbeds = !HasOption(argv, "--no-media");
         var checkNetworkHints = !HasOption(argv, "--no-network-hints");
         var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
@@ -310,6 +311,7 @@ internal static class WebCliHelpers
             CheckUnicodeReplacementChars = checkReplacementChars,
             CheckHeadingOrder = checkHeadingOrder,
             CheckLinkPurposeConsistency = checkLinkPurpose,
+            CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
             CheckRenderBlockingResources = checkRenderBlocking,
             MaxHeadBlockingResources = maxHeadBlockingResources
@@ -366,6 +368,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Fix heading hierarchy so content does not skip levels (for example h2 -> h4) to improve accessibility.");
             if (ContainsCategory(audit, "link-purpose"))
                 recommendations.Add("Use destination-specific link labels (avoid repeated generic labels like 'Learn more').");
+            if (ContainsCategory(audit, "media"))
+                recommendations.Add("Harden media embeds for page speed: lazy-load iframes/images, add decoding + intrinsic image dimensions, and prefer privacy-friendly embed hosts.");
             if (ContainsCategory(audit, "utf8"))
                 recommendations.Add("Enforce UTF-8 output and meta charset declarations to avoid encoding regressions.");
             if (ContainsCategory(audit, "duplicate-id"))

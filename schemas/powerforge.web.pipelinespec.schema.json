@@ -172,6 +172,8 @@
         "checkHeadingOrder": { "type": "boolean" },
         "checkLinkPurposeConsistency": { "type": "boolean" },
         "checkLinkPurpose": { "type": "boolean" },
+        "checkMediaEmbeds": { "type": "boolean" },
+        "checkMedia": { "type": "boolean" },
         "checkNetworkHints": { "type": "boolean" },
         "checkRenderBlockingResources": { "type": "boolean" },
         "checkRenderBlocking": { "type": "boolean" },
@@ -668,6 +670,8 @@
         "checkUtf8": { "type": "boolean" },
         "checkMetaCharset": { "type": "boolean" },
         "checkUnicodeReplacementChars": { "type": "boolean" },
+        "checkMediaEmbeds": { "type": "boolean" },
+        "checkMedia": { "type": "boolean" },
         "suppressIssues": {
           "type": "array",
           "items": { "type": "string" },

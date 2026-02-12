@@ -529,6 +529,88 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_WarnsWhenMediaEmbedsMissPerformanceHints()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-hints-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>
+                    <img src="/images/hero.jpg" />
+                    <img src="/images/card.jpg" srcset="/images/card-320.jpg 320w, /images/card-640.jpg 640w" />
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning => warning.Contains("iframe embed(s) missing loading=\"lazy\"", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning => warning.Contains("image(s) missing width/height", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue => issue.Category.Equals("media", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_MediaEmbedChecksCanBeDisabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <iframe src="https://example.test/embed"></iframe>
+                    <img src="/images/hero.jpg" />
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                CheckMediaEmbeds = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("media", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_WarnsWhenHeadingOrderSkipsLevels()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-heading-order-" + Guid.NewGuid().ToString("N"));

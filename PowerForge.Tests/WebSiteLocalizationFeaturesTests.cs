@@ -209,6 +209,72 @@ public class WebSiteLocalizationFeaturesTests
         }
     }
 
+    [Fact]
+    public void Verify_WarnsForLocalizationConfigGaps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-config-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsPath = Path.Combine(root, "content", "docs");
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(docsPath, "index.md"),
+                """
+                ---
+                title: Docs
+                ---
+
+                # Docs
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Localization Features Config Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Localization = new LocalizationSpec
+                {
+                    Enabled = true,
+                    DefaultLanguage = "de",
+                    PrefixDefaultLanguage = false,
+                    DetectFromPath = true,
+                    Languages = new[]
+                    {
+                        new LanguageSpec { Code = "en", Default = true },
+                        new LanguageSpec { Code = "pl", Default = true }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var verification = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.Contains(
+                verification.Warnings,
+                warning => warning.Contains("Localization defines multiple default languages", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(
+                verification.Warnings,
+                warning => warning.Contains("defaultLanguage 'de' does not match any active language code", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static WebBuildResult BuildSite(string root, SiteSpec spec)
     {
         var configPath = Path.Combine(root, "site.json");

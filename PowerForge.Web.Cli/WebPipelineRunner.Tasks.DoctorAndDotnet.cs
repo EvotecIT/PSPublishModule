@@ -166,6 +166,7 @@ internal static partial class WebPipelineRunner
             var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
             var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
             var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
+            var checkMediaEmbeds = GetBool(step, "checkMediaEmbeds") ?? GetBool(step, "checkMedia") ?? true;
             var checkNetworkHints = GetBool(step, "checkNetworkHints") ?? true;
             var checkRenderBlocking = GetBool(step, "checkRenderBlockingResources") ?? GetBool(step, "checkRenderBlocking") ?? true;
             var maxHeadBlockingResources = GetInt(step, "maxHeadBlockingResources") ?? GetInt(step, "max-head-blocking") ?? new WebAuditOptions().MaxHeadBlockingResources;
@@ -259,6 +260,7 @@ internal static partial class WebPipelineRunner
                 CheckUnicodeReplacementChars = checkReplacement,
                 CheckHeadingOrder = checkHeadingOrder,
                 CheckLinkPurposeConsistency = checkLinkPurpose,
+                CheckMediaEmbeds = checkMediaEmbeds,
                 CheckNetworkHints = checkNetworkHints,
                 CheckRenderBlockingResources = checkRenderBlocking,
                 MaxHeadBlockingResources = maxHeadBlockingResources,

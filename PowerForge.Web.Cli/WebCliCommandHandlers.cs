@@ -470,6 +470,7 @@ internal static partial class WebCliCommandHandlers
         var checkReplacementChars = !HasOption(subArgs, "--no-replacement-char-check");
         var checkHeadingOrder = !HasOption(subArgs, "--no-heading-order");
         var checkLinkPurpose = !HasOption(subArgs, "--no-link-purpose");
+        var checkMediaEmbeds = !HasOption(subArgs, "--no-media");
         var checkNetworkHints = !HasOption(subArgs, "--no-network-hints");
         var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
@@ -554,6 +555,7 @@ internal static partial class WebCliCommandHandlers
             CheckUnicodeReplacementChars = checkReplacementChars,
             CheckHeadingOrder = checkHeadingOrder,
             CheckLinkPurposeConsistency = checkLinkPurpose,
+            CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
             CheckRenderBlockingResources = checkRenderBlocking,
             MaxHeadBlockingResources = maxHeadBlockingResources

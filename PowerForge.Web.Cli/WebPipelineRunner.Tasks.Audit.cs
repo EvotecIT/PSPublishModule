@@ -46,6 +46,7 @@ internal static partial class WebPipelineRunner
         var checkIds = GetBool(step, "checkDuplicateIds") ?? true;
         var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
         var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
+        var checkMediaEmbeds = GetBool(step, "checkMediaEmbeds") ?? GetBool(step, "checkMedia") ?? true;
         var checkStructure = GetBool(step, "checkHtmlStructure") ?? true;
         var rendered = GetBool(step, "rendered") ?? false;
         var renderedEngine = GetString(step, "renderedEngine");
@@ -172,6 +173,7 @@ internal static partial class WebPipelineRunner
             CheckDuplicateIds = checkIds,
             CheckHeadingOrder = checkHeadingOrder,
             CheckLinkPurposeConsistency = checkLinkPurpose,
+            CheckMediaEmbeds = checkMediaEmbeds,
             CheckHtmlStructure = checkStructure,
             CheckRendered = rendered,
             RenderedEngine = renderedEngine ?? "Chromium",

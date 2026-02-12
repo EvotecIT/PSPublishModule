@@ -18,6 +18,7 @@ public static partial class WebSiteVerifier
         var entries = new List<ResolvedLocalizationLanguage>();
         var duplicateCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var duplicatePrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var explicitDefaultCount = 0;
         if (localizationSpec?.Languages is { Length: > 0 })
         {
             foreach (var language in localizationSpec.Languages)
@@ -47,15 +48,29 @@ public static partial class WebSiteVerifier
                     Prefix = prefix,
                     IsDefault = language.Default
                 });
+                if (language.Default)
+                    explicitDefaultCount++;
             }
         }
 
+        var activeLanguagesCount = entries.Count;
         if (localizationSpec?.Enabled == true && entries.Count == 0)
             warnings.Add("Localization is enabled but no active languages are configured.");
         foreach (var duplicateCode in duplicateCodes)
             warnings.Add($"Localization defines duplicate language code '{duplicateCode}'.");
         foreach (var duplicatePrefix in duplicatePrefixes)
             warnings.Add($"Localization defines duplicate language prefix '{duplicatePrefix}'.");
+        if (explicitDefaultCount > 1)
+            warnings.Add($"Localization defines multiple default languages ({explicitDefaultCount}). Mark only one language as default.");
+        if (localizationSpec?.Enabled == true && activeLanguagesCount == 1)
+            warnings.Add($"Best practice: localization is enabled but only one active language is configured ('{entries[0].Code}'). Add another language or disable localization.");
+        if (localizationSpec?.Enabled == true &&
+            !string.IsNullOrWhiteSpace(defaultLanguage) &&
+            entries.Count > 0 &&
+            !entries.Any(e => e.Code.Equals(defaultLanguage, StringComparison.OrdinalIgnoreCase)))
+        {
+            warnings.Add($"Localization: defaultLanguage '{defaultLanguage}' does not match any active language code. Falling back to '{entries[0].Code}'.");
+        }
 
         if (entries.Count == 0)
         {

@@ -615,6 +615,207 @@ public static partial class WebSiteAuditor
             "head-render-blocking");
     }
 
+    private static void ValidateMediaEmbeds(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        var iframeMissingLazy = new List<string>();
+        var iframeMissingTitle = new List<string>();
+        var iframeMissingReferrerPolicy = new List<string>();
+        var youtubeNonNoCookie = new List<string>();
+
+        foreach (var iframe in doc.QuerySelectorAll("iframe[src]"))
+        {
+            if (IsElementHidden(iframe))
+                continue;
+
+            var src = (iframe.GetAttribute("src") ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(src) || ShouldSkipLink(src))
+                continue;
+
+            var loading = (iframe.GetAttribute("loading") ?? string.Empty).Trim();
+            if (!loading.Equals("lazy", StringComparison.OrdinalIgnoreCase))
+                iframeMissingLazy.Add(src);
+
+            var title = (iframe.GetAttribute("title") ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(title))
+                iframeMissingTitle.Add(src);
+
+            var referrerPolicy = (iframe.GetAttribute("referrerpolicy") ?? string.Empty).Trim();
+            if (IsExternalLink(src) && string.IsNullOrWhiteSpace(referrerPolicy))
+                iframeMissingReferrerPolicy.Add(src);
+
+            if (IsYouTubeEmbedUrl(src) && src.IndexOf("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase) < 0)
+                youtubeNonNoCookie.Add(src);
+        }
+
+        var imageMissingLoading = new List<string>();
+        var imageMissingDecoding = new List<string>();
+        var imageMissingDimensions = new List<string>();
+        var imageSrcSetMissingSizes = new List<string>();
+        var eagerImageCount = 0;
+
+        foreach (var image in doc.QuerySelectorAll("img[src]"))
+        {
+            if (IsElementHidden(image))
+                continue;
+
+            var src = (image.GetAttribute("src") ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(src) || ShouldSkipLink(src))
+                continue;
+
+            var loading = (image.GetAttribute("loading") ?? string.Empty).Trim();
+            var fetchPriority = (image.GetAttribute("fetchpriority") ?? string.Empty).Trim();
+            if (loading.Equals("eager", StringComparison.OrdinalIgnoreCase))
+                eagerImageCount++;
+            if (string.IsNullOrWhiteSpace(loading) &&
+                !fetchPriority.Equals("high", StringComparison.OrdinalIgnoreCase))
+            {
+                imageMissingLoading.Add(src);
+            }
+
+            var decoding = (image.GetAttribute("decoding") ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(decoding))
+                imageMissingDecoding.Add(src);
+
+            if (!HasImageDimensionHints(image, src))
+                imageMissingDimensions.Add(src);
+
+            var srcset = (image.GetAttribute("srcset") ?? string.Empty).Trim();
+            var sizes = (image.GetAttribute("sizes") ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(srcset) && string.IsNullOrWhiteSpace(sizes))
+                imageSrcSetMissingSizes.Add(src);
+        }
+
+        if (iframeMissingLazy.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{iframeMissingLazy.Count} iframe embed(s) missing loading=\"lazy\".{BuildMediaSampleSuffix(iframeMissingLazy)}",
+                "media-iframe-lazy");
+        }
+
+        if (iframeMissingTitle.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{iframeMissingTitle.Count} iframe embed(s) missing title attribute.{BuildMediaSampleSuffix(iframeMissingTitle)}",
+                "media-iframe-title");
+        }
+
+        if (iframeMissingReferrerPolicy.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{iframeMissingReferrerPolicy.Count} external iframe embed(s) missing referrerpolicy.{BuildMediaSampleSuffix(iframeMissingReferrerPolicy)}",
+                "media-iframe-referrerpolicy");
+        }
+
+        if (youtubeNonNoCookie.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{youtubeNonNoCookie.Count} YouTube embed(s) do not use youtube-nocookie.com.{BuildMediaSampleSuffix(youtubeNonNoCookie)}",
+                "media-youtube-nocookie");
+        }
+
+        if (imageMissingLoading.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{imageMissingLoading.Count} image(s) missing loading hint (lazy/eager or fetchpriority=high).{BuildMediaSampleSuffix(imageMissingLoading)}",
+                "media-img-loading");
+        }
+
+        if (imageMissingDecoding.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{imageMissingDecoding.Count} image(s) missing decoding hint.{BuildMediaSampleSuffix(imageMissingDecoding)}",
+                "media-img-decoding");
+        }
+
+        if (imageMissingDimensions.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{imageMissingDimensions.Count} image(s) missing width/height or aspect-ratio hint (risk of layout shift).{BuildMediaSampleSuffix(imageMissingDimensions)}",
+                "media-img-dimensions");
+        }
+
+        if (imageSrcSetMissingSizes.Count > 0)
+        {
+            addIssue("warning", "media", relativePath,
+                $"{imageSrcSetMissingSizes.Count} responsive image(s) define srcset without sizes.{BuildMediaSampleSuffix(imageSrcSetMissingSizes)}",
+                "media-img-srcset-sizes");
+        }
+
+        if (eagerImageCount > 1)
+        {
+            addIssue("warning", "media", relativePath,
+                $"page contains {eagerImageCount} eagerly loaded images; keep eager images to one primary/LCP candidate when possible.",
+                "media-img-eager");
+        }
+    }
+
+    private static string BuildMediaSampleSuffix(IEnumerable<string> values)
+    {
+        var samples = values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value =>
+            {
+                var trimmed = value.Trim();
+                return trimmed.Length <= 64 ? trimmed : trimmed.Substring(0, 61) + "...";
+            })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+
+        if (samples.Length == 0)
+            return string.Empty;
+
+        return $" Sample: {string.Join(", ", samples)}.";
+    }
+
+    private static bool HasImageDimensionHints(AngleSharp.Dom.IElement image, string src)
+    {
+        if (IsSvgImageSource(src))
+            return true;
+
+        var width = (image.GetAttribute("width") ?? string.Empty).Trim();
+        var height = (image.GetAttribute("height") ?? string.Empty).Trim();
+        if (int.TryParse(width, out var widthPx) && widthPx > 0 &&
+            int.TryParse(height, out var heightPx) && heightPx > 0)
+        {
+            return true;
+        }
+
+        var style = image.GetAttribute("style") ?? string.Empty;
+        if (style.IndexOf("aspect-ratio", StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+
+        return false;
+    }
+
+    private static bool IsSvgImageSource(string src)
+    {
+        var normalized = StripQueryAndFragment(src).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        return normalized.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ||
+               normalized.EndsWith(".svgz", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsYouTubeEmbedUrl(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        if (value.IndexOf("youtube.com/embed/", StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+        if (value.IndexOf("youtube-nocookie.com/embed/", StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+        if (value.IndexOf("youtu.be/", StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+
+        return false;
+    }
+
     private static bool ContainsRelToken(string relValue, string token)
     {
         if (string.IsNullOrWhiteSpace(relValue) || string.IsNullOrWhiteSpace(token))

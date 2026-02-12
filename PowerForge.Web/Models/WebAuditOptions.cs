@@ -33,6 +33,8 @@ public sealed class WebAuditOptions
     public bool CheckTitles { get; set; } = true;
     /// <summary>When true, detect duplicate element IDs.</summary>
     public bool CheckDuplicateIds { get; set; } = true;
+    /// <summary>When true, validate media/embed performance and accessibility hints.</summary>
+    public bool CheckMediaEmbeds { get; set; } = true;
     /// <summary>When true, detect heading level skips (for example h2 -> h4).</summary>
     public bool CheckHeadingOrder { get; set; } = true;
     /// <summary>When true, warn when the same link label points to multiple destinations.</summary>
