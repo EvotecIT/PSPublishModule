@@ -43,6 +43,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - run heavy steps only in CI (`modes:["ci"]`):
      - `audit` (and rendered checks if enabled)
      - `optimize`
+   - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. Theme manifest (`theme.manifest.json` recommended):
    - set `schemaVersion: 2`
    - declare `features`

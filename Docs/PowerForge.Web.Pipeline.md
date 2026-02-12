@@ -441,6 +441,7 @@ Notes:
 - Use `ignoreMedia` (comma-separated globs) to relax media checks for selected paths.
 - Use `noDefaultIgnoreMedia` to disable the built-in API docs media-ignore list (`api/**`, `docs/api/**`, `api-docs/**`).
 - Use `mediaProfiles` (`.json`) for path-scoped media policy overrides (for example allowing standard YouTube host on selected sections or tightening eager-image limits).
+- Match precedence for `mediaProfiles`: longest `match` pattern wins.
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
 - `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:
@@ -453,6 +454,57 @@ Notes:
 - `scopeFromBuildUpdated`: when enabled, and `include` is not set, limits the audit to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site audit even in fast mode.
 CLI note:
 - Use `--rendered-no-install` to skip auto-install (for CI environments with preinstalled browsers).
+
+Recommended `mediaProfiles` file (copy/paste starter):
+```json
+[
+  {
+    "match": "api/**",
+    "ignore": true
+  },
+  {
+    "match": "docs/**",
+    "requireIframeLazy": true,
+    "requireIframeTitle": true,
+    "requireIframeReferrerPolicy": true,
+    "requireImageLoadingHint": true,
+    "requireImageDecodingHint": true,
+    "requireImageDimensions": true,
+    "requireImageSrcSetSizes": true,
+    "maxEagerImages": 1
+  },
+  {
+    "match": "showcase/**",
+    "allowYoutubeStandardHost": true,
+    "requireImageLoadingHint": true,
+    "requireImageDecodingHint": true,
+    "requireImageDimensions": true,
+    "requireImageSrcSetSizes": true,
+    "maxEagerImages": 3
+  }
+]
+```
+
+Reference this file from your pipeline step:
+```json
+{
+  "task": "audit",
+  "siteRoot": "./_site",
+  "mediaProfiles": "./config/media-profiles.json"
+}
+```
+
+`doctor` supports the same option:
+```json
+{
+  "task": "doctor",
+  "config": "./site.json",
+  "mediaProfiles": "./config/media-profiles.json"
+}
+```
+
+Sample file in this repo:
+- `Samples/PowerForge.Web.CodeGlyphX.Sample/config/media-profiles.json`
 
 #### dotnet-build
 Runs `dotnet build`.
