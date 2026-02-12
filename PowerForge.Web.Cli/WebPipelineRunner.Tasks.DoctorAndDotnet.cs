@@ -136,6 +136,7 @@ internal static partial class WebPipelineRunner
             var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
                                    GetString(step, "navRequiredLink") ?? GetString(step, "nav-required-link");
             var navProfilesPath = GetString(step, "navProfiles") ?? GetString(step, "nav-profiles");
+            var mediaProfilesPath = GetString(step, "mediaProfiles") ?? GetString(step, "media-profiles");
             var requiredRoutes = GetString(step, "requiredRoutes") ?? GetString(step, "required-routes") ??
                                  GetString(step, "requiredRoute") ?? GetString(step, "required-route");
             var navSelector = GetString(step, "navSelector") ?? GetString(step, "nav-selector") ?? "nav";
@@ -202,6 +203,7 @@ internal static partial class WebPipelineRunner
             var navRequiredValue = navRequired ?? !(navOptional ?? false);
             var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
             var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+            var mediaProfiles = LoadAuditMediaProfilesForPipeline(baseDir, mediaProfilesPath);
             var suppressIssues = GetArrayOfStrings(step, "suppressIssues") ?? GetArrayOfStrings(step, "suppress-issues");
             var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
             if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
@@ -238,6 +240,7 @@ internal static partial class WebPipelineRunner
                 NavIgnorePrefixes = navIgnorePrefixList,
                 NavRequiredLinks = navRequiredLinksList.ToArray(),
                 NavProfiles = navProfiles,
+                MediaProfiles = mediaProfiles,
                 MinNavCoveragePercent = minNavCoveragePercent,
                 RequiredRoutes = requiredRouteList.ToArray(),
                 CheckLinks = GetBool(step, "checkLinks") ?? true,

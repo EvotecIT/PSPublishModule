@@ -147,6 +147,8 @@
         "nav-required-link": { "type": "string" },
         "navProfiles": { "type": "string" },
         "nav-profiles": { "type": "string" },
+        "mediaProfiles": { "type": "string" },
+        "media-profiles": { "type": "string" },
         "minNavCoveragePercent": { "type": "integer", "minimum": 0, "maximum": 100 },
         "min-nav-coverage": { "type": "integer", "minimum": 0, "maximum": 100 },
         "requiredRoutes": { "type": "string" },
@@ -606,6 +608,8 @@
           "type": "string",
           "description": "Comma-separated list of links that must exist in each audited nav."
         },
+        "mediaProfiles": { "type": "string" },
+        "media-profiles": { "type": "string" },
         "navRequiredLink": {
           "type": "string",
           "description": "Deprecated alias for navRequiredLinks."

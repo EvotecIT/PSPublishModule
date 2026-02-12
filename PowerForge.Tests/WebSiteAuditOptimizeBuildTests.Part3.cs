@@ -690,6 +690,105 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_MediaProfileCanAllowStandardYouTubeHost()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-profile-youtube-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>API</title></head>
+                <body>
+                  <iframe
+                    src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                    loading="lazy"
+                    title="Demo video"
+                    referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>(),
+                MediaProfiles = new[]
+                {
+                    new WebAuditMediaProfile
+                    {
+                        Match = "api/**",
+                        AllowYoutubeStandardHost = true
+                    }
+                }
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning => warning.Contains("youtube-nocookie", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_MediaProfileCanIgnoreSpecificSurface()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-profile-ignore-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var docsRoot = Path.Combine(root, "docs");
+            Directory.CreateDirectory(docsRoot);
+            File.WriteAllText(Path.Combine(docsRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Docs</title></head>
+                <body>
+                  <iframe src="https://example.test/embed"></iframe>
+                  <img src="/images/hero.jpg" />
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>(),
+                MediaProfiles = new[]
+                {
+                    new WebAuditMediaProfile
+                    {
+                        Match = "docs/**",
+                        Ignore = true
+                    }
+                }
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("media", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_WarnsWhenHeadingOrderSkipsLevels()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-heading-order-" + Guid.NewGuid().ToString("N"));

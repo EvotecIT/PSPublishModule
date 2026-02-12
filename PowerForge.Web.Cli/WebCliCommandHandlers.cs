@@ -429,6 +429,7 @@ internal static partial class WebCliCommandHandlers
         var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
         var navProfilesPath = TryGetOptionValue(subArgs, "--nav-profiles");
+        var mediaProfilesPath = TryGetOptionValue(subArgs, "--media-profiles");
         var minNavCoverageText = TryGetOptionValue(subArgs, "--min-nav-coverage");
         var requiredRoutes = ReadOptionList(subArgs, "--required-route", "--required-routes");
         var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
@@ -500,6 +501,7 @@ internal static partial class WebCliCommandHandlers
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
+        var mediaProfiles = LoadAuditMediaProfiles(mediaProfilesPath);
 
         var result = WebSiteAuditor.Audit(new WebAuditOptions
         {
@@ -519,6 +521,7 @@ internal static partial class WebCliCommandHandlers
             NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
             NavRequiredLinks = navRequiredLinks.ToArray(),
             NavProfiles = navProfiles,
+            MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = requiredRoutes.ToArray(),
             CheckLinks = !HasOption(subArgs, "--no-links"),

@@ -75,6 +75,8 @@ public sealed class WebAuditOptions
     public string[] NavRequiredLinks { get; set; } = Array.Empty<string>();
     /// <summary>Optional per-path nav behavior overrides.</summary>
     public WebAuditNavProfile[] NavProfiles { get; set; } = Array.Empty<WebAuditNavProfile>();
+    /// <summary>Optional per-path media/embed behavior overrides.</summary>
+    public WebAuditMediaProfile[] MediaProfiles { get; set; } = Array.Empty<WebAuditMediaProfile>();
     /// <summary>Minimum allowed percentage of nav-covered pages (checked / (checked + ignored)). 0 disables the gate.</summary>
     public int MinNavCoveragePercent { get; set; }
     /// <summary>Routes that must resolve to generated HTML output (for example "/", "/404.html", "/api/").</summary>

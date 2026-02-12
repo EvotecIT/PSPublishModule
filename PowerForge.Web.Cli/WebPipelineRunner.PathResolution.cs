@@ -349,4 +349,21 @@ internal static partial class WebPipelineRunner
             .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
             .ToArray();
     }
+
+    private static WebAuditMediaProfile[] LoadAuditMediaProfilesForPipeline(string baseDir, string? mediaProfilesPath)
+    {
+        if (string.IsNullOrWhiteSpace(mediaProfilesPath))
+            return Array.Empty<WebAuditMediaProfile>();
+
+        var resolvedPath = ResolvePath(baseDir, mediaProfilesPath);
+        if (string.IsNullOrWhiteSpace(resolvedPath) || !File.Exists(resolvedPath))
+            throw new FileNotFoundException($"Media profile file not found: {mediaProfilesPath}", resolvedPath ?? mediaProfilesPath);
+
+        using var stream = File.OpenRead(resolvedPath);
+        var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditMediaProfileArray)
+                       ?? Array.Empty<WebAuditMediaProfile>();
+        return profiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+            .ToArray();
+    }
 }

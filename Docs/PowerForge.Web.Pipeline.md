@@ -440,6 +440,7 @@ Notes:
 - Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
 - Use `ignoreMedia` (comma-separated globs) to relax media checks for selected paths.
 - Use `noDefaultIgnoreMedia` to disable the built-in API docs media-ignore list (`api/**`, `docs/api/**`, `api-docs/**`).
+- Use `mediaProfiles` (`.json`) for path-scoped media policy overrides (for example allowing standard YouTube host on selected sections or tightening eager-image limits).
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
 - `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:

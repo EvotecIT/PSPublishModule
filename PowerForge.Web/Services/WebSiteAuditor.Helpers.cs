@@ -250,6 +250,46 @@ public static partial class WebSiteAuditor
         return null;
     }
 
+    private static WebAuditMediaProfile[] NormalizeMediaProfiles(WebAuditMediaProfile[]? profiles)
+    {
+        if (profiles is null || profiles.Length == 0)
+            return Array.Empty<WebAuditMediaProfile>();
+
+        return profiles
+            .Where(profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Match))
+            .Select(profile => new WebAuditMediaProfile
+            {
+                Match = profile.Match.Replace('\\', '/').Trim(),
+                Ignore = profile.Ignore,
+                AllowYoutubeStandardHost = profile.AllowYoutubeStandardHost,
+                RequireIframeLazy = profile.RequireIframeLazy,
+                RequireIframeTitle = profile.RequireIframeTitle,
+                RequireIframeReferrerPolicy = profile.RequireIframeReferrerPolicy,
+                RequireImageLoadingHint = profile.RequireImageLoadingHint,
+                RequireImageDecodingHint = profile.RequireImageDecodingHint,
+                RequireImageDimensions = profile.RequireImageDimensions,
+                RequireImageSrcSetSizes = profile.RequireImageSrcSetSizes,
+                MaxEagerImages = profile.MaxEagerImages
+            })
+            .OrderByDescending(profile => profile.Match.Length)
+            .ToArray();
+    }
+
+    private static WebAuditMediaProfile? ResolveMediaProfile(string relativePath, WebAuditMediaProfile[] profiles)
+    {
+        if (profiles.Length == 0 || string.IsNullOrWhiteSpace(relativePath))
+            return null;
+
+        var normalizedPath = relativePath.Replace('\\', '/').TrimStart('/');
+        foreach (var profile in profiles)
+        {
+            if (GlobMatch(profile.Match, normalizedPath))
+                return profile;
+        }
+
+        return null;
+    }
+
     private static string[] MergeRequiredNavLinks(string[] defaultRequiredLinks, WebAuditNavProfile? profile)
     {
         if (profile is null || profile.RequiredLinks.Length == 0)
@@ -618,8 +658,21 @@ public static partial class WebSiteAuditor
     private static void ValidateMediaEmbeds(
         AngleSharp.Dom.IDocument doc,
         string relativePath,
+        WebAuditMediaProfile? profile,
         Action<string, string, string?, string, string?> addIssue)
     {
+        var requireIframeLazy = profile?.RequireIframeLazy ?? true;
+        var requireIframeTitle = profile?.RequireIframeTitle ?? true;
+        var requireIframeReferrerPolicy = profile?.RequireIframeReferrerPolicy ?? true;
+        var requireYoutubeNoCookie = !(profile?.AllowYoutubeStandardHost ?? false);
+        var requireImageLoadingHint = profile?.RequireImageLoadingHint ?? true;
+        var requireImageDecodingHint = profile?.RequireImageDecodingHint ?? true;
+        var requireImageDimensions = profile?.RequireImageDimensions ?? true;
+        var requireImageSrcSetSizes = profile?.RequireImageSrcSetSizes ?? true;
+        var maxEagerImages = profile?.MaxEagerImages ?? 1;
+        if (maxEagerImages < 0)
+            maxEagerImages = 0;
+
         var iframeMissingLazy = new List<string>();
         var iframeMissingTitle = new List<string>();
         var iframeMissingReferrerPolicy = new List<string>();
@@ -634,20 +687,33 @@ public static partial class WebSiteAuditor
             if (string.IsNullOrWhiteSpace(src) || ShouldSkipLink(src))
                 continue;
 
-            var loading = (iframe.GetAttribute("loading") ?? string.Empty).Trim();
-            if (!loading.Equals("lazy", StringComparison.OrdinalIgnoreCase))
-                iframeMissingLazy.Add(src);
+            if (requireIframeLazy)
+            {
+                var loading = (iframe.GetAttribute("loading") ?? string.Empty).Trim();
+                if (!loading.Equals("lazy", StringComparison.OrdinalIgnoreCase))
+                    iframeMissingLazy.Add(src);
+            }
 
-            var title = (iframe.GetAttribute("title") ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(title))
-                iframeMissingTitle.Add(src);
+            if (requireIframeTitle)
+            {
+                var title = (iframe.GetAttribute("title") ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(title))
+                    iframeMissingTitle.Add(src);
+            }
 
-            var referrerPolicy = (iframe.GetAttribute("referrerpolicy") ?? string.Empty).Trim();
-            if (IsExternalLink(src) && string.IsNullOrWhiteSpace(referrerPolicy))
-                iframeMissingReferrerPolicy.Add(src);
+            if (requireIframeReferrerPolicy)
+            {
+                var referrerPolicy = (iframe.GetAttribute("referrerpolicy") ?? string.Empty).Trim();
+                if (IsExternalLink(src) && string.IsNullOrWhiteSpace(referrerPolicy))
+                    iframeMissingReferrerPolicy.Add(src);
+            }
 
-            if (IsYouTubeEmbedUrl(src) && src.IndexOf("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase) < 0)
+            if (requireYoutubeNoCookie &&
+                IsYouTubeEmbedUrl(src) &&
+                src.IndexOf("youtube-nocookie.com", StringComparison.OrdinalIgnoreCase) < 0)
+            {
                 youtubeNonNoCookie.Add(src);
+            }
         }
 
         var imageMissingLoading = new List<string>();
@@ -669,23 +735,32 @@ public static partial class WebSiteAuditor
             var fetchPriority = (image.GetAttribute("fetchpriority") ?? string.Empty).Trim();
             if (loading.Equals("eager", StringComparison.OrdinalIgnoreCase))
                 eagerImageCount++;
-            if (string.IsNullOrWhiteSpace(loading) &&
+
+            if (requireImageLoadingHint &&
+                string.IsNullOrWhiteSpace(loading) &&
                 !fetchPriority.Equals("high", StringComparison.OrdinalIgnoreCase))
             {
                 imageMissingLoading.Add(src);
             }
 
-            var decoding = (image.GetAttribute("decoding") ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(decoding))
-                imageMissingDecoding.Add(src);
+            if (requireImageDecodingHint)
+            {
+                var decoding = (image.GetAttribute("decoding") ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(decoding))
+                    imageMissingDecoding.Add(src);
+            }
 
-            if (!HasImageDimensionHints(image, src))
+            if (requireImageDimensions && !HasImageDimensionHints(image, src))
                 imageMissingDimensions.Add(src);
 
             var srcset = (image.GetAttribute("srcset") ?? string.Empty).Trim();
             var sizes = (image.GetAttribute("sizes") ?? string.Empty).Trim();
-            if (!string.IsNullOrWhiteSpace(srcset) && string.IsNullOrWhiteSpace(sizes))
+            if (requireImageSrcSetSizes &&
+                !string.IsNullOrWhiteSpace(srcset) &&
+                string.IsNullOrWhiteSpace(sizes))
+            {
                 imageSrcSetMissingSizes.Add(src);
+            }
         }
 
         if (iframeMissingLazy.Count > 0)
@@ -744,10 +819,10 @@ public static partial class WebSiteAuditor
                 "media-img-srcset-sizes");
         }
 
-        if (eagerImageCount > 1)
+        if (eagerImageCount > maxEagerImages)
         {
             addIssue("warning", "media", relativePath,
-                $"page contains {eagerImageCount} eagerly loaded images; keep eager images to one primary/LCP candidate when possible.",
+                $"page contains {eagerImageCount} eagerly loaded images; max allowed is {maxEagerImages}.",
                 "media-img-eager");
         }
     }

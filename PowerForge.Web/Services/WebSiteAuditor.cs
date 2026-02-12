@@ -128,6 +128,7 @@ public static partial class WebSiteAuditor
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var navProfiles = NormalizeNavProfiles(options.NavProfiles);
+        var mediaProfiles = NormalizeMediaProfiles(options.MediaProfiles);
         var canonicalNavLinks = Array.Empty<string>();
 
         if (options.CheckNavConsistency && !string.IsNullOrWhiteSpace(options.NavCanonicalPath))
@@ -309,8 +310,11 @@ public static partial class WebSiteAuditor
 
             var mediaIgnored = options.IgnoreMediaFor.Length > 0 &&
                                MatchesAny(options.IgnoreMediaFor, relativePath);
+            var mediaProfile = ResolveMediaProfile(relativePath, mediaProfiles);
+            if (mediaProfile?.Ignore == true)
+                mediaIgnored = true;
             if (options.CheckMediaEmbeds && !mediaIgnored)
-                ValidateMediaEmbeds(doc, relativePath, AddIssue);
+                ValidateMediaEmbeds(doc, relativePath, mediaProfile, AddIssue);
 
             if (options.CheckTitles)
             {

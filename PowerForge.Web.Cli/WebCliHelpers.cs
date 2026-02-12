@@ -24,6 +24,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
+        Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
@@ -38,7 +39,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
         Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
-        Console.WriteLine("                     [--nav-profiles <file.json>]");
+        Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
@@ -232,6 +233,20 @@ internal static class WebCliHelpers
             .ToArray();
     }
 
+    internal static WebAuditMediaProfile[] LoadAuditMediaProfiles(string? mediaProfilesPath)
+    {
+        if (string.IsNullOrWhiteSpace(mediaProfilesPath))
+            return Array.Empty<WebAuditMediaProfile>();
+
+        var fullPath = ResolveExistingFilePath(mediaProfilesPath);
+        using var stream = File.OpenRead(fullPath);
+        var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditMediaProfileArray)
+                       ?? Array.Empty<WebAuditMediaProfile>();
+        return profiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+            .ToArray();
+    }
+
     internal static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
     {
         var include = ReadOptionList(argv, "--include");
@@ -241,6 +256,7 @@ internal static class WebCliHelpers
         var navIgnorePrefixes = ReadOptionList(argv, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(argv, "--nav-required-link", "--nav-required-links");
         var navProfilesPath = TryGetOptionValue(argv, "--nav-profiles");
+        var mediaProfilesPath = TryGetOptionValue(argv, "--media-profiles");
         var requiredRoutes = ReadOptionList(argv, "--required-route", "--required-routes");
         var minNavCoverageText = TryGetOptionValue(argv, "--min-nav-coverage");
         var navSelector = TryGetOptionValue(argv, "--nav-selector") ?? "nav";
@@ -282,6 +298,7 @@ internal static class WebCliHelpers
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
+        var mediaProfiles = LoadAuditMediaProfiles(mediaProfilesPath);
 
         return WebSiteAuditor.Audit(new WebAuditOptions
         {
@@ -298,6 +315,7 @@ internal static class WebCliHelpers
             NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
             NavRequiredLinks = navRequiredLinks.ToArray(),
             NavProfiles = navProfiles,
+            MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = requiredRoutes.ToArray(),
             CheckLinks = !HasOption(argv, "--no-links"),

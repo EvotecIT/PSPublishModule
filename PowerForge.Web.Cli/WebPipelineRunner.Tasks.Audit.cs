@@ -34,6 +34,7 @@ internal static partial class WebPipelineRunner
         var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
                                GetString(step, "navRequiredLink") ?? GetString(step, "nav-required-link");
         var navProfilesPath = GetString(step, "navProfiles") ?? GetString(step, "nav-profiles");
+        var mediaProfilesPath = GetString(step, "mediaProfiles") ?? GetString(step, "media-profiles");
         var minNavCoveragePercent = GetInt(step, "minNavCoveragePercent") ?? GetInt(step, "min-nav-coverage") ?? 0;
         var requiredRoutes = GetString(step, "requiredRoutes") ?? GetString(step, "required-routes") ??
                              GetString(step, "requiredRoute") ?? GetString(step, "required-route");
@@ -105,6 +106,7 @@ internal static partial class WebPipelineRunner
         var navRequiredValue = navRequired ?? !(navOptional ?? false);
         var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
         var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
+        var mediaProfiles = LoadAuditMediaProfilesForPipeline(baseDir, mediaProfilesPath);
         var resolvedSummaryPath = ResolveSummaryPathForPipeline(summary, summaryPath);
         if (string.IsNullOrWhiteSpace(resolvedSummaryPath) && summaryOnFail)
             resolvedSummaryPath = ".powerforge/audit-summary.json";
@@ -169,6 +171,7 @@ internal static partial class WebPipelineRunner
             NavIgnorePrefixes = navIgnorePrefixList,
             NavRequiredLinks = CliPatternHelper.SplitPatterns(navRequiredLinks),
             NavProfiles = navProfiles,
+            MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = CliPatternHelper.SplitPatterns(requiredRoutes),
             CheckLinks = checkLinks,
