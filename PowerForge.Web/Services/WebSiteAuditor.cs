@@ -307,7 +307,9 @@ public static partial class WebSiteAuditor
                 ValidateHeadRenderBlocking(doc, relativePath, maxHeadBlockingResources, AddIssue);
             }
 
-            if (options.CheckMediaEmbeds)
+            var mediaIgnored = options.IgnoreMediaFor.Length > 0 &&
+                               MatchesAny(options.IgnoreMediaFor, relativePath);
+            if (options.CheckMediaEmbeds && !mediaIgnored)
                 ValidateMediaEmbeds(doc, relativePath, AddIssue);
 
             if (options.CheckTitles)

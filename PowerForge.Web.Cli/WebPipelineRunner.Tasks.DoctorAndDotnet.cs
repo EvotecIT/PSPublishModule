@@ -130,6 +130,7 @@ internal static partial class WebPipelineRunner
             var include = GetString(step, "include");
             var exclude = GetString(step, "exclude");
             var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
+            var ignoreMedia = GetString(step, "ignoreMedia") ?? GetString(step, "ignore-media");
             var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
                                     GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
             var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
@@ -143,6 +144,7 @@ internal static partial class WebPipelineRunner
             var minNavCoveragePercent = GetInt(step, "minNavCoveragePercent") ?? GetInt(step, "min-nav-coverage") ?? 0;
             var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
             var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
+            var useDefaultIgnoreMedia = !(GetBool(step, "noDefaultIgnoreMedia") ?? false);
             var summary = GetBool(step, "summary") ?? false;
             var summaryPath = GetString(step, "summaryPath");
             var summaryMax = GetInt(step, "summaryMaxIssues") ?? 10;
@@ -195,6 +197,8 @@ internal static partial class WebPipelineRunner
 
             var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
             var ignoreNavPatterns = BuildIgnoreNavPatternsForPipeline(ignoreNavList, useDefaultIgnoreNav);
+            var ignoreMediaList = CliPatternHelper.SplitPatterns(ignoreMedia).ToList();
+            var ignoreMediaPatterns = BuildIgnoreMediaPatternsForPipeline(ignoreMediaList, useDefaultIgnoreMedia);
             var navRequiredValue = navRequired ?? !(navOptional ?? false);
             var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
             var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
@@ -228,6 +232,7 @@ internal static partial class WebPipelineRunner
                 MaxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0,
                 SuppressIssues = suppressIssues ?? Array.Empty<string>(),
                 IgnoreNavFor = ignoreNavPatterns,
+                IgnoreMediaFor = ignoreMediaPatterns,
                 NavSelector = navSelector,
                 NavRequired = navRequiredValue,
                 NavIgnorePrefixes = navIgnorePrefixList,

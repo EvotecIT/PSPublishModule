@@ -611,6 +611,85 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_DefaultMediaIgnorePatterns_SkipApiPages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-ignore-default-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>API</title></head>
+                <body>
+                  <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>
+                  <img src="/images/hero.jpg" />
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("media", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_MediaChecksRunForApiPagesWhenDefaultMediaIgnoreIsCleared()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-ignore-cleared-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiRoot = Path.Combine(root, "api");
+            Directory.CreateDirectory(apiRoot);
+            File.WriteAllText(Path.Combine(apiRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>API</title></head>
+                <body>
+                  <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>
+                  <img src="/images/hero.jpg" />
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>()
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Issues, issue => issue.Category.Equals("media", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_WarnsWhenHeadingOrderSkipsLevels()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-heading-order-" + Guid.NewGuid().ToString("N"));

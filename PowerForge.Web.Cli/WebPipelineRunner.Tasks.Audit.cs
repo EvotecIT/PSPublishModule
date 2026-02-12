@@ -28,6 +28,7 @@ internal static partial class WebPipelineRunner
         var budgetExclude = GetString(step, "budgetExclude") ?? GetString(step, "budget-exclude");
         var includeScopeFromBuildUpdated = GetBool(step, "scopeFromBuildUpdated") ?? GetBool(step, "scope-from-build-updated");
         var ignoreNav = GetString(step, "ignoreNav") ?? GetString(step, "ignore-nav");
+        var ignoreMedia = GetString(step, "ignoreMedia") ?? GetString(step, "ignore-media");
         var navIgnorePrefixes = GetString(step, "navIgnorePrefixes") ?? GetString(step, "nav-ignore-prefixes") ??
                                 GetString(step, "navIgnorePrefix") ?? GetString(step, "nav-ignore-prefix");
         var navRequiredLinks = GetString(step, "navRequiredLinks") ?? GetString(step, "nav-required-links") ??
@@ -96,8 +97,11 @@ internal static partial class WebPipelineRunner
 
         var useDefaultExclude = !(GetBool(step, "noDefaultExclude") ?? false);
         var useDefaultIgnoreNav = !(GetBool(step, "noDefaultIgnoreNav") ?? false);
+        var useDefaultIgnoreMedia = !(GetBool(step, "noDefaultIgnoreMedia") ?? false);
         var ignoreNavList = CliPatternHelper.SplitPatterns(ignoreNav).ToList();
         var ignoreNavPatterns = BuildIgnoreNavPatternsForPipeline(ignoreNavList, useDefaultIgnoreNav);
+        var ignoreMediaList = CliPatternHelper.SplitPatterns(ignoreMedia).ToList();
+        var ignoreMediaPatterns = BuildIgnoreMediaPatternsForPipeline(ignoreMediaList, useDefaultIgnoreMedia);
         var navRequiredValue = navRequired ?? !(navOptional ?? false);
         var navIgnorePrefixList = CliPatternHelper.SplitPatterns(navIgnorePrefixes);
         var navProfiles = LoadAuditNavProfilesForPipeline(baseDir, navProfilesPath);
@@ -159,6 +163,7 @@ internal static partial class WebPipelineRunner
             BudgetExclude = CliPatternHelper.SplitPatterns(budgetExclude),
             SuppressIssues = suppressIssues ?? Array.Empty<string>(),
             IgnoreNavFor = ignoreNavPatterns,
+            IgnoreMediaFor = ignoreMediaPatterns,
             NavSelector = navSelector,
             NavRequired = navRequiredValue,
             NavIgnorePrefixes = navIgnorePrefixList,

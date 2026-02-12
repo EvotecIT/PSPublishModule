@@ -23,6 +23,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
         Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
@@ -36,6 +37,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
         Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
         Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
+        Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
         Console.WriteLine("                     [--nav-profiles <file.json>]");
         Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
@@ -235,6 +237,7 @@ internal static class WebCliHelpers
         var include = ReadOptionList(argv, "--include");
         var exclude = ReadOptionList(argv, "--exclude");
         var ignoreNav = ReadOptionList(argv, "--ignore-nav", "--ignore-nav-path");
+        var ignoreMedia = ReadOptionList(argv, "--ignore-media");
         var navIgnorePrefixes = ReadOptionList(argv, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(argv, "--nav-required-link", "--nav-required-links");
         var navProfilesPath = TryGetOptionValue(argv, "--nav-profiles");
@@ -243,6 +246,7 @@ internal static class WebCliHelpers
         var navSelector = TryGetOptionValue(argv, "--nav-selector") ?? "nav";
         var navRequired = !HasOption(argv, "--nav-optional");
         var useDefaultIgnoreNav = !HasOption(argv, "--no-default-ignore-nav");
+        var useDefaultIgnoreMedia = !HasOption(argv, "--no-default-ignore-media");
         var useDefaultExclude = !HasOption(argv, "--no-default-exclude");
         var summaryEnabled = HasOption(argv, "--summary");
         var summaryPath = TryGetOptionValue(argv, "--summary-path");
@@ -270,6 +274,7 @@ internal static class WebCliHelpers
             navRequiredLinks.Add("/");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
+        var ignoreMediaPatterns = BuildIgnoreMediaPatterns(ignoreMedia, useDefaultIgnoreMedia);
         var summaryMax = ParseIntOption(summaryMaxText, 10);
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
@@ -287,6 +292,7 @@ internal static class WebCliHelpers
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
             SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
+            IgnoreMediaFor = ignoreMediaPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,
             NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
@@ -393,6 +399,21 @@ internal static class WebCliHelpers
             return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
 
         var defaults = new WebAuditOptions().IgnoreNavFor;
+        if (userPatterns.Count == 0)
+            return defaults;
+
+        return defaults.Concat(userPatterns)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static string[] BuildIgnoreMediaPatterns(List<string> userPatterns, bool useDefaults)
+    {
+        if (!useDefaults)
+            return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+        var defaults = new WebAuditOptions().IgnoreMediaFor;
         if (userPatterns.Count == 0)
             return defaults;
 

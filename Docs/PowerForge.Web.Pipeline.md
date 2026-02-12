@@ -438,6 +438,8 @@ Notes:
   - Use `budgetExclude` (comma-separated globs) to exclude folders like `api/**` from the file-count budget without excluding them from the HTML audit scope.
 - `suppressIssues` (array of strings) filters audit issues before counts/gates and before printing/writing artifacts (use codes like `PFAUDIT.BUDGET` or `re:...`).
 - Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
+- Use `ignoreMedia` (comma-separated globs) to relax media checks for selected paths.
+- Use `noDefaultIgnoreMedia` to disable the built-in API docs media-ignore list (`api/**`, `docs/api/**`, `api-docs/**`).
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
 - `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:

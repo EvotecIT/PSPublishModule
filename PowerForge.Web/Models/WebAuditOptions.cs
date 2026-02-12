@@ -60,6 +60,13 @@ public sealed class WebAuditOptions
         "docs/api/**",
         "api/**"
     };
+    /// <summary>Skip media/embed checks on pages that match these glob patterns.</summary>
+    public string[] IgnoreMediaFor { get; set; } = new[]
+    {
+        "api-docs/**",
+        "docs/api/**",
+        "api/**"
+    };
     /// <summary>Require all pages to contain a nav element.</summary>
     public bool NavRequired { get; set; } = true;
     /// <summary>Skip nav checks on pages that match a prefix list (path-based).</summary>

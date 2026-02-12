@@ -302,6 +302,21 @@ internal static partial class WebPipelineRunner
             .ToArray();
     }
 
+    private static string[] BuildIgnoreMediaPatternsForPipeline(List<string> userPatterns, bool useDefaults)
+    {
+        if (!useDefaults)
+            return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+        var defaults = new WebAuditOptions().IgnoreMediaFor;
+        if (userPatterns.Count == 0)
+            return defaults;
+
+        return defaults.Concat(userPatterns)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static string? ResolveSummaryPathForPipeline(bool summaryEnabled, string? summaryPath)
     {
         if (!summaryEnabled && string.IsNullOrWhiteSpace(summaryPath))
