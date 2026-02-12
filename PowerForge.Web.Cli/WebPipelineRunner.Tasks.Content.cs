@@ -339,7 +339,7 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
     }
 
-    private static string[] ValidateApiDocsPreflight(
+    internal static string[] ValidateApiDocsPreflight(
         ApiDocsType apiType,
         string? sourceRoot,
         string? sourceUrl,

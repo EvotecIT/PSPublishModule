@@ -62,7 +62,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
         Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
-        Console.WriteLine("                     [--suppress-warning <pattern>]");
+        Console.WriteLine("                     [--fail-on-warnings] [--suppress-warning <pattern>]");
         Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
         Console.WriteLine("                     [--nav <file>] [--nav-surface <name>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");

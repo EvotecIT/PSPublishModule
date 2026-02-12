@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -58,6 +59,7 @@ internal static partial class WebCliCommandHandlers
         var excludeTypes = ReadOptionList(subArgs, "--exclude-type");
         var quickStartTypes = ReadOptionList(subArgs, "--quickstart-types", "--quick-start-types");
         var suppressWarnings = ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings").ToArray();
+        var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
 
         var apiType = ApiDocsType.CSharp;
         if (!string.IsNullOrWhiteSpace(typeText) &&
@@ -127,20 +129,54 @@ internal static partial class WebCliCommandHandlers
         if (quickStartTypes.Count > 0)
             options.QuickStartTypeNames.AddRange(quickStartTypes);
 
+        var preflightWarnings = WebPipelineRunner.ValidateApiDocsPreflight(
+            apiType,
+            sourceRoot,
+            sourceUrl,
+            options.SourceUrlMappings,
+            navJson,
+            navSurface,
+            navContextPath: null,
+            powerShellExamplesPath);
+        var filteredPreflightWarnings = WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings);
+
+        if (!outputJson && filteredPreflightWarnings.Length > 0)
+        {
+            foreach (var warning in filteredPreflightWarnings)
+                logger.Warn(warning);
+        }
+        if (failOnWarnings && filteredPreflightWarnings.Length > 0)
+        {
+            var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                           ?? "API docs preflight warnings encountered.";
+            return Fail(headline, outputJson, logger, "web.apidocs");
+        }
+
         var result = WebApiDocsGenerator.Generate(options);
-        var filteredWarnings = WebVerifyPolicy.FilterWarnings(result.Warnings, suppressWarnings);
+        var generatorWarnings = result.Warnings ?? Array.Empty<string>();
+        var combinedWarnings = filteredPreflightWarnings
+            .Concat(generatorWarnings)
+            .Where(static w => !string.IsNullOrWhiteSpace(w))
+            .ToArray();
+        var filteredWarnings = WebVerifyPolicy.FilterWarnings(combinedWarnings, suppressWarnings);
 
         if (!outputJson && filteredWarnings.Length > 0)
         {
             foreach (var warning in filteredWarnings)
                 logger.Warn(warning);
         }
+        if (failOnWarnings && filteredWarnings.Length > 0)
+        {
+            var headline = filteredWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                           ?? "API docs warnings encountered.";
+            return Fail(headline, outputJson, logger, "web.apidocs");
+        }
         if (!outputJson && result.UsedReflectionFallback)
             logger.Info("API docs used reflection fallback (XML missing or empty).");
 
         if (outputJson)
         {
-            if (filteredWarnings.Length != result.Warnings.Length)
+            if (filteredWarnings.Length != generatorWarnings.Length)
             {
                 result = new WebApiDocsResult
                 {
