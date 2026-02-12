@@ -101,6 +101,43 @@ internal static partial class WebPipelineRunner
         if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
             throw new InvalidOperationException("apidocs requires help for PowerShell.");
 
+        var preflightWarnings = ValidateApiDocsPreflight(
+            apiType,
+            sourceRoot,
+            sourceUrl,
+            sourceUrlMappings,
+            nav,
+            navSurfaceName,
+            navContextPath,
+            powerShellExamplesPath);
+        var filteredPreflightWarnings = suppressWarnings is { Length: > 0 }
+            ? WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings)
+            : preflightWarnings;
+        if (filteredPreflightWarnings.Length > 0)
+        {
+            logger?.Warn($"{label}: apidocs preflight warnings: {filteredPreflightWarnings.Length}");
+
+            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+            if (previewLimit > 0)
+            {
+                foreach (var warning in filteredPreflightWarnings.Where(static w => !string.IsNullOrWhiteSpace(w)).Take(previewLimit))
+                {
+                    logger?.Warn($"{label}: {warning}");
+                }
+
+                var remaining = filteredPreflightWarnings.Length - previewLimit;
+                if (remaining > 0)
+                    logger?.Warn($"{label}: (+{remaining} more warnings)");
+            }
+
+            if (failOnWarnings)
+            {
+                var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                               ?? "API docs preflight warnings encountered.";
+                throw new InvalidOperationException(headline);
+            }
+        }
+
         // Best-practice default: when pipeline runs at a website repo root, assume ./site.json
         // unless the step overrides it explicitly. This prevents "API reference has no navigation"
         // and theme drift when agents forget to wire config/nav.
@@ -300,6 +337,105 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+    }
+
+    private static string[] ValidateApiDocsPreflight(
+        ApiDocsType apiType,
+        string? sourceRoot,
+        string? sourceUrl,
+        IReadOnlyList<WebApiDocsSourceUrlMapping> sourceUrlMappings,
+        string? navPath,
+        string? navSurfaceName,
+        string? navContextPath,
+        string? powerShellExamplesPath)
+    {
+        var warnings = new List<string>();
+
+        var hasMappings = sourceUrlMappings is { Count: > 0 };
+        var hasSourceRoot = !string.IsNullOrWhiteSpace(sourceRoot);
+        var hasSourceUrl = !string.IsNullOrWhiteSpace(sourceUrl);
+        if (hasMappings && !hasSourceRoot && !hasSourceUrl)
+        {
+            warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrlMappings are configured but both sourceRoot and sourceUrl are empty; source links will be disabled.");
+        }
+
+        if (hasSourceRoot)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot!);
+            if (!Directory.Exists(fullSourceRoot))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot path does not exist: {fullSourceRoot}");
+            }
+        }
+
+        if (hasSourceUrl && !ContainsAnyPathToken(sourceUrl!))
+        {
+            warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrl does not include a path token ({path}, {pathNoRoot}, or {pathNoPrefix}).");
+        }
+
+        if (hasMappings)
+        {
+            var seenPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mapping in sourceUrlMappings)
+            {
+                if (mapping is null)
+                    continue;
+                var prefix = (mapping.PathPrefix ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(prefix))
+                    continue;
+
+                if (!seenPrefixes.Add(prefix))
+                {
+                    warnings.Add($"[PFWEB.APIDOCS.SOURCE] API docs source preflight: duplicate sourceUrlMappings pathPrefix '{prefix}'.");
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(navSurfaceName) && string.IsNullOrWhiteSpace(navPath))
+        {
+            warnings.Add("[PFWEB.APIDOCS.NAV] API docs nav preflight: navSurface is set but nav/navJson is empty; navSurface cannot be resolved.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(navPath))
+        {
+            var fullNavPath = Path.GetFullPath(navPath);
+            if (!File.Exists(fullNavPath))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.NAV] API docs nav preflight: nav/navJson file was not found: {fullNavPath}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(navContextPath))
+        {
+            var trimmed = navContextPath.Trim();
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal) &&
+                !trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.NAV] API docs nav preflight: navContextPath '{navContextPath}' should be root-relative (for example '/api/').");
+            }
+        }
+
+        if (apiType == ApiDocsType.PowerShell && !string.IsNullOrWhiteSpace(powerShellExamplesPath))
+        {
+            var fullExamplesPath = Path.GetFullPath(powerShellExamplesPath);
+            if (!Directory.Exists(fullExamplesPath) && !File.Exists(fullExamplesPath))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.POWERSHELL] API docs PowerShell preflight: psExamplesPath was not found: {fullExamplesPath}");
+            }
+        }
+
+        return warnings.ToArray();
+    }
+
+    private static bool ContainsAnyPathToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.IndexOf("{path}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               value.IndexOf("{pathNoRoot}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               value.IndexOf("{pathNoPrefix}", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
