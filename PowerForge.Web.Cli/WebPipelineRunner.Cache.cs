@@ -20,6 +20,8 @@ internal static partial class WebPipelineRunner
         // Tasks with external side-effects should not be cached.
         if (task.Equals("cloudflare", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
+            return false;
 
         return true;
     }
@@ -133,14 +135,35 @@ internal static partial class WebPipelineRunner
 
             foreach (var item in property.Value.EnumerateArray())
             {
-                if (item.ValueKind != JsonValueKind.String)
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    var value = item.GetString();
+                    if (string.IsNullOrWhiteSpace(value) || IsExternalUri(value))
+                        continue;
+                    var resolved = ResolvePath(baseDir, value);
+                    if (!string.IsNullOrWhiteSpace(resolved))
+                        yield return Path.GetFullPath(resolved);
                     continue;
-                var value = item.GetString();
-                if (string.IsNullOrWhiteSpace(value) || IsExternalUri(value))
+                }
+
+                if (item.ValueKind != JsonValueKind.Object)
                     continue;
-                var resolved = ResolvePath(baseDir, value);
-                if (!string.IsNullOrWhiteSpace(resolved))
-                    yield return Path.GetFullPath(resolved);
+
+                foreach (var nestedProperty in item.EnumerateObject())
+                {
+                    if (!FingerprintPathKeys.Contains(nestedProperty.Name))
+                        continue;
+                    if (nestedProperty.Value.ValueKind != JsonValueKind.String)
+                        continue;
+
+                    var nestedValue = nestedProperty.Value.GetString();
+                    if (string.IsNullOrWhiteSpace(nestedValue) || IsExternalUri(nestedValue))
+                        continue;
+
+                    var nestedResolved = ResolvePath(baseDir, nestedValue);
+                    if (!string.IsNullOrWhiteSpace(nestedResolved))
+                        yield return Path.GetFullPath(nestedResolved);
+                }
             }
         }
     }
@@ -200,7 +223,21 @@ internal static partial class WebPipelineRunner
             case "build":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "apidocs":
-                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output")));
+
+                var inputs = GetArrayOfObjects(step, "inputs") ?? GetArrayOfObjects(step, "entries");
+                if (inputs is { Length: > 0 })
+                {
+                    foreach (var input in inputs)
+                        outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(input, "out") ?? GetString(input, "output")));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             case "dotnet-publish":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "overlay":

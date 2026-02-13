@@ -36,7 +36,8 @@
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
         { "$ref": "#/$defs/OverlayStep" },
-        { "$ref": "#/$defs/CloudflareStep" }
+        { "$ref": "#/$defs/CloudflareStep" },
+        { "$ref": "#/$defs/ExecStep" }
       ]
     },
     "BuildStep": {
@@ -257,6 +258,43 @@
         { "required": ["zone-id"] }
       ]
     },
+    "ExecStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "exec" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "command": { "type": "string" },
+        "cmd": { "type": "string", "description": "Alias for command." },
+        "file": { "type": "string", "description": "Alias for command." },
+        "args": { "type": "string" },
+        "arguments": { "type": "string", "description": "Alias for args." },
+        "argsList": { "type": "array", "items": { "type": "string" } },
+        "args-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "argumentsList": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "arguments-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "workingDirectory": { "type": "string" },
+        "workingDir": { "type": "string", "description": "Alias for workingDirectory." },
+        "cwd": { "type": "string", "description": "Alias for workingDirectory." },
+        "allowFailure": { "type": "boolean" },
+        "continueOnError": { "type": "boolean", "description": "Alias for allowFailure." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." }
+      },
+      "required": ["task"],
+      "anyOf": [
+        { "required": ["command"] },
+        { "required": ["cmd"] },
+        { "required": ["file"] }
+      ]
+    },
     "ApiDocsStep": {
       "type": "object",
       "additionalProperties": false,
@@ -422,9 +460,49 @@
         "maxPowerShellSourceRepoMismatchHints": { "type": "number", "minimum": 0 },
         "max-powershell-source-repo-mismatch-hints": { "type": "number", "minimum": 0 },
         "suppressWarnings": { "type": "array", "items": { "type": "string" } },
-        "warningPreviewCount": { "type": "integer", "minimum": 0 }
+        "warningPreviewCount": { "type": "integer", "minimum": 0 },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ApiDocsBatchInput" },
+          "description": "Optional batch entries for multi-library API docs generation. Parent apidocs settings act as defaults."
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ApiDocsBatchInput" },
+          "description": "Alias for inputs."
+        }
       },
-      "required": ["task", "out"]
+      "required": ["task"],
+      "anyOf": [
+        { "required": ["out"] },
+        { "required": ["output"] },
+        { "required": ["inputs"] },
+        { "required": ["entries"] }
+      ]
+    },
+    "ApiDocsBatchInput": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["CSharp", "PowerShell"] },
+        "xml": { "type": "string" },
+        "help": { "type": "string" },
+        "helpPath": { "type": "string" },
+        "assembly": { "type": "string" },
+        "out": { "type": "string" },
+        "output": { "type": "string" },
+        "baseUrl": { "type": "string" },
+        "format": { "type": "string", "enum": ["json", "hybrid", "html", "both"] },
+        "includeNamespace": { "type": "string" },
+        "excludeNamespace": { "type": "string" },
+        "includeType": { "type": "string" },
+        "excludeType": { "type": "string" }
+      }
     },
     "XrefMergeStep": {
       "type": "object",

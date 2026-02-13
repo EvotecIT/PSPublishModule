@@ -188,6 +188,22 @@ internal static partial class WebPipelineRunner
         return list.Count == 0 ? null : list.ToArray();
     }
 
+    private static JsonElement[]? GetArrayOfObjects(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var list = new List<JsonElement>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Object)
+                list.Add(item.Clone());
+        }
+
+        return list.Count == 0 ? null : list.ToArray();
+    }
+
     private static WebApiDocsSourceUrlMapping[] GetApiDocsSourceUrlMappings(JsonElement element, params string[] names)
     {
         if (element.ValueKind != JsonValueKind.Object || names is null || names.Length == 0)

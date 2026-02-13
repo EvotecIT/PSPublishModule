@@ -64,6 +64,9 @@ internal static partial class WebPipelineRunner
             case "cloudflare":
                 ExecuteCloudflare(step, baseDir, stepResult);
                 break;
+            case "exec":
+                ExecuteExec(step, baseDir, stepResult);
+                break;
             default:
                 stepResult.Success = false;
                 stepResult.Message = "Unknown task";

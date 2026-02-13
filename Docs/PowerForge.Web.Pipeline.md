@@ -146,6 +146,7 @@ Generates API reference output from XML docs (optionally enriched by assembly).
 Notes:
 - `format`: `json`, `html`, `hybrid`, or `both` (json + html)
 - `title`: used for both `<title>` and the visible API overview `<h1>` (important for multi-API sites)
+- `inputs` (alias: `entries`) can run multiple API docs inputs in one step. Parent settings act as defaults.
 - HTML mode can include `headerHtml` + `footerHtml` fragments
 - Critical CSS (optional):
   - `injectCriticalCss: true` inlines `assetRegistry.criticalCss` from `site.json` into API pages (requires `config`)
@@ -207,6 +208,36 @@ Notes:
   - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
   - `coveragePreviewCount`: max failed coverage metrics shown in logs
   - PowerShell-only example inputs: `psExamplesPath`, `generatePowerShellFallbackExamples`, `powerShellFallbackExampleLimit`
+
+Multi-library batch example:
+```json
+{
+  "task": "apidocs",
+  "config": "./site.json",
+  "format": "both",
+  "template": "docs",
+  "css": "/css/app.css,/css/api.css",
+  "inputs": [
+    {
+      "id": "core-csharp",
+      "type": "CSharp",
+      "xml": "./Artifacts/core/Core.xml",
+      "assembly": "./Artifacts/core/Core.dll",
+      "out": "./_site/api/core",
+      "title": "Core API",
+      "baseUrl": "/api/core"
+    },
+    {
+      "id": "module-powershell",
+      "type": "PowerShell",
+      "helpPath": "./Module/en-US/Module-help.xml",
+      "out": "./_site/api/powershell",
+      "title": "PowerShell Cmdlets",
+      "baseUrl": "/api/powershell"
+    }
+  ]
+}
+```
 
 ##### Template overrides
 You can fully control the API docs layout by providing a template root or per-file overrides.
@@ -583,6 +614,24 @@ Notes:
 - Schema uses `noBlazorFixes` today; CLI reads `blazorFixes`. We should align these later.
 - `defineConstants` maps to `-p:DefineConstants=...` for multi-variant Blazor publishes.
 - `skipIfProjectMissing` (`skipIfMissingProject`, `skip-if-project-missing`) makes the step succeed with a skip message when the project path is absent (useful for worktree-only/partial checkouts).
+
+#### exec
+Runs an external command from the pipeline (extensibility hook for custom generators/tools).
+```json
+{
+  "task": "exec",
+  "command": "dotnet",
+  "args": "--version",
+  "workingDirectory": ".",
+  "timeoutSeconds": 120
+}
+```
+
+Notes:
+- `command` (aliases: `cmd`, `file`) is required.
+- Pass arguments with `args`/`arguments` or `argsList`/`argumentsList`.
+- `allowFailure` (`continueOnError`) keeps the pipeline green when the command exits non-zero.
+- `exec` steps are intentionally not cacheable (they can have external side effects).
 
 #### overlay
 Copies a static overlay directory into another (useful for Blazor outputs).
