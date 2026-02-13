@@ -30,6 +30,7 @@
         { "$ref": "#/$defs/XrefMergeStep" },
         { "$ref": "#/$defs/ChangelogStep" },
         { "$ref": "#/$defs/VersionHubStep" },
+        { "$ref": "#/$defs/PackageHubStep" },
         { "$ref": "#/$defs/LlmsStep" },
         { "$ref": "#/$defs/CompatMatrixStep" },
         { "$ref": "#/$defs/SitemapStep" },
@@ -659,6 +660,53 @@
         "deprecated": { "type": "boolean" },
         "aliases": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "PackageHubStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "package-hub" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "title": { "type": "string" },
+        "project": { "type": "string", "description": "Single .csproj path." },
+        "projects": { "type": "string", "description": "Comma-separated .csproj paths." },
+        "projectFiles": { "type": "array", "items": { "type": "string" }, "description": "Array of .csproj paths." },
+        "project-files": { "type": "array", "items": { "type": "string" }, "description": "Alias for projectFiles." },
+        "module": { "type": "string", "description": "Single .psd1 manifest path." },
+        "modules": { "type": "string", "description": "Comma-separated .psd1 manifest paths." },
+        "moduleFiles": { "type": "array", "items": { "type": "string" }, "description": "Array of .psd1 manifest paths." },
+        "module-files": { "type": "array", "items": { "type": "string" }, "description": "Alias for moduleFiles." },
+        "out": { "type": "string" },
+        "output": { "type": "string" }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["out"] },
+            { "required": ["output"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["project"] },
+            { "required": ["projects"] },
+            { "required": ["projectFiles"] },
+            { "required": ["project-files"] },
+            { "required": ["module"] },
+            { "required": ["modules"] },
+            { "required": ["moduleFiles"] },
+            { "required": ["module-files"] }
+          ]
+        }
+      ]
     },
     "LlmsStep": {
       "type": "object",
