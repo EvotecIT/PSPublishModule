@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using PowerForge;
 using PowerForge.Web;
 
@@ -20,6 +21,13 @@ internal static partial class WebPipelineRunner
         WebConsoleLogger? logger,
         WebPipelineStepResult stepResult)
     {
+        var batchInputs = GetArrayOfObjects(step, "inputs") ?? GetArrayOfObjects(step, "entries");
+        if (batchInputs is { Length: > 0 })
+        {
+            ExecuteApiDocsBatch(step, batchInputs, label, baseDir, fast, effectiveMode, logger, stepResult);
+            return;
+        }
+
         string? injectedCriticalCssHtml = null;
 
         var typeText = GetString(step, "type");
@@ -361,6 +369,81 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+    }
+
+    private static void ExecuteApiDocsBatch(
+        JsonElement parentStep,
+        JsonElement[] inputs,
+        string label,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
+    {
+        if (inputs.Length == 0)
+            throw new InvalidOperationException("apidocs batch requires at least one input object.");
+
+        var completed = 0;
+        var notes = new List<string>();
+        for (var index = 0; index < inputs.Length; index++)
+        {
+            var input = inputs[index];
+            var inputLabel = GetString(input, "id") ??
+                             GetString(input, "name") ??
+                             GetString(input, "title") ??
+                             $"input-{index + 1}";
+
+            using var merged = CreateMergedApiDocsStepDocument(parentStep, input);
+            var nestedResult = new WebPipelineStepResult { Task = "apidocs" };
+            try
+            {
+                ExecuteApiDocs(
+                    merged.RootElement,
+                    $"{label}/{inputLabel}",
+                    baseDir,
+                    fast,
+                    effectiveMode,
+                    logger,
+                    nestedResult);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"apidocs batch input '{inputLabel}' failed: {ex.Message}", ex);
+            }
+
+            completed++;
+            if (!string.IsNullOrWhiteSpace(nestedResult.Message))
+            {
+                var note = nestedResult.Message!;
+                if (note.Length > 100)
+                    note = $"{note.Substring(0, 97)}...";
+                notes.Add($"{inputLabel}: {note}");
+            }
+        }
+
+        var summary = string.Join("; ", notes.Take(2));
+        var suffix = notes.Count > 2 ? $" (+{notes.Count - 2} more)" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = string.IsNullOrWhiteSpace(summary)
+            ? $"API docs batch {completed} input(s)"
+            : $"API docs batch {completed} input(s): {summary}{suffix}";
+    }
+
+    private static JsonDocument CreateMergedApiDocsStepDocument(JsonElement parentStep, JsonElement input)
+    {
+        var parentNode = JsonNode.Parse(parentStep.GetRawText()) as JsonObject
+                         ?? throw new InvalidOperationException("apidocs batch parent step must be a JSON object.");
+        parentNode.Remove("inputs");
+        parentNode.Remove("entries");
+
+        if (input.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("apidocs batch inputs must be JSON objects.");
+
+        foreach (var property in input.EnumerateObject())
+            parentNode[property.Name] = JsonNode.Parse(property.Value.GetRawText());
+
+        return JsonDocument.Parse(parentNode.ToJsonString());
     }
 
     internal static string[] ValidateApiDocsPreflight(
