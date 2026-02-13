@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
@@ -49,6 +50,10 @@ public static class ShortcodeRegistry
 
 internal static partial class ShortcodeDefaults
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex HtmlTagRegex = new("<\\s*/?\\s*[a-zA-Z][^>]*>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex MarkdownLinkRegex = new("\\[[^\\]]+\\]\\([^\\)]+\\)", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+
     private static string HtmlAny(IReadOnlyDictionary<string, object?> map, params string[] keys)
     {
         foreach (var key in keys)
@@ -57,6 +62,21 @@ internal static partial class ShortcodeDefaults
             if (!string.IsNullOrWhiteSpace(value))
                 return value;
         }
+        return string.Empty;
+    }
+
+    private static string RawAny(IReadOnlyDictionary<string, object?> map, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (!map.TryGetValue(key, out var value) || value is null)
+                continue;
+
+            var raw = value.ToString();
+            if (!string.IsNullOrWhiteSpace(raw))
+                return raw.Trim();
+        }
+
         return string.Empty;
     }
 
@@ -180,8 +200,8 @@ internal static partial class ShortcodeDefaults
                         continue;
 
                     var id = HtmlAny(item, "id");
-                    var question = HtmlAny(item, "question", "q", "title");
-                    var answer = HtmlAny(item, "answer", "a", "text", "summary");
+                    var question = ResolveFaqInline(item, "question", "q", "title");
+                    var answer = ResolveFaqBlock(item, "answer", "a", "text", "summary");
 
                     sb.Append($"    <div class=\"pf-faq-item\"");
                     if (!string.IsNullOrWhiteSpace(id))
@@ -190,7 +210,7 @@ internal static partial class ShortcodeDefaults
                     if (!string.IsNullOrWhiteSpace(question))
                         sb.AppendLine($"      <h3>{question}</h3>");
                     if (!string.IsNullOrWhiteSpace(answer))
-                        sb.AppendLine($"      <p>{answer}</p>");
+                        sb.AppendLine($"      <div class=\"pf-faq-answer\">{answer}</div>");
                     sb.AppendLine("    </div>");
                 }
             }
@@ -199,6 +219,91 @@ internal static partial class ShortcodeDefaults
         }
         sb.AppendLine("</div>");
         return sb.ToString();
+    }
+
+    private static string ResolveFaqInline(IReadOnlyDictionary<string, object?> map, params string[] keys)
+    {
+        var html = ResolveFaqContent(map, keys);
+        return StripSingleParagraphWrapper(html);
+    }
+
+    private static string ResolveFaqBlock(IReadOnlyDictionary<string, object?> map, params string[] keys)
+        => ResolveFaqContent(map, keys);
+
+    private static string ResolveFaqContent(IReadOnlyDictionary<string, object?> map, params string[] keys)
+    {
+        var htmlKeys = keys.Select(k => $"{k}_html").ToArray();
+        var markdownKeys = keys
+            .SelectMany(k => new[] { $"{k}_md", $"{k}_markdown" })
+            .ToArray();
+
+        var explicitHtml = RawAny(map, htmlKeys);
+        if (!string.IsNullOrWhiteSpace(explicitHtml))
+            return explicitHtml;
+
+        var explicitMarkdown = RawAny(map, markdownKeys);
+        if (!string.IsNullOrWhiteSpace(explicitMarkdown))
+            return MarkdownRenderer.RenderToHtml(explicitMarkdown);
+
+        var raw = RawAny(map, keys);
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        if (LooksLikeHtml(raw))
+            return raw;
+
+        if (LooksLikeMarkdown(raw))
+            return MarkdownRenderer.RenderToHtml(raw);
+
+        return System.Web.HttpUtility.HtmlEncode(raw);
+    }
+
+    private static bool LooksLikeHtml(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        return HtmlTagRegex.IsMatch(value);
+    }
+
+    private static bool LooksLikeMarkdown(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        if (value.Contains("**", StringComparison.Ordinal) ||
+            value.Contains("__", StringComparison.Ordinal) ||
+            value.Contains("`", StringComparison.Ordinal) ||
+            value.Contains("```", StringComparison.Ordinal))
+            return true;
+
+        if (value.Contains("\n- ", StringComparison.Ordinal) ||
+            value.Contains("\n* ", StringComparison.Ordinal) ||
+            value.Contains("\n1. ", StringComparison.Ordinal) ||
+            value.StartsWith("> ", StringComparison.Ordinal))
+            return true;
+
+        if (value.Contains("# ", StringComparison.Ordinal) || value.Contains("## ", StringComparison.Ordinal))
+            return true;
+
+        return MarkdownLinkRegex.IsMatch(value);
+    }
+
+    private static string StripSingleParagraphWrapper(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var trimmed = html.Trim();
+        if (!trimmed.StartsWith("<p>", StringComparison.OrdinalIgnoreCase) ||
+            !trimmed.EndsWith("</p>", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        var inner = trimmed.Substring(3, trimmed.Length - 7);
+        if (inner.IndexOf("<p>", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            inner.IndexOf("</p>", StringComparison.OrdinalIgnoreCase) >= 0)
+            return trimmed;
+
+        return inner.Trim();
     }
 
     internal static string RenderBenchmarks(ShortcodeRenderContext context, Dictionary<string, string> attrs)

@@ -425,12 +425,15 @@ internal static partial class WebCliCommandHandlers
         var exclude = ReadOptionList(subArgs, "--exclude");
         var budgetExclude = ReadOptionList(subArgs, "--budget-exclude", "--budget-excludes");
         var ignoreNav = ReadOptionList(subArgs, "--ignore-nav", "--ignore-nav-path");
+        var ignoreMedia = ReadOptionList(subArgs, "--ignore-media");
         var navIgnorePrefixes = ReadOptionList(subArgs, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(subArgs, "--nav-required-link", "--nav-required-links");
         var navProfilesPath = TryGetOptionValue(subArgs, "--nav-profiles");
+        var mediaProfilesPath = TryGetOptionValue(subArgs, "--media-profiles");
         var minNavCoverageText = TryGetOptionValue(subArgs, "--min-nav-coverage");
         var requiredRoutes = ReadOptionList(subArgs, "--required-route", "--required-routes");
         var useDefaultIgnoreNav = !HasOption(subArgs, "--no-default-ignore-nav");
+        var useDefaultIgnoreMedia = !HasOption(subArgs, "--no-default-ignore-media");
         var navSelector = TryGetOptionValue(subArgs, "--nav-selector") ?? "nav";
         var navRequired = !HasOption(subArgs, "--nav-optional");
         var rendered = HasOption(subArgs, "--rendered");
@@ -470,6 +473,7 @@ internal static partial class WebCliCommandHandlers
         var checkReplacementChars = !HasOption(subArgs, "--no-replacement-char-check");
         var checkHeadingOrder = !HasOption(subArgs, "--no-heading-order");
         var checkLinkPurpose = !HasOption(subArgs, "--no-link-purpose");
+        var checkMediaEmbeds = !HasOption(subArgs, "--no-media");
         var checkNetworkHints = !HasOption(subArgs, "--no-network-hints");
         var checkRenderBlocking = !HasOption(subArgs, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(subArgs, "--max-head-blocking");
@@ -478,6 +482,7 @@ internal static partial class WebCliCommandHandlers
         var suppressIssues = ReadOptionList(subArgs, "--suppress-issue", "--suppress-issues");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
+        var ignoreMediaPatterns = BuildIgnoreMediaPatterns(ignoreMedia, useDefaultIgnoreMedia);
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
         var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
         var renderedPort = ParseIntOption(renderedPortText, 0);
@@ -496,6 +501,7 @@ internal static partial class WebCliCommandHandlers
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
+        var mediaProfiles = LoadAuditMediaProfiles(mediaProfilesPath);
 
         var result = WebSiteAuditor.Audit(new WebAuditOptions
         {
@@ -509,11 +515,13 @@ internal static partial class WebCliCommandHandlers
             BudgetExclude = budgetExclude.ToArray(),
             SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
+            IgnoreMediaFor = ignoreMediaPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,
             NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
             NavRequiredLinks = navRequiredLinks.ToArray(),
             NavProfiles = navProfiles,
+            MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = requiredRoutes.ToArray(),
             CheckLinks = !HasOption(subArgs, "--no-links"),
@@ -554,6 +562,7 @@ internal static partial class WebCliCommandHandlers
             CheckUnicodeReplacementChars = checkReplacementChars,
             CheckHeadingOrder = checkHeadingOrder,
             CheckLinkPurposeConsistency = checkLinkPurpose,
+            CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
             CheckRenderBlockingResources = checkRenderBlocking,
             MaxHeadBlockingResources = maxHeadBlockingResources

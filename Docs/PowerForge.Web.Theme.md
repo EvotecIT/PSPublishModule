@@ -337,6 +337,7 @@ Media performance notes:
 - `youtube` defaults to **lite mode** (`lite="true"`): thumbnail + play button hydrates iframe on interaction.
 - Set `lite="false"` when immediate iframe render is required.
 - `x`/`tweet` embeds inject a single per-page bootstrap script and lazy-load the X widget when embeds approach viewport.
+- Media shortcodes inject a small shared CSS baseline once per page (`extra_css`), so base behavior stays consistent across themes.
 
 Edit links:
 - When `site.json` defines `EditLinks`, pages expose `page.edit_url`.

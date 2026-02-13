@@ -161,6 +161,17 @@ public static partial class WebApiDocsGenerator
                 return $"<a href=\"{safeHref}\" target=\"_blank\" rel=\"noopener\">{safeLabel}</a>";
             return $"<a href=\"{safeHref}\">{safeLabel}</a>";
         });
+        linked = AboutTokenRegex.Replace(linked, match =>
+        {
+            var token = match.Value;
+            if (!slugMap.TryGetValue(token, out var slug))
+                return token;
+
+            var href = BuildDocsTypeUrl(baseUrl, slug);
+            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
+            var safeLabel = System.Web.HttpUtility.HtmlEncode(token);
+            return $"<a href=\"{safeHref}\">{safeLabel}</a>";
+        });
         return linked;
     }
 
@@ -221,13 +232,30 @@ public static partial class WebApiDocsGenerator
     private static string RenderSourceLink(ApiSourceLink link)
     {
         var suffix = link.Line > 0 ? $":{link.Line}" : string.Empty;
-        var label = System.Web.HttpUtility.HtmlEncode($"{link.Path}{suffix}");
+        var displayPath = NormalizeSourceDisplayPath(link.Path);
+        var label = System.Web.HttpUtility.HtmlEncode($"{displayPath}{suffix}");
         if (!string.IsNullOrWhiteSpace(link.Url))
         {
             var href = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
             return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
         }
         return $"<code>{label}</code>";
+    }
+
+    private static string NormalizeSourceDisplayPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        var normalized = path.Replace('\\', '/').Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2 && string.Equals(parts[0], parts[1], StringComparison.OrdinalIgnoreCase))
+            return string.Join("/", parts.Skip(1));
+
+        return string.Join("/", parts);
     }
 
     private static string? RenderTypeSourceAction(ApiSourceLink? link)
@@ -417,10 +445,15 @@ public static partial class WebApiDocsGenerator
             "Interface" => "I",
             "Enum" => "E",
             "Delegate" => "D",
+            "Cmdlet" => "PS",
+            "Function" => "Fn",
+            "Alias" => "Al",
+            "About" => "?",
+            "Command" => "PS",
             _ => "T"
         };
 
-    private static readonly string[] KindOrder = { "class", "struct", "interface", "enum", "delegate" };
+    private static readonly string[] KindOrder = { "class", "struct", "interface", "enum", "delegate", "cmdlet", "function", "alias", "about", "command" };
 
       private static List<KindFilter> BuildKindFilters(IReadOnlyList<ApiTypeModel> types)
       {
@@ -445,6 +478,11 @@ public static partial class WebApiDocsGenerator
               "interface" => $"Interfaces ({count})",
               "enum" => $"Enums ({count})",
               "delegate" => $"Delegates ({count})",
+              "cmdlet" => $"Cmdlets ({count})",
+              "function" => $"Functions ({count})",
+              "alias" => $"Aliases ({count})",
+              "about" => $"About ({count})",
+              "command" => $"Commands ({count})",
               _ => $"Types ({count})"
           };
 

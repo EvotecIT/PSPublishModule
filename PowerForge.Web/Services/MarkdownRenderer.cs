@@ -4,13 +4,20 @@ namespace PowerForge.Web;
 
 internal static class MarkdownRenderer
 {
+    private static readonly MarkdownReaderOptions GitHubLikeReaderOptions = new()
+    {
+        // GitHub-flavored markdown does not support definition lists by default.
+        // Disabling this avoids accidental dt/dd rendering from "Q:"/"A:" prose.
+        DefinitionLists = false
+    };
+
     public static string RenderToHtml(string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return string.Empty;
 
         try
         {
-            var doc = MarkdownReader.Parse(content);
+            var doc = MarkdownReader.Parse(content, GitHubLikeReaderOptions);
             var options = new HtmlOptions
             {
                 Kind = HtmlKind.Fragment,

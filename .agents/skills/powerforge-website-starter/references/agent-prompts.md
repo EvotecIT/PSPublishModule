@@ -17,9 +17,14 @@ Tasks:
    - `docs`: requiredLayouts `["docs"]` and any required slots.
 4. Ensure `pipeline.json` apidocs steps use multi-css:
    - `css: "/css/app.css,/css/api.css"`
-5. Ensure `themes/htmlforgex/partials/api-header.html` and `api-footer.html` use the same structural markup/classes as the normal header/footer.
-6. Run `./build.ps1 -Dev` and `./build.ps1 -Mode ci` (or the repo's CI equivalent) and fix verify/audit issues without adding new drift.
-7. Update docs:
+5. Add API docs quality outputs:
+   - `coverageReport: "./_reports/apidocs-<project>-coverage.json"` on each apidocs step.
+6. For PowerShell apidocs steps, wire examples fallback source:
+   - `psExamplesPath: "../<ModuleRepo>/Module/Examples"`
+   - Keep `generatePowerShellFallbackExamples: true` (default) unless explicitly disabled.
+7. Ensure `themes/htmlforgex/partials/api-header.html` and `api-footer.html` use the same structural markup/classes as the normal header/footer.
+8. Run `./build.ps1 -Dev` and `./build.ps1 -Mode ci` (or the repo's CI equivalent) and fix verify/audit issues without adding new drift.
+9. Update docs:
    - add a short "Theme contract + features + apiDocs css" section to the repo’s docs or `AGENTS.md`.
 
 Output:
@@ -41,4 +46,3 @@ Output:
    - `base.html` with required hooks (`assets.css_html`, `assets.js_html`, `extra_css_html`, `extra_scripts_html`, `include theme-tokens`)
 5. Add `.powerforge/verify-baseline.json` and `.powerforge/audit-baseline.json` (start empty).
 6. Run build in dev, then ci mode, and fix until clean.
-

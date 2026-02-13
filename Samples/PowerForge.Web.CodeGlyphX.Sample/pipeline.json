@@ -64,6 +64,7 @@
       "siteRoot": "../../Artifacts/PowerForge.Web.CodeGlyphX.Sample/site",
       "exclude": "**/*.scripts.html,**/*.head.html,**/api-fragments/**,api-fragments/**",
       "ignoreNav": "playground/**,**/404.html,**/404/index.html,sitemap/**",
+      "mediaProfiles": "./config/media-profiles.json",
       "navSelector": "header nav.nav",
       "rendered": true,
       "renderedEnsureInstalled": true,

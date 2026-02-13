@@ -74,7 +74,8 @@ powerforge-web build --config ./site.json --out ./Artifacts/site
 Output:
 - `Artifacts/site/` (final HTML, CSS, JS, images)
 - `Artifacts/site/_powerforge/` (build meta, plan/spec/redirects)
-- `Artifacts/site/search.json` (search index)
+- `Artifacts/site/search/index.json` (search index, all languages)
+- `Artifacts/site/search/<lang>/index.json` (per-language shard when localization is enabled)
 - `Artifacts/site/redirects.json` (if redirects were defined)
 - `Artifacts/site/_powerforge/linkcheck.json` (if link check enabled)
 

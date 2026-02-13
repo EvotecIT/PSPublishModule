@@ -83,4 +83,7 @@ Rule:
 - API pages must use the same global CSS as the rest of the site, plus API CSS.
 - Set `css` to a list: `"/css/app.css,/css/api.css"`.
 - Ensure `api-header`/`api-footer` match the site’s header/footer structure/classes.
-
+- Set `coverageReport` (for example `./_reports/apidocs-coverage.json`) so CI can track doc completeness drift.
+- For PowerShell API steps, set `psExamplesPath` (for example `../MyModule/Examples`) to improve examples when help XML is incomplete.
+- Add at least one coverage threshold + gate in CI-focused pipelines (for example `minTypeSummaryPercent`, `minPowerShellCodeExamplesPercent`, `failOnCoverage: true`).
+- Add source-link gates in CI (`minTypeSourceUrlPercent`, `maxMemberSourceRepoMismatchHints`, etc.) so broken source URL patterns fail fast.

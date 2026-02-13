@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using Scriban;
@@ -26,6 +27,8 @@ public sealed class WebSitemapOptions
     public bool IncludeHtmlFiles { get; set; } = true;
     /// <summary>When true, include text files (robots/llms).</summary>
     public bool IncludeTextFiles { get; set; } = true;
+    /// <summary>When true, emit localized alternate URLs (hreflang/x-default) when localization is configured.</summary>
+    public bool IncludeLanguageAlternates { get; set; } = true;
     /// <summary>When true, generate an HTML sitemap.</summary>
     public bool GenerateHtml { get; set; }
     /// <summary>Optional HTML sitemap output path.</summary>
@@ -49,6 +52,17 @@ public sealed class WebSitemapEntry
     public string? Priority { get; set; }
     /// <summary>Optional last-modified date.</summary>
     public string? LastModified { get; set; }
+    /// <summary>Optional localized alternate URLs for this path.</summary>
+    public WebSitemapAlternate[] Alternates { get; set; } = Array.Empty<WebSitemapAlternate>();
+}
+
+/// <summary>Localized alternate URL mapping for sitemap entries.</summary>
+public sealed class WebSitemapAlternate
+{
+    /// <summary>Language code (for example en, pl, x-default).</summary>
+    public string HrefLang { get; set; } = string.Empty;
+    /// <summary>Route path relative to site root.</summary>
+    public string Path { get; set; } = "/";
 }
 
 /// <summary>Generates sitemap.xml for the site output.</summary>
@@ -74,6 +88,8 @@ public static class WebSitemapGenerator
         outputPath = Path.GetFullPath(outputPath);
 
         var entries = new Dictionary<string, WebSitemapEntry>(StringComparer.OrdinalIgnoreCase);
+        var htmlRoutes = new List<string>();
+        var localization = options.IncludeLanguageAlternates ? TryLoadLocalizationConfig(siteRoot) : null;
         string? htmlOutputPath = null;
 
         if (options.IncludeHtmlFiles)
@@ -85,6 +101,7 @@ public static class WebSitemapGenerator
                 var route = NormalizeRoute(relative);
                 if (string.IsNullOrWhiteSpace(route)) continue;
                 AddOrUpdate(entries, route, null);
+                htmlRoutes.Add(route);
             }
         }
 
@@ -130,16 +147,23 @@ public static class WebSitemapGenerator
             }
         }
 
+        if (options.IncludeLanguageAlternates && localization is not null)
+            ApplyLanguageAlternates(entries, htmlRoutes, localization);
+
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+        var xhtmlNs = XNamespace.Get("http://www.w3.org/1999/xhtml");
         var entriesXml = entries.Values
             .OrderBy(u => u.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(u => BuildEntry(baseUrl, u, today))
+            .Select(u => BuildEntry(baseUrl, u, today, ns, xhtmlNs))
             .ToArray();
 
-        var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
         var doc = new XDocument(
             new XDeclaration("1.0", "UTF-8", null),
-            new XElement(ns + "urlset", entriesXml.Select(e => e.WithNamespace(ns))));
+            new XElement(
+                ns + "urlset",
+                new XAttribute(XNamespace.Xmlns + "xhtml", xhtmlNs.NamespaceName),
+                entriesXml));
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
         using (var stream = File.Create(outputPath))
@@ -186,7 +210,185 @@ public static class WebSitemapGenerator
         return trimmed;
     }
 
-    private static XElement BuildEntry(string baseUrl, WebSitemapEntry entry, string defaultLastmod)
+    private static void ApplyLanguageAlternates(
+        Dictionary<string, WebSitemapEntry> entries,
+        IEnumerable<string> htmlRoutes,
+        ResolvedLocalizationConfig localization)
+    {
+        if (entries is null || htmlRoutes is null || localization is null || !localization.Enabled)
+            return;
+
+        var routeInfos = htmlRoutes
+            .Where(static route => !string.IsNullOrWhiteSpace(route))
+            .Select(route => ResolveLocalizedRouteInfo(route, localization))
+            .ToArray();
+        if (routeInfos.Length == 0)
+            return;
+
+        var grouped = routeInfos
+            .GroupBy(static info => info.BaseRoute, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var group in grouped)
+        {
+            var byLanguage = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var info in group.OrderBy(static info => info.Route, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(info.Language) || string.IsNullOrWhiteSpace(info.Route))
+                    continue;
+                if (!byLanguage.ContainsKey(info.Language))
+                    byLanguage[info.Language] = info.Route;
+            }
+
+            if (byLanguage.Count <= 1)
+                continue;
+
+            foreach (var info in group)
+            {
+                if (!entries.TryGetValue(info.Route, out var entry))
+                    continue;
+
+                var alternates = byLanguage
+                    .Select(static pair => new WebSitemapAlternate
+                    {
+                        HrefLang = pair.Key,
+                        Path = pair.Value
+                    })
+                    .ToList();
+
+                if (!string.IsNullOrWhiteSpace(localization.DefaultLanguage) &&
+                    byLanguage.TryGetValue(localization.DefaultLanguage, out var defaultRoute))
+                {
+                    alternates.Add(new WebSitemapAlternate
+                    {
+                        HrefLang = "x-default",
+                        Path = defaultRoute
+                    });
+                }
+
+                entry.Alternates = alternates
+                    .GroupBy(static alt => $"{alt.HrefLang}|{alt.Path}", StringComparer.OrdinalIgnoreCase)
+                    .Select(static groupAlt => groupAlt.First())
+                    .OrderBy(static alt => alt.HrefLang, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+        }
+    }
+
+    private static LocalizedRouteInfo ResolveLocalizedRouteInfo(string route, ResolvedLocalizationConfig localization)
+    {
+        var normalizedRoute = NormalizeRoute(route);
+        if (!localization.Enabled)
+        {
+            return new LocalizedRouteInfo
+            {
+                Route = normalizedRoute,
+                BaseRoute = normalizedRoute,
+                Language = localization.DefaultLanguage
+            };
+        }
+
+        var trimmed = normalizedRoute.Trim('/');
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return new LocalizedRouteInfo
+            {
+                Route = normalizedRoute,
+                BaseRoute = normalizedRoute,
+                Language = localization.DefaultLanguage
+            };
+        }
+
+        var slash = trimmed.IndexOf('/', StringComparison.Ordinal);
+        var firstSegment = slash < 0 ? trimmed : trimmed.Substring(0, slash);
+        if (localization.ByPrefix.TryGetValue(firstSegment, out var languageCode))
+        {
+            var remainder = slash < 0 ? "/" : "/" + trimmed.Substring(slash + 1);
+            if (normalizedRoute.EndsWith("/", StringComparison.Ordinal) &&
+                !remainder.EndsWith("/", StringComparison.Ordinal))
+            {
+                remainder += "/";
+            }
+            var normalizedRemainder = NormalizeRoute(remainder);
+            return new LocalizedRouteInfo
+            {
+                Route = normalizedRoute,
+                BaseRoute = normalizedRemainder,
+                Language = languageCode
+            };
+        }
+
+        return new LocalizedRouteInfo
+        {
+            Route = normalizedRoute,
+            BaseRoute = normalizedRoute,
+            Language = localization.DefaultLanguage
+        };
+    }
+
+    private static ResolvedLocalizationConfig? TryLoadLocalizationConfig(string siteRoot)
+    {
+        if (string.IsNullOrWhiteSpace(siteRoot))
+            return null;
+
+        try
+        {
+            var specPath = Path.Combine(siteRoot, "_powerforge", "site-spec.json");
+            if (!File.Exists(specPath))
+                return null;
+
+            var spec = JsonSerializer.Deserialize<SiteSpec>(File.ReadAllText(specPath), WebJson.Options);
+            if (spec is null)
+                return null;
+
+            return ResolveLocalizationConfig(spec);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static ResolvedLocalizationConfig ResolveLocalizationConfig(SiteSpec spec)
+    {
+        var localizationSpec = spec.Localization;
+        var defaultLanguage = NormalizeLanguageToken(localizationSpec?.DefaultLanguage);
+        if (string.IsNullOrWhiteSpace(defaultLanguage))
+            defaultLanguage = "en";
+
+        var byPrefix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (localizationSpec?.Languages is { Length: > 0 })
+        {
+            foreach (var language in localizationSpec.Languages)
+            {
+                if (language is null || language.Disabled || string.IsNullOrWhiteSpace(language.Code))
+                    continue;
+                var code = NormalizeLanguageToken(language.Code);
+                if (string.IsNullOrWhiteSpace(code))
+                    continue;
+                var prefix = NormalizeLanguageToken(string.IsNullOrWhiteSpace(language.Prefix) ? code : language.Prefix);
+                if (string.IsNullOrWhiteSpace(prefix))
+                    continue;
+                if (!byPrefix.ContainsKey(prefix))
+                    byPrefix[prefix] = code;
+            }
+        }
+
+        return new ResolvedLocalizationConfig
+        {
+            Enabled = localizationSpec?.Enabled == true && byPrefix.Count > 0,
+            DefaultLanguage = defaultLanguage,
+            ByPrefix = byPrefix
+        };
+    }
+
+    private static string NormalizeLanguageToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
+    private static XElement BuildEntry(string baseUrl, WebSitemapEntry entry, string defaultLastmod, XNamespace sitemapNs, XNamespace xhtmlNs)
     {
         var path = string.IsNullOrWhiteSpace(entry.Path) ? "/" : entry.Path;
         var loc = baseUrl + (path.StartsWith("/") ? path : "/" + path);
@@ -195,11 +397,31 @@ public static class WebSitemapGenerator
         var priority = string.IsNullOrWhiteSpace(entry.Priority)
             ? (path == "/" ? "1.0" : "0.5")
             : entry.Priority;
-        return new XElement("url",
-            new XElement("loc", loc),
-            new XElement("lastmod", lastmod),
-            new XElement("changefreq", changefreq),
-            new XElement("priority", priority));
+
+        var urlElement = new XElement(
+            sitemapNs + "url",
+            new XElement(sitemapNs + "loc", loc),
+            new XElement(sitemapNs + "lastmod", lastmod),
+            new XElement(sitemapNs + "changefreq", changefreq),
+            new XElement(sitemapNs + "priority", priority));
+
+        if (entry.Alternates is { Length: > 0 })
+        {
+            foreach (var alternate in entry.Alternates
+                         .Where(static value => !string.IsNullOrWhiteSpace(value.HrefLang) && !string.IsNullOrWhiteSpace(value.Path))
+                         .OrderBy(static value => value.HrefLang, StringComparer.OrdinalIgnoreCase))
+            {
+                var href = baseUrl + (alternate.Path.StartsWith("/") ? alternate.Path : "/" + alternate.Path);
+                urlElement.Add(
+                    new XElement(
+                        xhtmlNs + "link",
+                        new XAttribute("rel", "alternate"),
+                        new XAttribute("hreflang", alternate.HrefLang),
+                        new XAttribute("href", href)));
+            }
+        }
+
+        return urlElement;
     }
 
     private static void MergeApiSitemap(string apiSitemapPath, string baseUrl, Dictionary<string, WebSitemapEntry> entries)
@@ -294,21 +516,6 @@ public static class WebSitemapGenerator
         return input;
     }
 
-    private static XElement WithNamespace(this XElement element, XNamespace ns)
-    {
-        var namespaced = new XElement(ns + element.Name.LocalName);
-        foreach (var attr in element.Attributes())
-            namespaced.Add(attr);
-        foreach (var node in element.Nodes())
-        {
-            if (node is XElement child)
-                namespaced.Add(child.WithNamespace(ns));
-            else
-                namespaced.Add(node);
-        }
-        return namespaced;
-    }
-
     private static bool IsUnderRoot(string root, string fullPath)
     {
         var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -398,4 +605,18 @@ public static class WebSitemapGenerator
   </main>
 </body>
 </html>";
+
+    private sealed class ResolvedLocalizationConfig
+    {
+        public bool Enabled { get; init; }
+        public string DefaultLanguage { get; init; } = "en";
+        public Dictionary<string, string> ByPrefix { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class LocalizedRouteInfo
+    {
+        public string Route { get; init; } = "/";
+        public string BaseRoute { get; init; } = "/";
+        public string Language { get; init; } = "en";
+    }
 }

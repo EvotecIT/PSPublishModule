@@ -413,6 +413,315 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenExpectedNavSurfacesAreNotExplicitlyDefined()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-surfaces-required-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            var docsPath = Path.Combine(root, "content", "docs");
+            Directory.CreateDirectory(pagesPath);
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+            File.WriteAllText(Path.Combine(docsPath, "index.md"),
+                """
+                ---
+                title: Docs
+                slug: index
+                ---
+
+                Docs
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier nav surfaces explicitness test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Features = new[] { "docs", "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    },
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Docs", Url = "/docs/" },
+                                new MenuItemSpec { Title = "API", Url = "/api/" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("expected nav surfaces", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("Navigation.Surfaces", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenNavSurfaceContextIsMisconfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-surfaces-context-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            var docsPath = Path.Combine(root, "content", "docs");
+            Directory.CreateDirectory(pagesPath);
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+            File.WriteAllText(Path.Combine(docsPath, "index.md"),
+                """
+                ---
+                title: Docs
+                slug: index
+                ---
+
+                Docs
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier nav surfaces context test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Features = new[] { "docs", "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    },
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Docs", Url = "/docs/" },
+                                new MenuItemSpec { Title = "API", Url = "/api/" }
+                            }
+                        }
+                    },
+                    Surfaces = new[]
+                    {
+                        new NavigationSurfaceSpec
+                        {
+                            Name = "main",
+                            Path = "/marketing/",
+                            PrimaryMenu = "main"
+                        },
+                        new NavigationSurfaceSpec
+                        {
+                            Name = "docs",
+                            Path = "/help/",
+                            PrimaryMenu = "main"
+                        },
+                        new NavigationSurfaceSpec
+                        {
+                            Name = "api",
+                            Path = "/docs/api/",
+                            Layout = "docs",
+                            PrimaryMenu = "main"
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("Surfaces['main'] should target root path '/'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("Surfaces['docs'] should target docs context", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, w => w.Contains("Surfaces['api'] should target API docs context", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenCustomSiteNavSurfacesMissExpectedApiSurface()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-site-nav-missing-apidocs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            var docsPath = Path.Combine(root, "content", "docs");
+            Directory.CreateDirectory(pagesPath);
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+            File.WriteAllText(Path.Combine(docsPath, "index.md"),
+                """
+                ---
+                title: Docs
+                slug: index
+                ---
+
+                Docs
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "data"));
+            File.WriteAllText(Path.Combine(root, "data", "site-nav.json"),
+                """
+                {
+                  "primary": [
+                    { "href": "/", "text": "Home" },
+                    { "href": "/docs/", "text": "Docs" },
+                    { "href": "/api/", "text": "API" }
+                  ],
+                  "menuModels": [],
+                  "profiles": [],
+                  "surfaces": {
+                    "main": {},
+                    "docs": {}
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier site-nav expected surface test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DataRoot = "data",
+                Features = new[] { "docs", "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    },
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Docs", Url = "/docs/" },
+                                new MenuItemSpec { Title = "API", Url = "/api/" }
+                            }
+                        }
+                    },
+                    Surfaces = new[]
+                    {
+                        new NavigationSurfaceSpec { Name = "main", Path = "/", PrimaryMenu = "main" },
+                        new NavigationSurfaceSpec { Name = "docs", Path = "/docs/", Collection = "docs", Layout = "docs", PrimaryMenu = "main" },
+                        new NavigationSurfaceSpec { Name = "apidocs", Path = "/api/", Layout = "apiDocs", PrimaryMenu = "main" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("site-nav.json surfaces are missing expected 'apidocs' surface", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsOnMarkdownRawHtmlHygiene()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-" + Guid.NewGuid().ToString("N"));

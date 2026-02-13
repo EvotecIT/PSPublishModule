@@ -415,6 +415,329 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_RendersNestedNavigationWhenParentHasNoHref()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-parent-nohref-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var siteJsonPath = Path.Combine(root, "site.json");
+        File.WriteAllText(siteJsonPath,
+            """
+            {
+              "Name": "TestSite",
+              "Navigation": {
+                "Menus": [
+                  {
+                    "Name": "main",
+                    "Items": [
+                      { "Title": "Home", "Url": "/" },
+                      {
+                        "Title": "Docs",
+                        "Items": [
+                          { "Title": "Guide", "Url": "/docs/guide/" },
+                          { "Title": "API", "Url": "/docs/api/" }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = siteJsonPath
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("nav-dropdown-trigger-button", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/guide/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/api/\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_LoadsMainMenuFromLegacyMenusObject_WhenMenuModelsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-legacy-menus-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var navJsonPath = Path.Combine(root, "site-nav.json");
+        File.WriteAllText(navJsonPath,
+            """
+            {
+              "generated": true,
+              "menus": {
+                "main": [
+                  { "text": "Home", "href": "/" },
+                  {
+                    "text": "Docs",
+                    "items": [
+                      { "text": "Guide", "href": "/docs/guide/" }
+                    ]
+                  }
+                ],
+                "footer-product": [
+                  { "text": "API", "href": "/api/" }
+                ]
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = navJsonPath
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("href=\"/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/guide/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/api/\"", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_UsesApiDocsSurface_WhenSiteNavSurfacesPresent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-surfaces-apidocs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var navJsonPath = Path.Combine(root, "site-nav.json");
+        File.WriteAllText(navJsonPath,
+            """
+            {
+              "generated": true,
+              "surfaces": {
+                "main": {
+                  "primary": [
+                    { "text": "Home", "href": "/" }
+                  ]
+                },
+                "apidocs": {
+                  "primary": [
+                    { "text": "API Home", "href": "/api/" },
+                    { "text": "Docs", "href": "/docs/" }
+                  ],
+                  "actions": [
+                    { "text": "Install", "href": "https://example.test/install", "external": true }
+                  ]
+                }
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = navJsonPath,
+            NavContextPath = "/api/"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("href=\"/api/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://example.test/install\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(">Home<", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateDocsHtml_UsesConfiguredNavSurfaceName_WhenProvided()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-surfaces-explicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var navJsonPath = Path.Combine(root, "site-nav.json");
+        File.WriteAllText(navJsonPath,
+            """
+            {
+              "generated": true,
+              "surfaces": {
+                "docs": {
+                  "primary": [
+                    { "text": "Docs Root", "href": "/docs/" }
+                  ]
+                },
+                "apidocs": {
+                  "primary": [
+                    { "text": "API Root", "href": "/api/" }
+                  ]
+                }
+              }
+            }
+            """);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            NavJsonPath = navJsonPath,
+            NavContextPath = "/api/",
+            NavSurfaceName = "docs"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var html = File.ReadAllText(indexHtmlPath);
+
+            Assert.Contains("href=\"/docs/\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Docs Root<", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(">API Root<", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_WarnsWhenCssMissingExpectedSelectors()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-" + Guid.NewGuid().ToString("N"));

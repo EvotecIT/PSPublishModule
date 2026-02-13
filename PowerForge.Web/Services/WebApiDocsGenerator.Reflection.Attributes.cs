@@ -120,7 +120,9 @@ public static partial class WebApiDocsGenerator
                 Type = p.Type,
                 Summary = p.Summary,
                 IsOptional = p.IsOptional,
-                DefaultValue = p.DefaultValue
+                DefaultValue = p.DefaultValue,
+                Position = p.Position,
+                PipelineInput = p.PipelineInput
             }).ToList();
         return clone;
     }
@@ -139,6 +141,8 @@ public static partial class WebApiDocsGenerator
     private static void ApplyParameterMetadata(ApiParameterModel model, ParameterInfo parameter)
     {
         model.IsOptional = parameter.IsOptional;
+        if (parameter.Position >= 0)
+            model.Position = parameter.Position.ToString();
         if (parameter.HasDefaultValue)
             model.DefaultValue = FormatDefaultValue(parameter.DefaultValue);
     }

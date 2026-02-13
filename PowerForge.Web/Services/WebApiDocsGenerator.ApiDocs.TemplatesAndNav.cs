@@ -110,6 +110,11 @@ public static partial class WebApiDocsGenerator
             }
         }
 
+        // Prefer the stable surfaces projection when present in site-nav.json.
+        // This keeps API/docs/header consumers aligned on one deterministic navigation shape.
+        if (TryApplySiteNavSurfaces(root, options, nav))
+            return nav;
+
         // Prefer the navigation export shape when present (site-nav.json). It contains merged auto menus and profile definitions.
         if (TryApplySiteNavExportWithProfiles(root, options, nav))
             return nav;
@@ -120,7 +125,15 @@ public static partial class WebApiDocsGenerator
             return nav;
         }
 
-        if (root.TryGetProperty("primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array)
+        // Backward compatibility: older site-nav exports may provide a top-level "menus" object
+        // without "menuModels". Parse that shape so API nav injection remains stable.
+        if (TryGetProperty(root, "menus", out var menusProp) && menusProp.ValueKind == JsonValueKind.Object)
+        {
+            var menuMap = ParseMenusObjectMap(menusProp);
+            ApplyMenusToNav(nav, menuMap);
+        }
+
+        if (root.TryGetProperty("primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array && nav.Primary.Count == 0)
         {
             nav.Primary = ParseNavItems(primaryProp);
         }
@@ -139,6 +152,207 @@ public static partial class WebApiDocsGenerator
             nav.Actions = ParseSiteNavActions(actionsProp);
 
         return nav;
+    }
+
+    private static bool TryApplySiteNavSurfaces(JsonElement root, WebApiDocsOptions options, NavConfig nav)
+    {
+        if (!TryGetProperty(root, "surfaces", out var surfacesProp) || surfacesProp.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (!TrySelectNavSurface(surfacesProp, options, out var selected))
+            return false;
+
+        var used = false;
+
+        if (TryGetProperty(selected, "primary", out var primaryProp) && primaryProp.ValueKind == JsonValueKind.Array)
+        {
+            nav.Primary = ParseAnyNavItems(primaryProp);
+            used |= nav.Primary.Count > 0;
+        }
+
+        if (TryGetProperty(selected, "actions", out var actionsProp) && actionsProp.ValueKind == JsonValueKind.Array)
+        {
+            nav.Actions = ParseSiteNavActions(actionsProp);
+            used |= nav.Actions.Count > 0;
+        }
+
+        if (TryGetProperty(selected, "menus", out var menusProp) && menusProp.ValueKind == JsonValueKind.Object)
+        {
+            var menuMap = ParseMenusObjectMap(menusProp);
+            if (menuMap.Count > 0)
+            {
+                // Prefer explicit "primaryMenu" from the selected surface.
+                var primaryMenu = ReadString(selected, "primaryMenu", "primary");
+                if (nav.Primary.Count == 0 && !string.IsNullOrWhiteSpace(primaryMenu) && menuMap.TryGetValue(primaryMenu, out var primaryItems))
+                {
+                    nav.Primary = primaryItems;
+                }
+
+                if (nav.Primary.Count == 0)
+                {
+                    if (menuMap.TryGetValue("main", out var mainItems))
+                        nav.Primary = mainItems;
+                    else if (menuMap.Count > 0)
+                        nav.Primary = menuMap.Values.First();
+                }
+
+                ApplyFooterMenus(nav, menuMap);
+                used |= menuMap.Count > 0;
+            }
+        }
+
+        if (TryGetProperty(selected, "footer", out var footerProp) && footerProp.ValueKind == JsonValueKind.Object)
+        {
+            var footerMap = ParseMenusObjectMap(footerProp);
+            ApplyFooterMenus(nav, footerMap);
+            used |= footerMap.Count > 0;
+        }
+
+        return used;
+    }
+
+    private static void ApplyFooterMenus(NavConfig nav, Dictionary<string, List<NavItem>> menuMap)
+    {
+        if (nav is null || menuMap is null || menuMap.Count == 0)
+            return;
+
+        if (menuMap.TryGetValue("footer-product", out var footerProduct) && footerProduct.Count > 0)
+            nav.FooterProduct = footerProduct;
+        if (menuMap.TryGetValue("footer-resources", out var footerResources) && footerResources.Count > 0)
+            nav.FooterResources = footerResources;
+        if (menuMap.TryGetValue("footer-company", out var footerCompany) && footerCompany.Count > 0)
+            nav.FooterCompany = footerCompany;
+
+        var fallbackFooters = menuMap
+            .Where(kvp => kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase) && kvp.Value.Count > 0)
+            .ToList();
+
+        foreach (var footer in fallbackFooters)
+        {
+            if (nav.FooterProduct.Count == 0)
+            {
+                nav.FooterProduct = footer.Value;
+                continue;
+            }
+            if (nav.FooterCompany.Count == 0)
+            {
+                nav.FooterCompany = footer.Value;
+                continue;
+            }
+            if (nav.FooterResources.Count == 0)
+            {
+                nav.FooterResources = footer.Value;
+            }
+        }
+    }
+
+    private static bool TrySelectNavSurface(JsonElement surfaces, WebApiDocsOptions options, out JsonElement selected)
+    {
+        selected = default;
+        if (surfaces.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(options.NavSurfaceName) &&
+            TryGetObjectPropertyCaseInsensitive(surfaces, options.NavSurfaceName.Trim(), out selected) &&
+            selected.ValueKind == JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.NavContextLayout))
+        {
+            foreach (var name in GetLayoutSurfaceCandidates(options.NavContextLayout))
+            {
+                if (TryGetObjectPropertyCaseInsensitive(surfaces, name, out selected) &&
+                    selected.ValueKind == JsonValueKind.Object)
+                {
+                    return true;
+                }
+            }
+        }
+
+        var path = NormalizeContextPath(options.NavContextPath);
+        var surfaceCandidates = GetSurfaceCandidates(path);
+        foreach (var name in surfaceCandidates)
+        {
+            if (TryGetObjectPropertyCaseInsensitive(surfaces, name, out selected) &&
+                selected.ValueKind == JsonValueKind.Object)
+            {
+                return true;
+            }
+        }
+
+        foreach (var property in surfaces.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.Object)
+            {
+                selected = property.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string[] GetSurfaceCandidates(string normalizedContextPath)
+    {
+        if (normalizedContextPath.StartsWith("/api", StringComparison.OrdinalIgnoreCase))
+            return new[] { "apidocs", "api", "main" };
+
+        if (normalizedContextPath.StartsWith("/docs", StringComparison.OrdinalIgnoreCase))
+            return new[] { "docs", "main" };
+
+        return new[] { "main", "apidocs", "api" };
+    }
+
+    private static string[] GetLayoutSurfaceCandidates(string layout)
+    {
+        if (string.IsNullOrWhiteSpace(layout))
+            return Array.Empty<string>();
+
+        var normalized = layout.Trim();
+        if (normalized.Equals("apiDocs", StringComparison.OrdinalIgnoreCase) || normalized.Equals("api", StringComparison.OrdinalIgnoreCase))
+            return new[] { "apidocs", "api", "main" };
+        if (normalized.Equals("docs", StringComparison.OrdinalIgnoreCase))
+            return new[] { "docs", "main" };
+        return new[] { normalized, "main" };
+    }
+
+    private static bool TryGetObjectPropertyCaseInsensitive(JsonElement element, string name, out JsonElement value)
+    {
+        value = default;
+        if (element.ValueKind != JsonValueKind.Object || string.IsNullOrWhiteSpace(name))
+            return false;
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static Dictionary<string, List<NavItem>> ParseMenusObjectMap(JsonElement menusProp)
+    {
+        var map = new Dictionary<string, List<NavItem>>(StringComparer.OrdinalIgnoreCase);
+        if (menusProp.ValueKind != JsonValueKind.Object)
+            return map;
+
+        foreach (var property in menusProp.EnumerateObject())
+        {
+            if (string.IsNullOrWhiteSpace(property.Name))
+                continue;
+            if (property.Value.ValueKind != JsonValueKind.Array)
+                continue;
+
+            map[property.Name] = ParseAnyNavItems(property.Value);
+        }
+
+        return map;
     }
 
     private static void ParseSiteNavigation(JsonElement navElement, WebApiDocsOptions options, NavConfig nav)
@@ -304,17 +518,24 @@ public static partial class WebApiDocsGenerator
 
         var href = ReadString(item, "Url", "url", "Href", "href");
         var text = ReadString(item, "Text", "text", "Title", "title");
-        if (string.IsNullOrWhiteSpace(href) || string.IsNullOrWhiteSpace(text))
+
+        var children = new List<NavItem>();
+        if (TryGetProperty(item, "Items", out var childItems) && childItems.ValueKind == JsonValueKind.Array)
+            children = ParseAnyNavItems(childItems);
+
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        // Allow non-link parent nodes when they carry children.
+        // This is common in docs menus where section headers act as dropdown labels.
+        if (string.IsNullOrWhiteSpace(href) && children.Count == 0)
             return null;
 
         var target = ReadString(item, "Target", "target");
         var rel = ReadString(item, "Rel", "rel");
         var external = ReadBool(item, "External", "external");
-        external |= IsExternal(href);
-
-        var children = new List<NavItem>();
-        if (TryGetProperty(item, "Items", out var childItems) && childItems.ValueKind == JsonValueKind.Array)
-            children = ParseAnyNavItems(childItems);
+        if (!string.IsNullOrWhiteSpace(href))
+            external |= IsExternal(href);
 
         return new NavItem(href, text, external, target, rel, children);
     }
