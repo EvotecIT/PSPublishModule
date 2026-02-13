@@ -21,6 +21,8 @@ internal static partial class WebPipelineRunner
     private static readonly HashSet<string> FingerprintPathKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "config", "siteRoot", "site-root", "project", "solution", "path",
+        "projects", "projectFiles", "project-files",
+        "module", "modules", "moduleFiles", "module-files",
         "out", "output", "source", "destination", "dest",
         "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
         "xml", "help", "helpPath", "assembly",

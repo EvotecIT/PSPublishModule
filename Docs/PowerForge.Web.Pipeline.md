@@ -371,6 +371,31 @@ Template usage (Scriban):
 {{ end }}
 ```
 
+#### package-hub
+Generates a unified package/module metadata JSON file from `.csproj` and `.psd1` inputs.
+```json
+{
+  "task": "package-hub",
+  "title": "IntelligenceX Package Hub",
+  "projectFiles": [
+    "../IntelligenceX/IntelligenceX.csproj",
+    "../IntelligenceX.Cli/IntelligenceX.Cli.csproj"
+  ],
+  "moduleFiles": [
+    "../Module/IntelligenceX.psd1"
+  ],
+  "out": "./data/package-hub.json"
+}
+```
+Notes:
+- Supports `project` / `projects` / `projectFiles` (`project-files`) for `.csproj` inputs.
+- Supports `module` / `modules` / `moduleFiles` (`module-files`) for `.psd1` inputs.
+- Output includes:
+  - libraries: package id/version, target frameworks, and package references
+  - modules: module version, PowerShell compatibility, required modules
+  - warnings: missing files or parse issues
+- Best used before `build` so templates can consume `data/package-hub.json`.
+
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```json

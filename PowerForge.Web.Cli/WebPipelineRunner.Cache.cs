@@ -209,6 +209,8 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "xref-merge":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "package-hub":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "llms":
             {
                 var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
