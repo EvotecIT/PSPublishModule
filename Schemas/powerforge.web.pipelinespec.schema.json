@@ -795,7 +795,10 @@
         "configuration": { "type": "string" },
         "framework": { "type": "string" },
         "runtime": { "type": "string" },
-        "noRestore": { "type": "boolean" }
+        "noRestore": { "type": "boolean" },
+        "skipIfProjectMissing": { "type": "boolean", "description": "When true, skip this step if the project path does not exist." },
+        "skipIfMissingProject": { "type": "boolean", "description": "Alias of skipIfProjectMissing." },
+        "skip-if-project-missing": { "type": "boolean", "description": "Alias of skipIfProjectMissing." }
       },
       "required": ["task", "project"]
     },
@@ -825,6 +828,9 @@
         "selfContained": { "type": "boolean" },
         "noBuild": { "type": "boolean" },
         "noRestore": { "type": "boolean" },
+        "skipIfProjectMissing": { "type": "boolean", "description": "When true, skip this step if the project path does not exist." },
+        "skipIfMissingProject": { "type": "boolean", "description": "Alias of skipIfProjectMissing." },
+        "skip-if-project-missing": { "type": "boolean", "description": "Alias of skipIfProjectMissing." },
         "baseHref": { "type": "string" },
         "defineConstants": { "type": "string" },
         "noBlazorFixes": { "type": "boolean" }
