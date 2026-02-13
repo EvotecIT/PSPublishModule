@@ -59,6 +59,16 @@ public sealed class BuildModuleConfiguration
     public int? VersionedInstallKeep { get; set; }
 
     /// <summary>
+    /// Controls how legacy flat installs under &lt;root&gt;\&lt;ModuleName&gt; are handled during install.
+    /// </summary>
+    public LegacyFlatModuleHandling? LegacyFlatHandling { get; set; }
+
+    /// <summary>
+    /// Version folder names to preserve during pruning (for example older major versions).
+    /// </summary>
+    public string[]? PreserveInstallVersions { get; set; }
+
+    /// <summary>
     /// When true, installs missing module dependencies (Required/External modules) before running the build.
     /// </summary>
     public bool? InstallMissingModules { get; set; }

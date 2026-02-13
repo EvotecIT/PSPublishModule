@@ -31,7 +31,7 @@ Notes:
 | Search index generation | Have | Have | Have | Have | Have | Have | Have |
 | Search UI/UX | Partial (theme-driven) | Have | Partial (theme-driven) | Have | Have | Partial | Have |
 | API reference generation | Have | Have | N/A | N/A | N/A | N/A | N/A |
-| API docs xref graph (docs <-> API) | Missing | Have | N/A | N/A | N/A | N/A | N/A |
+| API docs xref graph (docs <-> API) | Partial | Have | N/A | N/A | N/A | N/A | N/A |
 | Multi-version docs conventions | Partial | Have | Partial | Partial | N/A | Partial | Partial |
 | Theme contract / feature flags | Partial | Have | Partial | Partial | Have | Partial | Partial |
 | Navigation surfaces (main/docs/api/products) | Partial | Have | Have | Have | Have | Have | Have |
@@ -51,4 +51,3 @@ Notes:
   and real incremental rebuilds are the practical gap-closers.
 - If you want "Astro tier dev ergonomics": fast rebuild + clear diagnostics + integration
   points are the wins, without adopting islands/MDX as core requirements.
-

@@ -20,7 +20,8 @@ Use it to define discovery rules, versioning, staging, NuGet publishing, and Git
 
 GitHub tag/release templates support tokens:
 {Project}, {Version}, {PrimaryProject}, {PrimaryVersion}, {Repo},
-{Repository}, {Date}, {UtcDate}.
+{Repository}, {Date}, {UtcDate}, {DateTime}, {UtcDateTime},
+{Timestamp}, {UtcTimestamp}.
 When GitHub release mode is Single and multiple project versions are present, {Version} defaults to
 the local date (yyyy.MM.dd) unless a primary project version is available.
 

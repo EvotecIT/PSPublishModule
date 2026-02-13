@@ -22,6 +22,7 @@ internal static partial class WebPipelineRunner
     {
         "config", "siteRoot", "site-root", "project", "solution", "path",
         "out", "output", "source", "destination", "dest",
+        "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
         "xml", "help", "helpPath", "assembly",
         "changelog", "changelogPath",
         "apiIndex", "apiSitemap", "criticalCss", "hashManifest", "reportPath", "report-path",
@@ -31,6 +32,7 @@ internal static partial class WebPipelineRunner
         "templateDocsIndex", "templateDocsType",
         "docsScript", "searchScript",
         "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path",
+        "xrefMap", "xref-map", "xrefMapPath", "xref-map-path",
         "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path",
         "headerHtml", "footerHtml", "quickstart", "extra",
         "htmlOutput", "htmlTemplate", "cachePath", "profilePath"

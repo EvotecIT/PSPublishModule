@@ -85,6 +85,13 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
     [Parameter]
     public bool IsPreRelease { get; set; }
 
+    /// <summary>
+    /// When true (default), a 422 tag conflict reuses the existing release.
+    /// When false, the cmdlet fails on existing tags.
+    /// </summary>
+    [Parameter]
+    public bool ReuseExistingReleaseOnConflict { get; set; } = true;
+
     /// <summary>Creates the release and uploads assets.</summary>
     protected override void ProcessRecord()
     {
@@ -119,7 +126,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         try
         {
             var release = CreateRelease(GitHubUsername, GitHubRepositoryName, GitHubAccessToken,
-                TagName, ReleaseName!, ReleaseNotes, Commitish, GenerateReleaseNotes.IsPresent, IsDraft, IsPreRelease);
+                TagName, ReleaseName!, ReleaseNotes, Commitish, GenerateReleaseNotes.IsPresent, IsDraft, IsPreRelease, ReuseExistingReleaseOnConflict);
 
             result.ReleaseCreationSucceeded = true;
             result.ReleaseUrl = release.HtmlUrl;
@@ -172,7 +179,8 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         string? commitish,
         bool generateReleaseNotes,
         bool isDraft,
-        bool isPreRelease)
+        bool isPreRelease,
+        bool reuseExistingReleaseOnConflict)
     {
         using var client = CreateHttpClient(token);
 
@@ -203,7 +211,9 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
         if (!response.IsSuccessStatusCode)
         {
             // Idempotency: reruns frequently hit "tag already exists" (release already created).
-            if ((int)response.StatusCode == 422 && IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
+            if (reuseExistingReleaseOnConflict &&
+                (int)response.StatusCode == 422 &&
+                IsAlreadyExistsValidationError(responseText, fieldName: "tag_name"))
             {
                 WriteWarning($"GitHub release for tag '{tagName}' already exists; reusing existing release and continuing.");
                 return GetReleaseByTag(owner, repo, token, tagName);

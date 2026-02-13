@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -64,6 +65,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
+        Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
         Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
         Console.WriteLine("                     [--fail-on-warnings] [--suppress-warning <pattern>]");
         Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
@@ -92,6 +94,9 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
         Console.WriteLine("                     [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
+        Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
+        Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
+        Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
         Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
         Console.WriteLine("                     [--purge-everything] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
     }
@@ -183,6 +188,14 @@ internal static class WebCliHelpers
     {
         if (string.IsNullOrWhiteSpace(value)) return fallback;
         return long.TryParse(value, out var parsed) ? parsed : fallback;
+    }
+
+    internal static double ParseDoubleOption(string? value, double fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        return double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : fallback;
     }
 
     internal static int[] ParseIntListOption(string? value)

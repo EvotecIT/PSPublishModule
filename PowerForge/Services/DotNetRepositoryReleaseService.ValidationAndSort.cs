@@ -59,7 +59,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             foreach (var pkg in project.Packages)
             {
-                if (!File.Exists(pkg))
+                if (!spec.WhatIf && !File.Exists(pkg))
                     return (false, $"Publish preflight failed: package not found: {pkg}");
             }
 

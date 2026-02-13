@@ -232,6 +232,32 @@ public sealed partial class InvokeProjectBuildCommand
             .Replace("{UtcTimestamp}", utcTimestamp ?? string.Empty);
     }
 
+    private static GitHubTagConflictPolicy ParseGitHubTagConflictPolicy(string? value)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return GitHubTagConflictPolicy.Reuse;
+
+        if (Enum.TryParse<GitHubTagConflictPolicy>(text, ignoreCase: true, out var parsed))
+            return parsed;
+
+        return GitHubTagConflictPolicy.Reuse;
+    }
+
+    private static string ApplyTagConflictPolicy(
+        string tag,
+        GitHubTagConflictPolicy policy,
+        string utcTimestampToken)
+    {
+        if (string.IsNullOrWhiteSpace(tag)) return tag;
+
+        return policy switch
+        {
+            GitHubTagConflictPolicy.AppendUtcTimestamp => $"{tag}-{utcTimestampToken}",
+            _ => tag
+        };
+    }
+
     private static void WriteGitHubSummary(
         bool perProject,
         string? tag,
@@ -320,5 +346,6 @@ public sealed partial class InvokeProjectBuildCommand
         public string? GitHubTagTemplate { get; set; }
         public string? GitHubReleaseMode { get; set; }
         public string? GitHubPrimaryProject { get; set; }
+        public string? GitHubTagConflictPolicy { get; set; }
     }
 }

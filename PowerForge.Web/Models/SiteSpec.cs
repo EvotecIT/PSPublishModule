@@ -85,6 +85,8 @@ public sealed class SiteSpec
     public VersioningSpec? Versioning { get; set; }
     /// <summary>Link checking configuration.</summary>
     public LinkCheckSpec? LinkCheck { get; set; }
+    /// <summary>Cross-reference link configuration (docs/API xref map).</summary>
+    public XrefSpec? Xref { get; set; }
     /// <summary>Verification policy defaults for verify/doctor commands.</summary>
     public VerifyPolicySpec? Verify { get; set; }
     /// <summary>Build cache configuration.</summary>

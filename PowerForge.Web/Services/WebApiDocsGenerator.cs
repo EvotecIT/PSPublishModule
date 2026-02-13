@@ -131,6 +131,28 @@ public sealed class WebApiDocsOptions
     /// </summary>
     public string? CoverageReportPath { get; set; }
     /// <summary>
+    /// Generates a DocFX-compatible xref map for API symbols.
+    /// </summary>
+    public bool GenerateXrefMap { get; set; } = true;
+    /// <summary>
+    /// Includes member-level entries (methods/properties/fields/events/parameters) in generated xref maps.
+    /// </summary>
+    public bool GenerateMemberXrefs { get; set; } = true;
+    /// <summary>
+    /// Optional member xref kinds filter. Empty means all supported kinds.
+    /// Supported values: constructors, methods, properties, fields, events, extensions, parameters.
+    /// </summary>
+    public List<string> MemberXrefKinds { get; } = new();
+    /// <summary>
+    /// Optional cap for emitted member xref entries per type/command. 0 means unlimited.
+    /// </summary>
+    public int MemberXrefMaxPerType { get; set; }
+    /// <summary>
+    /// Optional xref map output path. Relative paths are resolved under <see cref="OutputPath"/>.
+    /// Defaults to <c>xrefmap.json</c> when not set.
+    /// </summary>
+    public string? XrefMapPath { get; set; }
+    /// <summary>
     /// Enables fallback code examples for PowerShell commands when help XML does not provide examples.
     /// </summary>
     public bool GeneratePowerShellFallbackExamples { get; set; } = true;
@@ -589,6 +611,7 @@ public static partial class WebApiDocsGenerator
         }
 
         var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+        var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
 
         var normalizedWarnings = warnings
             .Where(static w => !string.IsNullOrWhiteSpace(w))
@@ -602,6 +625,7 @@ public static partial class WebApiDocsGenerator
             SearchPath = searchPath,
             TypesPath = typesDir,
             CoveragePath = coveragePath,
+            XrefPath = xrefPath,
             TypeCount = types.Count,
             UsedReflectionFallback = usedReflectionFallback,
             Warnings = normalizedWarnings
@@ -627,6 +651,8 @@ public static partial class WebApiDocsGenerator
             return "[PFWEB.APIDOCS.QUICKSTART] " + warning;
         if (trimmed.StartsWith("API docs coverage:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.COVERAGE] " + warning;
+        if (trimmed.StartsWith("API docs xref:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.XREF] " + warning;
 
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;

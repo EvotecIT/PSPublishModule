@@ -30,9 +30,9 @@ public sealed class ModulePipelineInstallOptions
 
     /// <summary>
     /// Controls how legacy "flat" installs under &lt;root&gt;\&lt;ModuleName&gt; should be handled during install.
-    /// Default: <see cref="LegacyFlatModuleHandling.Warn"/>.
+    /// When null, falls back to configuration segments and then to <see cref="LegacyFlatModuleHandling.Warn"/>.
     /// </summary>
-    public LegacyFlatModuleHandling LegacyFlatHandling { get; set; } = LegacyFlatModuleHandling.Warn;
+    public LegacyFlatModuleHandling? LegacyFlatHandling { get; set; }
 
     /// <summary>
     /// Version folder names to preserve during pruning. Useful when migrating from older major versions.

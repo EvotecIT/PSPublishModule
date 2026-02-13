@@ -9,12 +9,12 @@ Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
 Schema:
-- `schemas/powerforge.web.pipelinespec.schema.json`
+- `Schemas/powerforge.web.pipelinespec.schema.json`
 
 Minimal pipeline:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.pipelinespec.schema.json",
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
   "steps": [
     {
       "task": "build",
@@ -179,7 +179,7 @@ Notes:
 - `failOnWarnings`: fail the pipeline step when API docs emits warnings
   - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
 - `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
-  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`
+  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`, `[PFWEB.APIDOCS.XREF]`
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
 - Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
 - Source URL templates are validated preflight:
@@ -196,6 +196,11 @@ Notes:
 - API coverage reports and gates:
   - `coverageReport`: write coverage JSON (default: `coverage.json` under apidocs output)
   - `generateCoverageReport`: enable/disable coverage report generation (default: `true`)
+  - `xrefMap`: write API xref map JSON (default: `xrefmap.json` under apidocs output)
+  - `generateXrefMap`: enable/disable xref map generation (default: `true`)
+  - `generateMemberXrefs`: include member/parameter xref entries in the map (default: `true`)
+  - `memberXrefKinds`: optional member-kind filter (`constructors,methods,properties,fields,events,extensions,parameters`)
+  - `memberXrefMaxPerType`: optional cap for member xref entries per type/command (`0` = unlimited)
   - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellParameterSummaryPercent`
   - source coverage thresholds (0-100): `minTypeSourcePathPercent`, `minTypeSourceUrlPercent`, `minMemberSourcePathPercent`, `minMemberSourceUrlPercent`, `minPowerShellSourcePathPercent`, `minPowerShellSourceUrlPercent`
   - source quality max-count thresholds (>=0): `maxTypeSourceInvalidUrlCount`, `maxMemberSourceInvalidUrlCount`, `maxPowerShellSourceInvalidUrlCount`, `maxTypeSourceUnresolvedTemplateCount`, `maxMemberSourceUnresolvedTemplateCount`, `maxPowerShellSourceUnresolvedTemplateCount`, `maxTypeSourceRepoMismatchHints`, `maxMemberSourceRepoMismatchHints`, `maxPowerShellSourceRepoMismatchHints`
@@ -278,6 +283,41 @@ Project.json example (metadata you can reuse across repos):
 Notes:
 - `ApiDocs` in `project.json` is **metadata**; today you still add the `apidocs` pipeline step.
 - See `Samples/PowerForge.Web.Sample/projects/ApiDocsDemo/project.json` for a full example.
+
+#### xref-merge
+Merges multiple xref maps into one shared map (useful when combining C# API docs, PowerShell API docs, and site pages).
+```json
+{
+  "task": "xref-merge",
+  "out": "./Artifacts/site/data/xrefmap.json",
+  "mapFiles": [
+    "./Artifacts/site/api/xrefmap.json",
+    "./Artifacts/site/powershell/xrefmap.json",
+    "./xref/site-xref-overrides.json"
+  ],
+  "preferLast": true,
+  "maxReferences": 80000,
+  "maxDuplicates": 200,
+  "maxReferenceGrowthCount": 15000,
+  "maxReferenceGrowthPercent": 35
+}
+```
+Notes:
+- Inputs can be files or directories.
+- Directory inputs are scanned using `pattern` (default `*.json`) and `recursive` (default `true`).
+- Duplicate UIDs:
+  - merged by UID
+  - aliases are unioned
+  - `preferLast:true` lets later files override `href`/`name`
+  - `failOnDuplicates:true` fails immediately when duplicates are detected
+- Growth guardrails:
+  - `maxReferences` warns when merged reference count exceeds the configured threshold (`0` disables)
+  - `maxDuplicates` warns when duplicate UID count exceeds the configured threshold (`0` disables)
+  - `maxReferenceGrowthCount` warns when merged reference growth exceeds an absolute delta versus previous output (`0` disables)
+  - `maxReferenceGrowthPercent` warns when merged reference growth exceeds a percent delta versus previous output (`0` disables)
+- Warning policy:
+  - `failOnWarnings` defaults to `true` in CI and `false` in dev (same behavior as `apidocs`)
+  - `warningPreviewCount` controls how many warnings are shown in logs
 
 #### changelog
 Generates a `data/changelog.json` file from a local `CHANGELOG.md` or GitHub releases.
@@ -565,12 +605,12 @@ Publish specs wrap a typical build + publish flow into a single config.
 Paths are resolved relative to the publish JSON file location.
 
 Schema:
-- `schemas/powerforge.web.publishspec.schema.json`
+- `Schemas/powerforge.web.publishspec.schema.json`
 
 Minimal publish:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",
@@ -588,7 +628,7 @@ Minimal publish:
 Full publish with overlay + optimize:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",

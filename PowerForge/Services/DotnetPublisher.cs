@@ -99,6 +99,7 @@ public sealed class DotnetPublisher
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
             var args = new List<string>

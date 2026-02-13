@@ -239,6 +239,18 @@
       ],
       "description": "Template for computed GitHub tag names. Supported tokens: {Project}, {Version}, {PrimaryProject}, {PrimaryVersion}, {Repo}, {Repository}, {Date}, {UtcDate}, {DateTime}, {UtcDateTime}, {Timestamp}, {UtcTimestamp}."
     },
+    "GitHubTagConflictPolicy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "Reuse",
+        "Fail",
+        "AppendUtcTimestamp",
+        null
+      ]
+    },
     "GitHubIsPreRelease": {
       "type": "boolean"
     },

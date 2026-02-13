@@ -326,6 +326,16 @@ Notes:
 - For deterministic output, point to a specific file.
 - `coverageReport` defaults to `coverage.json` under API output and includes completeness metrics (summary/remarks/examples/member docs).
 - Coverage report also includes source-link metrics (`source.types`, `source.members`, `source.powershell`) with URL/path coverage and broken-link hints (invalid URLs, unresolved template tokens, repo mismatch hints).
+- API docs also generate `xrefmap.json` by default (DocFX-style `references` payload) to support cross-site `xref:` links.
+  - CLI: `--xref-map <file>` to customize location, `--no-xref-map` to disable.
+  - Pipeline: `xrefMap`/`xref-map` and `generateXrefMap`/`generate-xref-map`.
+  - Member-level entries are enabled by default; disable with CLI `--no-member-xref` or pipeline `generateMemberXrefs:false`.
+  - Filter member entries with CLI `--member-xref-kinds <list>` (for example `methods,properties`) or pipeline `memberXrefKinds`.
+  - Cap member entries with CLI `--member-xref-max-per-type <n>` or pipeline `memberXrefMaxPerType`.
+  - Use `powerforge-web xref-merge --out <file> --map <file|dir> [--max-references <n>] [--max-duplicates <n>] [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>]` to combine multiple maps into one shared map with optional growth guardrails.
+  - Use the generated map from website builds via `site.json -> Xref.MapFiles`.
+  - C# xref maps now include member-level entries (methods/properties/fields/events) with deep links to rendered member anchors.
+  - PowerShell xref maps now include parameter-level entries (`parameter:<Command>.<Parameter>`) that deep-link to command syntax cards.
 - Source-link diagnostics also emit `[PFWEB.APIDOCS.SOURCE]` warnings for common misconfigurations:
   - `sourceUrlMappings` prefixes that never match discovered source paths
   - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)

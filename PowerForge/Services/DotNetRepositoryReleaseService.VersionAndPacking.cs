@@ -114,6 +114,7 @@ public sealed partial class DotNetRepositoryReleaseService
             CreateNoWindow = true,
             WorkingDirectory = workingDirectory
         };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
         var args = new List<string> { "pack", csproj, "--configuration", configuration };
@@ -155,6 +156,7 @@ public sealed partial class DotNetRepositoryReleaseService
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
         var args = new List<string>

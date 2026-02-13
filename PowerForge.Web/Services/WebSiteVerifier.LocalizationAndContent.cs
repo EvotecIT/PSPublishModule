@@ -8,6 +8,11 @@ namespace PowerForge.Web;
 /// <summary>Localization resolution and content-path helpers for verification.</summary>
 public static partial class WebSiteVerifier
 {
+    private static readonly StringComparison FileSystemPathComparison =
+        OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
     private static ResolvedLocalizationConfig ResolveLocalizationConfig(SiteSpec spec, List<string> warnings)
     {
         var localizationSpec = spec.Localization;
@@ -329,7 +334,29 @@ public static partial class WebSiteVerifier
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
         var trimmed = path.Trim();
         if (trimmed == "/") return "/";
-        return trimmed.Trim('/');
+
+        var normalized = trimmed.Replace('\\', '/');
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(segment => segment != ".")
+            .ToList();
+        if (segments.Count == 0)
+            return string.Empty;
+
+        var stack = new List<string>(segments.Count);
+        foreach (var segment in segments)
+        {
+            if (segment == "..")
+            {
+                if (stack.Count > 0)
+                    stack.RemoveAt(stack.Count - 1);
+                continue;
+            }
+
+            stack.Add(segment);
+        }
+
+        return string.Join("/", stack);
     }
 
     private static string Slugify(string input)
@@ -407,8 +434,8 @@ public static partial class WebSiteVerifier
         foreach (var root in roots)
         {
             if (string.IsNullOrWhiteSpace(root)) continue;
-            if (filePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-                filePath.Equals(root, StringComparison.OrdinalIgnoreCase))
+            if (filePath.StartsWith(root + Path.DirectorySeparatorChar, FileSystemPathComparison) ||
+                filePath.Equals(root, FileSystemPathComparison))
                 return true;
         }
         return false;

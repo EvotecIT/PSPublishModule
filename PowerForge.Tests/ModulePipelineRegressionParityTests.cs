@@ -282,6 +282,47 @@ public sealed class ModulePipelineRegressionParityTests
     }
 
     [Fact]
+    public void ValidateMissingFunctions_IgnoresScriptBlockLikeUnresolvedTokens()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false }
+            };
+
+            var logger = new CollectingLogger();
+            var runner = new ModulePipelineRunner(logger);
+            var plan = runner.Plan(spec);
+            var report = new MissingFunctionsReport(
+                summary: new[] { new MissingFunctionCommand("{ process { if ($_.TrustedDomain -eq $Trust.Target ) { $_ } } }", string.Empty, string.Empty, false, false, string.Empty, null) },
+                summaryFiltered: Array.Empty<MissingFunctionCommand>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+
+            InvokeValidateMissingFunctions(runner, report, plan);
+
+            Assert.DoesNotContain(logger.Errors, e => e.Contains("TrustedDomain", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(logger.Warnings, w => w.Contains("Missing commands detected during merge", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void AreRequiredModuleDraftListsEquivalent_AllowsDuplicateEntries_WhenMultisetMatches()
     {
         var left = new (string ModuleName, string? ModuleVersion, string? MinimumVersion, string? RequiredVersion, string? Guid)[]
@@ -330,6 +371,55 @@ public sealed class ModulePipelineRegressionParityTests
         };
 
         Assert.True(InvokeAreRequiredModuleDraftListsEquivalent(left, right));
+    }
+
+    [Fact]
+    public void Plan_ResolvesLegacyFlatHandling_FromBuildSegment_WhenInstallOptionsDoNotOverride()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions
+                {
+                    Enabled = false,
+                    LegacyFlatHandling = null,
+                    PreserveVersions = null
+                },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration
+                        {
+                            LegacyFlatHandling = LegacyFlatModuleHandling.Convert,
+                            PreserveInstallVersions = new[] { "2.0.26", "2.0.27" }
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Equal(LegacyFlatModuleHandling.Convert, plan.InstallLegacyFlatHandling);
+            Assert.Contains("2.0.26", plan.InstallPreserveVersions, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("2.0.27", plan.InstallPreserveVersions, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
     }
 
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)

@@ -250,21 +250,20 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             return;
         }
 
-        var sb = ScriptBlock.Create(@"
-param($u,$r,$t,$tag,$name,$asset,$pre,$gen)
-Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToken $t -TagName $tag -ReleaseName $name -AssetFilePaths $asset -IsPreRelease:$pre -GenerateReleaseNotes:$gen
-");
+        var sb = ScriptBlock.Create(PowerForgeScripts.Load("Scripts/Cmdlets/Invoke-SendGitHubRelease.ps1"));
 
         var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode)
             ? "Single"
             : config.GitHubReleaseMode!.Trim();
         var perProject = string.Equals(releaseMode, "PerProject", StringComparison.OrdinalIgnoreCase);
+        var conflictPolicy = ParseGitHubTagConflictPolicy(config.GitHubTagConflictPolicy);
+        var reuseExistingReleaseOnConflict = conflictPolicy == GitHubTagConflictPolicy.Reuse;
         var nowLocal = DateTime.Now;
         var nowUtc = DateTime.UtcNow;
         var dateToken = nowLocal.ToString("yyyy.MM.dd");
         var utcDateToken = nowUtc.ToString("yyyy.MM.dd");
-        var dateTimeToken = nowLocal.ToString("yyyy.MM.dd.HHmmss");
-        var utcDateTimeToken = nowUtc.ToString("yyyy.MM.dd.HHmmss");
+        var dateTimeToken = nowLocal.ToString("yyyy.MM.dd-HH.mm.ss");
+        var utcDateTimeToken = nowUtc.ToString("yyyy.MM.dd-HH.mm.ss");
         var timestampToken = nowLocal.ToString("yyyyMMddHHmmss");
         var utcTimestampToken = nowUtc.ToString("yyyyMMddHHmmss");
         var repoName = string.IsNullOrWhiteSpace(config.GitHubRepositoryName)
@@ -339,6 +338,7 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                         timestampToken,
                         utcTimestampToken);
                 }
+                tag = ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
 
                 var releaseName = string.IsNullOrWhiteSpace(config.GitHubReleaseName)
                     ? tag
@@ -356,7 +356,16 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                         timestampToken,
                         utcTimestampToken);
 
-                var output = sb.Invoke(config.GitHubUsername, config.GitHubRepositoryName, gitHubToken, tag, releaseName, new[] { project.ReleaseZipPath }, config.GitHubIsPreRelease, config.GitHubGenerateReleaseNotes);
+                var output = sb.Invoke(
+                    config.GitHubUsername,
+                    config.GitHubRepositoryName,
+                    gitHubToken,
+                    tag,
+                    releaseName,
+                    new[] { project.ReleaseZipPath },
+                    config.GitHubIsPreRelease,
+                    config.GitHubGenerateReleaseNotes,
+                    reuseExistingReleaseOnConflict);
                 var status = output.Count > 0 ? output[0]?.BaseObject : null;
 
                 bool ok = false;
@@ -438,6 +447,7 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                         timestampToken,
                         utcTimestampToken)
                     : $"v{tagVersionToken}");
+            tag = ApplyTagConflictPolicy(tag, conflictPolicy, utcTimestampToken);
 
             var releaseName = string.IsNullOrWhiteSpace(config.GitHubReleaseName)
                 ? tag
@@ -455,7 +465,16 @@ Send-GitHubRelease -GitHubUsername $u -GitHubRepositoryName $r -GitHubAccessToke
                     timestampToken,
                     utcTimestampToken);
 
-            var output = sb.Invoke(config.GitHubUsername, config.GitHubRepositoryName, gitHubToken, tag, releaseName, distinctAssets, config.GitHubIsPreRelease, config.GitHubGenerateReleaseNotes);
+            var output = sb.Invoke(
+                config.GitHubUsername,
+                config.GitHubRepositoryName,
+                gitHubToken,
+                tag,
+                releaseName,
+                distinctAssets,
+                config.GitHubIsPreRelease,
+                config.GitHubGenerateReleaseNotes,
+                reuseExistingReleaseOnConflict);
             var status = output.Count > 0 ? output[0]?.BaseObject : null;
 
             bool ok = false;

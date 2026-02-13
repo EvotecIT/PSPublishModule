@@ -86,9 +86,10 @@ GitHub releases
 - `GitHubTagTemplate` and `GitHubReleaseName` support tokens:
   - `{Project}`, `{Version}`, `{PrimaryProject}`, `{PrimaryVersion}`, `{Repo}`, `{Repository}`, `{Date}`, `{UtcDate}`, `{DateTime}`, `{UtcDateTime}`, `{Timestamp}`, `{UtcTimestamp}`
   - `{Date}` and `{UtcDate}` are formatted `yyyy.MM.dd`.
-  - `{DateTime}` and `{UtcDateTime}` are formatted `yyyy.MM.dd.HHmmss`.
-  - `{Timestamp}` and `{UtcTimestamp}` are formatted `yyyyMMddHHmmss`.
-  - Example collision-resistant single-release tag: `"{Repo}-v{UtcTimestamp}"`.
+- `GitHubTagConflictPolicy`:
+  - `Reuse` (default): idempotent, reuse existing release/tag when it already exists.
+  - `Fail`: fail if tag already exists.
+  - `AppendUtcTimestamp`: append `-yyyyMMddHHmmss` UTC suffix to computed tags.
 
 Signing
 - `CertificateThumbprint`, `CertificateStore`, `TimeStampServer` control package signing.
@@ -97,3 +98,4 @@ Signing
 Plan mode
 - `PlanOnly` (config) or `-Plan` (cmdlet): compute a plan without modifying files or publishing.
 - The plan JSON includes resolved versions, packages that would be created, and publish decisions.
+- In plan mode, publish preflight does not require package files to already exist on disk.

@@ -38,3 +38,18 @@ public enum CertificateHashAlgorithm
     /// <summary>SHA512.</summary>
     SHA512
 }
+
+/// <summary>
+/// Behavior when a computed GitHub tag already exists.
+/// </summary>
+public enum GitHubTagConflictPolicy
+{
+    /// <summary>Reuse the existing release/tag (idempotent behavior).</summary>
+    Reuse,
+
+    /// <summary>Fail the operation if the tag already exists.</summary>
+    Fail,
+
+    /// <summary>Append a UTC timestamp suffix to the computed tag.</summary>
+    AppendUtcTimestamp
+}

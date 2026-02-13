@@ -53,6 +53,12 @@ internal static partial class WebPipelineRunner
                         GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
         var coverageReportPath = ResolvePath(baseDir, GetString(step, "coverageReport") ?? GetString(step, "coverage-report") ?? GetString(step, "coverageReportPath") ?? GetString(step, "coverage-report-path"));
         var generateCoverageReport = GetBool(step, "generateCoverageReport") ?? GetBool(step, "generate-coverage-report") ?? true;
+        var xrefMapPath = ResolvePath(baseDir, GetString(step, "xrefMap") ?? GetString(step, "xref-map") ?? GetString(step, "xrefMapPath") ?? GetString(step, "xref-map-path"));
+        var generateXrefMap = GetBool(step, "generateXrefMap") ?? GetBool(step, "generate-xref-map") ?? true;
+        var generateMemberXrefs = GetBool(step, "generateMemberXrefs") ?? GetBool(step, "generate-member-xrefs") ?? true;
+        var memberXrefKindsText = GetString(step, "memberXrefKinds") ?? GetString(step, "member-xref-kinds");
+        var memberXrefKindsArray = GetArrayOfStrings(step, "memberXrefKinds") ?? GetArrayOfStrings(step, "member-xref-kinds");
+        var memberXrefMaxPerType = GetInt(step, "memberXrefMaxPerType") ?? GetInt(step, "member-xref-max-per-type") ?? 0;
         var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
         var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
         var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
@@ -233,6 +239,10 @@ internal static partial class WebPipelineRunner
             SourceUrlPattern = sourceUrl,
             GenerateCoverageReport = generateCoverageReport,
             CoverageReportPath = coverageReportPath,
+            GenerateXrefMap = generateXrefMap,
+            GenerateMemberXrefs = generateMemberXrefs,
+            MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
+            XrefMapPath = xrefMapPath,
             GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
             PowerShellExamplesPath = powerShellExamplesPath,
             PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
@@ -267,6 +277,20 @@ internal static partial class WebPipelineRunner
         var quickStartTypeList = CliPatternHelper.SplitPatterns(quickStartTypes);
         if (quickStartTypeList.Length > 0)
             options.QuickStartTypeNames.AddRange(quickStartTypeList);
+        var memberXrefKindList = new List<string>();
+        if (!string.IsNullOrWhiteSpace(memberXrefKindsText))
+            memberXrefKindList.AddRange(CliPatternHelper.SplitPatterns(memberXrefKindsText));
+        if (memberXrefKindsArray is { Length: > 0 })
+        {
+            foreach (var entry in memberXrefKindsArray)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+                memberXrefKindList.AddRange(CliPatternHelper.SplitPatterns(entry));
+            }
+        }
+        if (memberXrefKindList.Count > 0)
+            options.MemberXrefKinds.AddRange(memberXrefKindList);
 
         var res = WebApiDocsGenerator.Generate(options);
         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
@@ -759,5 +783,131 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = $"Sitemap {res.UrlCount} urls";
+    }
+
+    private static void ExecuteXrefMerge(
+        JsonElement step,
+        string label,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("xref-merge requires out.");
+
+        var inputs = new List<string>();
+        AddInputPaths(inputs, GetString(step, "map"));
+        AddInputPaths(inputs, GetString(step, "maps"));
+        AddInputPaths(inputs, GetString(step, "input"));
+        AddInputPaths(inputs, GetString(step, "inputs"));
+        AddInputPaths(inputs, GetString(step, "source"));
+        AddInputPaths(inputs, GetString(step, "sources"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "mapFiles"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "map-files"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "inputsArray"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "inputs-array"));
+
+        var resolvedInputs = inputs
+            .Where(static input => !string.IsNullOrWhiteSpace(input))
+            .Select(input => ResolvePath(baseDir, input) ?? input)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (resolvedInputs.Count == 0)
+            throw new InvalidOperationException("xref-merge requires at least one input map path (map/maps/input/inputs/source/sources).");
+
+        var topOnly = GetBool(step, "topOnly") ?? GetBool(step, "top-only") ?? false;
+        var recursive = GetBool(step, "recursive") ?? GetBool(step, "includeSubdirectories") ?? !topOnly;
+        var pattern = GetString(step, "pattern") ?? "*.json";
+        var preferLast = GetBool(step, "preferLast") ?? GetBool(step, "prefer-last") ?? false;
+        var failOnDuplicates = GetBool(step, "failOnDuplicates") ?? GetBool(step, "fail-on-duplicates") ?? false;
+        var maxReferences = GetInt(step, "maxReferences") ?? GetInt(step, "max-references") ?? 0;
+        var maxDuplicates = GetInt(step, "maxDuplicates") ?? GetInt(step, "max-duplicates") ?? 0;
+        var maxReferenceGrowthCount = GetInt(step, "maxReferenceGrowthCount") ?? GetInt(step, "max-reference-growth-count") ?? 0;
+        var maxReferenceGrowthPercent = GetDouble(step, "maxReferenceGrowthPercent") ?? GetDouble(step, "max-reference-growth-percent") ?? 0;
+        var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
+        var ciStrictDefaults = ConsoleEnvironment.IsCI && !isDev;
+        var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
+        var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+
+        var options = new WebXrefMergeOptions
+        {
+            OutputPath = outPath,
+            Pattern = string.IsNullOrWhiteSpace(pattern) ? "*.json" : pattern,
+            Recursive = recursive,
+            PreferLast = preferLast,
+            FailOnDuplicateIds = failOnDuplicates,
+            MaxReferences = maxReferences <= 0 ? 0 : maxReferences,
+            MaxDuplicates = maxDuplicates <= 0 ? 0 : maxDuplicates,
+            MaxReferenceGrowthCount = maxReferenceGrowthCount <= 0 ? 0 : maxReferenceGrowthCount,
+            MaxReferenceGrowthPercent = maxReferenceGrowthPercent <= 0 ? 0 : maxReferenceGrowthPercent
+        };
+        options.Inputs.AddRange(resolvedInputs);
+
+        var result = WebXrefMapMerger.Merge(options);
+        var warnings = result.Warnings ?? Array.Empty<string>();
+        if (warnings.Length > 0)
+        {
+            logger?.Warn($"{label}: xref-merge warnings: {warnings.Length}");
+
+            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+            if (previewLimit > 0)
+            {
+                foreach (var warning in warnings.Where(static warning => !string.IsNullOrWhiteSpace(warning)).Take(previewLimit))
+                    logger?.Warn($"{label}: {warning}");
+
+                var remaining = warnings.Length - previewLimit;
+                if (remaining > 0)
+                    logger?.Warn($"{label}: (+{remaining} more warnings)");
+            }
+
+            if (failOnWarnings)
+            {
+                var headline = warnings.FirstOrDefault(static warning => !string.IsNullOrWhiteSpace(warning))
+                               ?? "xref-merge warnings encountered.";
+                throw new InvalidOperationException(headline);
+            }
+        }
+
+        var noteParts = new List<string>();
+        if (result.DuplicateCount > 0)
+            noteParts.Add($"duplicates: {result.DuplicateCount}");
+        if (result.ReferenceDeltaCount.HasValue)
+        {
+            var deltaText = result.ReferenceDeltaCount.Value >= 0 ? $"+{result.ReferenceDeltaCount.Value}" : result.ReferenceDeltaCount.Value.ToString();
+            if (result.ReferenceDeltaPercent.HasValue)
+                noteParts.Add($"delta: {deltaText} ({result.ReferenceDeltaPercent.Value:0.##}%)");
+            else
+                noteParts.Add($"delta: {deltaText}");
+        }
+        var note = noteParts.Count > 0 ? $" ({string.Join(", ", noteParts)})" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Xref merge {result.ReferenceCount} refs from {result.SourceCount} sources{note}";
+    }
+
+    private static void AddInputPaths(List<string> target, string? value)
+    {
+        if (target is null || string.IsNullOrWhiteSpace(value))
+            return;
+        foreach (var item in CliPatternHelper.SplitPatterns(value))
+        {
+            if (!string.IsNullOrWhiteSpace(item))
+                target.Add(item);
+        }
+    }
+
+    private static void AddInputPaths(List<string> target, string[]? values)
+    {
+        if (target is null || values is null || values.Length == 0)
+            return;
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+            AddInputPaths(target, value);
+        }
     }
 }

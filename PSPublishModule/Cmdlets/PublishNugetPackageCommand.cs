@@ -151,6 +151,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        PowerForge.ProcessStartInfoEncoding.TryApplyUtf8(psi);
 #if NET472
         var args = new List<string>
         {

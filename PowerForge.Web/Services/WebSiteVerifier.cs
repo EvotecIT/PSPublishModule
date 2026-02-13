@@ -36,10 +36,12 @@ public static partial class WebSiteVerifier
         var collectionRoutes = new Dictionary<string, List<CollectionRoute>>(StringComparer.OrdinalIgnoreCase);
         var taxonomyTermsByLanguage = new Dictionary<string, Dictionary<string, HashSet<string>>>(StringComparer.OrdinalIgnoreCase);
         var usedTaxonomyNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var xrefLookup = BuildExternalXrefLookup(spec, plan.RootPath, warnings);
+        var xrefReferences = new List<XrefReference>();
         foreach (var collection in spec.Collections)
         {
             if (collection is null) continue;
-            var files = EnumerateCollectionFiles(plan.RootPath, collection.Input).ToArray();
+            var files = WebSiteBuilder.EnumerateCollectionFilesForDiscovery(plan, collection);
             if (files.Length == 0)
             {
                 warnings.Add($"Collection '{collection.Name}' has no files.");
@@ -61,7 +63,7 @@ public static partial class WebSiteVerifier
                 }
                 ValidateMarkdownHygiene(plan.RootPath, file, collection.Name, body, warnings);
 
-                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, collection.Input, file);
+                var collectionRoot = WebSiteBuilder.ResolveCollectionRootForDiscovery(plan, collection, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
                 var resolvedLanguage = ResolveItemLanguage(spec, localization, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
                 var translationKey = ResolveTranslationKey(matter, collection.Name, localizedRelativePath);
@@ -90,6 +92,16 @@ public static partial class WebSiteVerifier
                 {
                     routes[route] = file;
                 }
+                RegisterContentXrefs(
+                    xrefLookup,
+                    plan.RootPath,
+                    file,
+                    collection.Name,
+                    slugPath,
+                    route,
+                    translationKey,
+                    matter?.Meta);
+                CollectXrefReferences(plan.RootPath, file, body, xrefReferences);
 
                 if (!collectionRoutes.TryGetValue(collection.Name, out var list))
                 {
@@ -101,6 +113,7 @@ public static partial class WebSiteVerifier
         }
 
         AddSyntheticTaxonomyRoutes(spec, localization, routes, taxonomyTermsByLanguage, warnings);
+        ValidateXrefs(spec, xrefLookup, xrefReferences, warnings);
 
         ValidateDataFiles(spec, plan, warnings);
         ValidateThemeAssets(spec, plan, warnings);
@@ -145,6 +158,9 @@ public static partial class WebSiteVerifier
 
         if (trimmed.StartsWith("Markdown hygiene:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.MD.HYGIENE] " + warning;
+
+        if (trimmed.StartsWith("Xref:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.XREF] " + warning;
 
         if (trimmed.StartsWith("Data file '", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.DATA.VALIDATION] " + warning;

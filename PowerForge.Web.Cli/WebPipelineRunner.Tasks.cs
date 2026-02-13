@@ -40,6 +40,9 @@ internal static partial class WebPipelineRunner
             case "sitemap":
                 ExecuteSitemap(step, baseDir, stepResult);
                 break;
+            case "xref-merge":
+                ExecuteXrefMerge(step, label, baseDir, fast, effectiveMode, logger, stepResult);
+                break;
             case "optimize":
                 ExecuteOptimize(step, label, baseDir, fast, logger, lastBuildOutPath, lastBuildUpdatedFiles, stepResult);
                 break;

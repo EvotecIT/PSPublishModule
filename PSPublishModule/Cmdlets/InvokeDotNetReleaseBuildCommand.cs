@@ -147,10 +147,7 @@ public sealed class InvokeDotNetReleaseBuildCommand : PSCmdlet
         string timeStampServer,
         string[] includePatterns)
     {
-        var sb = ScriptBlock.Create(@"
-param($path,$store,$thumb,$ts,$include)
-Register-Certificate -Path $path -LocalStore $store -Thumbprint $thumb -TimeStampServer $ts -Include $include
-");
+        var sb = ScriptBlock.Create(PowerForgeScripts.Load("Scripts/Cmdlets/Invoke-RegisterCertificate.ps1"));
 
         // ModuleInfo.NewBoundScriptBlock works only for script modules. PSPublishModule cmdlets execute
         // in the binary module context, so we must invoke directly.

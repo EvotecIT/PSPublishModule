@@ -9,11 +9,14 @@ This document is the single source of truth for:
 - what is missing,
 - and the next milestones to prevent “going in circles”.
 
+Companion execution plan for C# libraries + PowerShell modules:
+- `Docs/PowerForge.Web.LibraryEcosystemPlan.md`
+
 ## How This Roadmap Is Verified (Avoid "We Think")
 
 This file is intended to be evidence-based:
 
-- **Schemas**: check `schemas/powerforge.web.*.schema.json` for the config surface area.
+- **Schemas**: check `Schemas/powerforge.web.*.schema.json` for the config surface area.
 - **Engine code**: verify key features exist by locating their implementation under `PowerForge.Web/Services` and related models under `PowerForge.Web/Models`.
 - **CLI wiring**: verify tasks/policies exist under `PowerForge.Web.Cli/`.
 
@@ -52,7 +55,7 @@ Legend:
 ### Blog + Taxonomies + Feeds
 
 - **Have**: Taxonomies (`tags/categories/custom`) with generated taxonomy list + term pages.
-  - Schema: `schemas/powerforge.web.sitespec.schema.json` (`Taxonomies`)
+  - Schema: `Schemas/powerforge.web.sitespec.schema.json` (`Taxonomies`)
   - Code: `PowerForge.Web/Services/WebSiteBuilder.ContentDiscovery.cs` + `PowerForge.Web/Services/WebSiteBuilder.OutputRendering.cs`
 - **Have**: RSS output (`rss.xml`) for section and taxonomy pages; feed settings via `FeedSpec`.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.OutputRendering.cs` (`RenderRssOutput`)
@@ -106,7 +109,11 @@ Legend:
 
 - **Have**: C# XML API docs generator + pipeline integration + source links.
 - **Have**: PowerShell help API docs (command help XML + parameter sets + examples + `about_*` topic import + fallback examples + coverage report).
+- **Have**: API docs xref map emission (`xrefmap.json`, DocFX-style `references`) for both C# and PowerShell outputs.
+  - Supports aliases like `T:Namespace.Type`, short type names (when unique), `ps:Command-Name`, `command:Command-Name`, module-qualified command aliases, and `about:` aliases.
   - Docs: `Docs/PowerForge.Web.ApiDocs.md`
+- **Partial**: XRef link resolver + verifier checks (`xref:` in markdown links) with optional external maps (`Xref.MapFiles`) and optional build map emission (`_powerforge/xrefmap.json`).
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.Xref.cs`, `PowerForge.Web/Services/WebSiteVerifier.Xref.cs`, `PowerForge.Web/Services/WebXrefSupport.cs`
 - **Partial**: Theme/layout contract for API pages (ensuring site nav renders) requires consistent `api-header/api-footer` partials across themes.
 
 ### Quality Gates (Verify/Audit/Doctor) + Budgets
@@ -159,7 +166,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 
 ### M3: DocFX-class Docs Conveniences (Later)
 
-- XRef/cross-reference system (docs <-> API).
+- XRef/cross-reference graph hardening (symbol graph parity, richer API UID generation, and template/runtime exposure).
 - Multi-version docs conventions with canonical rules.
 - Include/overwrite mechanisms for conceptual docs (DocFX-like).
 

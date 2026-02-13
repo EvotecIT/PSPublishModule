@@ -114,6 +114,37 @@ Supported fields:
   - `meta.prism_css_light` / `meta.prism_css_dark` (local Prism theme paths)
   - `meta.prism_core` / `meta.prism_autoloader` (local Prism script paths)
   - `meta.prism_lang_path` (local Prism language components base path)
+  - `meta.xref` / `meta.xrefs` / `meta.uid` / `meta.uids` (optional xref IDs for this page)
+
+### Xref links (docs <-> API)
+Use `xref:` links in markdown to reference symbols/pages by ID:
+
+```markdown
+[Install guide](xref:docs.install)
+[String.Length](xref:System.String#Length)
+```
+
+The engine resolves xrefs from:
+- page IDs declared in front matter (`xref`/`xrefs`/`uid`/`uids`)
+- implicit page IDs (`collection:slug`, route, translation key, source-based IDs)
+- optional external map files from `site.json -> Xref.MapFiles`
+  - API docs generators can emit DocFX-style `xrefmap.json` files (C# + PowerShell), which are valid `MapFiles` inputs.
+
+Optional `site.json` config:
+
+```json
+{
+  "Xref": {
+    "Enabled": true,
+    "MapFiles": ["xrefmap.json"],
+    "WarnOnMissing": true,
+    "EmitMap": true,
+    "MaxWarnings": 25
+  }
+}
+```
+
+When `EmitMap` is enabled, the build writes `_powerforge/xrefmap.json`.
 
 ### Syntax highlighting
 PowerForge.Web automatically injects Prism assets when a page contains fenced code blocks.

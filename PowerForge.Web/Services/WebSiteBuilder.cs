@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -88,6 +89,7 @@ public static partial class WebSiteBuilder
         var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
         items.AddRange(BuildTaxonomyItems(spec, items));
         items = BuildPaginatedItems(spec, items);
+        ResolveXrefs(spec, plan.RootPath, metaDir, items);
         var menuSpecs = BuildMenuSpecs(spec, items, plan.RootPath);
         foreach (var item in items)
         {
@@ -149,6 +151,7 @@ public static partial class WebSiteBuilder
             return;
 
         var outputThemesFolder = ResolveThemesFolder(spec);
+        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
 
         var chain = BuildThemeChain(themeRoot, manifest);
         foreach (var entry in chain)
@@ -157,7 +160,12 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(assetsDir))
                 continue;
 
-            var source = Path.Combine(entry.Root, assetsDir);
+            var source = Path.GetFullPath(Path.Combine(entry.Root, assetsDir));
+            if (!IsPathWithinBase(entry.Root, source))
+            {
+                Trace.TraceWarning($"Skipping theme assets outside theme root: {assetsDir}");
+                continue;
+            }
             if (!Directory.Exists(source))
                 continue;
 
@@ -167,7 +175,12 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(entryThemeName))
                 entryThemeName = spec.DefaultTheme ?? "theme";
 
-            var destination = Path.Combine(outputRoot, outputThemesFolder, entryThemeName, assetsDir);
+            var destination = Path.GetFullPath(Path.Combine(outputRoot, outputThemesFolder, entryThemeName, assetsDir));
+            if (!IsPathWithinRoot(normalizedOutputRoot, destination))
+            {
+                Trace.TraceWarning($"Skipping theme assets destination outside output root: {destination}");
+                continue;
+            }
             CopyDirectory(source, destination);
         }
     }
@@ -194,6 +207,8 @@ public static partial class WebSiteBuilder
         if (spec.StaticAssets is null || spec.StaticAssets.Length == 0)
             return;
 
+        var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
+
         foreach (var asset in spec.StaticAssets)
         {
             if (string.IsNullOrWhiteSpace(asset.Source))
@@ -214,6 +229,12 @@ public static partial class WebSiteBuilder
                     : (Path.HasExtension(destination)
                         ? Path.Combine(outputRoot, destination)
                         : Path.Combine(outputRoot, destination, Path.GetFileName(sourcePath)));
+                destPath = Path.GetFullPath(destPath);
+                if (!IsPathWithinRoot(normalizedOutputRoot, destPath))
+                {
+                    Trace.TraceWarning($"Skipping static asset file copy outside output root: {asset.Source} -> {asset.Destination}");
+                    continue;
+                }
 
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrWhiteSpace(destDir))
@@ -226,6 +247,12 @@ public static partial class WebSiteBuilder
             var targetRoot = string.IsNullOrWhiteSpace(destination)
                 ? outputRoot
                 : Path.Combine(outputRoot, destination);
+            targetRoot = Path.GetFullPath(targetRoot);
+            if (!IsPathWithinRoot(normalizedOutputRoot, targetRoot))
+            {
+                Trace.TraceWarning($"Skipping static asset directory copy outside output root: {asset.Source} -> {asset.Destination}");
+                continue;
+            }
             CopyDirectory(sourcePath, targetRoot);
         }
     }
@@ -314,8 +341,13 @@ public static partial class WebSiteBuilder
 
     private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
     {
+        var root = normalizedRoot
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var full = Path.GetFullPath(candidatePath);
-        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
+        if (full.Equals(root, FileSystemPathComparison))
+            return true;
+
+        return full.StartsWith(root + Path.DirectorySeparatorChar, FileSystemPathComparison);
     }
 
 }

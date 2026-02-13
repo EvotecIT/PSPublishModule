@@ -143,6 +143,52 @@ public class WebPipelineRunnerApiDocsPreflightTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ApiDocs_RespectsMemberXrefKindsAndMaxPerType()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-member-xref-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXmlWithMembers());
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "CSharp",
+                      "xml": "./test.xml",
+                      "out": "./_site/api",
+                      "format": "both",
+                      "memberXrefKinds": [ "methods", "properties" ],
+                      "memberXrefMaxPerType": 1
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+
+            var xrefPath = Path.Combine(root, "_site", "api", "xrefmap.json");
+            Assert.True(File.Exists(xrefPath));
+            var json = File.ReadAllText(xrefPath);
+            Assert.Contains("M:TestNamespace.TestType.Run(System.String)", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("P:TestNamespace.TestType.Name", json, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalXml()
     {
         return
@@ -154,6 +200,30 @@ public class WebPipelineRunnerApiDocsPreflightTests
               <members>
                 <member name="T:TestNamespace.TestType">
                   <summary>Type summary.</summary>
+                </member>
+              </members>
+            </doc>
+            """;
+    }
+
+    private static string BuildMinimalXmlWithMembers()
+    {
+        return
+            """
+            <doc>
+              <assembly>
+                <name>TestAssembly</name>
+              </assembly>
+              <members>
+                <member name="T:TestNamespace.TestType">
+                  <summary>Type summary.</summary>
+                </member>
+                <member name="M:TestNamespace.TestType.Run(System.String)">
+                  <summary>Run summary.</summary>
+                  <param name="name">Name.</param>
+                </member>
+                <member name="P:TestNamespace.TestType.Name">
+                  <summary>Name summary.</summary>
                 </member>
               </members>
             </doc>
