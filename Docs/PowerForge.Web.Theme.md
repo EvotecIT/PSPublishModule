@@ -477,8 +477,9 @@ When `site.json` defines `Versioning`, templates also receive:
 - `versions` (shortcut to `versioning.versions`)
 - `current_version`
 - `latest_version`
+- `versioning.lts` (when configured)
 
-Each entry includes `name`, `label`, `url`, `default`, `latest`, `deprecated`, `is_current`.
+Each entry includes `name`, `label`, `url`, `default`, `latest`, `lts`, `deprecated`, `is_current`.
 
 Example:
 ```html

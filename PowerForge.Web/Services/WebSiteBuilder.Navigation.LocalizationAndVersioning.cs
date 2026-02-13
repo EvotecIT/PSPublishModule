@@ -383,6 +383,7 @@ public static partial class WebSiteBuilder
                 Url = ResolveVersionUrl(versioning.BasePath, version),
                 Default = version.Default,
                 Latest = version.Latest,
+                Lts = version.Lts,
                 Deprecated = version.Deprecated
             };
         }
@@ -393,6 +394,7 @@ public static partial class WebSiteBuilder
 
         var current = ResolveCurrentVersion(versioning.Current, currentPath, versions);
         var latest = versions.FirstOrDefault(v => v.Latest) ?? versions.FirstOrDefault(v => v.Name.Equals(current.Name, StringComparison.OrdinalIgnoreCase)) ?? versions[0];
+        var lts = versions.FirstOrDefault(v => v.Lts);
         var @default = versions.FirstOrDefault(v => v.Default) ?? versions[0];
 
         foreach (var version in versions)
@@ -404,6 +406,7 @@ public static partial class WebSiteBuilder
             BasePath = NormalizeVersionBasePath(versioning.BasePath),
             Current = current,
             Latest = latest,
+            Lts = lts,
             Default = @default,
             Versions = versions
         };
@@ -563,4 +566,3 @@ public static partial class WebSiteBuilder
         }).ToArray();
     }
 }
-

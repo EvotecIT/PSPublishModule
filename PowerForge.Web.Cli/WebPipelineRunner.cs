@@ -25,6 +25,7 @@ internal static partial class WebPipelineRunner
         "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
         "xml", "help", "helpPath", "assembly",
         "changelog", "changelogPath",
+        "discoverRoot", "discover-root",
         "apiIndex", "apiSitemap", "criticalCss", "hashManifest", "reportPath", "report-path",
         "summaryPath", "sarifPath", "baselinePath", "navCanonicalPath", "navProfiles",
         "summary-path", "sarif-path", "baseline-path", "nav-canonical-path", "nav-profiles",

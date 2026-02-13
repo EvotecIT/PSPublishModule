@@ -712,6 +712,78 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"Changelog {res.ReleaseCount} releases{note}";
     }
 
+    private static void ExecuteVersionHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("version-hub requires out.");
+
+        var discoverRoot = ResolvePath(baseDir, GetString(step, "discoverRoot") ?? GetString(step, "discover-root"));
+        var discoverPattern = GetString(step, "discoverPattern") ?? GetString(step, "discover-pattern") ?? "v*";
+        var basePath = GetString(step, "basePath") ?? GetString(step, "base-path") ?? "/docs/";
+        var setLatestFromNewest = GetBool(step, "setLatestFromNewest") ?? GetBool(step, "set-latest-from-newest") ?? true;
+        var title = GetString(step, "title");
+
+        var entries = ParseVersionHubEntries(step);
+        var result = WebVersionHubGenerator.Generate(new WebVersionHubOptions
+        {
+            OutputPath = outPath,
+            BaseDirectory = baseDir,
+            Title = title,
+            Entries = entries,
+            DiscoverRoot = discoverRoot,
+            DiscoverPattern = discoverPattern,
+            BasePath = basePath,
+            SetLatestFromNewest = setLatestFromNewest
+        });
+
+        var warningNote = result.Warnings.Length > 0 ? $" ({result.Warnings.Length} warnings)" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = string.IsNullOrWhiteSpace(result.LatestVersion)
+            ? $"Version hub {result.VersionCount} versions{warningNote}"
+            : $"Version hub {result.VersionCount} versions (latest {result.LatestVersion}){warningNote}";
+    }
+
+    private static List<WebVersionHubEntryInput> ParseVersionHubEntries(JsonElement step)
+    {
+        var parsed = new List<WebVersionHubEntryInput>();
+        var arrays = new[]
+        {
+            GetArrayOfObjects(step, "versions"),
+            GetArrayOfObjects(step, "entries")
+        };
+
+        foreach (var array in arrays)
+        {
+            if (array is null || array.Length == 0)
+                continue;
+
+            foreach (var item in array)
+            {
+                var aliases = GetArrayOfStrings(item, "aliases") ?? Array.Empty<string>();
+                parsed.Add(new WebVersionHubEntryInput
+                {
+                    Id = GetString(item, "id"),
+                    Version = GetString(item, "version"),
+                    Label = GetString(item, "label"),
+                    Path = GetString(item, "path") ?? GetString(item, "url"),
+                    Channel = GetString(item, "channel"),
+                    Support = GetString(item, "support"),
+                    Latest = GetBool(item, "latest") ?? false,
+                    Lts = GetBool(item, "lts") ?? false,
+                    Deprecated = GetBool(item, "deprecated") ?? false,
+                    Aliases = aliases
+                        .Where(static value => !string.IsNullOrWhiteSpace(value))
+                        .Select(static value => value.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                });
+            }
+        }
+
+        return parsed;
+    }
+
     private static void ExecuteLlms(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
