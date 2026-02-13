@@ -3,7 +3,7 @@
 This document describes the JSON configuration consumed by `Invoke-ProjectBuild` and the behavior it drives.
 
 Schema
-- Location: `schemas/project.build.schema.json`
+- Location: `Schemas/project.build.schema.json`
 
 Overview
 - The build pipeline discovers .NET projects, resolves versions, optionally updates csproj files,
@@ -13,7 +13,7 @@ Overview
 Example configuration
 ```
 {
-  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/schemas/project.build.schema.json",
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/project.build.schema.json",
   "RootPath": "..",
   "ExpectedVersionMap": {
     "OfficeIMO.CSV": "0.1.X",

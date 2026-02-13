@@ -22,7 +22,7 @@ Run in CI:
 Example `pipeline.json`:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.pipelinespec.schema.json",
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
   "steps": [
     { "task": "build", "config": "./site.json", "out": "./_site", "clean": true },
 

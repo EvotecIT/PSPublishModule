@@ -34,7 +34,7 @@ PowerForge.Web is a website/docs engine that builds static, high-performance sit
   - Asset optimization and validation.
   - Asset + A11y registry (policy-driven, per-route bundles and defaults).
 - PowerForge.Cli gains: `powerforge site`, `powerforge site plan`, `powerforge site verify`.
-- JSON schemas added under `schemas/` for new specs and segments.
+- JSON schemas added under `Schemas/` for new specs and segments.
 
 ## Content model (collections-first)
 We should be flexible like Hugo/Jekyll: collections are first-class, and `projects/` is optional. This lets PowerForge.Web power simple company sites, doc portals, or multi-project hubs without changing the engine.
@@ -113,7 +113,7 @@ Fallbacks when front matter is missing:
 - tags: inferred by folder or empty
 - collection: inferred by folder
 
-Schema: `schemas/powerforge.web.frontmatter.schema.json`
+Schema: `Schemas/powerforge.web.frontmatter.schema.json`
 
 ## Markdown rendering spec (v1)
 Markdown should be rendered consistently across sites with a small, opinionated extension set.
@@ -144,7 +144,7 @@ It shows collections, asset/a11y registries, edit links, redirects, and analytic
 
 ```json
 {
-  "$schema": "./schemas/powerforge.web.sitespec.schema.json",
+  "$schema": "./Schemas/powerforge.web.sitespec.schema.json",
   "SchemaVersion": 1,
   "Name": "ExampleSite",
   "BaseUrl": "https://example.com",
@@ -249,7 +249,7 @@ It shows collections, asset/a11y registries, edit links, redirects, and analytic
 ## Sample project.json (v1, draft)
 ```json
 {
-  "$schema": "../schemas/powerforge.web.projectspec.schema.json",
+  "$schema": "../Schemas/powerforge.web.projectspec.schema.json",
   "SchemaVersion": 1,
   "Name": "HtmlForgeX",
   "Slug": "htmlforgex",
@@ -567,7 +567,7 @@ We should formalize the CodeGlyphX performance practices as defaults:
 ### Publish spec example
 ```json
 {
-  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",

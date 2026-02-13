@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 /// <summary>Scaffolds a starter site with content and theme.</summary>
 public static class WebSiteScaffolder
 {
-    private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/schemas/";
+    private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
