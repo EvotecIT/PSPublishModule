@@ -100,7 +100,7 @@ public static partial class WebSiteBuilder
         CopyThemeAssets(spec, plan.RootPath, outDir);
         CopyStaticAssets(spec, plan.RootPath, outDir);
         WriteSiteNavData(spec, outDir, menuSpecs);
-        WriteSearchIndex(outDir, items);
+        WriteSearchIndex(spec, outDir, items);
         WriteLinkCheckReport(spec, items, metaDir);
 
         var redirectsPayload = new

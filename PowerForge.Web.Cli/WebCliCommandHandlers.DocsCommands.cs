@@ -402,12 +402,20 @@ internal static partial class WebCliCommandHandlers
                          TryGetOptionValue(subArgs, "--output-path");
         var apiSitemap = TryGetOptionValue(subArgs, "--api-sitemap");
         var entriesPath = TryGetOptionValue(subArgs, "--entries");
+        var entriesJsonPath = TryGetOptionValue(subArgs, "--entries-json");
+        var jsonOutput = TryGetOptionValue(subArgs, "--sitemap-json-out") ??
+                         TryGetOptionValue(subArgs, "--json-out");
+        var generateSitemapJson = HasOption(subArgs, "--sitemap-json") ||
+                                  !string.IsNullOrWhiteSpace(jsonOutput);
         var htmlOutput = TryGetOptionValue(subArgs, "--html-out") ??
                          TryGetOptionValue(subArgs, "--html-output") ??
                          TryGetOptionValue(subArgs, "--html-path");
         var htmlTemplate = TryGetOptionValue(subArgs, "--html-template");
         var htmlCss = TryGetOptionValue(subArgs, "--html-css");
         var htmlTitle = TryGetOptionValue(subArgs, "--html-title");
+        var includeHtmlFiles = !HasOption(subArgs, "--no-html-files");
+        var includeTextFiles = !HasOption(subArgs, "--no-text-files");
+        var includeLanguageAlternates = !HasOption(subArgs, "--no-language-alternates");
         var generateHtml = HasOption(subArgs, "--html") ||
                            !string.IsNullOrWhiteSpace(htmlOutput) ||
                            !string.IsNullOrWhiteSpace(htmlTemplate) ||
@@ -426,7 +434,13 @@ internal static partial class WebCliCommandHandlers
             OutputPath = outputPath,
             ApiSitemapPath = apiSitemap,
             Entries = LoadSitemapEntries(entriesPath),
+            EntriesJsonPath = entriesJsonPath,
+            IncludeHtmlFiles = includeHtmlFiles,
+            IncludeTextFiles = includeTextFiles,
+            IncludeLanguageAlternates = includeLanguageAlternates,
             GenerateHtml = generateHtml,
+            GenerateJson = generateSitemapJson,
+            JsonOutputPath = jsonOutput,
             HtmlOutputPath = htmlOutput,
             HtmlTemplatePath = htmlTemplate,
             HtmlCssHref = htmlCss,
@@ -448,6 +462,8 @@ internal static partial class WebCliCommandHandlers
 
         logger.Success($"Sitemap generated: {result.OutputPath}");
         logger.Info($"URL count: {result.UrlCount}");
+        if (!string.IsNullOrWhiteSpace(result.JsonOutputPath))
+            logger.Info($"Sitemap JSON: {result.JsonOutputPath}");
         if (!string.IsNullOrWhiteSpace(result.HtmlOutputPath))
             logger.Info($"HTML sitemap: {result.HtmlOutputPath}");
         return 0;

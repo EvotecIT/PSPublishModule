@@ -262,12 +262,40 @@ internal static partial class WebPipelineRunner
             if (item.ValueKind != JsonValueKind.Object) continue;
             var path = GetString(item, "path") ?? GetString(item, "route") ?? GetString(item, "url");
             if (string.IsNullOrWhiteSpace(path)) continue;
+
+            var alternates = new List<WebSitemapAlternate>();
+            if (item.TryGetProperty("alternates", out var alternatesElement) &&
+                alternatesElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var alternate in alternatesElement.EnumerateArray())
+                {
+                    if (alternate.ValueKind != JsonValueKind.Object)
+                        continue;
+                    var hrefLang = GetString(alternate, "hrefLang") ?? GetString(alternate, "hreflang");
+                    var altPath = GetString(alternate, "path") ??
+                                  GetString(alternate, "route") ??
+                                  GetString(alternate, "url") ??
+                                  GetString(alternate, "href");
+                    if (string.IsNullOrWhiteSpace(hrefLang) || string.IsNullOrWhiteSpace(altPath))
+                        continue;
+                    alternates.Add(new WebSitemapAlternate
+                    {
+                        HrefLang = hrefLang,
+                        Path = altPath
+                    });
+                }
+            }
+
             list.Add(new WebSitemapEntry
             {
                 Path = path,
+                Title = GetString(item, "title"),
+                Description = GetString(item, "description"),
+                Section = GetString(item, "section"),
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
                 Priority = GetString(item, "priority"),
-                LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified")
+                LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified"),
+                Alternates = alternates.ToArray()
             });
         }
         return list.ToArray();
