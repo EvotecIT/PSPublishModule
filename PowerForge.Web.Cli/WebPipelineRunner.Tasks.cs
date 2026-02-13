@@ -36,6 +36,7 @@ internal static partial class WebPipelineRunner
                 break;
             case "version-hub":
                 ExecuteVersionHub(step, baseDir, stepResult);
+                break;
             case "package-hub":
                 ExecutePackageHub(step, baseDir, stepResult);
                 break;
