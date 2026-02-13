@@ -867,6 +867,46 @@ internal static partial class WebPipelineRunner
         return parsed;
     }
 
+    private static void ExecutePackageHub(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("package-hub requires out.");
+
+        var title = GetString(step, "title");
+        var projects = new List<string>();
+        AddInputPaths(projects, GetString(step, "project"));
+        AddInputPaths(projects, GetString(step, "projects"));
+        AddInputPaths(projects, GetArrayOfStrings(step, "projectFiles"));
+        AddInputPaths(projects, GetArrayOfStrings(step, "project-files"));
+
+        var modules = new List<string>();
+        AddInputPaths(modules, GetString(step, "module"));
+        AddInputPaths(modules, GetString(step, "modules"));
+        AddInputPaths(modules, GetArrayOfStrings(step, "moduleFiles"));
+        AddInputPaths(modules, GetArrayOfStrings(step, "module-files"));
+
+        var options = new WebPackageHubOptions
+        {
+            OutputPath = outPath,
+            BaseDirectory = baseDir,
+            Title = title
+        };
+        options.ProjectPaths.AddRange(projects
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        options.ModulePaths.AddRange(modules
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        var result = WebPackageHubGenerator.Generate(options);
+        var warningNote = result.Warnings.Length > 0
+            ? $" ({result.Warnings.Length} warnings)"
+            : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Package hub {result.LibraryCount} libraries, {result.ModuleCount} modules{warningNote}";
+    }
+
     private static void ExecuteLlms(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
