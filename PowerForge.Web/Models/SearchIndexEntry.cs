@@ -13,6 +13,12 @@ public sealed class SearchIndexEntry
     public string Snippet { get; set; } = string.Empty;
     /// <summary>Collection identifier.</summary>
     public string Collection { get; set; } = string.Empty;
+    /// <summary>Resolved page kind (for example page, section, taxonomy, term, home).</summary>
+    public string Kind { get; set; } = string.Empty;
+    /// <summary>Relative ranking weight used by search clients.</summary>
+    public double Weight { get; set; } = 1.0;
+    /// <summary>Precomputed text blob to simplify lightweight client-side search ranking.</summary>
+    public string SearchText { get; set; } = string.Empty;
     /// <summary>Tag list used for filtering.</summary>
     public string[] Tags { get; set; } = Array.Empty<string>();
     /// <summary>Optional project slug.</summary>

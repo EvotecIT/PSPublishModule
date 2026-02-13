@@ -3,8 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
-using Scriban;
-using Scriban.Runtime;
 
 namespace PowerForge.Web;
 
@@ -23,6 +21,8 @@ public sealed class WebSitemapOptions
     public string[]? ExtraPaths { get; set; }
     /// <summary>Explicit sitemap entries.</summary>
     public WebSitemapEntry[]? Entries { get; set; }
+    /// <summary>Optional JSON file containing sitemap entries (array or object with entries[]).</summary>
+    public string? EntriesJsonPath { get; set; }
     /// <summary>When true, include HTML files.</summary>
     public bool IncludeHtmlFiles { get; set; } = true;
     /// <summary>When true, include text files (robots/llms).</summary>
@@ -31,6 +31,10 @@ public sealed class WebSitemapOptions
     public bool IncludeLanguageAlternates { get; set; } = true;
     /// <summary>When true, generate an HTML sitemap.</summary>
     public bool GenerateHtml { get; set; }
+    /// <summary>When true, generate a machine-readable sitemap JSON file.</summary>
+    public bool GenerateJson { get; set; }
+    /// <summary>Optional sitemap JSON output path.</summary>
+    public string? JsonOutputPath { get; set; }
     /// <summary>Optional HTML sitemap output path.</summary>
     public string? HtmlOutputPath { get; set; }
     /// <summary>Optional HTML sitemap template path.</summary>
@@ -46,6 +50,12 @@ public sealed class WebSitemapEntry
 {
     /// <summary>Route path (relative to base URL).</summary>
     public string Path { get; set; } = "/";
+    /// <summary>Optional display title used by HTML sitemap renderers.</summary>
+    public string? Title { get; set; }
+    /// <summary>Optional description used by HTML sitemap renderers.</summary>
+    public string? Description { get; set; }
+    /// <summary>Optional section/group label used by HTML sitemap renderers.</summary>
+    public string? Section { get; set; }
     /// <summary>Optional change frequency value.</summary>
     public string? ChangeFrequency { get; set; }
     /// <summary>Optional priority value.</summary>
@@ -66,7 +76,7 @@ public sealed class WebSitemapAlternate
 }
 
 /// <summary>Generates sitemap.xml for the site output.</summary>
-public static class WebSitemapGenerator
+public static partial class WebSitemapGenerator
 {
     /// <summary>Generates a sitemap from site output.</summary>
     /// <param name="options">Generation options.</param>
@@ -90,7 +100,9 @@ public static class WebSitemapGenerator
         var entries = new Dictionary<string, WebSitemapEntry>(StringComparer.OrdinalIgnoreCase);
         var htmlRoutes = new List<string>();
         var localization = options.IncludeLanguageAlternates ? TryLoadLocalizationConfig(siteRoot) : null;
+        var generateJson = options.GenerateJson || options.GenerateHtml;
         string? htmlOutputPath = null;
+        string? jsonOutputPath = null;
 
         if (options.IncludeHtmlFiles)
         {
@@ -100,7 +112,7 @@ public static class WebSitemapGenerator
                 if (relative.EndsWith("404.html", StringComparison.OrdinalIgnoreCase)) continue;
                 var route = NormalizeRoute(relative);
                 if (string.IsNullOrWhiteSpace(route)) continue;
-                AddOrUpdate(entries, route, null);
+                AddOrUpdate(entries, route, BuildEntryFromHtmlFile(file, route));
                 htmlRoutes.Add(route);
             }
         }
@@ -130,6 +142,14 @@ public static class WebSitemapGenerator
                 AddOrUpdate(entries, NormalizeRoute(entry.Path), entry);
             }
         }
+        if (!string.IsNullOrWhiteSpace(options.EntriesJsonPath))
+        {
+            foreach (var entry in LoadEntriesFromJsonPath(options.EntriesJsonPath))
+            {
+                if (entry is null || string.IsNullOrWhiteSpace(entry.Path)) continue;
+                AddOrUpdate(entries, NormalizeRoute(entry.Path), entry);
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(options.ApiSitemapPath))
             MergeApiSitemap(options.ApiSitemapPath, baseUrl, entries);
@@ -146,6 +166,12 @@ public static class WebSitemapGenerator
                 AddOrUpdate(entries, NormalizeRoute(relative), null);
             }
         }
+        if (generateJson)
+        {
+            jsonOutputPath = string.IsNullOrWhiteSpace(options.JsonOutputPath)
+                ? Path.Combine(siteRoot, "sitemap", "index.json")
+                : Path.GetFullPath(options.JsonOutputPath);
+        }
 
         if (options.IncludeLanguageAlternates && localization is not null)
             ApplyLanguageAlternates(entries, htmlRoutes, localization);
@@ -153,8 +179,10 @@ public static class WebSitemapGenerator
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
         var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
         var xhtmlNs = XNamespace.Get("http://www.w3.org/1999/xhtml");
-        var entriesXml = entries.Values
+        var orderedEntries = entries.Values
             .OrderBy(u => u.Path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var entriesXml = orderedEntries
             .Select(u => BuildEntry(baseUrl, u, today, ns, xhtmlNs))
             .ToArray();
 
@@ -170,13 +198,12 @@ public static class WebSitemapGenerator
         {
             doc.Save(stream);
         }
+        if (generateJson && !string.IsNullOrWhiteSpace(jsonOutputPath))
+            WriteSitemapJson(baseUrl, orderedEntries, jsonOutputPath);
 
         if (options.GenerateHtml && !string.IsNullOrWhiteSpace(htmlOutputPath))
         {
-            var entryList = entries.Values
-                .OrderBy(u => u.Path, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var html = RenderHtmlSitemap(baseUrl, options, entryList);
+            var html = RenderHtmlSitemap(baseUrl, options, orderedEntries);
             Directory.CreateDirectory(Path.GetDirectoryName(htmlOutputPath) ?? siteRoot);
             File.WriteAllText(htmlOutputPath, html, Encoding.UTF8);
         }
@@ -184,6 +211,7 @@ public static class WebSitemapGenerator
         return new WebSitemapResult
         {
             OutputPath = outputPath,
+            JsonOutputPath = jsonOutputPath,
             HtmlOutputPath = htmlOutputPath,
             UrlCount = entriesXml.Length
         };
@@ -193,6 +221,11 @@ public static class WebSitemapGenerator
     {
         if (string.IsNullOrWhiteSpace(path)) return "/";
         var trimmed = path.Replace('\\', '/').Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri) &&
+            (absoluteUri.Scheme == Uri.UriSchemeHttp || absoluteUri.Scheme == Uri.UriSchemeHttps))
+        {
+            trimmed = absoluteUri.AbsolutePath + absoluteUri.Query;
+        }
         if (trimmed.StartsWith("/")) trimmed = trimmed.TrimStart('/');
 
         if (trimmed.Equals("index.html", StringComparison.OrdinalIgnoreCase))
@@ -479,12 +512,20 @@ public static class WebSitemapGenerator
         if (entries.TryGetValue(normalized, out var existing))
         {
             if (update is null) return;
+            if (!string.IsNullOrWhiteSpace(update.Title))
+                existing.Title = update.Title;
+            if (!string.IsNullOrWhiteSpace(update.Description))
+                existing.Description = update.Description;
+            if (!string.IsNullOrWhiteSpace(update.Section))
+                existing.Section = update.Section;
             if (!string.IsNullOrWhiteSpace(update.ChangeFrequency))
                 existing.ChangeFrequency = update.ChangeFrequency;
             if (!string.IsNullOrWhiteSpace(update.Priority))
                 existing.Priority = update.Priority;
             if (!string.IsNullOrWhiteSpace(update.LastModified))
                 existing.LastModified = update.LastModified;
+            if (update.Alternates is { Length: > 0 })
+                existing.Alternates = update.Alternates;
             return;
         }
 
@@ -497,9 +538,13 @@ public static class WebSitemapGenerator
         entries[normalized] = new WebSitemapEntry
         {
             Path = normalized,
+            Title = update.Title,
+            Description = update.Description,
+            Section = update.Section,
             ChangeFrequency = update.ChangeFrequency,
             Priority = update.Priority,
-            LastModified = update.LastModified
+            LastModified = update.LastModified,
+            Alternates = update.Alternates
         };
     }
 
@@ -522,89 +567,6 @@ public static class WebSitemapGenerator
         var targetFull = Path.GetFullPath(fullPath);
         return targetFull.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static string RenderHtmlSitemap(string baseUrl, WebSitemapOptions options, IReadOnlyList<WebSitemapEntry> entries)
-    {
-        var templatePath = options.HtmlTemplatePath;
-        string templateText;
-        if (!string.IsNullOrWhiteSpace(templatePath))
-        {
-            if (!File.Exists(templatePath))
-                throw new FileNotFoundException($"Sitemap HTML template not found: {templatePath}");
-            templateText = File.ReadAllText(templatePath);
-        }
-        else
-        {
-            templateText = DefaultHtmlTemplate;
-        }
-        var title = string.IsNullOrWhiteSpace(options.HtmlTitle) ? "Sitemap" : options.HtmlTitle;
-        var cssHref = options.HtmlCssHref ?? string.Empty;
-
-        var items = entries.Select(e => new Dictionary<string, object?>
-            {
-                ["path"] = e.Path,
-                ["url"] = baseUrl + (e.Path.StartsWith("/") ? e.Path : "/" + e.Path),
-                ["lastmod"] = e.LastModified,
-                ["changefreq"] = e.ChangeFrequency,
-                ["priority"] = e.Priority
-            })
-            .ToList();
-
-        var parsed = Template.Parse(templateText);
-        if (parsed.HasErrors)
-        {
-            var messages = string.Join(Environment.NewLine, parsed.Messages.Select(m => m.Message));
-            throw new InvalidOperationException($"Sitemap HTML template errors:{Environment.NewLine}{messages}");
-        }
-
-        var globals = new ScriptObject();
-        globals.Add("title", title);
-        globals.Add("base_url", baseUrl);
-        globals.Add("css_href", cssHref);
-        globals.Add("generated", DateTime.UtcNow.ToString("O"));
-        globals.Add("entries", items);
-
-        var context = new TemplateContext
-        {
-            LoopLimit = 0
-        };
-        context.PushGlobal(globals);
-
-        return parsed.Render(context);
-    }
-
-    private const string DefaultHtmlTemplate = @"<!doctype html>
-<html lang=""en"">
-<head>
-  <meta charset=""utf-8"" />
-  <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <meta name=""robots"" content=""noindex"" />
-  <title>{{ title }}</title>
-  {{ if css_href != """" }}<link rel=""stylesheet"" href=""{{ css_href }}"" />{{ end }}
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; background: #0b0f14; color: #e2e8f0; }
-    .pf-wrap { max-width: 960px; margin: 0 auto; padding: 48px 24px; }
-    .pf-list { list-style: none; margin: 24px 0 0; padding: 0; }
-    .pf-item { padding: 12px 0; border-bottom: 1px solid rgba(148,163,184,0.2); }
-    .pf-item a { color: inherit; text-decoration: none; }
-    .pf-item a:hover { color: #22d3ee; }
-    .pf-meta { font-size: 0.85rem; color: #94a3b8; }
-  </style>
-</head>
-<body>
-  <main class=""pf-wrap"">
-    <h1>{{ title }}</h1>
-    <div class=""pf-meta"">Generated {{ generated }}</div>
-    <ul class=""pf-list"">
-      {{ for item in entries }}
-        <li class=""pf-item"">
-          <a href=""{{ item.url }}"">{{ item.path }}</a>
-        </li>
-      {{ end }}
-    </ul>
-  </main>
-</body>
-</html>";
 
     private sealed class ResolvedLocalizationConfig
     {

@@ -846,9 +846,19 @@
         "out": { "type": "string" },
         "output": { "type": "string" },
         "entries": { "type": "array", "items": { "$ref": "#/$defs/SitemapEntry" } },
+        "entriesJson": { "type": "string" },
+        "entriesFile": { "type": "string" },
+        "entries-json": { "type": "string" },
+        "entries-file": { "type": "string" },
         "includeHtmlFiles": { "type": "boolean" },
         "includeTextFiles": { "type": "boolean" },
+        "includeLanguageAlternates": { "type": "boolean" },
         "extraPaths": { "type": "array", "items": { "type": "string" } },
+        "json": { "type": "boolean" },
+        "jsonOutput": { "type": "string" },
+        "jsonOut": { "type": "string" },
+        "json-output": { "type": "string" },
+        "json-out": { "type": "string" },
         "html": { "type": "boolean" },
         "htmlOutput": { "type": "string" },
         "htmlOut": { "type": "string" },
@@ -1152,7 +1162,25 @@
         "changefreq": { "type": "string" },
         "changeFrequency": { "type": "string" },
         "lastmod": { "type": "string" },
-        "lastModified": { "type": "string" }
+        "lastModified": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "section": { "type": "string" },
+        "alternates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "hrefLang": { "type": "string" },
+              "hreflang": { "type": "string" },
+              "path": { "type": "string" },
+              "route": { "type": "string" },
+              "url": { "type": "string" },
+              "href": { "type": "string" }
+            }
+          }
+        }
       }
     }
   }

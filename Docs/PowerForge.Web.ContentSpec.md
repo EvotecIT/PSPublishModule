@@ -254,6 +254,9 @@ When localization is enabled and at least two languages are configured:
 - Search output is emitted as:
   - `/search/index.json` (all languages)
   - `/search/<language>/index.json` (language shard, for example `/search/pl/index.json`)
+  - `/search/collections/<collection>/index.json` (collection shard, for example `/search/collections/docs/index.json`)
+  - `/search/manifest.json` (discoverability manifest for shards + search surface path)
+  - `/search/index.html` (auto-generated search page when `Features` includes `search` and no custom page exists)
 
 ## Collections
 Collections map markdown inputs to output routes:
@@ -668,9 +671,11 @@ Defaults:
 - `robots.txt`, `llms.txt`, `llms.json`, `llms-full.txt` are included when present.
 - Paths are normalized to trailing‑slash routes when they map to `index.html`.
 - If localization config exists in `_powerforge/site-spec.json`, sitemap entries include localized alternates (`xhtml:link`, `hreflang`, `x-default`).
+- Optional JSON output (`json: true`) writes a resolved machine-readable sitemap (`sitemap/index.json`) including URL/title/section metadata.
 
 Explicit entries:
 - `entries` in the sitemap task override auto‑generated metadata for the same path.
+- `entriesJson` can load entries from a JSON file (`[{...}]` or `{ "entries":[...] }`).
 - If a path is not present in auto output, it is still added to the sitemap.
 
 Example task:

@@ -35,9 +35,15 @@ public class WebSiteLocalizationFeaturesTests
             var allSearchPath = Path.Combine(result.OutputPath, "search", "index.json");
             var enSearchPath = Path.Combine(result.OutputPath, "search", "en", "index.json");
             var plSearchPath = Path.Combine(result.OutputPath, "search", "pl", "index.json");
+            var manifestPath = Path.Combine(result.OutputPath, "search", "manifest.json");
+            var collectionSearchPath = Path.Combine(result.OutputPath, "search", "collections", "docs", "index.json");
+            var searchSurfacePath = Path.Combine(result.OutputPath, "search", "index.html");
             Assert.True(File.Exists(allSearchPath));
             Assert.True(File.Exists(enSearchPath));
             Assert.True(File.Exists(plSearchPath));
+            Assert.True(File.Exists(manifestPath));
+            Assert.True(File.Exists(collectionSearchPath));
+            Assert.True(File.Exists(searchSurfacePath));
 
             var allEntries = JsonDocument.Parse(File.ReadAllText(allSearchPath)).RootElement.EnumerateArray().ToArray();
             var enEntries = JsonDocument.Parse(File.ReadAllText(enSearchPath)).RootElement.EnumerateArray().ToArray();
@@ -49,6 +55,79 @@ public class WebSiteLocalizationFeaturesTests
             Assert.All(enEntries, entry => Assert.Equal("en", entry.GetProperty("language").GetString()));
             Assert.All(plEntries, entry => Assert.Equal("pl", entry.GetProperty("language").GetString()));
             Assert.All(allEntries, entry => Assert.Equal("docs:index", entry.GetProperty("translationKey").GetString()));
+
+            var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath)).RootElement;
+            Assert.Equal("/search/index.json", manifest.GetProperty("searchIndexPath").GetString());
+            Assert.Contains(
+                manifest.GetProperty("languageShards").EnumerateArray().ToArray(),
+                shard => string.Equals(shard.GetProperty("language").GetString(), "en", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(
+                manifest.GetProperty("collectionShards").EnumerateArray().ToArray(),
+                shard => string.Equals(shard.GetProperty("collection").GetString(), "docs", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Sitemap_Generate_FromEntriesJson_ProducesJsonAndThemedHtmlMap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-sitemap-json-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-sitemap-json-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Sitemap JSON Test", "localization-sitemap-json-theme");
+            var build = BuildSite(root, spec);
+
+            var entriesPath = Path.Combine(root, "sitemap.entries.json");
+            File.WriteAllText(entriesPath,
+                """
+                {
+                  "entries": [
+                    {
+                      "path": "/docs/",
+                      "title": "Documentation Home",
+                      "section": "Guides",
+                      "description": "Landing page for documentation."
+                    }
+                  ]
+                }
+                """);
+
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = build.OutputPath,
+                BaseUrl = spec.BaseUrl,
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false,
+                IncludeLanguageAlternates = false,
+                EntriesJsonPath = entriesPath,
+                GenerateJson = true,
+                GenerateHtml = true
+            });
+
+            Assert.True(File.Exists(sitemap.OutputPath));
+            Assert.True(File.Exists(sitemap.JsonOutputPath));
+            Assert.True(File.Exists(sitemap.HtmlOutputPath));
+
+            var json = JsonDocument.Parse(File.ReadAllText(sitemap.JsonOutputPath!)).RootElement;
+            var docsEntry = json.GetProperty("entries")
+                .EnumerateArray()
+                .FirstOrDefault(entry => string.Equals(entry.GetProperty("path").GetString(), "/docs/", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("Documentation Home", docsEntry.GetProperty("title").GetString());
+            Assert.Equal("Guides", docsEntry.GetProperty("section").GetString());
+
+            var html = File.ReadAllText(sitemap.HtmlOutputPath!);
+            Assert.Contains("Documentation Home", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Guides", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/themes/localization-sitemap-json-theme/assets/app.css", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -294,6 +373,7 @@ public class WebSiteLocalizationFeaturesTests
             DefaultTheme = themeName,
             ThemesRoot = "themes",
             TrailingSlash = TrailingSlashMode.Always,
+            Features = new[] { "docs", "search" },
             Localization = new LocalizationSpec
             {
                 Enabled = true,
@@ -323,6 +403,7 @@ public class WebSiteLocalizationFeaturesTests
     {
         var themeRoot = Path.Combine(root, "themes", themeName);
         Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+        Directory.CreateDirectory(Path.Combine(themeRoot, "assets"));
         File.WriteAllText(Path.Combine(themeRoot, "layouts", $"{layoutName}.html"),
             """
             <!doctype html>
@@ -339,6 +420,7 @@ public class WebSiteLocalizationFeaturesTests
               "defaultLayout": "{{layoutName}}"
             }
             """);
+        File.WriteAllText(Path.Combine(themeRoot, "assets", "app.css"), "body { font-family: Segoe UI, Arial, sans-serif; }");
     }
 
     private static void CreateLocalizedDocsContent(string root)

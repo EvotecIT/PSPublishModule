@@ -1046,8 +1046,20 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("sitemap requires siteRoot and baseUrl.");
 
         var entries = GetSitemapEntries(step, "entries");
+        var entriesJson = ResolvePath(baseDir,
+            GetString(step, "entriesJson") ??
+            GetString(step, "entriesFile") ??
+            GetString(step, "entries-json") ??
+            GetString(step, "entries-file"));
         var includeHtml = GetBool(step, "includeHtmlFiles");
         var includeText = GetBool(step, "includeTextFiles");
+        var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
+        var jsonEnabled = GetBool(step, "json") ?? false;
+        var jsonOutput = ResolvePath(baseDir,
+            GetString(step, "jsonOutput") ??
+            GetString(step, "jsonOut") ??
+            GetString(step, "json-output") ??
+            GetString(step, "json-out"));
         var htmlEnabled = GetBool(step, "html") ?? false;
         var htmlOutput = ResolvePath(baseDir, GetString(step, "htmlOutput") ?? GetString(step, "htmlOut") ?? GetString(step, "html-out"));
         var htmlTemplate = ResolvePath(baseDir, GetString(step, "htmlTemplate") ?? GetString(step, "html-template"));
@@ -1060,6 +1072,8 @@ internal static partial class WebPipelineRunner
                           !string.IsNullOrWhiteSpace(htmlCss) ||
                           !string.IsNullOrWhiteSpace(htmlTitle);
         }
+        if (!jsonEnabled)
+            jsonEnabled = !string.IsNullOrWhiteSpace(jsonOutput) || htmlEnabled;
 
         var res = WebSitemapGenerator.Generate(new WebSitemapOptions
         {
@@ -1069,9 +1083,13 @@ internal static partial class WebPipelineRunner
             ApiSitemapPath = ResolvePath(baseDir, GetString(step, "apiSitemap") ?? GetString(step, "api-sitemap")),
             ExtraPaths = GetArrayOfStrings(step, "extraPaths") ?? GetArrayOfStrings(step, "extra-paths"),
             Entries = entries.Length == 0 ? null : entries,
+            EntriesJsonPath = entriesJson,
             IncludeHtmlFiles = includeHtml ?? true,
             IncludeTextFiles = includeText ?? true,
+            IncludeLanguageAlternates = includeLanguageAlternates ?? true,
             GenerateHtml = htmlEnabled,
+            GenerateJson = jsonEnabled,
+            JsonOutputPath = jsonOutput,
             HtmlOutputPath = htmlOutput,
             HtmlTemplatePath = htmlTemplate,
             HtmlCssHref = htmlCss,

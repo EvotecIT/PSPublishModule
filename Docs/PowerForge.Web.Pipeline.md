@@ -500,14 +500,17 @@ Notes:
 - Use `includeDependencies:false` to omit dependency columns from generated outputs.
 
 #### sitemap
-Generates `sitemap.xml` and (optionally) `sitemap.html`.
+Generates `sitemap.xml` and (optionally) `sitemap/index.json` + `sitemap.html`.
 ```json
 {
   "task": "sitemap",
   "siteRoot": "./Artifacts/site",
   "baseUrl": "https://example.com",
   "includeLanguageAlternates": true,
+  "entriesJson": "./data/sitemap.entries.json",
   "extraPaths": ["/robots.txt"],
+  "json": true,
+  "jsonOut": "./Artifacts/site/sitemap/index.json",
   "html": true,
   "htmlTemplate": "./themes/nova/templates/sitemap.html",
   "htmlTitle": "Sitemap",
@@ -520,8 +523,11 @@ Generates `sitemap.xml` and (optionally) `sitemap.html`.
 Notes:
 - By default, **all HTML pages** under `siteRoot` are auto‑included.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
+- `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
+- `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 - `includeLanguageAlternates` (default `true`) emits `xhtml:link` alternates (`hreflang` and `x-default`) when `_powerforge/site-spec.json` contains an enabled `Localization` config.
+- When `htmlCss` is omitted, PowerForge tries to auto-detect site/theme CSS so the HTML sitemap inherits theme styling.
 
 #### optimize
 Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash assets + generate cache headers.

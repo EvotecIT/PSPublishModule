@@ -40,7 +40,10 @@ internal static partial class WebPipelineRunner
         "csproj", "csprojFiles", "csproj-files", "psd1", "psd1Files", "psd1-files",
         "markdownOut", "markdown-out", "markdownOutput", "markdown-output",
         "headerHtml", "footerHtml", "quickstart", "extra",
-        "htmlOutput", "htmlTemplate", "cachePath", "profilePath"
+        "htmlOutput", "htmlTemplate",
+        "entriesJson", "entriesFile", "entries-json", "entries-file",
+        "jsonOutput", "jsonOut", "json-output", "json-out",
+        "cachePath", "profilePath"
     };
 
     private sealed class WebPipelineCacheState

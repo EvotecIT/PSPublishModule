@@ -281,7 +281,37 @@ internal static partial class WebPipelineRunner
                 var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
                 if (string.IsNullOrWhiteSpace(outPath) && !string.IsNullOrWhiteSpace(siteRoot))
                     outPath = Path.Combine(siteRoot, "sitemap.xml");
-                return ResolveOutputCandidates(baseDir, outPath);
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir, outPath));
+
+                var htmlEnabled = GetBool(step, "html") ?? false;
+                var htmlOutput = ResolvePath(baseDir,
+                    GetString(step, "htmlOutput") ??
+                    GetString(step, "htmlOut") ??
+                    GetString(step, "html-out"));
+                if (htmlEnabled || !string.IsNullOrWhiteSpace(htmlOutput))
+                {
+                    if (string.IsNullOrWhiteSpace(htmlOutput) && !string.IsNullOrWhiteSpace(siteRoot))
+                        htmlOutput = Path.Combine(siteRoot, "sitemap", "index.html");
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, htmlOutput));
+                }
+
+                var jsonEnabled = GetBool(step, "json") ?? htmlEnabled;
+                var jsonOutput = ResolvePath(baseDir,
+                    GetString(step, "jsonOutput") ??
+                    GetString(step, "jsonOut") ??
+                    GetString(step, "json-output") ??
+                    GetString(step, "json-out"));
+                if (jsonEnabled || !string.IsNullOrWhiteSpace(jsonOutput))
+                {
+                    if (string.IsNullOrWhiteSpace(jsonOutput) && !string.IsNullOrWhiteSpace(siteRoot))
+                        jsonOutput = Path.Combine(siteRoot, "sitemap", "index.json");
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, jsonOutput));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
             }
             case "optimize":
             {

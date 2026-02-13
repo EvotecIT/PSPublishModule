@@ -540,7 +540,7 @@ public static partial class WebSiteBuilder
         return StripTagsRegex.Replace(input, string.Empty);
     }
 
-    private static void WriteSearchIndex(string outputRoot, IReadOnlyList<ContentItem> items)
+    private static void WriteSearchIndex(SiteSpec spec, string outputRoot, IReadOnlyList<ContentItem> items)
     {
         if (items.Count == 0) return;
 
@@ -548,10 +548,13 @@ public static partial class WebSiteBuilder
         foreach (var item in items)
         {
             if (item.Draft) continue;
-            if (item.Kind != PageKind.Page && item.Kind != PageKind.Home)
+            if (string.IsNullOrWhiteSpace(item.OutputPath))
+                continue;
+            if (item.OutputPath.Equals("/404.html", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var snippet = BuildSnippet(item.HtmlContent, 240);
+            var normalizedLanguage = NormalizeLanguageToken(item.Language);
             entries.Add(new SearchIndexEntry
             {
                 Title = item.Title,
@@ -559,13 +562,24 @@ public static partial class WebSiteBuilder
                 Description = item.Description,
                 Snippet = snippet,
                 Collection = item.Collection,
+                Kind = item.Kind.ToString().ToLowerInvariant(),
+                Weight = ResolveSearchWeight(item.Kind, item.Collection),
+                SearchText = BuildSearchText(item, snippet),
                 Tags = item.Tags,
                 Project = item.ProjectSlug,
-                Language = NormalizeLanguageToken(item.Language),
+                Language = normalizedLanguage,
                 TranslationKey = item.TranslationKey,
                 Meta = item.Meta.Count == 0 ? null : item.Meta
             });
         }
+        if (entries.Count == 0)
+            return;
+
+        entries = entries
+            .OrderByDescending(static entry => entry.Weight)
+            .ThenBy(static entry => entry.Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static entry => entry.Url, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var searchDir = Path.Combine(outputRoot, "search");
         Directory.CreateDirectory(searchDir);
@@ -578,19 +592,66 @@ public static partial class WebSiteBuilder
             .Where(static language => !string.IsNullOrWhiteSpace(language))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (languages.Length <= 1)
-            return;
-
-        foreach (var language in languages)
+        if (languages.Length > 1)
         {
-            var shard = entries
-                .Where(entry => NormalizeLanguageToken(entry.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            var shardDir = Path.Combine(searchDir, language);
-            Directory.CreateDirectory(shardDir);
-            var shardPath = Path.Combine(shardDir, "index.json");
-            WriteAllTextIfChanged(shardPath, JsonSerializer.Serialize(shard, WebJson.Options));
+            foreach (var language in languages)
+            {
+                var shard = entries
+                    .Where(entry => NormalizeLanguageToken(entry.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var shardDir = Path.Combine(searchDir, language);
+                Directory.CreateDirectory(shardDir);
+                var shardPath = Path.Combine(shardDir, "index.json");
+                WriteAllTextIfChanged(shardPath, JsonSerializer.Serialize(shard, WebJson.Options));
+            }
         }
+
+        var collectionShards = new List<Dictionary<string, object?>>();
+        var collections = entries
+            .Select(static entry => entry.Collection)
+            .Where(static collection => !string.IsNullOrWhiteSpace(collection))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var collection in collections)
+        {
+            var token = Slugify(collection);
+            if (string.IsNullOrWhiteSpace(token))
+                continue;
+            var shard = entries
+                .Where(entry => string.Equals(entry.Collection, collection, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var collectionDir = Path.Combine(searchDir, "collections", token);
+            Directory.CreateDirectory(collectionDir);
+            var collectionPath = Path.Combine(collectionDir, "index.json");
+            WriteAllTextIfChanged(collectionPath, JsonSerializer.Serialize(shard, WebJson.Options));
+            collectionShards.Add(new Dictionary<string, object?>
+            {
+                ["collection"] = collection,
+                ["path"] = $"/search/collections/{token}/index.json",
+                ["count"] = shard.Length
+            });
+        }
+
+        var languageShards = languages.Select(language => new Dictionary<string, object?>
+        {
+            ["language"] = language,
+            ["path"] = $"/search/{language}/index.json",
+            ["count"] = entries.Count(entry => NormalizeLanguageToken(entry.Language).Equals(language, StringComparison.OrdinalIgnoreCase))
+        }).ToArray();
+
+        var manifest = new Dictionary<string, object?>
+        {
+            ["entryCount"] = entries.Count,
+            ["searchIndexPath"] = "/search/index.json",
+            ["languageShards"] = languageShards,
+            ["collectionShards"] = collectionShards,
+            ["searchPagePath"] = "/search/"
+        };
+        var manifestPath = Path.Combine(searchDir, "manifest.json");
+        WriteAllTextIfChanged(manifestPath, JsonSerializer.Serialize(manifest, WebJson.Options));
+
+        if (HasFeature(spec.Features, "search"))
+            EnsureSearchPage(outputRoot, entries);
     }
 
     private static void WriteLinkCheckReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)
