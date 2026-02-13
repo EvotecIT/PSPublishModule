@@ -310,8 +310,15 @@ internal static partial class WebPipelineRunner
         var framework = GetString(step, "framework");
         var runtime = GetString(step, "runtime");
         var noRestore = GetBool(step, "noRestore") ?? false;
+        var skipIfProjectMissing = GetBool(step, "skipIfProjectMissing") ??
+                                   GetBool(step, "skipIfMissingProject") ??
+                                   GetBool(step, "skip-if-project-missing") ??
+                                   false;
         if (string.IsNullOrWhiteSpace(project))
             throw new InvalidOperationException("dotnet-build requires project.");
+
+        if (TrySkipDotNetStepForMissingProject(project, skipIfProjectMissing, stepResult, "dotnet build"))
+            return;
 
         var res = WebDotNetRunner.Build(new WebDotNetBuildOptions
         {
@@ -343,9 +350,17 @@ internal static partial class WebPipelineRunner
         var defineConstants = GetString(step, "defineConstants") ?? GetString(step, "define-constants");
         var noBlazorFixes = GetBool(step, "noBlazorFixes") ?? false;
         var blazorFixes = GetBool(step, "blazorFixes") ?? !noBlazorFixes;
+        var skipIfProjectMissing = GetBool(step, "skipIfProjectMissing") ??
+                                   GetBool(step, "skipIfMissingProject") ??
+                                   GetBool(step, "skip-if-project-missing") ??
+                                   false;
 
         if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(outPath))
             throw new InvalidOperationException("dotnet-publish requires project and out.");
+
+        if (TrySkipDotNetStepForMissingProject(project, skipIfProjectMissing, stepResult, "dotnet publish"))
+            return;
+
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
 
@@ -376,6 +391,19 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = "dotnet publish ok";
+    }
+
+    private static bool TrySkipDotNetStepForMissingProject(string project, bool skipIfProjectMissing, WebPipelineStepResult stepResult, string taskLabel)
+    {
+        if (!skipIfProjectMissing)
+            return false;
+
+        if (File.Exists(project) || Directory.Exists(project))
+            return false;
+
+        stepResult.Success = true;
+        stepResult.Message = $"{taskLabel} skipped: project path not found '{project}'";
+        return true;
     }
 
     private static void ExecuteOverlay(JsonElement step, string baseDir, WebPipelineStepResult stepResult)

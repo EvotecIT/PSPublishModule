@@ -554,7 +554,8 @@ Runs `dotnet build`.
   "project": "./src/MySite/MySite.csproj",
   "configuration": "Release",
   "framework": "net9.0",
-  "noRestore": true
+  "noRestore": true,
+  "skipIfProjectMissing": true
 }
 ```
 
@@ -572,7 +573,8 @@ Runs `dotnet publish` and (optionally) applies Blazor fixes.
   "noRestore": true,
   "baseHref": "/",
   "defineConstants": "DOCS_BUILD",
-  "blazorFixes": true
+  "blazorFixes": true,
+  "skipIfProjectMissing": true
 }
 ```
 
@@ -580,6 +582,7 @@ Notes:
 - `blazorFixes` defaults to `true` in the CLI.
 - Schema uses `noBlazorFixes` today; CLI reads `blazorFixes`. We should align these later.
 - `defineConstants` maps to `-p:DefineConstants=...` for multi-variant Blazor publishes.
+- `skipIfProjectMissing` (`skipIfMissingProject`, `skip-if-project-missing`) makes the step succeed with a skip message when the project path is absent (useful for worktree-only/partial checkouts).
 
 #### overlay
 Copies a static overlay directory into another (useful for Blazor outputs).
