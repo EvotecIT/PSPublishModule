@@ -379,7 +379,9 @@
         "Enabled": { "type": "boolean", "default": true },
         "MaxItems": { "type": "integer", "minimum": 0 },
         "IncludeContent": { "type": "boolean", "default": false },
-        "IncludeCategories": { "type": "boolean", "default": true }
+        "IncludeCategories": { "type": "boolean", "default": true },
+        "IncludeAtom": { "type": "boolean", "default": false },
+        "IncludeJsonFeed": { "type": "boolean", "default": false }
       }
     },
     "OutputFormatSpec": {

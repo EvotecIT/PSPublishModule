@@ -496,7 +496,7 @@ Example:
 ## Output runtime (feeds/json variants)
 Templates receive output metadata for the current page:
 - `outputs` (array of `{ name, url, media_type, rel, is_current }`)
-- `feed_url` (resolved RSS URL when available)
+- `feed_url` (resolved preferred feed URL when available: RSS, then Atom, then JSON Feed)
 
 The engine also injects `<link rel=\"alternate\" ...>` tags for non-HTML outputs into `<head>`.
 

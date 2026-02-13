@@ -752,12 +752,12 @@ PowerForge.Web generates:
 - `/tags/<term>/` (term pages)
 
 ## Outputs
-Enable multiple outputs (HTML/JSON/RSS) per page kind:
+Enable multiple outputs (HTML/JSON/RSS/Atom/JSON Feed) per page kind:
 ```json
 {
   "Outputs": {
     "Rules": [
-      { "Kind": "section", "Formats": ["html", "rss"] },
+      { "Kind": "section", "Formats": ["html", "rss", "atom", "jsonfeed"] },
       { "Kind": "page", "Formats": ["html", "json"] }
     ]
   }
@@ -767,6 +767,17 @@ Enable multiple outputs (HTML/JSON/RSS) per page kind:
 Implicit defaults (when no explicit output rule/override exists):
 - `blog` section pages: `html` + `rss`
 - `tags`/`categories` taxonomy and term pages: `html` + `rss`
+
+Optional implicit feed formats:
+```json
+{
+  "Feed": {
+    "IncludeAtom": true,
+    "IncludeJsonFeed": true
+  }
+}
+```
+This adds `atom` (`index.atom.xml`) and `jsonfeed` (`index.feed.json`) to implicit blog/taxonomy outputs while keeping existing RSS defaults.
 
 This gives zero-config feeds for common blog/taxonomy layouts while keeping other page kinds HTML-only by default.
 
