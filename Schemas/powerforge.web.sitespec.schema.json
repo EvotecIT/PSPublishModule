@@ -428,6 +428,9 @@
         "BasePath": { "type": "string" },
         "Current": { "type": "string" },
         "HubPath": { "type": "string" },
+        "GenerateAliasRedirects": { "type": "boolean" },
+        "LatestAliasPath": { "type": "string" },
+        "LtsAliasPath": { "type": "string" },
         "Versions": {
           "type": "array",
           "items": { "$ref": "#/$defs/VersionSpec" }
@@ -470,6 +473,7 @@
         "Default": { "type": "boolean" },
         "Latest": { "type": "boolean" },
         "Lts": { "type": "boolean" },
+        "Aliases": { "type": "array", "items": { "type": "string" } },
         "Deprecated": { "type": "boolean" }
       },
       "required": ["Name"]

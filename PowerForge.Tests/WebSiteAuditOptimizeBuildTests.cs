@@ -199,6 +199,97 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Build_GeneratesVersionAliasRedirects_WhenEnabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-version-alias-redirects-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "redirect-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"),
+                """
+                <!doctype html>
+                <html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "redirect-test",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Version Alias Redirect Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "redirect-test",
+                ThemesRoot = "themes",
+                Versioning = new VersioningSpec
+                {
+                    Enabled = true,
+                    BasePath = "/docs",
+                    GenerateAliasRedirects = true,
+                    Versions = new[]
+                    {
+                        new VersionSpec { Name = "v3", Url = "/docs/v3/", Latest = true, Aliases = new[] { "stable" } },
+                        new VersionSpec { Name = "v2", Url = "/docs/v2/", Lts = true, Aliases = new[] { "legacy" } }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var netlify = File.ReadAllText(Path.Combine(result.OutputPath, "_redirects"));
+            Assert.Contains("/docs/latest/ /docs/v3/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/lts/ /docs/v2/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/stable/ /docs/v3/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/legacy/ /docs/v2/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+
+            var metadataPath = Path.Combine(result.OutputPath, "_powerforge", "redirects.json");
+            var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
+            var redirects = metadata.RootElement.GetProperty("redirects");
+            Assert.Contains(redirects.EnumerateArray(), entry =>
+                string.Equals(entry.GetProperty("from").GetString(), "/docs/latest/", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(entry.GetProperty("to").GetString(), "/docs/v3/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Build_FeedOptions_LimitItems_IncludeContent_AndRespectTaxonomyOutputs()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-feed-options-" + Guid.NewGuid().ToString("N"));

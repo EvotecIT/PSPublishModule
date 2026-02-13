@@ -77,6 +77,7 @@ public static partial class WebSiteBuilder
             if (project.Redirects is { Length: > 0 })
                 redirects.AddRange(project.Redirects);
         }
+        AddVersioningAliasRedirects(spec, redirects);
 
         var data = LoadData(spec, plan, projectSpecs);
         var projectMap = projectSpecs
