@@ -35,6 +35,8 @@ internal static partial class WebPipelineRunner
         "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path",
         "xrefMap", "xref-map", "xrefMapPath", "xref-map-path",
         "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path",
+        "csproj", "csprojFiles", "csproj-files", "psd1", "psd1Files", "psd1-files",
+        "markdownOut", "markdown-out", "markdownOutput", "markdown-output",
         "headerHtml", "footerHtml", "quickstart", "extra",
         "htmlOutput", "htmlTemplate", "cachePath", "profilePath"
     };

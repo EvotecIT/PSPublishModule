@@ -896,6 +896,108 @@ internal static partial class WebPipelineRunner
         stepResult.Message = $"LLMS generated ({res.Version})";
     }
 
+    private static void ExecuteCompatibilityMatrix(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    {
+        var outputPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outputPath))
+            throw new InvalidOperationException("compat-matrix requires out.");
+
+        var markdownOutputPath = ResolvePath(baseDir,
+            GetString(step, "markdownOut") ??
+            GetString(step, "markdown-out") ??
+            GetString(step, "markdownOutput") ??
+            GetString(step, "markdown-output"));
+
+        var includeDependencies = GetBool(step, "includeDependencies") ??
+                                  GetBool(step, "include-dependencies") ??
+                                  true;
+        var failOnWarnings = GetBool(step, "failOnWarnings") ?? false;
+
+        var csprojInputs = new List<string>();
+        AddInputPaths(csprojInputs, GetString(step, "csproj"));
+        AddInputPaths(csprojInputs, GetString(step, "project"));
+        AddInputPaths(csprojInputs, GetString(step, "csprojFiles"));
+        AddInputPaths(csprojInputs, GetString(step, "csproj-files"));
+        AddInputPaths(csprojInputs, GetArrayOfStrings(step, "csprojFiles"));
+        AddInputPaths(csprojInputs, GetArrayOfStrings(step, "csproj-files"));
+        AddInputPaths(csprojInputs, GetArrayOfStrings(step, "projects"));
+
+        var psd1Inputs = new List<string>();
+        AddInputPaths(psd1Inputs, GetString(step, "psd1"));
+        AddInputPaths(psd1Inputs, GetString(step, "psd1Files"));
+        AddInputPaths(psd1Inputs, GetString(step, "psd1-files"));
+        AddInputPaths(psd1Inputs, GetArrayOfStrings(step, "psd1Files"));
+        AddInputPaths(psd1Inputs, GetArrayOfStrings(step, "psd1-files"));
+
+        var options = new WebCompatibilityMatrixOptions
+        {
+            OutputPath = outputPath,
+            MarkdownOutputPath = markdownOutputPath,
+            BaseDirectory = baseDir,
+            Title = GetString(step, "title"),
+            IncludeDependencies = includeDependencies
+        };
+        options.CsprojFiles.AddRange(csprojInputs
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ResolvePath(baseDir, value) ?? value)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+        options.Psd1Files.AddRange(psd1Inputs
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => ResolvePath(baseDir, value) ?? value)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        if (step.TryGetProperty("entries", out var entriesElement) && entriesElement.ValueKind == JsonValueKind.Array)
+            options.Entries.AddRange(ParseCompatibilityEntries(entriesElement));
+
+        var result = WebCompatibilityMatrixGenerator.Generate(options);
+        if (failOnWarnings && result.Warnings.Length > 0)
+        {
+            throw new InvalidOperationException(result.Warnings.FirstOrDefault(static warning => !string.IsNullOrWhiteSpace(warning))
+                                                ?? "compat-matrix generated warnings.");
+        }
+
+        var note = result.Warnings.Length > 0 ? $" ({result.Warnings.Length} warnings)" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Compatibility matrix {result.EntryCount} entries{note}";
+    }
+
+    private static IEnumerable<WebCompatibilityMatrixEntryInput> ParseCompatibilityEntries(JsonElement entriesElement)
+    {
+        foreach (var item in entriesElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+
+            yield return new WebCompatibilityMatrixEntryInput
+            {
+                Type = GetString(item, "type"),
+                Id = GetString(item, "id"),
+                Name = GetString(item, "name"),
+                Version = GetString(item, "version"),
+                SourcePath = GetString(item, "sourcePath") ?? GetString(item, "source-path") ?? GetString(item, "source"),
+                TargetFrameworks = (GetArrayOfStrings(item, "targetFrameworks")
+                                    ?? GetArrayOfStrings(item, "target-frameworks")
+                                    ?? GetArrayOfStrings(item, "tfms")
+                                    ?? Array.Empty<string>()).ToList(),
+                PowerShellEditions = (GetArrayOfStrings(item, "powerShellEditions")
+                                      ?? GetArrayOfStrings(item, "powershellEditions")
+                                      ?? GetArrayOfStrings(item, "psEditions")
+                                      ?? GetArrayOfStrings(item, "ps-editions")
+                                      ?? Array.Empty<string>()).ToList(),
+                PowerShellVersion = GetString(item, "powerShellVersion")
+                                    ?? GetString(item, "powershellVersion")
+                                    ?? GetString(item, "psVersion")
+                                    ?? GetString(item, "ps-version"),
+                Dependencies = (GetArrayOfStrings(item, "dependencies")
+                                ?? GetArrayOfStrings(item, "dependsOn")
+                                ?? Array.Empty<string>()).ToList(),
+                Status = GetString(item, "status"),
+                Notes = GetString(item, "notes"),
+                Url = GetString(item, "url")
+            };
+        }
+    }
+
     private static void ExecuteSitemap(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
