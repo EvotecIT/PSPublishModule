@@ -38,6 +38,7 @@ collection: {{collection}}
             "overlay" => HandleOverlay(subArgs, outputJson, logger, outputSchemaVersion),
             "llms" => HandleLlms(subArgs, outputJson, logger, outputSchemaVersion),
             "sitemap" => HandleSitemap(subArgs, outputJson, logger, outputSchemaVersion),
+            "xref-merge" => HandleXrefMerge(subArgs, outputJson, logger, outputSchemaVersion),
             "cloudflare" => HandleCloudflare(subArgs, outputJson, logger, outputSchemaVersion),
             _ => HandleUnknownCommand()
         };

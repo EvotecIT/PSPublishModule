@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -35,18 +36,42 @@ internal static partial class WebCliCommandHandlers
         var sidebarPosition = TryGetOptionValue(subArgs, "--sidebar") ?? TryGetOptionValue(subArgs, "--sidebar-position");
         var bodyClass = TryGetOptionValue(subArgs, "--body-class") ?? TryGetOptionValue(subArgs, "--bodyClass");
         var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
+        var sourcePathPrefix = TryGetOptionValue(subArgs, "--source-path-prefix");
         var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
+        var coverageReport = TryGetOptionValue(subArgs, "--coverage-report");
+        var generateCoverageReport = !HasOption(subArgs, "--no-coverage-report");
+        if (HasOption(subArgs, "--coverage-report-off"))
+            generateCoverageReport = false;
+        var xrefMapPath = TryGetOptionValue(subArgs, "--xref-map") ??
+                          TryGetOptionValue(subArgs, "--xref-map-path") ??
+                          TryGetOptionValue(subArgs, "--xrefMap") ??
+                          TryGetOptionValue(subArgs, "--xrefMapPath");
+        var generateXrefMap = !HasOption(subArgs, "--no-xref-map");
+        if (HasOption(subArgs, "--xref-map-off"))
+            generateXrefMap = false;
+        var generateMemberXrefs = !HasOption(subArgs, "--no-member-xref");
+        if (HasOption(subArgs, "--member-xref-off"))
+            generateMemberXrefs = false;
+        var memberXrefKinds = ReadOptionList(subArgs, "--member-xref-kind", "--member-xref-kinds");
+        var memberXrefMaxPerType = ParseIntOption(TryGetOptionValue(subArgs, "--member-xref-max-per-type"), 0);
+        var powerShellExamplesPath = TryGetOptionValue(subArgs, "--ps-examples") ?? TryGetOptionValue(subArgs, "--powershell-examples");
+        var generatePowerShellFallbackExamples = !HasOption(subArgs, "--no-ps-fallback-examples");
+        if (HasOption(subArgs, "--ps-fallback-examples-off"))
+            generatePowerShellFallbackExamples = false;
+        var powerShellFallbackLimit = ParseIntOption(TryGetOptionValue(subArgs, "--ps-fallback-limit"), 2);
         var sourceMapValues = GetOptionValues(subArgs, "--source-map");
         var includeUndocumented = !HasOption(subArgs, "--documented-only") && !HasOption(subArgs, "--no-undocumented");
         if (HasOption(subArgs, "--include-undocumented"))
             includeUndocumented = true;
         var navJson = TryGetOptionValue(subArgs, "--nav") ?? TryGetOptionValue(subArgs, "--nav-json");
+        var navSurface = TryGetOptionValue(subArgs, "--nav-surface") ?? TryGetOptionValue(subArgs, "--nav-surface-name");
         var includeNamespaces = ReadOptionList(subArgs, "--include-namespace", "--namespace-prefix");
         var excludeNamespaces = ReadOptionList(subArgs, "--exclude-namespace");
         var includeTypes = ReadOptionList(subArgs, "--include-type");
         var excludeTypes = ReadOptionList(subArgs, "--exclude-type");
         var quickStartTypes = ReadOptionList(subArgs, "--quickstart-types", "--quick-start-types");
         var suppressWarnings = ReadOptionList(subArgs, "--suppress-warning", "--suppress-warnings").ToArray();
+        var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
 
         var apiType = ApiDocsType.CSharp;
         if (!string.IsNullOrWhiteSpace(typeText) &&
@@ -85,10 +110,23 @@ internal static partial class WebCliCommandHandlers
             SidebarPosition = sidebarPosition,
             BodyClass = bodyClass,
             SourceRootPath = sourceRoot,
+            SourcePathPrefix = sourcePathPrefix,
             SourceUrlPattern = sourceUrl,
             IncludeUndocumentedTypes = includeUndocumented,
-            NavJsonPath = navJson
+            NavJsonPath = navJson,
+            NavSurfaceName = navSurface,
+            GenerateCoverageReport = generateCoverageReport,
+            CoverageReportPath = coverageReport,
+            GenerateXrefMap = generateXrefMap,
+            GenerateMemberXrefs = generateMemberXrefs,
+            MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
+            XrefMapPath = xrefMapPath,
+            GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+            PowerShellExamplesPath = powerShellExamplesPath,
+            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackLimit > 0 ? powerShellFallbackLimit : 2
         };
+        if (memberXrefKinds.Count > 0)
+            options.MemberXrefKinds.AddRange(memberXrefKinds);
         foreach (var sourceMapValue in sourceMapValues)
         {
             if (!TryParseApiDocsSourceMap(sourceMapValue, out var mapping))
@@ -109,20 +147,54 @@ internal static partial class WebCliCommandHandlers
         if (quickStartTypes.Count > 0)
             options.QuickStartTypeNames.AddRange(quickStartTypes);
 
+        var preflightWarnings = WebPipelineRunner.ValidateApiDocsPreflight(
+            apiType,
+            sourceRoot,
+            sourceUrl,
+            options.SourceUrlMappings,
+            navJson,
+            navSurface,
+            navContextPath: null,
+            powerShellExamplesPath);
+        var filteredPreflightWarnings = WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings);
+
+        if (!outputJson && filteredPreflightWarnings.Length > 0)
+        {
+            foreach (var warning in filteredPreflightWarnings)
+                logger.Warn(warning);
+        }
+        if (failOnWarnings && filteredPreflightWarnings.Length > 0)
+        {
+            var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                           ?? "API docs preflight warnings encountered.";
+            return Fail(headline, outputJson, logger, "web.apidocs");
+        }
+
         var result = WebApiDocsGenerator.Generate(options);
-        var filteredWarnings = WebVerifyPolicy.FilterWarnings(result.Warnings, suppressWarnings);
+        var generatorWarnings = result.Warnings ?? Array.Empty<string>();
+        var combinedWarnings = filteredPreflightWarnings
+            .Concat(generatorWarnings)
+            .Where(static w => !string.IsNullOrWhiteSpace(w))
+            .ToArray();
+        var filteredWarnings = WebVerifyPolicy.FilterWarnings(combinedWarnings, suppressWarnings);
 
         if (!outputJson && filteredWarnings.Length > 0)
         {
             foreach (var warning in filteredWarnings)
                 logger.Warn(warning);
         }
+        if (failOnWarnings && filteredWarnings.Length > 0)
+        {
+            var headline = filteredWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                           ?? "API docs warnings encountered.";
+            return Fail(headline, outputJson, logger, "web.apidocs");
+        }
         if (!outputJson && result.UsedReflectionFallback)
             logger.Info("API docs used reflection fallback (XML missing or empty).");
 
         if (outputJson)
         {
-            if (filteredWarnings.Length != result.Warnings.Length)
+            if (filteredWarnings.Length != generatorWarnings.Length)
             {
                 result = new WebApiDocsResult
                 {
@@ -130,6 +202,8 @@ internal static partial class WebCliCommandHandlers
                     IndexPath = result.IndexPath,
                     SearchPath = result.SearchPath,
                     TypesPath = result.TypesPath,
+                    CoveragePath = result.CoveragePath,
+                    XrefPath = result.XrefPath,
                     TypeCount = result.TypeCount,
                     UsedReflectionFallback = result.UsedReflectionFallback,
                     Warnings = filteredWarnings
@@ -376,6 +450,97 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"URL count: {result.UrlCount}");
         if (!string.IsNullOrWhiteSpace(result.HtmlOutputPath))
             logger.Info($"HTML sitemap: {result.HtmlOutputPath}");
+        return 0;
+    }
+
+    private static int HandleXrefMerge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        var outPath = TryGetOptionValue(subArgs, "--out") ??
+                      TryGetOptionValue(subArgs, "--out-path") ??
+                      TryGetOptionValue(subArgs, "--output-path");
+        var inputs = ReadOptionList(subArgs, "--map", "--maps", "--input", "--inputs", "--source", "--sources");
+        var pattern = TryGetOptionValue(subArgs, "--pattern") ?? "*.json";
+        var recursive = !HasOption(subArgs, "--top-only");
+        if (HasOption(subArgs, "--recursive"))
+            recursive = true;
+        var preferLast = HasOption(subArgs, "--prefer-last") || HasOption(subArgs, "--preferLast");
+        var failOnDuplicates = HasOption(subArgs, "--fail-on-duplicates") || HasOption(subArgs, "--failOnDuplicates");
+        var maxReferences = ParseIntOption(
+            TryGetOptionValue(subArgs, "--max-references") ??
+            TryGetOptionValue(subArgs, "--maxReferences"),
+            0);
+        var maxDuplicates = ParseIntOption(
+            TryGetOptionValue(subArgs, "--max-duplicates") ??
+            TryGetOptionValue(subArgs, "--maxDuplicates"),
+            0);
+        var maxReferenceGrowthCount = ParseIntOption(
+            TryGetOptionValue(subArgs, "--max-reference-growth-count") ??
+            TryGetOptionValue(subArgs, "--maxReferenceGrowthCount"),
+            0);
+        var maxReferenceGrowthPercent = ParseDoubleOption(
+            TryGetOptionValue(subArgs, "--max-reference-growth-percent") ??
+            TryGetOptionValue(subArgs, "--maxReferenceGrowthPercent"),
+            0);
+        var failOnWarnings = HasOption(subArgs, "--fail-on-warnings");
+
+        if (string.IsNullOrWhiteSpace(outPath))
+            return Fail("Missing required --out.", outputJson, logger, "web.xref-merge");
+        if (inputs.Count == 0)
+            return Fail("Missing required --map/--input.", outputJson, logger, "web.xref-merge");
+
+        var options = new WebXrefMergeOptions
+        {
+            OutputPath = outPath,
+            Pattern = string.IsNullOrWhiteSpace(pattern) ? "*.json" : pattern,
+            Recursive = recursive,
+            PreferLast = preferLast,
+            FailOnDuplicateIds = failOnDuplicates,
+            MaxReferences = maxReferences <= 0 ? 0 : maxReferences,
+            MaxDuplicates = maxDuplicates <= 0 ? 0 : maxDuplicates,
+            MaxReferenceGrowthCount = maxReferenceGrowthCount <= 0 ? 0 : maxReferenceGrowthCount,
+            MaxReferenceGrowthPercent = maxReferenceGrowthPercent <= 0 ? 0 : maxReferenceGrowthPercent
+        };
+        options.Inputs.AddRange(inputs);
+
+        var result = WebXrefMapMerger.Merge(options);
+        if (!outputJson && result.Warnings.Length > 0)
+        {
+            foreach (var warning in result.Warnings)
+                logger.Warn(warning);
+        }
+        if (failOnWarnings && result.Warnings.Length > 0)
+        {
+            var headline = result.Warnings.FirstOrDefault(static warning => !string.IsNullOrWhiteSpace(warning))
+                           ?? "xref merge warnings encountered.";
+            return Fail(headline, outputJson, logger, "web.xref-merge");
+        }
+
+        if (outputJson)
+        {
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = "web.xref-merge",
+                Success = true,
+                ExitCode = 0,
+                Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebXrefMergeResult)
+            });
+            return 0;
+        }
+
+        logger.Success($"Xref map merged: {result.OutputPath}");
+        logger.Info($"Sources: {result.SourceCount}");
+        logger.Info($"References: {result.ReferenceCount}");
+        if (result.DuplicateCount > 0)
+            logger.Info($"Duplicates: {result.DuplicateCount}");
+        if (result.ReferenceDeltaCount.HasValue)
+        {
+            var deltaText = result.ReferenceDeltaCount.Value >= 0 ? $"+{result.ReferenceDeltaCount.Value}" : result.ReferenceDeltaCount.Value.ToString();
+            if (result.ReferenceDeltaPercent.HasValue)
+                logger.Info($"Reference delta: {deltaText} ({result.ReferenceDeltaPercent.Value:0.##}%)");
+            else
+                logger.Info($"Reference delta: {deltaText}");
+        }
         return 0;
     }
 }

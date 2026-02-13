@@ -64,7 +64,7 @@ public static partial class WebSiteBuilder
 <noscript><link rel=""stylesheet"" href=""{href}"" /></noscript>";
     }
 
-    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, string rootPath)
+    private static string BuildHeadHtml(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems, string rootPath)
     {
         var parts = new List<string>();
         var head = spec.Head;
@@ -92,7 +92,63 @@ public static partial class WebSiteBuilder
             if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
                 parts.Add(File.ReadAllText(resolved));
         }
+
+        var languageAlternates = BuildLanguageAlternateHeadLinks(spec, item, allItems);
+        if (!string.IsNullOrWhiteSpace(languageAlternates))
+            parts.Add(languageAlternates);
+
         return string.Join(Environment.NewLine, parts);
+    }
+
+    private static string BuildLanguageAlternateHeadLinks(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems)
+    {
+        if (spec is null || item is null || allItems is null)
+            return string.Empty;
+
+        var localization = ResolveLocalizationConfig(spec);
+        if (!localization.Enabled || localization.Languages.Length <= 1)
+            return string.Empty;
+
+        var currentLanguage = ResolveEffectiveLanguageCode(localization, item.Language);
+        var alternates = new List<(string HrefLang, string Url)>();
+        foreach (var language in localization.Languages)
+        {
+            var route = ResolveLocalizedPageUrl(spec, localization, item, allItems, language.Code, currentLanguage);
+            if (string.IsNullOrWhiteSpace(route))
+                continue;
+
+            var absoluteUrl = ResolveAbsoluteUrl(spec.BaseUrl, route);
+            if (string.IsNullOrWhiteSpace(absoluteUrl))
+                continue;
+
+            alternates.Add((language.Code, absoluteUrl));
+        }
+
+        if (alternates.Count <= 1)
+            return string.Empty;
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var alternate in alternates
+                     .OrderBy(static value => value.HrefLang, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static value => value.Url, StringComparer.OrdinalIgnoreCase))
+        {
+            sb.AppendLine(
+                $"<link rel=\"alternate\" hreflang=\"{System.Web.HttpUtility.HtmlEncode(alternate.HrefLang)}\" href=\"{System.Web.HttpUtility.HtmlEncode(alternate.Url)}\" />");
+        }
+
+        var defaultLanguage = localization.Languages.FirstOrDefault(static language => language.IsDefault);
+        if (defaultLanguage is not null)
+        {
+            var defaultAlternate = alternates.FirstOrDefault(value =>
+                value.HrefLang.Equals(defaultLanguage.Code, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(defaultAlternate.Url))
+            {
+                sb.AppendLine(
+                    $"<link rel=\"alternate\" hreflang=\"x-default\" href=\"{System.Web.HttpUtility.HtmlEncode(defaultAlternate.Url)}\" />");
+            }
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     private static string RenderHeadLinks(HeadSpec head)
@@ -263,19 +319,26 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(filePath))
             return null;
 
-        if (Path.IsPathRooted(filePath))
-            return filePath;
-
+        var allowedRoots = new List<string> { NormalizeRootPathForSink(rootPath) };
         var baseDir = Path.GetDirectoryName(item.SourcePath);
         if (!string.IsNullOrWhiteSpace(baseDir))
+            allowedRoots.Add(NormalizeRootPathForSink(baseDir));
+
+        if (Path.IsPathRooted(filePath))
         {
-            var candidate = Path.Combine(baseDir, filePath);
-            if (File.Exists(candidate))
+            var rootedPath = Path.GetFullPath(filePath);
+            return IsPathWithinAnyRoot(allowedRoots, rootedPath) ? rootedPath : null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseDir))
+        {
+            var candidate = Path.GetFullPath(Path.Combine(baseDir, filePath));
+            if (IsPathWithinAnyRoot(allowedRoots, candidate) && File.Exists(candidate))
                 return candidate;
         }
 
-        var rootCandidate = Path.Combine(rootPath, filePath);
-        return rootCandidate;
+        var rootCandidate = Path.GetFullPath(Path.Combine(rootPath, filePath));
+        return IsPathWithinAnyRoot(allowedRoots, rootCandidate) ? rootCandidate : null;
     }
 
     private static string ResolveAbsoluteUrl(string? baseUrl, string? path)
@@ -591,7 +654,28 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
         var trimmed = path.Trim();
         if (trimmed == "/") return "/";
-        return trimmed.Trim('/');
+
+        var normalized = trimmed.Replace('\\', '/');
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Where(segment => segment != ".")
+            .ToList();
+        if (segments.Count == 0)
+            return string.Empty;
+
+        var stack = new List<string>(segments.Count);
+        foreach (var segment in segments)
+        {
+            if (segment == "..")
+            {
+                if (stack.Count > 0)
+                    stack.RemoveAt(stack.Count - 1);
+                continue;
+            }
+            stack.Add(segment);
+        }
+
+        return string.Join("/", stack);
     }
 
     private static string ResolveOutputDirectory(string outputRoot, string route)
@@ -599,7 +683,12 @@ public static partial class WebSiteBuilder
         var trimmed = route.Trim('/');
         if (string.IsNullOrWhiteSpace(trimmed))
             return outputRoot;
-        return Path.Combine(outputRoot, trimmed.Replace('/', Path.DirectorySeparatorChar));
+
+        var combined = Path.GetFullPath(Path.Combine(outputRoot, trimmed.Replace('/', Path.DirectorySeparatorChar)));
+        var normalizedRoot = NormalizeRootPathForSink(outputRoot);
+        if (!IsPathWithinRoot(normalizedRoot, combined))
+            return outputRoot;
+        return combined;
     }
 
     private static string NormalizeAlias(string alias)
@@ -656,7 +745,9 @@ public static partial class WebSiteBuilder
             }
         }
 
-        return results;
+        return results
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IEnumerable<string> BuildCollectionInputCandidates(string rootPath, string[] contentRoots, string input)
@@ -696,7 +787,9 @@ public static partial class WebSiteBuilder
                 : Path.GetFullPath(Path.Combine(fullContentRoot, remainder)));
         }
 
-        return candidates;
+        return candidates
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IEnumerable<string> EnumerateCollectionFilesWithWildcard(string path, string[] includePatterns, string[] excludePatterns)
@@ -712,12 +805,13 @@ public static partial class WebSiteBuilder
             return Array.Empty<string>();
 
         var results = new List<string>();
-        foreach (var dir in Directory.GetDirectories(basePath))
+        foreach (var dir in Directory.GetDirectories(basePath).OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
         {
             var candidate = string.IsNullOrEmpty(tail) ? dir : Path.Combine(dir, tail);
             if (!Directory.Exists(candidate))
                 continue;
-            var files = Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories);
+            var files = Directory.EnumerateFiles(candidate, "*.md", SearchOption.AllDirectories)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase);
             results.AddRange(FilterByPatterns(candidate, files, includePatterns, excludePatterns));
         }
 
@@ -770,10 +864,39 @@ public static partial class WebSiteBuilder
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullFile = Path.GetFullPath(filePath);
 
-        if (fullFile.Equals(fullBase, StringComparison.OrdinalIgnoreCase))
+        if (fullFile.Equals(fullBase, FileSystemPathComparison))
             return true;
 
-        return fullFile.StartsWith(fullBase + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return fullFile.StartsWith(fullBase + Path.DirectorySeparatorChar, FileSystemPathComparison);
+    }
+
+    private static bool IsPathWithinAnyRoot(IEnumerable<string> normalizedRoots, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        foreach (var root in normalizedRoots)
+        {
+            if (string.IsNullOrWhiteSpace(root))
+                continue;
+            if (full.StartsWith(root, FileSystemPathComparison))
+                return true;
+        }
+
+        return false;
+    }
+
+    internal static string[] BuildContentRootsForDiscovery(WebSitePlan plan)
+        => BuildContentRoots(plan);
+
+    internal static string[] EnumerateCollectionFilesForDiscovery(WebSitePlan plan, CollectionSpec collection)
+    {
+        var roots = BuildContentRoots(plan);
+        return EnumerateCollectionFiles(plan.RootPath, roots, collection.Input, collection.Include, collection.Exclude)
+            .ToArray();
+    }
+
+    internal static string? ResolveCollectionRootForDiscovery(WebSitePlan plan, CollectionSpec collection, string filePath)
+    {
+        var roots = BuildContentRoots(plan);
+        return ResolveCollectionRootForFile(plan.RootPath, roots, collection.Input, filePath);
     }
 }
-

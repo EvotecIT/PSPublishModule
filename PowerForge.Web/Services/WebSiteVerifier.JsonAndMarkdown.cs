@@ -242,7 +242,7 @@ public static partial class WebSiteVerifier
         if (string.IsNullOrWhiteSpace(basePath) || string.IsNullOrWhiteSpace(tail))
             return Path.GetFullPath(full);
 
-        if (!filePath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+        if (!filePath.StartsWith(basePath, FileSystemPathComparison))
             return Path.GetFullPath(full);
 
         var relative = Path.GetRelativePath(basePath, filePath);
@@ -271,7 +271,7 @@ public static partial class WebSiteVerifier
             if (string.IsNullOrWhiteSpace(project.ContentPath))
                 continue;
 
-            if (filePath.StartsWith(project.ContentPath, StringComparison.OrdinalIgnoreCase))
+            if (filePath.StartsWith(project.ContentPath, FileSystemPathComparison))
                 return project.Slug;
         }
 

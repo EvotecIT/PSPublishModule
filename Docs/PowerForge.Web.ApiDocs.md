@@ -45,6 +45,8 @@ If your site uses `Navigation.Profiles` (route/layout specific menus), set:
   - Set this when you want API pages to match a specific `Navigation.Profile` (for example `"/api/"`).
 - optionally `navContextLayout` / `navContextCollection` / `navContextProject`
  so the generator can select the same profile your theme uses. For best results, point `nav` at `site-nav.json` (the nav export) when available.
+- optionally `navSurface` (pipeline) / `--nav-surface` (CLI)
+  - Forces API docs to consume a specific `site-nav.json` surface (for example `apidocs`, `docs`, `main`) when present.
 
 ## Best practice: enforce CSS + fragments with featureContracts
 To prevent API regressions (generator adds new UI but the theme does not style it), define a theme-level contract in `theme.manifest.json`:
@@ -256,7 +258,20 @@ referenced type exists in the generated API docs.
 Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 (for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
 Each command is treated as a "type" with parameter sets rendered as methods.
-Current scope is command help only; `about_*` conceptual topics are not yet projected into API pages.
+PowerForge classifies command kinds (`Cmdlet` / `Function` / `Alias`) using
+best-effort module metadata discovery (manifest exports + root module functions)
+when available. If help XML includes `commandType`, it takes precedence over
+manifest hints. Manifest parsing supports multiline export arrays and inline
+comments.
+
+When `help` points at a directory (or a directory can be inferred from the help
+xml location), `about_*` files are also imported into the API output:
+- `about_*.help.txt`
+- `about_*.txt`
+- `about_*.md` / `about_*.markdown`
+
+Imported `about_*` topics render as `About` entries and are linkable from command
+remarks (for example `about_CommonParameters`).
 
 ## Usage scenarios
 
@@ -295,15 +310,36 @@ Pipeline step:
   "out": "./_site/api",
   "format": "both",
   "template": "docs",
-  "css": "/css/api-docs.css"
+  "css": "/css/api-docs.css",
+  "coverageReport": "./_reports/apidocs-coverage.json",
+  "psExamplesPath": "./Module/Examples"
 }
 ```
 
 CLI:
 ```bash
-powerforge-web apidocs --type powershell --help-path ./Module/en-US/MyModule-help.xml --out ./_site/api --format both --template docs --css /css/api-docs.css
+powerforge-web apidocs --type powershell --help-path ./Module/en-US/MyModule-help.xml --out ./_site/api --format both --template docs --css /css/api-docs.css --coverage-report ./_reports/apidocs-coverage.json --ps-examples ./Module/Examples
 ```
 
 Notes:
 - If `helpPath` points to a directory with multiple `*-help.xml` files, the first one is used.
 - For deterministic output, point to a specific file.
+- `coverageReport` defaults to `coverage.json` under API output and includes completeness metrics (summary/remarks/examples/member docs).
+- Coverage report also includes source-link metrics (`source.types`, `source.members`, `source.powershell`) with URL/path coverage and broken-link hints (invalid URLs, unresolved template tokens, repo mismatch hints).
+- API docs also generate `xrefmap.json` by default (DocFX-style `references` payload) to support cross-site `xref:` links.
+  - CLI: `--xref-map <file>` to customize location, `--no-xref-map` to disable.
+  - Pipeline: `xrefMap`/`xref-map` and `generateXrefMap`/`generate-xref-map`.
+  - Member-level entries are enabled by default; disable with CLI `--no-member-xref` or pipeline `generateMemberXrefs:false`.
+  - Filter member entries with CLI `--member-xref-kinds <list>` (for example `methods,properties`) or pipeline `memberXrefKinds`.
+  - Cap member entries with CLI `--member-xref-max-per-type <n>` or pipeline `memberXrefMaxPerType`.
+  - Use `powerforge-web xref-merge --out <file> --map <file|dir> [--max-references <n>] [--max-duplicates <n>] [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>]` to combine multiple maps into one shared map with optional growth guardrails.
+  - Use the generated map from website builds via `site.json -> Xref.MapFiles`.
+  - C# xref maps now include member-level entries (methods/properties/fields/events) with deep links to rendered member anchors.
+  - PowerShell xref maps now include parameter-level entries (`parameter:<Command>.<Parameter>`) that deep-link to command syntax cards.
+- Source-link diagnostics also emit `[PFWEB.APIDOCS.SOURCE]` warnings for common misconfigurations:
+  - `sourceUrlMappings` prefixes that never match discovered source paths
+  - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)
+  - source URL templates missing a path token (`{path}`, `{pathNoRoot}`, or `{pathNoPrefix}`)
+  - unsupported source URL template tokens (anything outside `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
+- PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.
+- In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.

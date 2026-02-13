@@ -15,7 +15,7 @@ It is not intended to be a perfect feature-by-feature comparison of every ecosys
 
 If you want to verify a PowerForge item, start with:
 - `Docs/PowerForge.Web.Roadmap.md`
-- `schemas/powerforge.web.*.schema.json`
+- `Schemas/powerforge.web.*.schema.json`
 - `PowerForge.Web/Services/*`
 
 ## High-Level Matrix
@@ -36,7 +36,7 @@ If you want to verify a PowerForge item, start with:
 | JSON Feed | Missing | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | Taxonomy pages (list + term) | Have | Ecosystem | Built-in | Built-in | Built-in | Built-in | Built-in |
 | API reference from .NET XML docs | Have | Built-in | N/A | N/A | N/A | N/A | N/A |
-| XRef/cross refs (docs <-> api) | Missing | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
+| XRef/cross refs (docs <-> api) | Partial | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
 | Multi-version docs conventions | Partial | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
 | i18n routing | Have | Ecosystem | Built-in | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | Output formats (html/rss/json) | Have | Built-in | Built-in | Built-in | Built-in | Built-in | Built-in |
@@ -63,9 +63,9 @@ These are the gaps that most often cause surprises when compared to DocFX/Hugo/A
 1. **Extensibility hooks**
    - Stable pre/post build hooks, per-page transforms, and data transforms without forking.
 2. **DocFX-class cross references**
-   - XRef model so conceptual docs can link to types/members reliably (and vice-versa).
+   - `xref:` link resolution exists and API docs now emit DocFX-style `xrefmap.json` for C# + PowerShell symbols.
+   - Full symbol graph parity and richer UID coverage are still in progress.
 3. **Feed parity**
    - Add Atom and JSON Feed alongside RSS.
 4. **Incremental rebuild**
    - Hugo-tier invalidation (content-hash dependency graph) so big sites rebuild fast and deterministically.
-

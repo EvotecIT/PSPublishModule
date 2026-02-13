@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -23,20 +24,23 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
+        Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
         Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
-        Console.WriteLine("                     [--no-heading-order] [--no-link-purpose]");
+        Console.WriteLine("                     [--no-heading-order] [--no-link-purpose] [--no-media]");
         Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
         Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
         Console.WriteLine("                     [--rendered-no-install]");
         Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
         Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
         Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
-        Console.WriteLine("                     [--nav-profiles <file.json>]");
+        Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
+        Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--nav-canonical <file>] [--nav-canonical-selector <css>] [--nav-canonical-required]");
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
@@ -60,10 +64,13 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
-        Console.WriteLine("                     [--suppress-warning <pattern>]");
-        Console.WriteLine("                     [--source-root <dir>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
+        Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
+        Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
+        Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
+        Console.WriteLine("                     [--fail-on-warnings] [--suppress-warning <pattern>]");
+        Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
-        Console.WriteLine("                     [--nav <file>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
+        Console.WriteLine("                     [--nav <file>] [--nav-surface <name>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
         Console.WriteLine("                     [--quickstart-types <type[,type]>]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
         Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
@@ -87,6 +94,9 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>]");
         Console.WriteLine("                     [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
+        Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
+        Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
+        Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
         Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
         Console.WriteLine("                     [--purge-everything] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
     }
@@ -180,6 +190,14 @@ internal static class WebCliHelpers
         return long.TryParse(value, out var parsed) ? parsed : fallback;
     }
 
+    internal static double ParseDoubleOption(string? value, double fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        return double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : fallback;
+    }
+
     internal static int[] ParseIntListOption(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -228,19 +246,36 @@ internal static class WebCliHelpers
             .ToArray();
     }
 
+    internal static WebAuditMediaProfile[] LoadAuditMediaProfiles(string? mediaProfilesPath)
+    {
+        if (string.IsNullOrWhiteSpace(mediaProfilesPath))
+            return Array.Empty<WebAuditMediaProfile>();
+
+        var fullPath = ResolveExistingFilePath(mediaProfilesPath);
+        using var stream = File.OpenRead(fullPath);
+        var profiles = JsonSerializer.Deserialize(stream, WebCliJson.Context.WebAuditMediaProfileArray)
+                       ?? Array.Empty<WebAuditMediaProfile>();
+        return profiles
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.Match))
+            .ToArray();
+    }
+
     internal static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
     {
         var include = ReadOptionList(argv, "--include");
         var exclude = ReadOptionList(argv, "--exclude");
         var ignoreNav = ReadOptionList(argv, "--ignore-nav", "--ignore-nav-path");
+        var ignoreMedia = ReadOptionList(argv, "--ignore-media");
         var navIgnorePrefixes = ReadOptionList(argv, "--nav-ignore-prefix", "--nav-ignore-prefixes");
         var navRequiredLinks = ReadOptionList(argv, "--nav-required-link", "--nav-required-links");
         var navProfilesPath = TryGetOptionValue(argv, "--nav-profiles");
+        var mediaProfilesPath = TryGetOptionValue(argv, "--media-profiles");
         var requiredRoutes = ReadOptionList(argv, "--required-route", "--required-routes");
         var minNavCoverageText = TryGetOptionValue(argv, "--min-nav-coverage");
         var navSelector = TryGetOptionValue(argv, "--nav-selector") ?? "nav";
         var navRequired = !HasOption(argv, "--nav-optional");
         var useDefaultIgnoreNav = !HasOption(argv, "--no-default-ignore-nav");
+        var useDefaultIgnoreMedia = !HasOption(argv, "--no-default-ignore-media");
         var useDefaultExclude = !HasOption(argv, "--no-default-exclude");
         var summaryEnabled = HasOption(argv, "--summary");
         var summaryPath = TryGetOptionValue(argv, "--summary-path");
@@ -255,6 +290,7 @@ internal static class WebCliHelpers
         var checkReplacementChars = !HasOption(argv, "--no-replacement-char-check");
         var checkHeadingOrder = !HasOption(argv, "--no-heading-order");
         var checkLinkPurpose = !HasOption(argv, "--no-link-purpose");
+        var checkMediaEmbeds = !HasOption(argv, "--no-media");
         var checkNetworkHints = !HasOption(argv, "--no-network-hints");
         var checkRenderBlocking = !HasOption(argv, "--no-render-blocking");
         var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
@@ -267,6 +303,7 @@ internal static class WebCliHelpers
             navRequiredLinks.Add("/");
 
         var ignoreNavPatterns = BuildIgnoreNavPatterns(ignoreNav, useDefaultIgnoreNav);
+        var ignoreMediaPatterns = BuildIgnoreMediaPatterns(ignoreMedia, useDefaultIgnoreMedia);
         var summaryMax = ParseIntOption(summaryMaxText, 10);
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
@@ -274,6 +311,7 @@ internal static class WebCliHelpers
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
+        var mediaProfiles = LoadAuditMediaProfiles(mediaProfilesPath);
 
         return WebSiteAuditor.Audit(new WebAuditOptions
         {
@@ -284,11 +322,13 @@ internal static class WebCliHelpers
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
             SuppressIssues = suppressIssues.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
+            IgnoreMediaFor = ignoreMediaPatterns,
             NavSelector = navSelector,
             NavRequired = navRequired,
             NavIgnorePrefixes = navIgnorePrefixes.ToArray(),
             NavRequiredLinks = navRequiredLinks.ToArray(),
             NavProfiles = navProfiles,
+            MediaProfiles = mediaProfiles,
             MinNavCoveragePercent = minNavCoveragePercent,
             RequiredRoutes = requiredRoutes.ToArray(),
             CheckLinks = !HasOption(argv, "--no-links"),
@@ -308,6 +348,7 @@ internal static class WebCliHelpers
             CheckUnicodeReplacementChars = checkReplacementChars,
             CheckHeadingOrder = checkHeadingOrder,
             CheckLinkPurposeConsistency = checkLinkPurpose,
+            CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
             CheckRenderBlockingResources = checkRenderBlocking,
             MaxHeadBlockingResources = maxHeadBlockingResources
@@ -364,6 +405,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Fix heading hierarchy so content does not skip levels (for example h2 -> h4) to improve accessibility.");
             if (ContainsCategory(audit, "link-purpose"))
                 recommendations.Add("Use destination-specific link labels (avoid repeated generic labels like 'Learn more').");
+            if (ContainsCategory(audit, "media"))
+                recommendations.Add("Harden media embeds for page speed: lazy-load iframes/images, add decoding + intrinsic image dimensions, and prefer privacy-friendly embed hosts.");
             if (ContainsCategory(audit, "utf8"))
                 recommendations.Add("Enforce UTF-8 output and meta charset declarations to avoid encoding regressions.");
             if (ContainsCategory(audit, "duplicate-id"))
@@ -387,6 +430,21 @@ internal static class WebCliHelpers
             return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
 
         var defaults = new WebAuditOptions().IgnoreNavFor;
+        if (userPatterns.Count == 0)
+            return defaults;
+
+        return defaults.Concat(userPatterns)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    internal static string[] BuildIgnoreMediaPatterns(List<string> userPatterns, bool useDefaults)
+    {
+        if (!useDefaults)
+            return userPatterns.Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
+
+        var defaults = new WebAuditOptions().IgnoreMediaFor;
         if (userPatterns.Count == 0)
             return defaults;
 

@@ -33,6 +33,8 @@ public sealed class WebAuditOptions
     public bool CheckTitles { get; set; } = true;
     /// <summary>When true, detect duplicate element IDs.</summary>
     public bool CheckDuplicateIds { get; set; } = true;
+    /// <summary>When true, validate media/embed performance and accessibility hints.</summary>
+    public bool CheckMediaEmbeds { get; set; } = true;
     /// <summary>When true, detect heading level skips (for example h2 -> h4).</summary>
     public bool CheckHeadingOrder { get; set; } = true;
     /// <summary>When true, warn when the same link label points to multiple destinations.</summary>
@@ -58,6 +60,13 @@ public sealed class WebAuditOptions
         "docs/api/**",
         "api/**"
     };
+    /// <summary>Skip media/embed checks on pages that match these glob patterns.</summary>
+    public string[] IgnoreMediaFor { get; set; } = new[]
+    {
+        "api-docs/**",
+        "docs/api/**",
+        "api/**"
+    };
     /// <summary>Require all pages to contain a nav element.</summary>
     public bool NavRequired { get; set; } = true;
     /// <summary>Skip nav checks on pages that match a prefix list (path-based).</summary>
@@ -66,6 +75,8 @@ public sealed class WebAuditOptions
     public string[] NavRequiredLinks { get; set; } = Array.Empty<string>();
     /// <summary>Optional per-path nav behavior overrides.</summary>
     public WebAuditNavProfile[] NavProfiles { get; set; } = Array.Empty<WebAuditNavProfile>();
+    /// <summary>Optional per-path media/embed behavior overrides.</summary>
+    public WebAuditMediaProfile[] MediaProfiles { get; set; } = Array.Empty<WebAuditMediaProfile>();
     /// <summary>Minimum allowed percentage of nav-covered pages (checked / (checked + ignored)). 0 disables the gate.</summary>
     public int MinNavCoveragePercent { get; set; }
     /// <summary>Routes that must resolve to generated HTML output (for example "/", "/404.html", "/api/").</summary>

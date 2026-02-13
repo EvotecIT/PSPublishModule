@@ -82,9 +82,10 @@ public static partial class WebSiteBuilder
                 if (IsUnderAnyRoot(file, leafBundleRoots) && !IsLeafBundleIndex(file))
                     continue;
 
+                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, contentRoots, collection.Input, file);
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
-                var effectiveBody = IncludePreprocessor.Apply(body, plan.RootPath);
+                var effectiveBody = IncludePreprocessor.Apply(body, plan.RootPath, file, collectionRoot);
                 var projectSlug = ResolveProjectSlug(plan, file);
                 projectMap.TryGetValue(projectSlug ?? string.Empty, out var projectSpec);
                 var editUrl = EditLinkResolver.Resolve(spec, projectSpec, plan.RootPath, file, matter?.EditPath);
@@ -133,7 +134,6 @@ public static partial class WebSiteBuilder
 
                 var title = matter?.Title ?? FrontMatterParser.ExtractTitleFromMarkdown(processedBody) ?? Path.GetFileNameWithoutExtension(file);
                 var description = matter?.Description ?? string.Empty;
-                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, contentRoots, collection.Input, file);
                 var relativePath = ResolveRelativePath(collectionRoot, file);
                 var resolvedLanguage = ResolveItemLanguage(spec, relativePath, matter, out var localizedRelativePath, out var localizedRelativeDir);
                 var relativeDir = localizedRelativeDir;

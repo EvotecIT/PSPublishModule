@@ -287,6 +287,77 @@ public static partial class WebSiteVerifier
         }
     }
 
+    private static void ValidateLocalizationTranslationMappings(
+        ResolvedLocalizationConfig localization,
+        IReadOnlyDictionary<string, List<CollectionRoute>> collectionRoutes,
+        List<string> warnings)
+    {
+        if (!localization.Enabled || localization.Languages.Length <= 1 || collectionRoutes.Count == 0)
+            return;
+
+        var expectedLanguages = localization.Languages
+            .Select(static language => NormalizeLanguageToken(language.Code))
+            .Where(static language => !string.IsNullOrWhiteSpace(language))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (expectedLanguages.Length <= 1)
+            return;
+
+        var entries = collectionRoutes.Values
+            .SelectMany(static routes => routes)
+            .Where(static route => !route.Draft)
+            .Where(static route => !string.IsNullOrWhiteSpace(route.TranslationKey))
+            .Select(route => new
+            {
+                route.Route,
+                route.File,
+                Language = NormalizeLanguageToken(route.Language),
+                route.TranslationKey
+            })
+            .Where(static route => !string.IsNullOrWhiteSpace(route.Language))
+            .ToArray();
+        if (entries.Length == 0)
+            return;
+
+        var duplicates = entries
+            .GroupBy(
+                static entry => $"{entry.TranslationKey}|{entry.Language}",
+                StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .ToArray();
+        foreach (var duplicate in duplicates)
+        {
+            var sampleFiles = duplicate
+                .Select(static entry => entry.File)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(3)
+                .Select(Path.GetFileName)
+                .ToArray();
+            warnings.Add(
+                $"Localization: duplicate translation mapping for key '{duplicate.First().TranslationKey}' in language '{duplicate.First().Language}' ({string.Join(", ", sampleFiles)}).");
+        }
+
+        foreach (var group in entries.GroupBy(static entry => entry.TranslationKey, StringComparer.OrdinalIgnoreCase))
+        {
+            var presentLanguages = group
+                .Select(static entry => entry.Language)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static language => language, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (presentLanguages.Length < 2)
+                continue;
+
+            var missingLanguages = expectedLanguages
+                .Where(language => !presentLanguages.Contains(language, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+            if (missingLanguages.Length == 0)
+                continue;
+
+            warnings.Add(
+                $"Localization: translation '{group.Key}' is missing languages [{string.Join(", ", missingLanguages)}] (present: [{string.Join(", ", presentLanguages)}]).");
+        }
+    }
+
     private sealed class ResolvedLocalizationConfig
     {
         public bool Enabled { get; init; }
@@ -305,5 +376,5 @@ public static partial class WebSiteVerifier
         public bool IsDefault { get; set; }
     }
 
-    private sealed record CollectionRoute(string Route, string File, bool Draft, string Language);
+    private sealed record CollectionRoute(string Route, string File, bool Draft, string Language, string TranslationKey);
 }

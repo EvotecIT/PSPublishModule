@@ -41,11 +41,36 @@ public sealed class WebApiDocsResult
     public string SearchPath { get; set; } = string.Empty;
     /// <summary>Path to the types index file.</summary>
     public string TypesPath { get; set; } = string.Empty;
+    /// <summary>Path to the coverage report JSON file, when generated.</summary>
+    public string? CoveragePath { get; set; }
+    /// <summary>Path to the xref map JSON file, when generated.</summary>
+    public string? XrefPath { get; set; }
     /// <summary>Number of types documented.</summary>
     public int TypeCount { get; set; }
     /// <summary>True when reflection was used to populate types.</summary>
     public bool UsedReflectionFallback { get; set; }
     /// <summary>Warnings emitted during generation.</summary>
+    public string[] Warnings { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>Result payload for xref map merge.</summary>
+public sealed class WebXrefMergeResult
+{
+    /// <summary>Path to the merged xref output.</summary>
+    public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Number of source files merged.</summary>
+    public int SourceCount { get; set; }
+    /// <summary>Number of xref references emitted.</summary>
+    public int ReferenceCount { get; set; }
+    /// <summary>Number of duplicate UIDs encountered while merging.</summary>
+    public int DuplicateCount { get; set; }
+    /// <summary>Reference count from the previously merged output file, when available.</summary>
+    public int? PreviousReferenceCount { get; set; }
+    /// <summary>Reference delta relative to the previous merged output file, when available.</summary>
+    public int? ReferenceDeltaCount { get; set; }
+    /// <summary>Reference delta percent relative to the previous merged output file, when available.</summary>
+    public double? ReferenceDeltaPercent { get; set; }
+    /// <summary>Warnings emitted during merge.</summary>
     public string[] Warnings { get; set; } = Array.Empty<string>();
 }
 

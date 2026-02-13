@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -46,8 +48,20 @@ internal static partial class WebPipelineRunner
         var sidebar = GetString(step, "sidebar") ?? GetString(step, "sidebarPosition") ?? GetString(step, "sidebar-position");
         var bodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class");
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
+        var sourcePathPrefix = GetString(step, "sourcePathPrefix") ?? GetString(step, "source-path-prefix");
         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
                         GetString(step, "sourcePattern") ?? GetString(step, "source-pattern");
+        var coverageReportPath = ResolvePath(baseDir, GetString(step, "coverageReport") ?? GetString(step, "coverage-report") ?? GetString(step, "coverageReportPath") ?? GetString(step, "coverage-report-path"));
+        var generateCoverageReport = GetBool(step, "generateCoverageReport") ?? GetBool(step, "generate-coverage-report") ?? true;
+        var xrefMapPath = ResolvePath(baseDir, GetString(step, "xrefMap") ?? GetString(step, "xref-map") ?? GetString(step, "xrefMapPath") ?? GetString(step, "xref-map-path"));
+        var generateXrefMap = GetBool(step, "generateXrefMap") ?? GetBool(step, "generate-xref-map") ?? true;
+        var generateMemberXrefs = GetBool(step, "generateMemberXrefs") ?? GetBool(step, "generate-member-xrefs") ?? true;
+        var memberXrefKindsText = GetString(step, "memberXrefKinds") ?? GetString(step, "member-xref-kinds");
+        var memberXrefKindsArray = GetArrayOfStrings(step, "memberXrefKinds") ?? GetArrayOfStrings(step, "member-xref-kinds");
+        var memberXrefMaxPerType = GetInt(step, "memberXrefMaxPerType") ?? GetInt(step, "member-xref-max-per-type") ?? 0;
+        var powerShellExamplesPath = ResolvePath(baseDir, GetString(step, "psExamplesPath") ?? GetString(step, "ps-examples-path") ?? GetString(step, "powerShellExamplesPath") ?? GetString(step, "powershell-examples-path"));
+        var generatePowerShellFallbackExamples = GetBool(step, "generatePowerShellFallbackExamples") ?? GetBool(step, "generate-powershell-fallback-examples") ?? true;
+        var powerShellFallbackExampleLimit = GetInt(step, "powerShellFallbackExampleLimit") ?? GetInt(step, "powershell-fallback-example-limit") ?? 2;
         var sourceUrlMappings = GetApiDocsSourceUrlMappings(
             step,
             "sourceUrlMappings",
@@ -61,6 +75,8 @@ internal static partial class WebPipelineRunner
         var navContextCollection = GetString(step, "navContextCollection") ?? GetString(step, "nav-context-collection");
         var navContextLayout = GetString(step, "navContextLayout") ?? GetString(step, "nav-context-layout");
         var navContextProject = GetString(step, "navContextProject") ?? GetString(step, "nav-context-project");
+        var navSurfaceName = GetString(step, "navSurface") ?? GetString(step, "nav-surface") ??
+                             GetString(step, "navSurfaceName") ?? GetString(step, "nav-surface-name");
         var includeNamespaces = GetString(step, "includeNamespace") ?? GetString(step, "include-namespace");
         var excludeNamespaces = GetString(step, "excludeNamespace") ?? GetString(step, "exclude-namespace");
         var includeTypes = GetString(step, "includeType") ?? GetString(step, "include-type");
@@ -75,6 +91,9 @@ internal static partial class WebPipelineRunner
         var ciStrictDefaults = ConsoleEnvironment.IsCI && !isDev;
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
         var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+        var coveragePreviewCount = GetInt(step, "coveragePreviewCount") ?? GetInt(step, "coverage-preview") ?? (isDev ? 2 : 5);
+        var coverageThresholds = GetApiDocsCoverageThresholds(step);
+        var failOnCoverage = GetBool(step, "failOnCoverage") ?? GetBool(step, "fail-on-coverage") ?? (coverageThresholds.Count > 0);
 
         var apiType = ApiDocsType.CSharp;
         if (!string.IsNullOrWhiteSpace(typeText) &&
@@ -87,6 +106,43 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("apidocs requires xml for CSharp.");
         if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
             throw new InvalidOperationException("apidocs requires help for PowerShell.");
+
+        var preflightWarnings = ValidateApiDocsPreflight(
+            apiType,
+            sourceRoot,
+            sourceUrl,
+            sourceUrlMappings,
+            nav,
+            navSurfaceName,
+            navContextPath,
+            powerShellExamplesPath);
+        var filteredPreflightWarnings = suppressWarnings is { Length: > 0 }
+            ? WebVerifyPolicy.FilterWarnings(preflightWarnings, suppressWarnings)
+            : preflightWarnings;
+        if (filteredPreflightWarnings.Length > 0)
+        {
+            logger?.Warn($"{label}: apidocs preflight warnings: {filteredPreflightWarnings.Length}");
+
+            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+            if (previewLimit > 0)
+            {
+                foreach (var warning in filteredPreflightWarnings.Where(static w => !string.IsNullOrWhiteSpace(w)).Take(previewLimit))
+                {
+                    logger?.Warn($"{label}: {warning}");
+                }
+
+                var remaining = filteredPreflightWarnings.Length - previewLimit;
+                if (remaining > 0)
+                    logger?.Warn($"{label}: (+{remaining} more warnings)");
+            }
+
+            if (failOnWarnings)
+            {
+                var headline = filteredPreflightWarnings.FirstOrDefault(static w => !string.IsNullOrWhiteSpace(w))
+                               ?? "API docs preflight warnings encountered.";
+                throw new InvalidOperationException(headline);
+            }
+        }
 
         // Best-practice default: when pipeline runs at a website repo root, assume ./site.json
         // unless the step overrides it explicitly. This prevents "API reference has no navigation"
@@ -179,7 +235,17 @@ internal static partial class WebPipelineRunner
             SidebarPosition = sidebar,
             BodyClass = bodyClass,
             SourceRootPath = sourceRoot,
+            SourcePathPrefix = sourcePathPrefix,
             SourceUrlPattern = sourceUrl,
+            GenerateCoverageReport = generateCoverageReport,
+            CoverageReportPath = coverageReportPath,
+            GenerateXrefMap = generateXrefMap,
+            GenerateMemberXrefs = generateMemberXrefs,
+            MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
+            XrefMapPath = xrefMapPath,
+            GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+            PowerShellExamplesPath = powerShellExamplesPath,
+            PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
             IncludeUndocumentedTypes = includeUndocumented,
             NavJsonPath = nav,
             // Default to root context for profile selection to avoid accidental "API header has different nav"
@@ -188,6 +254,7 @@ internal static partial class WebPipelineRunner
             NavContextCollection = navContextCollection,
             NavContextLayout = navContextLayout,
             NavContextProject = navContextProject,
+            NavSurfaceName = navSurfaceName,
             SiteName = siteName,
             BrandUrl = brandUrl,
             BrandIcon = brandIcon
@@ -210,6 +277,20 @@ internal static partial class WebPipelineRunner
         var quickStartTypeList = CliPatternHelper.SplitPatterns(quickStartTypes);
         if (quickStartTypeList.Length > 0)
             options.QuickStartTypeNames.AddRange(quickStartTypeList);
+        var memberXrefKindList = new List<string>();
+        if (!string.IsNullOrWhiteSpace(memberXrefKindsText))
+            memberXrefKindList.AddRange(CliPatternHelper.SplitPatterns(memberXrefKindsText));
+        if (memberXrefKindsArray is { Length: > 0 })
+        {
+            foreach (var entry in memberXrefKindsArray)
+            {
+                if (string.IsNullOrWhiteSpace(entry))
+                    continue;
+                memberXrefKindList.AddRange(CliPatternHelper.SplitPatterns(entry));
+            }
+        }
+        if (memberXrefKindList.Count > 0)
+            options.MemberXrefKinds.AddRange(memberXrefKindList);
 
         var res = WebApiDocsGenerator.Generate(options);
         var note = res.UsedReflectionFallback ? " (reflection)" : string.Empty;
@@ -254,8 +335,307 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        if (coverageThresholds.Count > 0)
+        {
+            var coverageFailures = EvaluateApiDocsCoverageThresholds(res.CoveragePath, coverageThresholds, out var coverageHeadline);
+            if (coverageFailures.Count > 0)
+            {
+                note += $" (coverage: {coverageFailures.Count} issue(s))";
+                logger?.Warn($"{label}: apidocs coverage threshold failures: {coverageFailures.Count}");
+
+                var previewLimit = Math.Clamp(coveragePreviewCount, 0, 20);
+                if (previewLimit > 0)
+                {
+                    foreach (var failure in coverageFailures.Take(previewLimit))
+                        logger?.Warn($"{label}: {failure}");
+
+                    var remaining = coverageFailures.Count - previewLimit;
+                    if (remaining > 0)
+                        logger?.Warn($"{label}: (+{remaining} more coverage issues)");
+                }
+
+                if (failOnCoverage)
+                    throw new InvalidOperationException(coverageHeadline ?? "API docs coverage thresholds failed.");
+            }
+        }
+
         stepResult.Success = true;
         stepResult.Message = $"API docs {res.TypeCount} types{note}";
+    }
+
+    internal static string[] ValidateApiDocsPreflight(
+        ApiDocsType apiType,
+        string? sourceRoot,
+        string? sourceUrl,
+        IReadOnlyList<WebApiDocsSourceUrlMapping> sourceUrlMappings,
+        string? navPath,
+        string? navSurfaceName,
+        string? navContextPath,
+        string? powerShellExamplesPath)
+    {
+        var warnings = new List<string>();
+
+        var hasMappings = sourceUrlMappings is { Count: > 0 };
+        var hasSourceRoot = !string.IsNullOrWhiteSpace(sourceRoot);
+        var hasSourceUrl = !string.IsNullOrWhiteSpace(sourceUrl);
+        if (hasMappings && !hasSourceRoot && !hasSourceUrl)
+        {
+            warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrlMappings are configured but both sourceRoot and sourceUrl are empty; source links will be disabled.");
+        }
+
+        if (hasSourceRoot)
+        {
+            var fullSourceRoot = Path.GetFullPath(sourceRoot!);
+            if (!Directory.Exists(fullSourceRoot))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceRoot path does not exist: {fullSourceRoot}");
+            }
+        }
+
+        if (hasSourceUrl && !ContainsAnyPathToken(sourceUrl!))
+        {
+            warnings.Add("[PFWEB.APIDOCS.SOURCE] API docs source preflight: sourceUrl does not include a path token ({path}, {pathNoRoot}, or {pathNoPrefix}).");
+        }
+
+        if (hasMappings)
+        {
+            var seenPrefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var mapping in sourceUrlMappings)
+            {
+                if (mapping is null)
+                    continue;
+                var prefix = (mapping.PathPrefix ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(prefix))
+                    continue;
+
+                if (!seenPrefixes.Add(prefix))
+                {
+                    warnings.Add($"[PFWEB.APIDOCS.SOURCE] API docs source preflight: duplicate sourceUrlMappings pathPrefix '{prefix}'.");
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(navSurfaceName) && string.IsNullOrWhiteSpace(navPath))
+        {
+            warnings.Add("[PFWEB.APIDOCS.NAV] API docs nav preflight: navSurface is set but nav/navJson is empty; navSurface cannot be resolved.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(navPath))
+        {
+            var fullNavPath = Path.GetFullPath(navPath);
+            if (!File.Exists(fullNavPath))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.NAV] API docs nav preflight: nav/navJson file was not found: {fullNavPath}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(navContextPath))
+        {
+            var trimmed = navContextPath.Trim();
+            if (!trimmed.StartsWith("/", StringComparison.Ordinal) &&
+                !trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.NAV] API docs nav preflight: navContextPath '{navContextPath}' should be root-relative (for example '/api/').");
+            }
+        }
+
+        if (apiType == ApiDocsType.PowerShell && !string.IsNullOrWhiteSpace(powerShellExamplesPath))
+        {
+            var fullExamplesPath = Path.GetFullPath(powerShellExamplesPath);
+            if (!Directory.Exists(fullExamplesPath) && !File.Exists(fullExamplesPath))
+            {
+                warnings.Add($"[PFWEB.APIDOCS.POWERSHELL] API docs PowerShell preflight: psExamplesPath was not found: {fullExamplesPath}");
+            }
+        }
+
+        return warnings.ToArray();
+    }
+
+    private static bool ContainsAnyPathToken(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.IndexOf("{path}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               value.IndexOf("{pathNoRoot}", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               value.IndexOf("{pathNoPrefix}", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static List<ApiDocsCoverageThreshold> GetApiDocsCoverageThresholds(JsonElement step)
+    {
+        var thresholds = new List<ApiDocsCoverageThreshold>();
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSummaryPercent", "min-type-summary-percent", "types.summary.percent", "Type summary coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeRemarksPercent", "min-type-remarks-percent", "types.remarks.percent", "Type remarks coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeCodeExamplesPercent", "min-type-code-examples-percent", "types.codeExamples.percent", "Type code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSummaryPercent", "min-member-summary-percent", "members.summary.percent", "Member summary coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberCodeExamplesPercent", "min-member-code-examples-percent", "members.codeExamples.percent", "Member code examples coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSummaryPercent", "min-powershell-summary-percent", "powershell.summary.percent", "PowerShell command summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellRemarksPercent", "min-powershell-remarks-percent", "powershell.remarks.percent", "PowerShell command remarks coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellCodeExamplesPercent", "min-powershell-code-examples-percent", "powershell.codeExamples.percent", "PowerShell command code examples coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellParameterSummaryPercent", "min-powershell-parameter-summary-percent", "powershell.parameters.percent", "PowerShell parameter summary coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourcePathPercent", "min-type-source-path-percent", "source.types.path.percent", "Type source path coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minTypeSourceUrlPercent", "min-type-source-url-percent", "source.types.url.percent", "Type source URL coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourcePathPercent", "min-member-source-path-percent", "source.members.path.percent", "Member source path coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minMemberSourceUrlPercent", "min-member-source-url-percent", "source.members.url.percent", "Member source URL coverage");
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourcePathPercent", "min-powershell-source-path-percent", "source.powershell.path.percent", "PowerShell command source path coverage", powerShellCommandMetric: true);
+        AddCoverageMinPercentThreshold(thresholds, step, "minPowerShellSourceUrlPercent", "min-powershell-source-url-percent", "source.powershell.url.percent", "PowerShell command source URL coverage", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceInvalidUrlCount", "max-type-source-invalid-url-count", "source.types.invalidUrl.count", "Type source invalid URL count");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceInvalidUrlCount", "max-member-source-invalid-url-count", "source.members.invalidUrl.count", "Member source invalid URL count");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceInvalidUrlCount", "max-powershell-source-invalid-url-count", "source.powershell.invalidUrl.count", "PowerShell command source invalid URL count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceUnresolvedTemplateCount", "max-type-source-unresolved-template-count", "source.types.unresolvedTemplateToken.count", "Type source unresolved template token count");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceUnresolvedTemplateCount", "max-member-source-unresolved-template-count", "source.members.unresolvedTemplateToken.count", "Member source unresolved template token count");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceUnresolvedTemplateCount", "max-powershell-source-unresolved-template-count", "source.powershell.unresolvedTemplateToken.count", "PowerShell command source unresolved template token count", powerShellCommandMetric: true);
+        AddCoverageMaxThreshold(thresholds, step, "maxTypeSourceRepoMismatchHints", "max-type-source-repo-mismatch-hints", "source.types.repoMismatchHints.count", "Type source repo-mismatch hints");
+        AddCoverageMaxThreshold(thresholds, step, "maxMemberSourceRepoMismatchHints", "max-member-source-repo-mismatch-hints", "source.members.repoMismatchHints.count", "Member source repo-mismatch hints");
+        AddCoverageMaxThreshold(thresholds, step, "maxPowerShellSourceRepoMismatchHints", "max-powershell-source-repo-mismatch-hints", "source.powershell.repoMismatchHints.count", "PowerShell command source repo-mismatch hints", powerShellCommandMetric: true);
+        return thresholds;
+    }
+
+    private static void AddCoverageMinPercentThreshold(
+        List<ApiDocsCoverageThreshold> thresholds,
+        JsonElement step,
+        string primaryName,
+        string aliasName,
+        string metricPath,
+        string label,
+        bool powerShellCommandMetric = false)
+    {
+        var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
+        if (!value.HasValue)
+            return;
+
+        if (value.Value is < 0 or > 100)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be between 0 and 100.");
+
+        thresholds.Add(new ApiDocsCoverageThreshold
+        {
+            Label = label,
+            MetricPath = metricPath,
+            TargetValue = value.Value,
+            Comparison = ApiDocsCoverageComparison.Minimum,
+            FormatAsPercent = true,
+            SkipWhenNoPowerShellCommands = powerShellCommandMetric
+        });
+    }
+
+    private static void AddCoverageMaxThreshold(
+        List<ApiDocsCoverageThreshold> thresholds,
+        JsonElement step,
+        string primaryName,
+        string aliasName,
+        string metricPath,
+        string label,
+        bool powerShellCommandMetric = false)
+    {
+        var value = GetDouble(step, primaryName) ?? GetDouble(step, aliasName);
+        if (!value.HasValue)
+            return;
+
+        if (value.Value < 0)
+            throw new InvalidOperationException($"apidocs coverage threshold '{primaryName}' must be greater than or equal to 0.");
+
+        thresholds.Add(new ApiDocsCoverageThreshold
+        {
+            Label = label,
+            MetricPath = metricPath,
+            TargetValue = value.Value,
+            Comparison = ApiDocsCoverageComparison.Maximum,
+            FormatAsPercent = false,
+            SkipWhenNoPowerShellCommands = powerShellCommandMetric
+        });
+    }
+
+    private static List<string> EvaluateApiDocsCoverageThresholds(
+        string? coveragePath,
+        IReadOnlyList<ApiDocsCoverageThreshold> thresholds,
+        out string? headline)
+    {
+        headline = null;
+        var failures = new List<string>();
+        if (thresholds.Count == 0)
+            return failures;
+
+        if (string.IsNullOrWhiteSpace(coveragePath) || !File.Exists(coveragePath))
+        {
+            var message = "API docs coverage report not found; cannot evaluate coverage thresholds. Enable GenerateCoverageReport or set coverageReport path.";
+            failures.Add(message);
+            headline = message;
+            return failures;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(coveragePath));
+        var root = doc.RootElement;
+
+        var commandCount = 0;
+        if (TryGetJsonDoubleByPath(root, "powershell.commandCount", out var commandCountRaw))
+            commandCount = (int)Math.Round(commandCountRaw);
+
+        foreach (var threshold in thresholds)
+        {
+            if (threshold.SkipWhenNoPowerShellCommands && commandCount <= 0)
+                continue;
+
+            if (!TryGetJsonDoubleByPath(root, threshold.MetricPath, out var actual))
+            {
+                failures.Add($"{threshold.Label}: metric '{threshold.MetricPath}' is missing from coverage report.");
+                continue;
+            }
+
+            if (threshold.Comparison == ApiDocsCoverageComparison.Minimum && actual + 0.0001 < threshold.TargetValue)
+            {
+                failures.Add($"{threshold.Label}: {FormatCoverageValue(actual, threshold.FormatAsPercent)} is below required {FormatCoverageValue(threshold.TargetValue, threshold.FormatAsPercent)}.");
+            }
+            else if (threshold.Comparison == ApiDocsCoverageComparison.Maximum && actual - threshold.TargetValue > 0.0001)
+            {
+                failures.Add($"{threshold.Label}: {FormatCoverageValue(actual, threshold.FormatAsPercent)} exceeds allowed {FormatCoverageValue(threshold.TargetValue, threshold.FormatAsPercent)}.");
+            }
+        }
+
+        headline = failures.FirstOrDefault();
+        return failures;
+    }
+
+    private static string FormatCoverageValue(double value, bool asPercent)
+    {
+        return asPercent ? $"{value:0.##}%" : $"{value:0.##}";
+    }
+
+    private static bool TryGetJsonDoubleByPath(JsonElement root, string path, out double value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var current = root;
+        foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(part, out current))
+                return false;
+        }
+
+        if (current.ValueKind == JsonValueKind.Number && current.TryGetDouble(out value))
+            return true;
+        if (current.ValueKind == JsonValueKind.String &&
+            double.TryParse(current.GetString(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value))
+            return true;
+        return false;
+    }
+
+    private sealed class ApiDocsCoverageThreshold
+    {
+        public string Label { get; init; } = string.Empty;
+        public string MetricPath { get; init; } = string.Empty;
+        public double TargetValue { get; init; }
+        public ApiDocsCoverageComparison Comparison { get; init; } = ApiDocsCoverageComparison.Minimum;
+        public bool FormatAsPercent { get; init; } = true;
+        public bool SkipWhenNoPowerShellCommands { get; init; }
+    }
+
+    private enum ApiDocsCoverageComparison
+    {
+        Minimum,
+        Maximum
     }
 
     private static string RenderCriticalCssHtml(AssetRegistrySpec? assets, string rootPath)
@@ -403,5 +783,131 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = $"Sitemap {res.UrlCount} urls";
+    }
+
+    private static void ExecuteXrefMerge(
+        JsonElement step,
+        string label,
+        string baseDir,
+        bool fast,
+        string effectiveMode,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
+    {
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+        if (string.IsNullOrWhiteSpace(outPath))
+            throw new InvalidOperationException("xref-merge requires out.");
+
+        var inputs = new List<string>();
+        AddInputPaths(inputs, GetString(step, "map"));
+        AddInputPaths(inputs, GetString(step, "maps"));
+        AddInputPaths(inputs, GetString(step, "input"));
+        AddInputPaths(inputs, GetString(step, "inputs"));
+        AddInputPaths(inputs, GetString(step, "source"));
+        AddInputPaths(inputs, GetString(step, "sources"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "mapFiles"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "map-files"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "inputsArray"));
+        AddInputPaths(inputs, GetArrayOfStrings(step, "inputs-array"));
+
+        var resolvedInputs = inputs
+            .Where(static input => !string.IsNullOrWhiteSpace(input))
+            .Select(input => ResolvePath(baseDir, input) ?? input)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (resolvedInputs.Count == 0)
+            throw new InvalidOperationException("xref-merge requires at least one input map path (map/maps/input/inputs/source/sources).");
+
+        var topOnly = GetBool(step, "topOnly") ?? GetBool(step, "top-only") ?? false;
+        var recursive = GetBool(step, "recursive") ?? GetBool(step, "includeSubdirectories") ?? !topOnly;
+        var pattern = GetString(step, "pattern") ?? "*.json";
+        var preferLast = GetBool(step, "preferLast") ?? GetBool(step, "prefer-last") ?? false;
+        var failOnDuplicates = GetBool(step, "failOnDuplicates") ?? GetBool(step, "fail-on-duplicates") ?? false;
+        var maxReferences = GetInt(step, "maxReferences") ?? GetInt(step, "max-references") ?? 0;
+        var maxDuplicates = GetInt(step, "maxDuplicates") ?? GetInt(step, "max-duplicates") ?? 0;
+        var maxReferenceGrowthCount = GetInt(step, "maxReferenceGrowthCount") ?? GetInt(step, "max-reference-growth-count") ?? 0;
+        var maxReferenceGrowthPercent = GetDouble(step, "maxReferenceGrowthPercent") ?? GetDouble(step, "max-reference-growth-percent") ?? 0;
+        var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
+        var ciStrictDefaults = ConsoleEnvironment.IsCI && !isDev;
+        var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
+        var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
+
+        var options = new WebXrefMergeOptions
+        {
+            OutputPath = outPath,
+            Pattern = string.IsNullOrWhiteSpace(pattern) ? "*.json" : pattern,
+            Recursive = recursive,
+            PreferLast = preferLast,
+            FailOnDuplicateIds = failOnDuplicates,
+            MaxReferences = maxReferences <= 0 ? 0 : maxReferences,
+            MaxDuplicates = maxDuplicates <= 0 ? 0 : maxDuplicates,
+            MaxReferenceGrowthCount = maxReferenceGrowthCount <= 0 ? 0 : maxReferenceGrowthCount,
+            MaxReferenceGrowthPercent = maxReferenceGrowthPercent <= 0 ? 0 : maxReferenceGrowthPercent
+        };
+        options.Inputs.AddRange(resolvedInputs);
+
+        var result = WebXrefMapMerger.Merge(options);
+        var warnings = result.Warnings ?? Array.Empty<string>();
+        if (warnings.Length > 0)
+        {
+            logger?.Warn($"{label}: xref-merge warnings: {warnings.Length}");
+
+            var previewLimit = Math.Clamp(warningPreviewCount, 0, 20);
+            if (previewLimit > 0)
+            {
+                foreach (var warning in warnings.Where(static warning => !string.IsNullOrWhiteSpace(warning)).Take(previewLimit))
+                    logger?.Warn($"{label}: {warning}");
+
+                var remaining = warnings.Length - previewLimit;
+                if (remaining > 0)
+                    logger?.Warn($"{label}: (+{remaining} more warnings)");
+            }
+
+            if (failOnWarnings)
+            {
+                var headline = warnings.FirstOrDefault(static warning => !string.IsNullOrWhiteSpace(warning))
+                               ?? "xref-merge warnings encountered.";
+                throw new InvalidOperationException(headline);
+            }
+        }
+
+        var noteParts = new List<string>();
+        if (result.DuplicateCount > 0)
+            noteParts.Add($"duplicates: {result.DuplicateCount}");
+        if (result.ReferenceDeltaCount.HasValue)
+        {
+            var deltaText = result.ReferenceDeltaCount.Value >= 0 ? $"+{result.ReferenceDeltaCount.Value}" : result.ReferenceDeltaCount.Value.ToString();
+            if (result.ReferenceDeltaPercent.HasValue)
+                noteParts.Add($"delta: {deltaText} ({result.ReferenceDeltaPercent.Value:0.##}%)");
+            else
+                noteParts.Add($"delta: {deltaText}");
+        }
+        var note = noteParts.Count > 0 ? $" ({string.Join(", ", noteParts)})" : string.Empty;
+        stepResult.Success = true;
+        stepResult.Message = $"Xref merge {result.ReferenceCount} refs from {result.SourceCount} sources{note}";
+    }
+
+    private static void AddInputPaths(List<string> target, string? value)
+    {
+        if (target is null || string.IsNullOrWhiteSpace(value))
+            return;
+        foreach (var item in CliPatternHelper.SplitPatterns(value))
+        {
+            if (!string.IsNullOrWhiteSpace(item))
+                target.Add(item);
+        }
+    }
+
+    private static void AddInputPaths(List<string> target, string[]? values)
+    {
+        if (target is null || values is null || values.Length == 0)
+            return;
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+            AddInputPaths(target, value);
+        }
     }
 }

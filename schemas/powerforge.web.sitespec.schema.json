@@ -67,6 +67,7 @@
     "Localization": { "$ref": "#/$defs/LocalizationSpec" },
     "Versioning": { "$ref": "#/$defs/VersioningSpec" },
     "LinkCheck": { "$ref": "#/$defs/LinkCheckSpec" },
+    "Xref": { "$ref": "#/$defs/XrefSpec" },
     "Verify": { "$ref": "#/$defs/VerifyPolicySpec" },
     "Features": {
       "type": "array",
@@ -485,6 +486,17 @@
         "Enabled": { "type": "boolean" },
         "Root": { "type": "string" },
         "Mode": { "type": "string", "enum": ["contenthash", "mtime"] }
+      }
+    },
+    "XrefSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "MapFiles": { "type": "array", "items": { "type": "string" } },
+        "WarnOnMissing": { "type": "boolean" },
+        "EmitMap": { "type": "boolean" },
+        "MaxWarnings": { "type": "integer", "minimum": 1 }
       }
     },
     "VerifyPolicySpec": {

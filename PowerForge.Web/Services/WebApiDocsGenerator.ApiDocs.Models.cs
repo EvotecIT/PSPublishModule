@@ -83,6 +83,8 @@ public static partial class WebApiDocsGenerator
         public string? Summary { get; set; }
         public bool IsOptional { get; set; }
         public string? DefaultValue { get; set; }
+        public string? Position { get; set; }
+        public string? PipelineInput { get; set; }
     }
 
     private sealed class ApiTypeParameterModel
@@ -110,13 +112,16 @@ public static partial class WebApiDocsGenerator
         private readonly Stream _stream;
         private readonly MetadataReader _reader;
         private readonly string? _sourceRoot;
+        private readonly string? _sourcePathPrefix;
         private readonly string? _defaultPattern;
         private readonly IReadOnlyList<SourceUrlMappingRule> _sourceUrlMappings;
+        private static readonly string[] SupportedSourceUrlTokens = { "path", "line", "root", "pathNoRoot", "pathNoPrefix" };
 
         private SourceLinkContext(
             MetadataReaderProvider provider,
             Stream stream,
             string? sourceRoot,
+            string? sourcePathPrefix,
             string? defaultPattern,
             IReadOnlyList<SourceUrlMappingRule> sourceUrlMappings)
         {
@@ -124,6 +129,7 @@ public static partial class WebApiDocsGenerator
             _stream = stream;
             _reader = provider.GetMetadataReader();
             _sourceRoot = sourceRoot;
+            _sourcePathPrefix = NormalizePathPrefix(sourcePathPrefix ?? string.Empty);
             _defaultPattern = defaultPattern;
             _sourceUrlMappings = sourceUrlMappings ?? Array.Empty<SourceUrlMappingRule>();
         }
@@ -172,9 +178,13 @@ public static partial class WebApiDocsGenerator
                     warnings.Add("SourceUrlPattern set without SourceRootPath (and git root not found); source URLs will be omitted.");
                     pattern = null;
                 }
+                else if (!string.IsNullOrWhiteSpace(pattern))
+                {
+                    ValidateSourceUrlTemplatePattern(pattern, "sourceUrl", warnings);
+                }
 
                 var mappings = BuildSourceUrlMappings(options.SourceUrlMappings, warnings);
-                return new SourceLinkContext(provider, stream, root, pattern, mappings);
+                return new SourceLinkContext(provider, stream, root, options.SourcePathPrefix, pattern, mappings);
             }
             catch (Exception ex)
             {
@@ -275,14 +285,16 @@ public static partial class WebApiDocsGenerator
                 return null;
 
             var normalizedPath = NormalizeSourcePath(resolvedPath);
-            var root = GetFirstPathSegment(normalizedPath);
-            var pathNoRoot = RemoveFirstPathSegment(normalizedPath);
-
             var mapping = MatchSourceUrlMapping(normalizedPath);
             var pathNoPrefix = mapping is null
                 ? normalizedPath
                 : TrimMappedPrefix(normalizedPath, mapping.PathPrefix);
-            var effectivePath = mapping is { StripPathPrefix: true } ? pathNoPrefix : normalizedPath;
+
+            var prefixedPath = ApplySourcePathPrefix(normalizedPath, _sourcePathPrefix);
+            var prefixedPathNoPrefix = ApplySourcePathPrefix(pathNoPrefix, _sourcePathPrefix);
+            var root = GetFirstPathSegment(prefixedPath);
+            var pathNoRoot = RemoveFirstPathSegment(prefixedPath);
+            var effectivePath = mapping is { StripPathPrefix: true } ? prefixedPathNoPrefix : prefixedPath;
 
             var pattern = mapping?.UrlPattern;
             if (string.IsNullOrWhiteSpace(pattern))
@@ -290,14 +302,25 @@ public static partial class WebApiDocsGenerator
             if (string.IsNullOrWhiteSpace(pattern))
                 return null;
 
-            pattern = TryApplyGitHubRepoAutoFix(pattern, root, normalizedPath);
+            pattern = TryApplyGitHubRepoAutoFix(pattern, root, prefixedPath);
 
             return pattern
                 .Replace("{path}", effectivePath, StringComparison.OrdinalIgnoreCase)
                 .Replace("{line}", line.ToString(), StringComparison.OrdinalIgnoreCase)
                 .Replace("{root}", root, StringComparison.OrdinalIgnoreCase)
                 .Replace("{pathNoRoot}", pathNoRoot, StringComparison.OrdinalIgnoreCase)
-                .Replace("{pathNoPrefix}", pathNoPrefix, StringComparison.OrdinalIgnoreCase);
+                .Replace("{pathNoPrefix}", prefixedPathNoPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string ApplySourcePathPrefix(string path, string? prefix)
+        {
+            var normalizedPath = NormalizeSourcePath(path);
+            var normalizedPrefix = NormalizePathPrefix(prefix ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(normalizedPath) || string.IsNullOrWhiteSpace(normalizedPrefix))
+                return normalizedPath;
+            if (PathMatchesPrefix(normalizedPath, normalizedPrefix))
+                return normalizedPath;
+            return $"{normalizedPrefix}/{normalizedPath}";
         }
 
         private SourceUrlMappingRule? MatchSourceUrlMapping(string normalizedPath)
@@ -332,17 +355,18 @@ public static partial class WebApiDocsGenerator
                 var pathPrefix = NormalizePathPrefix(mapping.PathPrefix);
                 if (string.IsNullOrWhiteSpace(pathPrefix))
                 {
-                    warnings?.Add("API docs: sourceUrlMappings entry ignored because pathPrefix is empty.");
+                    warnings?.Add("API docs source: sourceUrlMappings entry ignored because pathPrefix is empty.");
                     continue;
                 }
 
                 var pattern = mapping.UrlPattern?.Trim();
                 if (string.IsNullOrWhiteSpace(pattern))
                 {
-                    warnings?.Add($"API docs: sourceUrlMappings entry for '{pathPrefix}' ignored because urlPattern is empty.");
+                    warnings?.Add($"API docs source: sourceUrlMappings entry for '{pathPrefix}' ignored because urlPattern is empty.");
                     continue;
                 }
 
+                ValidateSourceUrlTemplatePattern(pattern, $"sourceUrlMappings entry for '{pathPrefix}'", warnings);
                 rules.Add(new SourceUrlMappingRule(pathPrefix, pattern, mapping.StripPathPrefix));
             }
 
@@ -366,6 +390,57 @@ public static partial class WebApiDocsGenerator
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
             return value.Replace('\\', '/').Trim().Trim('/');
+        }
+
+        private static void ValidateSourceUrlTemplatePattern(string pattern, string label, List<string>? warnings)
+        {
+            if (string.IsNullOrWhiteSpace(pattern) || string.IsNullOrWhiteSpace(label))
+                return;
+
+            var tokens = ExtractSourceUrlTokens(pattern);
+            var hasPathToken = tokens.Any(static token =>
+                token.Equals("path", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("pathNoRoot", StringComparison.OrdinalIgnoreCase) ||
+                token.Equals("pathNoPrefix", StringComparison.OrdinalIgnoreCase));
+            if (!hasPathToken)
+            {
+                warnings?.Add($"API docs source: {label} does not contain a path token (use {{path}}, {{pathNoRoot}}, or {{pathNoPrefix}}).");
+            }
+
+            var unknown = tokens
+                .Where(token => !SupportedSourceUrlTokens.Any(s => s.Equals(token, StringComparison.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static token => token, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (unknown.Length == 0)
+                return;
+
+            var preview = string.Join(", ", unknown.Select(static token => $"{{{token}}}"));
+            warnings?.Add($"API docs source: {label} contains unsupported token(s): {preview}. Supported tokens: {{path}}, {{line}}, {{root}}, {{pathNoRoot}}, {{pathNoPrefix}}.");
+        }
+
+        private static string[] ExtractSourceUrlTokens(string pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                return Array.Empty<string>();
+
+            var tokens = new List<string>();
+            for (var i = 0; i < pattern.Length; i++)
+            {
+                if (pattern[i] != '{')
+                    continue;
+
+                var end = pattern.IndexOf('}', i + 1);
+                if (end <= i + 1)
+                    continue;
+
+                var name = pattern.Substring(i + 1, end - i - 1).Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    tokens.Add(name);
+                i = end;
+            }
+
+            return tokens.ToArray();
         }
 
         private static bool PathMatchesPrefix(string path, string prefix)
@@ -573,7 +648,7 @@ public static partial class WebApiDocsGenerator
 
     private sealed class NavItem
     {
-        public NavItem(string href, string text, bool external, string? target = null, string? rel = null, List<NavItem>? items = null)
+        public NavItem(string? href, string text, bool external, string? target = null, string? rel = null, List<NavItem>? items = null)
         {
             Href = href;
             Text = text;
@@ -583,7 +658,7 @@ public static partial class WebApiDocsGenerator
             Items = items ?? new List<NavItem>();
         }
 
-        public string Href { get; }
+        public string? Href { get; }
         public string Text { get; }
         public bool External { get; }
         public string? Target { get; }

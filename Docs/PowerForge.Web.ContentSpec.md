@@ -80,12 +80,17 @@ meta.eyebrow: Documentation
 # Getting Started
 ```
 
+Markdown parsing target is GitHub-like flavor (GFM-style) for predictable docs behavior.
+Notably, definition-list parsing is disabled by default, so prose like `Q:` / `A:` does not
+silently turn into `<dl>/<dt>/<dd>` structures.
+
 Supported fields:
 - `title`, `description`, `date`
 - `tags`, `aliases`
 - `slug`, `order`, `draft`
 - `language` / `lang` (page language code when localization is enabled)
 - `translation_key` (shared key used to map the same page across languages)
+  - aliases: `translation.key`, `i18n.key`
 - `layout`, `template`, `collection`
 - `canonical`, `editpath`
 - `meta.*` (custom data exposed to templates)
@@ -109,6 +114,37 @@ Supported fields:
   - `meta.prism_css_light` / `meta.prism_css_dark` (local Prism theme paths)
   - `meta.prism_core` / `meta.prism_autoloader` (local Prism script paths)
   - `meta.prism_lang_path` (local Prism language components base path)
+  - `meta.xref` / `meta.xrefs` / `meta.uid` / `meta.uids` (optional xref IDs for this page)
+
+### Xref links (docs <-> API)
+Use `xref:` links in markdown to reference symbols/pages by ID:
+
+```markdown
+[Install guide](xref:docs.install)
+[String.Length](xref:System.String#Length)
+```
+
+The engine resolves xrefs from:
+- page IDs declared in front matter (`xref`/`xrefs`/`uid`/`uids`)
+- implicit page IDs (`collection:slug`, route, translation key, source-based IDs)
+- optional external map files from `site.json -> Xref.MapFiles`
+  - API docs generators can emit DocFX-style `xrefmap.json` files (C# + PowerShell), which are valid `MapFiles` inputs.
+
+Optional `site.json` config:
+
+```json
+{
+  "Xref": {
+    "Enabled": true,
+    "MapFiles": ["xrefmap.json"],
+    "WarnOnMissing": true,
+    "EmitMap": true,
+    "MaxWarnings": 25
+  }
+}
+```
+
+When `EmitMap` is enabled, the build writes `_powerforge/xrefmap.json`.
 
 ### Syntax highlighting
 PowerForge.Web automatically injects Prism assets when a page contains fenced code blocks.
@@ -211,6 +247,13 @@ When `DetectFromPath` is enabled, a leading language folder in content paths is 
 - `content/docs/pl/index.md` → `/pl/docs/`
 
 Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
+
+When localization is enabled and at least two languages are configured:
+- Page `<head>` output includes `rel="alternate"` language links (`hreflang`) for localized variants.
+- The default language variant also emits `hreflang="x-default"`.
+- Search output is emitted as:
+  - `/search/index.json` (all languages)
+  - `/search/<language>/index.json` (language shard, for example `/search/pl/index.json`)
 
 ## Collections
 Collections map markdown inputs to output routes:
@@ -426,7 +469,8 @@ Best practice (theme rendering):
   - `{{ pf.menu_tree "docs" 4 }}` renders a nested `<ul>` tree for sidebar menus.
 
 ### Navigation surfaces (stable projections)
-If your site defines `Navigation.Surfaces`, the runtime `navigation` object also exposes `navigation.surfaces` as named projections.
+The runtime `navigation` object exposes `navigation.surfaces` as named projections.
+PowerForge can infer defaults (`main`, `docs`, `apidocs`, `products`) from features/menus, but production sites should define `Navigation.Surfaces` explicitly so verify/nav-lint checks stay deterministic.
 This helps themes avoid hard-coding assumptions like "docs sidebar == menu named docs" and supports multi-surface headers (main/products/docs).
 Example:
 ```json
@@ -623,6 +667,7 @@ Defaults:
 - All generated `.html` files under `_site/` are included.
 - `robots.txt`, `llms.txt`, `llms.json`, `llms-full.txt` are included when present.
 - Paths are normalized to trailing‑slash routes when they map to `index.html`.
+- If localization config exists in `_powerforge/site-spec.json`, sitemap entries include localized alternates (`xhtml:link`, `hreflang`, `x-default`).
 
 Explicit entries:
 - `entries` in the sitemap task override auto‑generated metadata for the same path.

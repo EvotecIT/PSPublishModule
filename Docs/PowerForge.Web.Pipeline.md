@@ -9,12 +9,12 @@ Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
 Schema:
-- `schemas/powerforge.web.pipelinespec.schema.json`
+- `Schemas/powerforge.web.pipelinespec.schema.json`
 
 Minimal pipeline:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.pipelinespec.schema.json",
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
   "steps": [
     {
       "task": "build",
@@ -166,8 +166,12 @@ Notes:
   - `sidebar` (`left` or `right`) controls the docs sidebar position (`template: docs`)
   - `bodyClass` sets the `<body>` class on API docs pages (default `pf-api-docs`)
   - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
+  - `sourcePathPrefix` prepends a stable prefix to resolved source paths before URL token expansion (useful for mixed-repo or nested-source layouts)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs
 - `nav`: path to `site.json` or `site-nav.json` to inject navigation tokens into header/footer
+- `navSurface`:
+  - optional explicit surface name from `site-nav.json.surfaces` (for example `apidocs`, `docs`, `main`)
+  - when set, API docs navigation tokens are sourced from that surface
 - `navContextPath` / `navContextCollection` / `navContextLayout` / `navContextProject`:
   - optional context used to select `Navigation.Profiles` when injecting nav tokens
   - default behavior: profile selection uses the site root (`/`) unless you set `navContextPath` explicitly
@@ -175,12 +179,34 @@ Notes:
 - `failOnWarnings`: fail the pipeline step when API docs emits warnings
   - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
 - `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
-  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`
+  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`, `[PFWEB.APIDOCS.XREF]`
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
+- Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
+- Source URL templates are validated preflight:
+  - require at least one path token (`{path}`, `{pathNoRoot}`, `{pathNoPrefix}`)
+  - warn on unsupported tokens (supported: `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
+- Additional `apidocs` preflight checks emit warning codes before generation starts:
+  - `[PFWEB.APIDOCS.SOURCE]` for source-link config issues (for example `sourceUrlMappings` configured without `sourceRoot`/`sourceUrl`, missing `sourceRoot` directory, duplicate mapping prefixes)
+  - `[PFWEB.APIDOCS.NAV]` for nav config issues (for example `navSurface` configured without `nav`)
+  - `[PFWEB.APIDOCS.POWERSHELL]` for missing PowerShell examples paths when `psExamplesPath` is set
 - `warningPreviewCount`: how many warnings to print to console (default `2` in dev, `5` otherwise)
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 - `quickStartTypes` (aliases: `quickstartTypes`, `quick-start-types`) accepts comma-separated simple type names for the "Quick Start" and "Main API" sections
+- API coverage reports and gates:
+  - `coverageReport`: write coverage JSON (default: `coverage.json` under apidocs output)
+  - `generateCoverageReport`: enable/disable coverage report generation (default: `true`)
+  - `xrefMap`: write API xref map JSON (default: `xrefmap.json` under apidocs output)
+  - `generateXrefMap`: enable/disable xref map generation (default: `true`)
+  - `generateMemberXrefs`: include member/parameter xref entries in the map (default: `true`)
+  - `memberXrefKinds`: optional member-kind filter (`constructors,methods,properties,fields,events,extensions,parameters`)
+  - `memberXrefMaxPerType`: optional cap for member xref entries per type/command (`0` = unlimited)
+  - coverage thresholds (0-100): `minTypeSummaryPercent`, `minTypeRemarksPercent`, `minTypeCodeExamplesPercent`, `minMemberSummaryPercent`, `minMemberCodeExamplesPercent`, `minPowerShellSummaryPercent`, `minPowerShellRemarksPercent`, `minPowerShellCodeExamplesPercent`, `minPowerShellParameterSummaryPercent`
+  - source coverage thresholds (0-100): `minTypeSourcePathPercent`, `minTypeSourceUrlPercent`, `minMemberSourcePathPercent`, `minMemberSourceUrlPercent`, `minPowerShellSourcePathPercent`, `minPowerShellSourceUrlPercent`
+  - source quality max-count thresholds (>=0): `maxTypeSourceInvalidUrlCount`, `maxMemberSourceInvalidUrlCount`, `maxPowerShellSourceInvalidUrlCount`, `maxTypeSourceUnresolvedTemplateCount`, `maxMemberSourceUnresolvedTemplateCount`, `maxPowerShellSourceUnresolvedTemplateCount`, `maxTypeSourceRepoMismatchHints`, `maxMemberSourceRepoMismatchHints`, `maxPowerShellSourceRepoMismatchHints`
+  - `failOnCoverage`: fail step when thresholds are below minimums (default: `true` when any threshold is configured)
+  - `coveragePreviewCount`: max failed coverage metrics shown in logs
+  - PowerShell-only example inputs: `psExamplesPath`, `generatePowerShellFallbackExamples`, `powerShellFallbackExampleLimit`
 
 ##### Template overrides
 You can fully control the API docs layout by providing a template root or per-file overrides.
@@ -257,6 +283,41 @@ Project.json example (metadata you can reuse across repos):
 Notes:
 - `ApiDocs` in `project.json` is **metadata**; today you still add the `apidocs` pipeline step.
 - See `Samples/PowerForge.Web.Sample/projects/ApiDocsDemo/project.json` for a full example.
+
+#### xref-merge
+Merges multiple xref maps into one shared map (useful when combining C# API docs, PowerShell API docs, and site pages).
+```json
+{
+  "task": "xref-merge",
+  "out": "./Artifacts/site/data/xrefmap.json",
+  "mapFiles": [
+    "./Artifacts/site/api/xrefmap.json",
+    "./Artifacts/site/powershell/xrefmap.json",
+    "./xref/site-xref-overrides.json"
+  ],
+  "preferLast": true,
+  "maxReferences": 80000,
+  "maxDuplicates": 200,
+  "maxReferenceGrowthCount": 15000,
+  "maxReferenceGrowthPercent": 35
+}
+```
+Notes:
+- Inputs can be files or directories.
+- Directory inputs are scanned using `pattern` (default `*.json`) and `recursive` (default `true`).
+- Duplicate UIDs:
+  - merged by UID
+  - aliases are unioned
+  - `preferLast:true` lets later files override `href`/`name`
+  - `failOnDuplicates:true` fails immediately when duplicates are detected
+- Growth guardrails:
+  - `maxReferences` warns when merged reference count exceeds the configured threshold (`0` disables)
+  - `maxDuplicates` warns when duplicate UID count exceeds the configured threshold (`0` disables)
+  - `maxReferenceGrowthCount` warns when merged reference growth exceeds an absolute delta versus previous output (`0` disables)
+  - `maxReferenceGrowthPercent` warns when merged reference growth exceeds a percent delta versus previous output (`0` disables)
+- Warning policy:
+  - `failOnWarnings` defaults to `true` in CI and `false` in dev (same behavior as `apidocs`)
+  - `warningPreviewCount` controls how many warnings are shown in logs
 
 #### changelog
 Generates a `data/changelog.json` file from a local `CHANGELOG.md` or GitHub releases.
@@ -338,6 +399,7 @@ Generates `sitemap.xml` and (optionally) `sitemap.html`.
   "task": "sitemap",
   "siteRoot": "./Artifacts/site",
   "baseUrl": "https://example.com",
+  "includeLanguageAlternates": true,
   "extraPaths": ["/robots.txt"],
   "html": true,
   "htmlTemplate": "./themes/nova/templates/sitemap.html",
@@ -352,6 +414,7 @@ Notes:
 - By default, **all HTML pages** under `siteRoot` are auto‑included.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
+- `includeLanguageAlternates` (default `true`) emits `xhtml:link` alternates (`hreflang` and `x-default`) when `_powerforge/site-spec.json` contains an enabled `Localization` config.
 
 #### optimize
 Applies critical CSS, minifies HTML/CSS/JS, optimizes images, and can hash assets + generate cache headers.
@@ -415,8 +478,15 @@ Notes:
   - Use `budgetExclude` (comma-separated globs) to exclude folders like `api/**` from the file-count budget without excluding them from the HTML audit scope.
 - `suppressIssues` (array of strings) filters audit issues before counts/gates and before printing/writing artifacts (use codes like `PFAUDIT.BUDGET` or `re:...`).
 - Use `noDefaultIgnoreNav` to disable the built-in API docs nav ignore list.
+- Use `ignoreMedia` (comma-separated globs) to relax media checks for selected paths.
+- Use `noDefaultIgnoreMedia` to disable the built-in API docs media-ignore list (`api/**`, `docs/api/**`, `api-docs/**`).
+- Use `mediaProfiles` (`.json`) for path-scoped media policy overrides (for example allowing standard YouTube host on selected sections or tightening eager-image limits).
+- Match precedence for `mediaProfiles`: longest `match` pattern wins.
 - Use `navRequired: false` (or `navOptional: true`) if some pages intentionally omit a nav element.
 - Use `navIgnorePrefixes` to skip nav checks for path prefixes (comma-separated, e.g. `api/,docs/api/`).
+- `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:
+  - iframe checks: `loading="lazy"`, `title`, external `referrerpolicy`, YouTube nocookie host hint
+  - image checks: loading/decoding hints, intrinsic size/aspect-ratio hints, `srcset` + `sizes` pairing
 - Use `noDefaultExclude` to include partial HTML files like `*.scripts.html`.
 - `renderedBaseUrl` lets you run rendered checks against a running server (otherwise a local server is started).
 - `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.
@@ -424,6 +494,57 @@ Notes:
 - `scopeFromBuildUpdated`: when enabled, and `include` is not set, limits the audit to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site audit even in fast mode.
 CLI note:
 - Use `--rendered-no-install` to skip auto-install (for CI environments with preinstalled browsers).
+
+Recommended `mediaProfiles` file (copy/paste starter):
+```json
+[
+  {
+    "match": "api/**",
+    "ignore": true
+  },
+  {
+    "match": "docs/**",
+    "requireIframeLazy": true,
+    "requireIframeTitle": true,
+    "requireIframeReferrerPolicy": true,
+    "requireImageLoadingHint": true,
+    "requireImageDecodingHint": true,
+    "requireImageDimensions": true,
+    "requireImageSrcSetSizes": true,
+    "maxEagerImages": 1
+  },
+  {
+    "match": "showcase/**",
+    "allowYoutubeStandardHost": true,
+    "requireImageLoadingHint": true,
+    "requireImageDecodingHint": true,
+    "requireImageDimensions": true,
+    "requireImageSrcSetSizes": true,
+    "maxEagerImages": 3
+  }
+]
+```
+
+Reference this file from your pipeline step:
+```json
+{
+  "task": "audit",
+  "siteRoot": "./_site",
+  "mediaProfiles": "./config/media-profiles.json"
+}
+```
+
+`doctor` supports the same option:
+```json
+{
+  "task": "doctor",
+  "config": "./site.json",
+  "mediaProfiles": "./config/media-profiles.json"
+}
+```
+
+Sample file in this repo:
+- `Samples/PowerForge.Web.CodeGlyphX.Sample/config/media-profiles.json`
 
 #### dotnet-build
 Runs `dotnet build`.
@@ -484,12 +605,12 @@ Publish specs wrap a typical build + publish flow into a single config.
 Paths are resolved relative to the publish JSON file location.
 
 Schema:
-- `schemas/powerforge.web.publishspec.schema.json`
+- `Schemas/powerforge.web.publishspec.schema.json`
 
 Minimal publish:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",
@@ -507,7 +628,7 @@ Minimal publish:
 Full publish with overlay + optimize:
 ```json
 {
-  "$schema": "./schemas/powerforge.web.publishspec.schema.json",
+  "$schema": "./Schemas/powerforge.web.publishspec.schema.json",
   "SchemaVersion": 1,
   "Build": {
     "Config": "./site.json",

@@ -65,6 +65,11 @@ public sealed class WebApiDocsOptions
     public string? NavContextLayout { get; set; }
     /// <summary>Optional navigation context project slug used for profile matching.</summary>
     public string? NavContextProject { get; set; }
+    /// <summary>
+    /// Optional navigation surface name used when NavJsonPath points to site-nav.json with "surfaces".
+    /// When set, API docs nav injection prefers that surface over context-based inference.
+    /// </summary>
+    public string? NavSurfaceName { get; set; }
     /// <summary>Optional site display name override.</summary>
     public string? SiteName { get; set; }
     /// <summary>Optional brand URL override.</summary>
@@ -89,6 +94,11 @@ public sealed class WebApiDocsOptions
     public string? SearchScriptPath { get; set; }
     /// <summary>Optional root path for source link generation.</summary>
     public string? SourceRootPath { get; set; }
+    /// <summary>
+    /// Optional path prefix prepended to resolved source paths before URL token expansion.
+    /// Useful when generated source paths need a stable repo-relative prefix in mixed-repo layouts.
+    /// </summary>
+    public string? SourcePathPrefix { get; set; }
     /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
     public string? SourceUrlPattern { get; set; }
     /// <summary>
@@ -111,6 +121,49 @@ public sealed class WebApiDocsOptions
     /// Values are matched case-insensitively against type simple names.
     /// </summary>
     public List<string> QuickStartTypeNames { get; } = new();
+    /// <summary>
+    /// Generates a machine-readable coverage report with API documentation completeness stats.
+    /// </summary>
+    public bool GenerateCoverageReport { get; set; } = true;
+    /// <summary>
+    /// Optional coverage report output path. Relative paths are resolved under <see cref="OutputPath"/>.
+    /// Defaults to <c>coverage.json</c> when not set.
+    /// </summary>
+    public string? CoverageReportPath { get; set; }
+    /// <summary>
+    /// Generates a DocFX-compatible xref map for API symbols.
+    /// </summary>
+    public bool GenerateXrefMap { get; set; } = true;
+    /// <summary>
+    /// Includes member-level entries (methods/properties/fields/events/parameters) in generated xref maps.
+    /// </summary>
+    public bool GenerateMemberXrefs { get; set; } = true;
+    /// <summary>
+    /// Optional member xref kinds filter. Empty means all supported kinds.
+    /// Supported values: constructors, methods, properties, fields, events, extensions, parameters.
+    /// </summary>
+    public List<string> MemberXrefKinds { get; } = new();
+    /// <summary>
+    /// Optional cap for emitted member xref entries per type/command. 0 means unlimited.
+    /// </summary>
+    public int MemberXrefMaxPerType { get; set; }
+    /// <summary>
+    /// Optional xref map output path. Relative paths are resolved under <see cref="OutputPath"/>.
+    /// Defaults to <c>xrefmap.json</c> when not set.
+    /// </summary>
+    public string? XrefMapPath { get; set; }
+    /// <summary>
+    /// Enables fallback code examples for PowerShell commands when help XML does not provide examples.
+    /// </summary>
+    public bool GeneratePowerShellFallbackExamples { get; set; } = true;
+    /// <summary>
+    /// Optional path to PowerShell example scripts (file or directory). When omitted, generator probes common module paths.
+    /// </summary>
+    public string? PowerShellExamplesPath { get; set; }
+    /// <summary>
+    /// Maximum number of fallback code examples imported per PowerShell command.
+    /// </summary>
+    public int PowerShellFallbackExampleLimitPerCommand { get; set; } = 2;
 }
 
 /// <summary>Path-based source URL mapping for API source/edit links.</summary>
@@ -144,6 +197,7 @@ public static partial class WebApiDocsGenerator
     private static readonly Regex SlugDashRegex = new("-{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>[^\\]]+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HrefTokenRegex = new("\\[\\[href:(?<url>[^|\\]]+)\\|(?<label>[^\\]]*)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex AboutTokenRegex = new("\\babout_[A-Za-z0-9_.-]+\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, RegexTimeout);
 
     // Minimal selector contract: enough to catch "API generator added new structure but theme CSS didn't follow".
     private static readonly string[] RequiredSelectorsSimple = { ".pf-api", ".pf-api-search", ".pf-api-types", ".pf-api-type", ".pf-api-section" };
@@ -202,7 +256,7 @@ public static partial class WebApiDocsGenerator
         }
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
-            ? ParsePowerShellHelp(helpPath, warnings)
+            ? ParsePowerShellHelp(helpPath, warnings, options)
             : ParseXml(xmlPath, assembly, options);
         var usedReflectionFallback = false;
         if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
@@ -366,7 +420,9 @@ public static partial class WebApiDocsGenerator
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
                         ["isOptional"] = p.IsOptional,
-                        ["defaultValue"] = p.DefaultValue
+                        ["defaultValue"] = p.DefaultValue,
+                        ["position"] = p.Position,
+                        ["pipelineInput"] = p.PipelineInput
                     }).ToList()
                 }).ToList(),
                 ["constructors"] = type.Constructors.Select(m => new Dictionary<string, object?>
@@ -410,7 +466,9 @@ public static partial class WebApiDocsGenerator
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
                         ["isOptional"] = p.IsOptional,
-                        ["defaultValue"] = p.DefaultValue
+                        ["defaultValue"] = p.DefaultValue,
+                        ["position"] = p.Position,
+                        ["pipelineInput"] = p.PipelineInput
                     }).ToList()
                 }).ToList(),
                 ["properties"] = type.Properties.Select(p => new Dictionary<string, object?>
@@ -552,6 +610,9 @@ public static partial class WebApiDocsGenerator
             ValidateCssContract(outputPath, options, warnings);
         }
 
+        var coveragePath = WriteCoverageReport(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+        var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
+
         var normalizedWarnings = warnings
             .Where(static w => !string.IsNullOrWhiteSpace(w))
             .Select(NormalizeWarningCode)
@@ -563,6 +624,8 @@ public static partial class WebApiDocsGenerator
             IndexPath = indexPath,
             SearchPath = searchPath,
             TypesPath = typesDir,
+            CoveragePath = coveragePath,
+            XrefPath = xrefPath,
             TypeCount = types.Count,
             UsedReflectionFallback = usedReflectionFallback,
             Warnings = normalizedWarnings
@@ -586,6 +649,10 @@ public static partial class WebApiDocsGenerator
 
         if (trimmed.StartsWith("API docs: quickStartTypes", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.QUICKSTART] " + warning;
+        if (trimmed.StartsWith("API docs coverage:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.COVERAGE] " + warning;
+        if (trimmed.StartsWith("API docs xref:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.XREF] " + warning;
 
         if (trimmed.StartsWith("API docs: using embedded header/footer", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.NAV.FALLBACK] " + warning;
@@ -613,6 +680,8 @@ public static partial class WebApiDocsGenerator
         if (trimmed.StartsWith("Source links disabled:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
         if (trimmed.StartsWith("SourceUrlPattern repo", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.SOURCE] " + warning;
+        if (trimmed.StartsWith("API docs source:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.SOURCE] " + warning;
 
         if (trimmed.StartsWith("Failed to parse PowerShell help:", StringComparison.OrdinalIgnoreCase) ||

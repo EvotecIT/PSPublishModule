@@ -85,7 +85,7 @@ public static partial class WebApiDocsGenerator
         return apiDoc;
     }
 
-    private static ApiDocModel ParsePowerShellHelp(string helpPath, List<string> warnings)
+    private static ApiDocModel ParsePowerShellHelp(string helpPath, List<string> warnings, WebApiDocsOptions options)
     {
         var apiDoc = new ApiDocModel();
         if (string.IsNullOrWhiteSpace(helpPath))
@@ -98,7 +98,11 @@ public static partial class WebApiDocsGenerator
         var moduleName = Path.GetFileNameWithoutExtension(resolved) ?? string.Empty;
         if (moduleName.EndsWith("-help", StringComparison.OrdinalIgnoreCase))
             moduleName = moduleName[..^5];
+        if (moduleName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            moduleName = moduleName[..^4];
         apiDoc.AssemblyName = moduleName;
+        var manifestPath = TryResolvePowerShellModuleManifestPath(resolved, moduleName);
+        var kindHints = LoadPowerShellCommandKindHints(manifestPath, warnings);
 
         XDocument doc;
         try
@@ -133,13 +137,14 @@ public static partial class WebApiDocsGenerator
                 Name = name!,
                 FullName = name!,
                 Namespace = moduleName ?? string.Empty,
-                Kind = "Cmdlet",
+                Kind = ResolvePowerShellCommandKind(name!, kindHints, details?.Element(commandNs + "commandType")?.Value),
                 Slug = Slugify(name!),
                 Summary = summary,
                 Remarks = remarks
             };
 
             var syntax = command.Element(commandNs + "syntax");
+            var commandParameterMap = BuildPowerShellParameterMap(command, commandNs, mamlNs, devNs);
             if (syntax is not null)
             {
                 foreach (var syntaxItem in syntax.Elements(commandNs + "syntaxItem"))
@@ -153,25 +158,50 @@ public static partial class WebApiDocsGenerator
                     foreach (var parameter in syntaxItem.Elements(commandNs + "parameter"))
                     {
                         var paramName = parameter.Element(mamlNs + "name")?.Value?.Trim() ?? string.Empty;
+                        commandParameterMap.TryGetValue(paramName, out var commandParameter);
                         var paramSummary = JoinParagraphs(parameter.Element(mamlNs + "description"), mamlNs);
+                        if (string.IsNullOrWhiteSpace(paramSummary))
+                            paramSummary = commandParameter?.Summary;
                         var paramType = parameter.Element(commandNs + "parameterValue")?.Value?.Trim();
                         if (string.IsNullOrWhiteSpace(paramType))
                             paramType = parameter.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(paramType))
+                            paramType = commandParameter?.Type;
+                        var isRequired = bool.TryParse(parameter.Attribute("required")?.Value, out var required) && required;
+                        if (!isRequired && commandParameter is not null)
+                            isRequired = commandParameter.Required;
+                        var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(defaultValue))
+                            defaultValue = commandParameter?.DefaultValue;
+                        var position = parameter.Attribute("position")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(position))
+                            position = commandParameter?.Position;
+                        var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
+                        if (string.IsNullOrWhiteSpace(pipelineInput))
+                            pipelineInput = commandParameter?.PipelineInput;
 
                         member.Parameters.Add(new ApiParameterModel
                         {
                             Name = paramName,
                             Type = paramType,
-                            Summary = paramSummary
+                            Summary = paramSummary,
+                            IsOptional = !isRequired,
+                            DefaultValue = string.IsNullOrWhiteSpace(defaultValue) ? null : defaultValue,
+                            Position = string.IsNullOrWhiteSpace(position) ? null : position,
+                            PipelineInput = string.IsNullOrWhiteSpace(pipelineInput) ? null : pipelineInput
                         });
                     }
                     type.Methods.Add(member);
                 }
             }
 
+            AppendPowerShellExamples(type, command, commandNs, mamlNs, devNs);
+
             apiDoc.Types[type.FullName] = type;
         }
 
+        AppendPowerShellFallbackExamples(apiDoc, helpPath, resolved, manifestPath, options, warnings);
+        AppendPowerShellAboutTopics(apiDoc, helpPath, resolved, moduleName ?? string.Empty, manifestPath, warnings);
         return apiDoc;
     }
 
@@ -238,6 +268,47 @@ public static partial class WebApiDocsGenerator
         return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
     }
 
+    private static Dictionary<string, PowerShellParameterInfo> BuildPowerShellParameterMap(
+        XElement command,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
+    {
+        var map = new Dictionary<string, PowerShellParameterInfo>(StringComparer.OrdinalIgnoreCase);
+        var parameters = command.Element(commandNs + "parameters");
+        if (parameters is null)
+            return map;
+
+        foreach (var parameter in parameters.Elements(commandNs + "parameter"))
+        {
+            var name = parameter.Element(mamlNs + "name")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var summary = JoinParagraphs(parameter.Element(mamlNs + "description"), mamlNs);
+            var type = parameter.Element(commandNs + "parameterValue")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(type))
+                type = parameter.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+
+            var required = bool.TryParse(parameter.Attribute("required")?.Value, out var parsedRequired) && parsedRequired;
+            var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
+            var position = parameter.Attribute("position")?.Value?.Trim();
+            var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
+
+            map[name] = new PowerShellParameterInfo
+            {
+                Summary = summary,
+                Type = type,
+                Required = required,
+                DefaultValue = defaultValue,
+                Position = position,
+                PipelineInput = pipelineInput
+            };
+        }
+
+        return map;
+    }
+
     private static string? JoinReturnValues(XElement command, XNamespace commandNs, XNamespace mamlNs)
     {
         var values = command.Element(commandNs + "returnValues");
@@ -248,5 +319,349 @@ public static partial class WebApiDocsGenerator
             .Select(text => text!)
             .ToList();
         return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
+    }
+
+    private static void AppendPowerShellExamples(
+        ApiTypeModel type,
+        XElement command,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
+    {
+        if (type is null || command is null)
+            return;
+
+        var examples = command.Element(commandNs + "examples");
+        if (examples is null)
+            return;
+
+        foreach (var example in examples.Elements(commandNs + "example"))
+        {
+            var narrativeParts = new List<string>();
+            var title = NormalizePowerShellExampleTitle(example.Element(mamlNs + "title")?.Value);
+            if (!string.IsNullOrWhiteSpace(title))
+                narrativeParts.Add(title);
+
+            var introduction = JoinParagraphs(example.Element(mamlNs + "introduction"), mamlNs);
+            if (!string.IsNullOrWhiteSpace(introduction))
+                narrativeParts.Add(introduction);
+
+            var code = example.Element(devNs + "code")?.Value;
+            if (string.IsNullOrWhiteSpace(code))
+                code = example.Element(commandNs + "code")?.Value;
+            code = code?.Trim();
+
+            var remarks = JoinParagraphs(example.Element(devNs + "remarks"), mamlNs);
+            if (string.IsNullOrWhiteSpace(remarks))
+                remarks = JoinParagraphs(example.Element(mamlNs + "remarks"), mamlNs);
+            if (!string.IsNullOrWhiteSpace(remarks))
+                narrativeParts.Add(remarks);
+
+            if (narrativeParts.Count > 0)
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "text",
+                    Text = string.Join(Environment.NewLine + Environment.NewLine, narrativeParts)
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "code",
+                    Text = code
+                });
+            }
+        }
+    }
+
+    private static string NormalizePowerShellExampleTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return string.Empty;
+
+        var normalized = title.Trim();
+        normalized = normalized.Trim('-').Trim();
+        return normalized;
+    }
+
+    private static string ResolvePowerShellCommandKind(string commandName, PowerShellCommandKindHints hints, string? commandTypeRaw)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+            return "Cmdlet";
+        var commandType = NormalizePowerShellCommandType(commandTypeRaw);
+        if (!string.IsNullOrWhiteSpace(commandType))
+            return commandType;
+        if (commandName.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
+            return "About";
+        if (hints.Aliases.Contains(commandName))
+            return "Alias";
+        if (hints.Functions.Contains(commandName))
+            return "Function";
+        if (hints.Cmdlets.Contains(commandName))
+            return "Cmdlet";
+        if (hints.FunctionsWildcard && !hints.CmdletsWildcard)
+            return "Function";
+        if (hints.CmdletsWildcard && !hints.FunctionsWildcard)
+            return "Cmdlet";
+        if (hints.HasSignals)
+            return "Command";
+        return "Cmdlet";
+    }
+
+    private static string? NormalizePowerShellCommandType(string? commandTypeRaw)
+    {
+        if (string.IsNullOrWhiteSpace(commandTypeRaw))
+            return null;
+
+        var normalized = commandTypeRaw.Trim();
+        if (normalized.Contains('.', StringComparison.Ordinal))
+            normalized = normalized[(normalized.LastIndexOf('.') + 1)..];
+
+        return normalized.ToLowerInvariant() switch
+        {
+            "cmdlet" => "Cmdlet",
+            "function" => "Function",
+            "filter" => "Function",
+            "script" => "Function",
+            "externalscript" => "Function",
+            "alias" => "Alias",
+            _ => null
+        };
+    }
+
+    private static void AppendPowerShellAboutTopics(
+        ApiDocModel apiDoc,
+        string inputHelpPath,
+        string resolvedHelpPath,
+        string moduleName,
+        string? manifestPath,
+        List<string> warnings)
+    {
+        var existing = new HashSet<string>(apiDoc.Types.Keys, StringComparer.OrdinalIgnoreCase);
+        foreach (var file in ResolvePowerShellAboutTopicFiles(inputHelpPath, resolvedHelpPath, manifestPath))
+        {
+            var aboutName = GetAboutTopicNameFromFile(file);
+            if (string.IsNullOrWhiteSpace(aboutName))
+                continue;
+            if (existing.Contains(aboutName))
+                continue;
+
+            string content;
+            try
+            {
+                content = File.ReadAllText(file);
+            }
+            catch (Exception ex)
+            {
+                warnings?.Add($"PowerShell about topic skipped: {Path.GetFileName(file)} ({ex.GetType().Name}: {ex.Message})");
+                continue;
+            }
+
+            var normalized = NormalizePowerShellAboutText(content);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            var summary = GetPowerShellAboutSummary(normalized, aboutName);
+            var remarks = GetPowerShellAboutRemarks(normalized, aboutName);
+
+            var type = new ApiTypeModel
+            {
+                Name = aboutName,
+                FullName = aboutName,
+                Namespace = moduleName ?? string.Empty,
+                Kind = "About",
+                Slug = Slugify(aboutName),
+                Summary = summary,
+                Remarks = remarks
+            };
+
+            apiDoc.Types[type.FullName] = type;
+            existing.Add(type.FullName);
+        }
+    }
+
+    private static IReadOnlyList<string> ResolvePowerShellAboutTopicFiles(string inputHelpPath, string resolvedHelpPath, string? manifestPath)
+    {
+        var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(inputHelpPath) && Directory.Exists(inputHelpPath))
+            roots.Add(Path.GetFullPath(inputHelpPath));
+
+        var helpDir = Path.GetDirectoryName(resolvedHelpPath);
+        if (!string.IsNullOrWhiteSpace(helpDir) && Directory.Exists(helpDir))
+        {
+            roots.Add(Path.GetFullPath(helpDir));
+            var parent = Directory.GetParent(helpDir);
+            if (parent is not null && parent.Exists)
+                roots.Add(parent.FullName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(manifestPath))
+        {
+            var manifestDir = Path.GetDirectoryName(manifestPath);
+            if (!string.IsNullOrWhiteSpace(manifestDir) && Directory.Exists(manifestDir))
+                roots.Add(Path.GetFullPath(manifestDir));
+        }
+
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in roots)
+        {
+            foreach (var pattern in new[] { "about_*.help.txt", "about_*.txt", "about_*.md", "about_*.markdown" })
+            {
+                IEnumerable<string> matches;
+                try
+                {
+                    matches = Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var match in matches)
+                    files.Add(match);
+            }
+        }
+
+        return files.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string? GetAboutTopicNameFromFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var fileName = Path.GetFileName(path);
+        if (string.IsNullOrWhiteSpace(fileName))
+            return null;
+
+        var name = fileName.EndsWith(".help.txt", StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^".help.txt".Length]
+            : Path.GetFileNameWithoutExtension(fileName);
+
+        if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("about_", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return name;
+    }
+
+    private static string NormalizePowerShellAboutText(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+        var normalized = content.Replace("\uFEFF", string.Empty, StringComparison.Ordinal)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Trim();
+        return normalized;
+    }
+
+    private static string? GetPowerShellAboutSummary(string text, string aboutName)
+    {
+        var lines = text.Split('\n')
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
+        if (lines.Count == 0)
+            return null;
+
+        foreach (var line in lines)
+        {
+            var normalized = line.TrimStart('#').Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+            if (string.Equals(normalized, aboutName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(normalized, "TOPIC", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(normalized, "SHORT DESCRIPTION", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.Equals(normalized, "LONG DESCRIPTION", StringComparison.OrdinalIgnoreCase))
+                continue;
+            return normalized;
+        }
+
+        return lines[0];
+    }
+
+    private static string? GetPowerShellAboutRemarks(string text, string aboutName)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n')
+            .Select(x => x.TrimEnd())
+            .ToList();
+
+        if (lines.Count > 0)
+        {
+            var first = lines[0].TrimStart('#').Trim();
+            if (string.Equals(first, aboutName, StringComparison.OrdinalIgnoreCase))
+                lines.RemoveAt(0);
+        }
+
+        var remarks = string.Join(Environment.NewLine, lines).Trim();
+        return string.IsNullOrWhiteSpace(remarks) ? null : remarks;
+    }
+
+    private static string? TryResolvePowerShellModuleManifestPath(string resolvedHelpPath, string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(resolvedHelpPath))
+            return null;
+
+        var startDir = Path.GetDirectoryName(resolvedHelpPath);
+        if (string.IsNullOrWhiteSpace(startDir))
+            return null;
+
+        var directories = new List<string>();
+        var current = Path.GetFullPath(startDir);
+        for (var depth = 0; depth < 6 && !string.IsNullOrWhiteSpace(current); depth++)
+        {
+            directories.Add(current);
+            var parent = Directory.GetParent(current);
+            if (parent is null)
+                break;
+            if (string.Equals(parent.FullName, current, StringComparison.OrdinalIgnoreCase))
+                break;
+            current = parent.FullName;
+        }
+
+        foreach (var dir in directories)
+        {
+            if (string.IsNullOrWhiteSpace(moduleName))
+                continue;
+            var exact = Path.Combine(dir, moduleName + ".psd1");
+            if (File.Exists(exact))
+                return exact;
+        }
+
+        foreach (var dir in directories)
+        {
+            string[] manifests;
+            try
+            {
+                manifests = Directory.GetFiles(dir, "*.psd1", SearchOption.TopDirectoryOnly);
+            }
+            catch
+            {
+                continue;
+            }
+            if (manifests.Length == 1)
+                return manifests[0];
+        }
+
+        return null;
+    }
+
+    private sealed class PowerShellParameterInfo
+    {
+        public string? Summary { get; set; }
+        public string? Type { get; set; }
+        public bool Required { get; set; }
+        public string? DefaultValue { get; set; }
+        public string? Position { get; set; }
+        public string? PipelineInput { get; set; }
     }
 }
