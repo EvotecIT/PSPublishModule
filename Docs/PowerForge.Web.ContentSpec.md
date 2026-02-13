@@ -789,10 +789,13 @@ Versioning metadata can be stored in `site.json` and used in templates:
     "Enabled": true,
     "BasePath": "/docs",
     "HubPath": "./data/version-hub.json",
+    "GenerateAliasRedirects": true,
     "Current": "v2",
+    "LatestAliasPath": "/docs/latest/",
+    "LtsAliasPath": "/docs/lts/",
     "Versions": [
-      { "Name": "v2", "Label": "v2", "Url": "/docs/v2/", "Latest": true },
-      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Lts": true, "Deprecated": true }
+      { "Name": "v2", "Label": "v2", "Url": "/docs/v2/", "Latest": true, "Aliases": ["stable"] },
+      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Lts": true, "Deprecated": true, "Aliases": ["legacy"] }
     ]
   }
 }
@@ -809,8 +812,15 @@ PowerForge also exposes a resolved runtime object under `versioning` (plus short
 Recommended contract:
 - mark exactly one version as `Default`
 - mark exactly one version as `Latest`
+- optionally mark one version as `Lts`
 - keep `Current` aligned to a configured `Name`
 - use root-relative URLs (for example `/docs/v2/`)
+
+Redirect alias generation:
+- when `GenerateAliasRedirects` is true, build output includes host redirect files for:
+  - latest alias (default `<BasePath>/latest/` unless `LatestAliasPath` is set)
+  - lts alias when any version has `Lts:true` (default `<BasePath>/lts/` unless `LtsAliasPath` is set)
+  - per-version `Aliases` (for example `"stable"` -> `/docs/stable/`)
 
 ## Link checking
 Enable link checking in `site.json`:

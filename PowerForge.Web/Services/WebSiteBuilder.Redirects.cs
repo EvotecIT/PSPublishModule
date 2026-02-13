@@ -11,6 +11,111 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    private static void AddVersioningAliasRedirects(SiteSpec spec, List<RedirectSpec> redirects)
+    {
+        if (spec is null || redirects is null)
+            return;
+
+        var versioning = spec.Versioning;
+        if (versioning is null || !versioning.Enabled || !versioning.GenerateAliasRedirects)
+            return;
+
+        var versions = (versioning.Versions ?? Array.Empty<VersionSpec>())
+            .Where(static version => version is not null && !string.IsNullOrWhiteSpace(version.Name))
+            .GroupBy(version => version.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
+        if (versions.Length == 0)
+            return;
+
+        var existingSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var redirect in redirects)
+        {
+            if (redirect is null || string.IsNullOrWhiteSpace(redirect.From))
+                continue;
+            existingSources.Add(NormalizeRouteForMatch(redirect.From));
+        }
+
+        var latest = versions.FirstOrDefault(static version => version.Latest);
+        if (latest is null)
+            latest = versions.FirstOrDefault(static version => version.Default) ?? versions[0];
+        var lts = versions.FirstOrDefault(static version => version.Lts);
+
+        var latestAliasInput = string.IsNullOrWhiteSpace(versioning.LatestAliasPath)
+            ? "latest"
+            : versioning.LatestAliasPath;
+        var latestAliasSource = ResolveVersionAliasSource(versioning.BasePath, latestAliasInput);
+        TryAddAliasRedirect(latestAliasSource, ResolveVersionUrl(versioning.BasePath, latest), existingSources, redirects);
+
+        if (lts is not null)
+        {
+            var ltsAliasInput = string.IsNullOrWhiteSpace(versioning.LtsAliasPath)
+                ? "lts"
+                : versioning.LtsAliasPath;
+            var ltsAliasSource = ResolveVersionAliasSource(versioning.BasePath, ltsAliasInput);
+            TryAddAliasRedirect(ltsAliasSource, ResolveVersionUrl(versioning.BasePath, lts), existingSources, redirects);
+        }
+
+        foreach (var version in versions)
+        {
+            if (version.Aliases is null || version.Aliases.Length == 0)
+                continue;
+
+            var target = ResolveVersionUrl(versioning.BasePath, version);
+            foreach (var alias in version.Aliases)
+            {
+                var source = ResolveVersionAliasSource(versioning.BasePath, alias);
+                TryAddAliasRedirect(source, target, existingSources, redirects);
+            }
+        }
+    }
+
+    private static string ResolveVersionAliasSource(string? basePath, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (IsExternalUrl(trimmed))
+            return string.Empty;
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            return NormalizeRouteForMatch(trimmed);
+
+        var normalizedBasePath = NormalizeVersionBasePath(basePath);
+        if (string.IsNullOrWhiteSpace(normalizedBasePath) || normalizedBasePath == "/")
+            return NormalizeRouteForMatch("/" + trimmed.Trim('/') + "/");
+
+        return NormalizeRouteForMatch($"{normalizedBasePath}/{trimmed.Trim('/')}/");
+    }
+
+    private static void TryAddAliasRedirect(
+        string? source,
+        string? target,
+        HashSet<string> existingSources,
+        List<RedirectSpec> redirects)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(target))
+            return;
+
+        var normalizedSource = NormalizeRouteForMatch(source);
+        var normalizedTarget = NormalizeRouteForMatch(target);
+        if (string.Equals(normalizedSource, normalizedTarget, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!existingSources.Add(normalizedSource))
+            return;
+
+        redirects.Add(new RedirectSpec
+        {
+            From = normalizedSource,
+            To = normalizedTarget,
+            Status = 301,
+            MatchType = RedirectMatchType.Exact,
+            PreserveQuery = true
+        });
+    }
+
     private static void WriteRedirectOutputs(string outputRoot, IReadOnlyList<RedirectSpec> redirects)
     {
         if (redirects.Count == 0) return;
@@ -110,4 +215,3 @@ public static partial class WebSiteBuilder
     }
 
 }
-

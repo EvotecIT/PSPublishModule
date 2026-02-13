@@ -60,6 +60,7 @@ public static partial class WebSiteVerifier
         var defaultCount = 0;
         var latestCount = 0;
         var ltsCount = 0;
+        var aliasSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var version in versioning.Versions)
         {
@@ -79,6 +80,19 @@ public static partial class WebSiteVerifier
             if (version.Default) defaultCount++;
             if (version.Latest) latestCount++;
             if (version.Lts) ltsCount++;
+
+            if (versioning.GenerateAliasRedirects && version.Aliases is { Length: > 0 })
+            {
+                foreach (var alias in version.Aliases)
+                {
+                    var normalizedAlias = ResolveVersionAliasForNavigationMatch(versioning.BasePath, alias);
+                    if (string.IsNullOrWhiteSpace(normalizedAlias))
+                        continue;
+
+                    if (!aliasSources.Add(normalizedAlias))
+                        warnings.Add($"Versioning alias '{alias}' resolves to duplicate source '{normalizedAlias}'.");
+                }
+            }
 
             if (string.IsNullOrWhiteSpace(version.Url))
                 continue;
@@ -116,6 +130,63 @@ public static partial class WebSiteVerifier
             warnings.Add("Versioning does not mark any version as Default. The first version will be used.");
         if (latestCount == 0)
             warnings.Add("Versioning does not mark any version as Latest. The current/default version will be used.");
+
+        if (versioning.GenerateAliasRedirects)
+        {
+            var latestAliasInput = string.IsNullOrWhiteSpace(versioning.LatestAliasPath)
+                ? "latest"
+                : versioning.LatestAliasPath;
+            var latestAlias = ResolveVersionAliasForNavigationMatch(versioning.BasePath, latestAliasInput);
+            if (string.IsNullOrWhiteSpace(latestAlias))
+            {
+                warnings.Add("Versioning.GenerateAliasRedirects is enabled but LatestAliasPath is invalid. Use root-relative path or alias token.");
+            }
+            else if (!aliasSources.Add(latestAlias))
+            {
+                warnings.Add($"Versioning latest alias resolves to duplicate source '{latestAlias}'.");
+            }
+
+            if (ltsCount > 0)
+            {
+                var ltsAliasInput = string.IsNullOrWhiteSpace(versioning.LtsAliasPath)
+                    ? "lts"
+                    : versioning.LtsAliasPath;
+                var ltsAlias = ResolveVersionAliasForNavigationMatch(versioning.BasePath, ltsAliasInput);
+                if (string.IsNullOrWhiteSpace(ltsAlias))
+                {
+                    warnings.Add("Versioning.GenerateAliasRedirects is enabled but LtsAliasPath is invalid. Use root-relative path or alias token.");
+                }
+                else if (!aliasSources.Add(ltsAlias))
+                {
+                    warnings.Add($"Versioning lts alias resolves to duplicate source '{ltsAlias}'.");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(versioning.LtsAliasPath))
+            {
+                warnings.Add("Versioning.LtsAliasPath is set but no version is marked as Lts.");
+            }
+        }
+    }
+
+    private static string ResolveVersionAliasForNavigationMatch(string? basePath, string? alias)
+    {
+        if (string.IsNullOrWhiteSpace(alias))
+            return string.Empty;
+
+        var trimmed = alias.Trim();
+        if (IsExternalNavigationUrl(trimmed))
+            return string.Empty;
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            return NormalizeRouteForNavigationMatch(trimmed);
+
+        var normalizedBase = string.IsNullOrWhiteSpace(basePath)
+            ? string.Empty
+            : NormalizeRouteForNavigationMatch(basePath);
+        if (string.IsNullOrWhiteSpace(normalizedBase) || normalizedBase == "/")
+            return NormalizeRouteForNavigationMatch("/" + trimmed.Trim('/') + "/");
+
+        return NormalizeRouteForNavigationMatch($"{normalizedBase.TrimEnd('/')}/{trimmed.Trim('/')}/");
     }
 
 

@@ -15,6 +15,15 @@ public sealed class VersioningSpec
     /// <summary>Optional path to a version-hub JSON document (relative to site.json or absolute).</summary>
     public string? HubPath { get; set; }
 
+    /// <summary>When true, generate redirect aliases (for example latest/lts) into hosting redirect outputs.</summary>
+    public bool GenerateAliasRedirects { get; set; }
+
+    /// <summary>Optional source path for latest alias redirect. Defaults to &lt;basePath&gt;/latest/ when not set.</summary>
+    public string? LatestAliasPath { get; set; }
+
+    /// <summary>Optional source path for LTS alias redirect. Defaults to &lt;basePath&gt;/lts/ when not set.</summary>
+    public string? LtsAliasPath { get; set; }
+
     /// <summary>Known documentation versions.</summary>
     public VersionSpec[] Versions { get; set; } = Array.Empty<VersionSpec>();
 }
@@ -42,6 +51,9 @@ public sealed class VersionSpec
 
     /// <summary>Marks the version as deprecated.</summary>
     public bool Deprecated { get; set; }
+
+    /// <summary>Optional alias sources (for example latest, stable, current) that should redirect to this version URL.</summary>
+    public string[] Aliases { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Link checking configuration.</summary>

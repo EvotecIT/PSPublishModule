@@ -145,6 +145,72 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenVersioningAliasRedirectsAreMisconfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-versioning-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Version Alias Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Versioning = new VersioningSpec
+                {
+                    Enabled = true,
+                    BasePath = "/docs",
+                    GenerateAliasRedirects = true,
+                    LtsAliasPath = "/docs/lts/",
+                    Versions = new[]
+                    {
+                        new VersionSpec { Name = "v2", Url = "/docs/v2/", Latest = true, Aliases = new[] { "stable" } },
+                        new VersionSpec { Name = "v1", Url = "/docs/v1/", Aliases = new[] { "/docs/stable/" } }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("duplicate source '/docs/stable/'", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("LtsAliasPath is set but no version is marked as Lts", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhenBlogCollectionHasNoLandingPage()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-blog-landing-" + Guid.NewGuid().ToString("N"));
