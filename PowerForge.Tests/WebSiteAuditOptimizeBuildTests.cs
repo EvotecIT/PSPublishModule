@@ -35,6 +35,7 @@ public partial class WebSiteAuditOptimizeBuildTests
                 <body>
                   <div id="current">{{ versioning.current.name }}</div>
                   <div id="latest">{{ versioning.latest.name }}</div>
+                  <div id="lts">{{ versioning.lts.name }}</div>
                   <div id="versions">{{ for v in versioning.versions }}{{ v.name }}{{ if v.is_current }}*{{ end }};{{ end }}</div>
                 </body>
                 </html>
@@ -63,7 +64,7 @@ public partial class WebSiteAuditOptimizeBuildTests
                     Versions = new[]
                     {
                         new VersionSpec { Name = "v2", Label = "v2", Url = "/docs/v2/", Latest = true },
-                        new VersionSpec { Name = "v1", Label = "v1", Url = "/docs/v1/", Default = true }
+                        new VersionSpec { Name = "v1", Label = "v1", Url = "/docs/v1/", Default = true, Lts = true }
                     }
                 },
                 Collections = new[]
@@ -86,6 +87,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             var output = File.ReadAllText(Path.Combine(result.OutputPath, "index.html"));
             Assert.Contains("<div id=\"current\">v1</div>", output, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<div id=\"latest\">v2</div>", output, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<div id=\"lts\">v1</div>", output, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("v1*;", output, StringComparison.OrdinalIgnoreCase);
         }
         finally

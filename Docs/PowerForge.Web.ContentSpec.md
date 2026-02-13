@@ -777,18 +777,22 @@ Versioning metadata can be stored in `site.json` and used in templates:
   "Versioning": {
     "Enabled": true,
     "BasePath": "/docs",
+    "HubPath": "./data/version-hub.json",
     "Current": "v2",
     "Versions": [
       { "Name": "v2", "Label": "v2", "Url": "/docs/v2/", "Latest": true },
-      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Deprecated": true }
+      { "Name": "v1", "Label": "v1 (LTS)", "Url": "/docs/v1/", "Lts": true, "Deprecated": true }
     ]
   }
 }
 ```
+`HubPath` is optional. When set and `Versions` is empty, PowerForge loads versions from the generated `version-hub.json`.
+
 This data is available under `site.versioning` in templates.
 PowerForge also exposes a resolved runtime object under `versioning` (plus shortcuts `current_version`, `latest_version`, `versions`) with:
 - normalized URLs
 - resolved current version (from `Current` or current page path)
+- resolved `versioning.lts` when any version is marked `Lts`
 - `is_current` flags for each version entry
 
 Recommended contract:

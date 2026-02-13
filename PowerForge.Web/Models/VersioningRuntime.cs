@@ -15,6 +15,9 @@ public sealed class VersioningRuntime
     /// <summary>Resolved latest version entry.</summary>
     public VersionRuntimeItem? Latest { get; set; }
 
+    /// <summary>Resolved LTS version entry.</summary>
+    public VersionRuntimeItem? Lts { get; set; }
+
     /// <summary>Resolved default version entry.</summary>
     public VersionRuntimeItem? Default { get; set; }
 
@@ -39,6 +42,9 @@ public sealed class VersionRuntimeItem
 
     /// <summary>True when this version is marked as latest.</summary>
     public bool Latest { get; set; }
+
+    /// <summary>True when this version is marked as LTS.</summary>
+    public bool Lts { get; set; }
 
     /// <summary>True when this version is marked as deprecated.</summary>
     public bool Deprecated { get; set; }

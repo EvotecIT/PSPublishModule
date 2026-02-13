@@ -12,6 +12,9 @@ public sealed class VersioningSpec
     /// <summary>Current version key.</summary>
     public string? Current { get; set; }
 
+    /// <summary>Optional path to a version-hub JSON document (relative to site.json or absolute).</summary>
+    public string? HubPath { get; set; }
+
     /// <summary>Known documentation versions.</summary>
     public VersionSpec[] Versions { get; set; } = Array.Empty<VersionSpec>();
 }
@@ -33,6 +36,9 @@ public sealed class VersionSpec
 
     /// <summary>Marks the latest version.</summary>
     public bool Latest { get; set; }
+
+    /// <summary>Marks the version as long-term support (LTS).</summary>
+    public bool Lts { get; set; }
 
     /// <summary>Marks the version as deprecated.</summary>
     public bool Deprecated { get; set; }

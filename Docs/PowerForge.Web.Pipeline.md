@@ -402,6 +402,29 @@ Template usage (Scriban):
 {{ end }}
 ```
 
+#### version-hub
+Generates version-switcher metadata for multi-version docs sites.
+```json
+{
+  "task": "version-hub",
+  "title": "CodeGlyphX Versions",
+  "discoverRoot": "./versions",
+  "discoverPattern": "v*",
+  "basePath": "/docs/",
+  "setLatestFromNewest": true,
+  "out": "./data/version-hub.json"
+}
+```
+
+Notes:
+- Use explicit `versions`/`entries` arrays when you want full control over labels/channels/flags.
+- Use `discoverRoot` to auto-discover folder-based versions (for example `v1.0`, `v2.0`, `v3.0-preview1`).
+- Output includes:
+  - `latestPath` and `ltsPath` for theme switchers/canonical helpers
+  - ordered `versions` list with `latest`, `lts`, `deprecated`, and optional `aliases`
+- Best practice: run this before `build` so templates can consume `data/version-hub.json`.
+- To wire it into `site.json` versioning without duplicating entries, set `Versioning.HubPath` to the generated file and leave `Versioning.Versions` empty.
+
 #### llms
 Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```json

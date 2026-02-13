@@ -59,6 +59,7 @@ public static partial class WebSiteVerifier
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var defaultCount = 0;
         var latestCount = 0;
+        var ltsCount = 0;
 
         foreach (var version in versioning.Versions)
         {
@@ -77,6 +78,7 @@ public static partial class WebSiteVerifier
 
             if (version.Default) defaultCount++;
             if (version.Latest) latestCount++;
+            if (version.Lts) ltsCount++;
 
             if (string.IsNullOrWhiteSpace(version.Url))
                 continue;
@@ -108,6 +110,8 @@ public static partial class WebSiteVerifier
             warnings.Add($"Versioning marks {defaultCount} entries as Default. Use only one.");
         if (latestCount > 1)
             warnings.Add($"Versioning marks {latestCount} entries as Latest. Use only one.");
+        if (ltsCount > 1)
+            warnings.Add($"Versioning marks {ltsCount} entries as Lts. Use only one.");
         if (defaultCount == 0)
             warnings.Add("Versioning does not mark any version as Default. The first version will be used.");
         if (latestCount == 0)

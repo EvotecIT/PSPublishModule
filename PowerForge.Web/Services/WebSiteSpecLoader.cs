@@ -25,6 +25,8 @@ public static class WebSiteSpecLoader
         if (spec is null)
             throw new InvalidOperationException($"Failed to deserialize site config: {fullPath}");
 
+        ApplyVersioningHub(spec, fullPath, opts);
+
         return (spec, fullPath);
     }
 
@@ -173,5 +175,67 @@ public static class WebSiteSpecLoader
                 return existing.Key;
         }
         return null;
+    }
+
+    private static void ApplyVersioningHub(SiteSpec spec, string configPath, JsonSerializerOptions options)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+
+        var versioning = spec.Versioning;
+        if (versioning is null || string.IsNullOrWhiteSpace(versioning.HubPath))
+            return;
+
+        if (versioning.Versions is { Length: > 0 })
+            return;
+
+        var baseDir = Path.GetDirectoryName(configPath) ?? ".";
+        var resolvedHubPath = versioning.HubPath.Trim();
+        if (!Path.IsPathRooted(resolvedHubPath))
+            resolvedHubPath = Path.Combine(baseDir, resolvedHubPath);
+        resolvedHubPath = Path.GetFullPath(resolvedHubPath);
+
+        if (!File.Exists(resolvedHubPath))
+            throw new FileNotFoundException($"Versioning hub file not found: {resolvedHubPath}");
+
+        var json = File.ReadAllText(resolvedHubPath);
+        var hub = JsonSerializer.Deserialize<WebVersionHubDocument>(json, options);
+        if (hub is null)
+            throw new InvalidOperationException($"Failed to deserialize versioning hub: {resolvedHubPath}");
+
+        var loadedVersions = new List<VersionSpec>();
+        if (hub.Versions is not null)
+        {
+            foreach (var entry in hub.Versions)
+            {
+                if (entry is null)
+                    continue;
+
+                var name = !string.IsNullOrWhiteSpace(entry.Id) ? entry.Id.Trim() : (entry.Version ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                loadedVersions.Add(new VersionSpec
+                {
+                    Name = name,
+                    Label = string.IsNullOrWhiteSpace(entry.Label) ? name : entry.Label.Trim(),
+                    Url = string.IsNullOrWhiteSpace(entry.Path) ? null : entry.Path.Trim(),
+                    Latest = entry.Latest,
+                    Lts = entry.Lts,
+                    Deprecated = entry.Deprecated
+                });
+            }
+        }
+
+        versioning.Versions = loadedVersions.ToArray();
+        if (versioning.Versions.Length == 0)
+            return;
+
+        if (string.IsNullOrWhiteSpace(versioning.Current))
+        {
+            versioning.Current = versioning.Versions
+                .FirstOrDefault(static v => v.Latest)?.Name
+                ?? versioning.Versions[0].Name;
+        }
     }
 }

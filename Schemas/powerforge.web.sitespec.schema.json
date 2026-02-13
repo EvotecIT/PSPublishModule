@@ -425,6 +425,7 @@
         "Enabled": { "type": "boolean" },
         "BasePath": { "type": "string" },
         "Current": { "type": "string" },
+        "HubPath": { "type": "string" },
         "Versions": {
           "type": "array",
           "items": { "$ref": "#/$defs/VersionSpec" }
@@ -466,6 +467,7 @@
         "Url": { "type": "string" },
         "Default": { "type": "boolean" },
         "Latest": { "type": "boolean" },
+        "Lts": { "type": "boolean" },
         "Deprecated": { "type": "boolean" }
       },
       "required": ["Name"]

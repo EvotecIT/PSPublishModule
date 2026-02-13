@@ -29,6 +29,7 @@
         { "$ref": "#/$defs/ApiDocsStep" },
         { "$ref": "#/$defs/XrefMergeStep" },
         { "$ref": "#/$defs/ChangelogStep" },
+        { "$ref": "#/$defs/VersionHubStep" },
         { "$ref": "#/$defs/LlmsStep" },
         { "$ref": "#/$defs/SitemapStep" },
         { "$ref": "#/$defs/OptimizeStep" },
@@ -589,6 +590,74 @@
         "output": { "type": "string" }
       },
       "required": ["task", "out"]
+    },
+    "VersionHubStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "version-hub" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "title": { "type": "string" },
+        "discoverRoot": { "type": "string" },
+        "discover-root": { "type": "string" },
+        "discoverPattern": { "type": "string" },
+        "discover-pattern": { "type": "string" },
+        "basePath": { "type": "string" },
+        "base-path": { "type": "string" },
+        "setLatestFromNewest": { "type": "boolean" },
+        "set-latest-from-newest": { "type": "boolean" },
+        "versions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/VersionHubEntry" }
+        },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/VersionHubEntry" }
+        },
+        "out": { "type": "string" },
+        "output": { "type": "string" }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["out"] },
+            { "required": ["output"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["versions"] },
+            { "required": ["entries"] },
+            { "required": ["discoverRoot"] },
+            { "required": ["discover-root"] }
+          ]
+        }
+      ]
+    },
+    "VersionHubEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "label": { "type": "string" },
+        "path": { "type": "string" },
+        "url": { "type": "string" },
+        "channel": { "type": "string" },
+        "support": { "type": "string" },
+        "latest": { "type": "boolean" },
+        "lts": { "type": "boolean" },
+        "deprecated": { "type": "boolean" },
+        "aliases": { "type": "array", "items": { "type": "string" } }
+      }
     },
     "LlmsStep": {
       "type": "object",

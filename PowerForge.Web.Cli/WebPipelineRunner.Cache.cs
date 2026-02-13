@@ -244,6 +244,8 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
             case "changelog":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "version-hub":
+                return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "xref-merge":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "llms":
