@@ -14,4 +14,10 @@ public sealed class FeedSpec
 
     /// <summary>When true, emit tags/categories as RSS category elements.</summary>
     public bool IncludeCategories { get; set; } = true;
+
+    /// <summary>When true, include Atom feeds in implicit blog/taxonomy outputs.</summary>
+    public bool IncludeAtom { get; set; }
+
+    /// <summary>When true, include JSON Feed outputs in implicit blog/taxonomy outputs.</summary>
+    public bool IncludeJsonFeed { get; set; }
 }

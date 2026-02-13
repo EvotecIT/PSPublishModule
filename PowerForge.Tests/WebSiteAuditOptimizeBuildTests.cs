@@ -1,5 +1,6 @@
 using PowerForge.Web;
 using ImageMagick;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace PowerForge.Tests;
@@ -409,6 +410,238 @@ public partial class WebSiteAuditOptimizeBuildTests
 
             Assert.False(File.Exists(Path.Combine(result.OutputPath, "blog", "index.xml")));
             Assert.False(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.xml")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_ImplicitFeedOptions_AddAtomAndJsonFeedOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-feed-parity-implicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                Blog home
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "first-post.md"),
+                """
+                ---
+                title: First Post
+                date: 2026-01-01
+                tags: [release]
+                ---
+
+                Hello
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feed-parity-implicit");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "blog.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>{{ head_html }}</head>
+                <body>
+                  <div id="feed">{{ feed_url }}</div>
+                  {{ for out in outputs }}<span class="out">{{ out.name }}={{ out.url }}</span>{{ end }}
+                  {{ content }}
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "term.html"),
+                """
+                <!doctype html>
+                <html><head>{{ head_html }}</head><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feed-parity-implicit",
+                  "engine": "scriban",
+                  "defaultLayout": "blog"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Feed Parity Implicit Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feed-parity-implicit",
+                ThemesRoot = "themes",
+                Feed = new FeedSpec
+                {
+                    IncludeAtom = true,
+                    IncludeJsonFeed = true
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ListLayout = "blog"
+                    }
+                },
+                Taxonomies = new[]
+                {
+                    new TaxonomySpec { Name = "tags", BasePath = "/tags", TermLayout = "term" }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var blogHtml = File.ReadAllText(Path.Combine(result.OutputPath, "blog", "index.html"));
+            Assert.Contains("<div id=\"feed\">https://example.test/blog/index.xml</div>", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("application/atom+xml", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("application/feed+json", blogHtml, StringComparison.OrdinalIgnoreCase);
+
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.xml")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.atom.xml")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.feed.json")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.atom.xml")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "tags", "release", "index.feed.json")));
+
+            var atom = XDocument.Load(Path.Combine(result.OutputPath, "blog", "index.atom.xml"));
+            Assert.Equal("feed", atom.Root?.Name.LocalName);
+            Assert.Equal("http://www.w3.org/2005/Atom", atom.Root?.Name.NamespaceName);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(result.OutputPath, "blog", "index.feed.json")));
+            Assert.Equal("https://jsonfeed.org/version/1.1", json.RootElement.GetProperty("version").GetString());
+            Assert.True(json.RootElement.GetProperty("items").GetArrayLength() > 0);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_ExplicitAtomAndJsonFeedOutputs_WorkWithoutRss()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-feed-parity-explicit-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                Blog home
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post.md"),
+                """
+                ---
+                title: Post
+                date: 2026-01-05
+                tags: [release]
+                ---
+
+                <strong>Body</strong>
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "feed-parity-explicit");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "blog.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>{{ head_html }}</head>
+                <body>
+                  <div id="feed">{{ feed_url }}</div>
+                  {{ for out in outputs }}<span class="out">{{ out.name }}={{ out.url }}</span>{{ end }}
+                  {{ content }}
+                </body>
+                </html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "feed-parity-explicit",
+                  "engine": "scriban",
+                  "defaultLayout": "blog"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Feed Parity Explicit Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "feed-parity-explicit",
+                ThemesRoot = "themes",
+                Feed = new FeedSpec
+                {
+                    IncludeContent = true,
+                    IncludeCategories = false
+                },
+                Outputs = new OutputsSpec
+                {
+                    Rules = new[]
+                    {
+                        new OutputRuleSpec { Kind = "section", Formats = new[] { "html", "atom", "jsonfeed" } }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        ListLayout = "blog"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var blogHtml = File.ReadAllText(Path.Combine(result.OutputPath, "blog", "index.html"));
+            Assert.Contains("<div id=\"feed\">https://example.test/blog/index.atom.xml</div>", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("application/atom+xml", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("application/feed+json", blogHtml, StringComparison.OrdinalIgnoreCase);
+
+            Assert.False(File.Exists(Path.Combine(result.OutputPath, "blog", "index.xml")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.atom.xml")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "blog", "index.feed.json")));
+
+            var atom = XDocument.Load(Path.Combine(result.OutputPath, "blog", "index.atom.xml"));
+            var atomContent = atom.Descendants().FirstOrDefault(element =>
+                element.Name.LocalName.Equals("content", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(atomContent);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(result.OutputPath, "blog", "index.feed.json")));
+            var item = json.RootElement.GetProperty("items").EnumerateArray().First();
+            Assert.True(item.TryGetProperty("content_html", out _));
+            Assert.False(item.TryGetProperty("tags", out _));
         }
         finally
         {

@@ -7,7 +7,7 @@ using System.Xml.Linq;
 
 namespace PowerForge.Web;
 
-/// <summary>HTML/JSON/RSS output rendering helpers.</summary>
+/// <summary>HTML/JSON/RSS/Atom/JSON Feed output rendering helpers.</summary>
 public static partial class WebSiteBuilder
 {
     private static void WriteContentItem(
@@ -97,7 +97,7 @@ public static partial class WebSiteBuilder
             Localization = BuildLocalizationRuntime(spec, item, allItems),
             Versioning = BuildVersioningRuntime(spec, item.OutputPath),
             Outputs = outputs.ToArray(),
-            FeedUrl = outputs.FirstOrDefault(o => string.Equals(o.Name, "rss", StringComparison.OrdinalIgnoreCase))?.Url,
+            FeedUrl = ResolvePreferredFeedUrl(outputs),
             Breadcrumbs = breadcrumbs,
             CurrentPath = item.OutputPath,
             CssHtml = cssHtml,
@@ -211,17 +211,30 @@ public static partial class WebSiteBuilder
         if (item.Kind == PageKind.Section &&
             string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
         {
-            return new[] { "html", "rss" };
+            return BuildImplicitFeedFormats(spec.Feed);
         }
 
         if ((item.Kind == PageKind.Taxonomy || item.Kind == PageKind.Term) &&
             (string.Equals(item.Collection, "tags", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(item.Collection, "categories", StringComparison.OrdinalIgnoreCase)))
         {
-            return new[] { "html", "rss" };
+            return BuildImplicitFeedFormats(spec.Feed);
         }
 
         return Array.Empty<string>();
+    }
+
+    private static string[] BuildImplicitFeedFormats(FeedSpec? feed)
+    {
+        var formats = new List<string> { "html", "rss" };
+        if (feed?.IncludeAtom == true)
+            formats.Add("atom");
+        if (feed?.IncludeJsonFeed == true)
+            formats.Add("jsonfeed");
+
+        return formats
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static OutputFormatSpec? ResolveOutputFormatSpec(SiteSpec spec, string name)
@@ -238,6 +251,8 @@ public static partial class WebSiteBuilder
         {
             "html" => new OutputFormatSpec { Name = "html", MediaType = "text/html", Suffix = "html" },
             "rss" => new OutputFormatSpec { Name = "rss", MediaType = "application/rss+xml", Suffix = "xml", Rel = "alternate" },
+            "atom" => new OutputFormatSpec { Name = "atom", MediaType = "application/atom+xml", Suffix = "atom.xml", Rel = "alternate" },
+            "jsonfeed" => new OutputFormatSpec { Name = "jsonfeed", MediaType = "application/feed+json", Suffix = "feed.json", Rel = "alternate" },
             "json" => new OutputFormatSpec { Name = "json", MediaType = "application/json", Suffix = "json" },
             _ => new OutputFormatSpec { Name = name, MediaType = "text/plain", Suffix = name, IsPlainText = true }
         };
@@ -349,6 +364,8 @@ public static partial class WebSiteBuilder
         {
             "json" => RenderJsonOutput(spec, item, allItems),
             "rss" => RenderRssOutput(spec, item, allItems),
+            "atom" => RenderAtomOutput(spec, item, allItems),
+            "jsonfeed" => RenderJsonFeedOutput(spec, item, allItems),
             _ => RenderHtmlPage(spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml)
         };
     }
@@ -381,7 +398,6 @@ public static partial class WebSiteBuilder
 
     private static string RenderRssOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
-        var listItems = ResolveListItems(item, items);
         var feedSpec = spec.Feed;
         var maxItems = feedSpec?.MaxItems ?? 0;
         var includeContent = feedSpec?.IncludeContent == true;
@@ -393,11 +409,7 @@ public static partial class WebSiteBuilder
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "rss", Suffix = "xml" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
 
-        IEnumerable<ContentItem> orderedItems = listItems
-            .OrderByDescending(i => i.Date ?? DateTime.MinValue)
-            .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase);
-        if (maxItems > 0)
-            orderedItems = orderedItems.Take(maxItems);
+        var orderedItems = ResolveFeedItems(item, items, maxItems);
 
         var contentNs = XNamespace.Get("http://purl.org/rss/1.0/modules/content/");
         var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
@@ -444,6 +456,139 @@ public static partial class WebSiteBuilder
 
         var doc = new XDocument(root);
         return doc.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static string RenderAtomOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var feedSpec = spec.Feed;
+        var maxItems = feedSpec?.MaxItems ?? 0;
+        var includeContent = feedSpec?.IncludeContent == true;
+        var includeCategories = feedSpec?.IncludeCategories != false;
+        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var feedTitle = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title;
+        var feedDescription = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description;
+        var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "atom", Suffix = "atom.xml" });
+        var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
+        var siteLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
+        var orderedItems = ResolveFeedItems(item, items, maxItems).ToArray();
+        var updated = orderedItems
+            .Select(entry => entry.Date?.ToUniversalTime())
+            .Where(static value => value.HasValue)
+            .Select(static value => value!.Value)
+            .DefaultIfEmpty(DateTime.UtcNow)
+            .Max();
+
+        var root = new XElement(XName.Get("feed", "http://www.w3.org/2005/Atom"),
+            new XElement(XName.Get("title", "http://www.w3.org/2005/Atom"), feedTitle),
+            new XElement(XName.Get("id", "http://www.w3.org/2005/Atom"), feedSelfLink),
+            new XElement(XName.Get("updated", "http://www.w3.org/2005/Atom"), updated.ToString("O")),
+            new XElement(XName.Get("subtitle", "http://www.w3.org/2005/Atom"), feedDescription),
+            new XElement(XName.Get("link", "http://www.w3.org/2005/Atom"),
+                new XAttribute("href", siteLink)),
+            new XElement(XName.Get("link", "http://www.w3.org/2005/Atom"),
+                new XAttribute("href", feedSelfLink),
+                new XAttribute("rel", "self"),
+                new XAttribute("type", "application/atom+xml")));
+
+        foreach (var entry in orderedItems)
+        {
+            var entryLink = string.IsNullOrWhiteSpace(baseUrl) ? entry.OutputPath : baseUrl + entry.OutputPath;
+            var entryUpdated = entry.Date?.ToUniversalTime() ?? DateTime.UtcNow;
+            var atomEntry = new XElement(XName.Get("entry", "http://www.w3.org/2005/Atom"),
+                new XElement(XName.Get("title", "http://www.w3.org/2005/Atom"), entry.Title),
+                new XElement(XName.Get("id", "http://www.w3.org/2005/Atom"), entryLink),
+                new XElement(XName.Get("link", "http://www.w3.org/2005/Atom"),
+                    new XAttribute("href", entryLink)),
+                new XElement(XName.Get("updated", "http://www.w3.org/2005/Atom"), entryUpdated.ToString("O")),
+                new XElement(XName.Get("summary", "http://www.w3.org/2005/Atom"),
+                    string.IsNullOrWhiteSpace(entry.Description) ? BuildSnippet(entry.HtmlContent, 200) : entry.Description));
+
+            if (includeContent && !string.IsNullOrWhiteSpace(entry.HtmlContent))
+            {
+                atomEntry.Add(new XElement(XName.Get("content", "http://www.w3.org/2005/Atom"),
+                    new XAttribute("type", "html"),
+                    new XCData(entry.HtmlContent)));
+            }
+
+            if (includeCategories)
+            {
+                foreach (var category in ResolveRssCategories(entry))
+                {
+                    atomEntry.Add(new XElement(XName.Get("category", "http://www.w3.org/2005/Atom"),
+                        new XAttribute("term", category)));
+                }
+            }
+
+            root.Add(atomEntry);
+        }
+
+        var doc = new XDocument(root);
+        return doc.ToString(SaveOptions.DisableFormatting);
+    }
+
+    private static string RenderJsonFeedOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
+    {
+        var feedSpec = spec.Feed;
+        var maxItems = feedSpec?.MaxItems ?? 0;
+        var includeContent = feedSpec?.IncludeContent == true;
+        var includeCategories = feedSpec?.IncludeCategories != false;
+        var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
+        var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "jsonfeed", Suffix = "feed.json" });
+        var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
+        var homePageUrl = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
+        var orderedItems = ResolveFeedItems(item, items, maxItems);
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["version"] = "https://jsonfeed.org/version/1.1",
+            ["title"] = string.IsNullOrWhiteSpace(item.Title) ? spec.Name : item.Title,
+            ["home_page_url"] = homePageUrl,
+            ["feed_url"] = feedSelfLink,
+            ["description"] = string.IsNullOrWhiteSpace(item.Description) ? spec.Name : item.Description,
+            ["items"] = orderedItems.Select(entry =>
+            {
+                var entryUrl = string.IsNullOrWhiteSpace(baseUrl) ? entry.OutputPath : baseUrl + entry.OutputPath;
+                var feedItem = new Dictionary<string, object?>
+                {
+                    ["id"] = entryUrl,
+                    ["url"] = entryUrl,
+                    ["title"] = entry.Title,
+                    ["summary"] = string.IsNullOrWhiteSpace(entry.Description) ? BuildSnippet(entry.HtmlContent, 200) : entry.Description,
+                    ["date_published"] = (entry.Date?.ToUniversalTime() ?? DateTime.UtcNow).ToString("O")
+                };
+
+                if (includeContent && !string.IsNullOrWhiteSpace(entry.HtmlContent))
+                    feedItem["content_html"] = entry.HtmlContent;
+                if (includeCategories)
+                    feedItem["tags"] = ResolveRssCategories(entry).ToArray();
+
+                return feedItem;
+            }).ToArray()
+        };
+
+        return JsonSerializer.Serialize(payload, WebJson.Options);
+    }
+
+    private static string? ResolvePreferredFeedUrl(IReadOnlyList<OutputRuntime> outputs)
+    {
+        if (outputs is null || outputs.Count == 0)
+            return null;
+
+        return outputs.FirstOrDefault(output => string.Equals(output.Name, "rss", StringComparison.OrdinalIgnoreCase))?.Url
+               ?? outputs.FirstOrDefault(output => string.Equals(output.Name, "atom", StringComparison.OrdinalIgnoreCase))?.Url
+               ?? outputs.FirstOrDefault(output => string.Equals(output.Name, "jsonfeed", StringComparison.OrdinalIgnoreCase))?.Url
+               ?? outputs.FirstOrDefault(output => !output.IsCurrent)?.Url;
+    }
+
+    private static IEnumerable<ContentItem> ResolveFeedItems(ContentItem item, IReadOnlyList<ContentItem> items, int maxItems)
+    {
+        IEnumerable<ContentItem> orderedItems = ResolveListItems(item, items)
+            .OrderByDescending(entry => entry.Date ?? DateTime.MinValue)
+            .ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase);
+        if (maxItems > 0)
+            orderedItems = orderedItems.Take(maxItems);
+
+        return orderedItems;
     }
 
     private static IEnumerable<string> ResolveRssCategories(ContentItem item)
