@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Scriban;
@@ -7,6 +8,8 @@ namespace PowerForge.Web;
 
 public static partial class WebSitemapGenerator
 {
+    private const long MaxEntriesJsonBytes = 8 * 1024 * 1024;
+
     private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
     {
         var section = ResolveSectionFromRoute(route);
@@ -37,8 +40,9 @@ public static partial class WebSitemapGenerator
                 ? null
                 : System.Net.WebUtility.HtmlDecode(raw);
         }
-        catch
+        catch (Exception ex)
         {
+            Trace.TraceWarning($"Failed to read sitemap HTML title from '{filePath}': {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -71,9 +75,17 @@ public static partial class WebSitemapGenerator
 
     private static IEnumerable<WebSitemapEntry> LoadEntriesFromJsonPath(string path)
     {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("EntriesJsonPath cannot be empty.", nameof(path));
+
         var fullPath = Path.GetFullPath(path.Trim().Trim('"'));
+        if (!fullPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Sitemap entries file must be JSON: {fullPath}");
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Sitemap entries JSON not found: {fullPath}");
+        var info = new FileInfo(fullPath);
+        if (info.Length > MaxEntriesJsonBytes)
+            throw new InvalidDataException($"Sitemap entries JSON exceeds max size ({MaxEntriesJsonBytes} bytes): {fullPath}");
 
         var json = File.ReadAllText(fullPath);
         using var doc = JsonDocument.Parse(json);
@@ -85,6 +97,12 @@ public static partial class WebSitemapGenerator
         {
             if (root.TryGetProperty("entries", out var entriesElement) && entriesElement.ValueKind == JsonValueKind.Array)
                 ParseSitemapEntriesArray(entriesElement, list);
+            else
+                throw new InvalidDataException($"Sitemap entries JSON object must contain an 'entries' array: {fullPath}");
+        }
+        else
+        {
+            throw new InvalidDataException($"Sitemap entries JSON must be an array or object with an 'entries' array: {fullPath}");
         }
         return list;
     }
@@ -226,9 +244,9 @@ public static partial class WebSitemapGenerator
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort only.
+                Trace.TraceWarning($"Failed to resolve sitemap CSS from site spec '{specPath}': {ex.GetType().Name}: {ex.Message}");
             }
         }
 

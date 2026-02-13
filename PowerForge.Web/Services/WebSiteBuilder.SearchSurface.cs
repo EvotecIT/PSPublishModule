@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
@@ -121,9 +122,9 @@ public static partial class WebSiteBuilder
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort only.
+                Trace.TraceWarning($"Failed to resolve search page CSS from site spec '{specPath}': {ex.GetType().Name}: {ex.Message}");
             }
         }
 
