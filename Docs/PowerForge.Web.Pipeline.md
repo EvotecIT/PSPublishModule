@@ -446,6 +446,33 @@ Notes:
 - `apiLevel`: `None` (default), `Summary`, or `Full`
 - `apiMaxTypes` / `apiMaxMembers` cap the size of API detail sections in `llms-full.txt`
 
+#### compat-matrix
+Generates compatibility matrix data for C# libraries and PowerShell modules.
+```json
+{
+  "task": "compat-matrix",
+  "title": "CodeGlyphX Compatibility",
+  "csprojFiles": ["./src/CodeGlyphX/CodeGlyphX.csproj"],
+  "psd1Files": ["./Module/CodeGlyphX.psd1"],
+  "entries": [
+    {
+      "type": "nuget",
+      "id": "CodeGlyphX.Extensions",
+      "version": "1.2.0-preview.1",
+      "targetFrameworks": ["net8.0", "net10.0"],
+      "status": "preview"
+    }
+  ],
+  "out": "./data/compat-matrix.json",
+  "markdownOut": "./content/docs/compatibility.md"
+}
+```
+Notes:
+- `csproj` / `csprojFiles` discover package id, version, TFMs, and package dependencies from project files.
+- `psd1` / `psd1Files` discover module version, PowerShell version/editions, and required modules.
+- explicit `entries` are merged with discovered rows (explicit values win when duplicated by type+id).
+- Use `includeDependencies:false` to omit dependency columns from generated outputs.
+
 #### sitemap
 Generates `sitemap.xml` and (optionally) `sitemap.html`.
 ```json

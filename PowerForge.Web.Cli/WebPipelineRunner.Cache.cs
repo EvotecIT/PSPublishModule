@@ -246,6 +246,19 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "version-hub":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "compat-matrix":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "markdownOut") ??
+                    GetString(step, "markdown-out") ??
+                    GetString(step, "markdownOutput") ??
+                    GetString(step, "markdown-output")));
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             case "xref-merge":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "llms":

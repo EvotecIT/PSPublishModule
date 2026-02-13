@@ -40,6 +40,9 @@ internal static partial class WebPipelineRunner
             case "llms":
                 ExecuteLlms(step, baseDir, stepResult);
                 break;
+            case "compat-matrix":
+                ExecuteCompatibilityMatrix(step, baseDir, stepResult);
+                break;
             case "sitemap":
                 ExecuteSitemap(step, baseDir, stepResult);
                 break;
