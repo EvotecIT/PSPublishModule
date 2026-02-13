@@ -36,6 +36,7 @@ If you want to verify a PowerForge item, start with:
 | JSON Feed | Missing | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | Taxonomy pages (list + term) | Have | Ecosystem | Built-in | Built-in | Built-in | Built-in | Built-in |
 | API reference from .NET XML docs | Have | Built-in | N/A | N/A | N/A | N/A | N/A |
+| Package/module metadata hub (csproj + psd1) | Have/Partial | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | XRef/cross refs (docs <-> api) | Partial | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
 | Multi-version docs conventions | Partial | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
 | i18n routing | Have | Ecosystem | Built-in | Ecosystem | Ecosystem | Ecosystem | Ecosystem |

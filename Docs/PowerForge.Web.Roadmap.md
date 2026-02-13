@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-02-10
+Last updated: 2026-02-13
 
 This document is the single source of truth for:
 
@@ -115,6 +115,13 @@ Legend:
 - **Partial**: XRef link resolver + verifier checks (`xref:` in markdown links) with optional external maps (`Xref.MapFiles`) and optional build map emission (`_powerforge/xrefmap.json`).
   - Code: `PowerForge.Web/Services/WebSiteBuilder.Xref.cs`, `PowerForge.Web/Services/WebSiteVerifier.Xref.cs`, `PowerForge.Web/Services/WebXrefSupport.cs`
 - **Partial**: Theme/layout contract for API pages (ensuring site nav renders) requires consistent `api-header/api-footer` partials across themes.
+
+### Library + Module Release Hub
+
+- **Have**: `package-hub` pipeline task that emits unified package/module metadata from `.csproj` and `.psd1` inputs.
+  - Code: `PowerForge.Web/Services/WebPackageHubGenerator.cs`, `PowerForge.Web/Models/WebPackageHub.cs`
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.Content.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.cs`
+- **Partial**: Package hub currently emits metadata JSON only; turnkey rendered pages/layout contracts remain theme-driven.
 
 ### Quality Gates (Verify/Audit/Doctor) + Budgets
 

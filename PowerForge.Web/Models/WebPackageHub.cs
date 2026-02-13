@@ -83,6 +83,8 @@ public sealed class WebPackageHubModule
     public string? PowerShellVersion { get; set; }
     /// <summary>Compatible PowerShell editions.</summary>
     public List<string> CompatiblePSEditions { get; set; } = new();
+    /// <summary>Exported cmdlets/functions.</summary>
+    public List<string> ExportedCommands { get; set; } = new();
     /// <summary>Required module dependencies.</summary>
     public List<WebPackageHubDependency> RequiredModules { get; set; } = new();
 }

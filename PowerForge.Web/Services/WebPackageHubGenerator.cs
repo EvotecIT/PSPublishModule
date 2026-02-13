@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Text;
 using System.Xml.Linq;
 
 namespace PowerForge.Web;
@@ -186,8 +187,16 @@ public static class WebPackageHubGenerator
             var author = ReadPsd1Scalar(content, "Author");
             var powershellVersion = ReadPsd1Scalar(content, "PowerShellVersion");
             var editions = ReadPsd1Array(content, "CompatiblePSEditions");
-            var requiredModules = ReadPsd1Array(content, "RequiredModules")
-                .Select(name => new WebPackageHubDependency { Name = name })
+            var requiredModules = ReadPsd1RequiredModules(content)
+                .GroupBy(dependency => dependency.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderBy(dependency => dependency.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var exportedCommands = ReadPsd1Array(content, "CmdletsToExport")
+                .Concat(ReadPsd1Array(content, "FunctionsToExport"))
+                .Where(name => !string.IsNullOrWhiteSpace(name) && !name.Equals("*", StringComparison.Ordinal))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             module = new WebPackageHubModule
@@ -199,6 +208,7 @@ public static class WebPackageHubGenerator
                 Author = author,
                 PowerShellVersion = powershellVersion,
                 CompatiblePSEditions = editions,
+                ExportedCommands = exportedCommands,
                 RequiredModules = requiredModules
             };
 
@@ -221,40 +231,21 @@ public static class WebPackageHubGenerator
 
     private static string? ReadPsd1Scalar(string content, string key)
     {
-        var pattern = $"(?im)^\\s*['\\\"']?{Regex.Escape(key)}['\\\"']?\\s*=\\s*(?<value>.+)$";
-        var match = Regex.Match(content, pattern, RegexOptions.CultureInvariant, RegexTimeout);
-        if (!match.Success)
+        var expression = ReadPsd1ValueExpression(content, key);
+        if (string.IsNullOrWhiteSpace(expression))
             return null;
 
-        var value = match.Groups["value"].Value;
-        var commentIndex = value.IndexOf('#');
-        if (commentIndex >= 0)
-            value = value.Substring(0, commentIndex);
-        value = value.Trim().TrimEnd(',').Trim();
-        if (value.StartsWith("'", StringComparison.Ordinal) && value.EndsWith("'", StringComparison.Ordinal) && value.Length >= 2)
-            value = value.Substring(1, value.Length - 2);
-        if (value.StartsWith("\"", StringComparison.Ordinal) && value.EndsWith("\"", StringComparison.Ordinal) && value.Length >= 2)
-            value = value.Substring(1, value.Length - 2);
-
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        return NormalizePsd1ScalarValue(expression);
     }
 
     private static List<string> ReadPsd1Array(string content, string key)
     {
-        var pattern = $"(?ims)^\\s*['\\\"']?{Regex.Escape(key)}['\\\"']?\\s*=\\s*@\\((?<items>.*?)\\)";
-        var match = Regex.Match(content, pattern, RegexOptions.CultureInvariant, RegexTimeout);
-        if (!match.Success)
+        var expression = ReadPsd1ValueExpression(content, key);
+        if (string.IsNullOrWhiteSpace(expression))
             return new List<string>();
 
-        var body = match.Groups["items"].Value;
-        var values = new List<string>();
-
-        foreach (Match quoted in Regex.Matches(body, "['\"](?<value>[^'\"]+)['\"]", RegexOptions.CultureInvariant, RegexTimeout))
-        {
-            var value = quoted.Groups["value"].Value?.Trim();
-            if (!string.IsNullOrWhiteSpace(value))
-                values.Add(value);
-        }
+        var body = NormalizePsd1ListBody(expression);
+        var values = ExtractQuotedStrings(body).ToList();
 
         if (values.Count == 0)
         {
@@ -264,6 +255,232 @@ public static class WebPackageHubGenerator
         return values
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static List<WebPackageHubDependency> ReadPsd1RequiredModules(string content)
+    {
+        var expression = ReadPsd1ValueExpression(content, "RequiredModules");
+        if (string.IsNullOrWhiteSpace(expression))
+            return new List<WebPackageHubDependency>();
+
+        var body = NormalizePsd1ListBody(expression);
+        var values = new List<WebPackageHubDependency>();
+
+        foreach (Match match in Regex.Matches(body, @"(?is)@\{(?<body>.*?)\}", RegexOptions.CultureInvariant, RegexTimeout))
+        {
+            var hashBody = match.Groups["body"].Value;
+            var name = ReadHashtableValue(hashBody, "ModuleName") ?? ReadHashtableValue(hashBody, "Name");
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            var version = ReadHashtableValue(hashBody, "RequiredVersion") ??
+                          ReadHashtableValue(hashBody, "ModuleVersion") ??
+                          ReadHashtableValue(hashBody, "MaximumVersion");
+            values.Add(new WebPackageHubDependency
+            {
+                Name = name,
+                Version = version
+            });
+        }
+
+        var bodyWithoutTables = Regex.Replace(body, @"(?is)@\{.*?\}", " ", RegexOptions.CultureInvariant, RegexTimeout);
+        foreach (var name in ExtractQuotedStrings(bodyWithoutTables))
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            values.Add(new WebPackageHubDependency
+            {
+                Name = name
+            });
+        }
+
+        if (values.Count == 0)
+        {
+            foreach (var name in SplitList(bodyWithoutTables))
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+                values.Add(new WebPackageHubDependency
+                {
+                    Name = name
+                });
+            }
+        }
+
+        return values;
+    }
+
+    private static string? ReadPsd1ValueExpression(string content, string key)
+    {
+        if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(key))
+            return null;
+
+        var keyPattern = $"(?im)^\\s*['\\\"']?{Regex.Escape(key)}['\\\"']?\\s*=\\s*";
+        var match = Regex.Match(content, keyPattern, RegexOptions.CultureInvariant, RegexTimeout);
+        if (!match.Success)
+            return null;
+
+        var start = match.Index + match.Length;
+        if (start >= content.Length)
+            return null;
+
+        var sb = new StringBuilder();
+        var parenDepth = 0;
+        var bracketDepth = 0;
+        var braceDepth = 0;
+        var inSingleQuote = false;
+        var inDoubleQuote = false;
+        var inComment = false;
+
+        for (var i = start; i < content.Length; i++)
+        {
+            var ch = content[i];
+
+            if (inComment)
+            {
+                if (ch == '\r' || ch == '\n')
+                {
+                    inComment = false;
+                    if (parenDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+                        break;
+                    sb.Append(ch);
+                }
+                continue;
+            }
+
+            if (inSingleQuote)
+            {
+                sb.Append(ch);
+                if (ch == '\'')
+                {
+                    if (i + 1 < content.Length && content[i + 1] == '\'')
+                    {
+                        sb.Append('\'');
+                        i++;
+                        continue;
+                    }
+                    inSingleQuote = false;
+                }
+                continue;
+            }
+
+            if (inDoubleQuote)
+            {
+                sb.Append(ch);
+                if (ch == '`' && i + 1 < content.Length)
+                {
+                    sb.Append(content[i + 1]);
+                    i++;
+                    continue;
+                }
+                if (ch == '"')
+                {
+                    if (i + 1 < content.Length && content[i + 1] == '"')
+                    {
+                        sb.Append('"');
+                        i++;
+                        continue;
+                    }
+                    inDoubleQuote = false;
+                }
+                continue;
+            }
+
+            if (ch == '#')
+            {
+                inComment = true;
+                continue;
+            }
+
+            if ((ch == '\r' || ch == '\n') && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0)
+                break;
+
+            if (sb.Length == 0 && char.IsWhiteSpace(ch))
+                continue;
+
+            if (ch == '\'')
+            {
+                inSingleQuote = true;
+                sb.Append(ch);
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inDoubleQuote = true;
+                sb.Append(ch);
+                continue;
+            }
+
+            if (ch == '(')
+                parenDepth++;
+            else if (ch == ')' && parenDepth > 0)
+                parenDepth--;
+            else if (ch == '[')
+                bracketDepth++;
+            else if (ch == ']' && bracketDepth > 0)
+                bracketDepth--;
+            else if (ch == '{')
+                braceDepth++;
+            else if (ch == '}' && braceDepth > 0)
+                braceDepth--;
+
+            sb.Append(ch);
+        }
+
+        var expression = sb.ToString().Trim().TrimEnd(',').Trim();
+        return string.IsNullOrWhiteSpace(expression) ? null : expression;
+    }
+
+    private static string NormalizePsd1ListBody(string expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return string.Empty;
+
+        var trimmed = expression.Trim();
+        if (trimmed.StartsWith("@(", StringComparison.Ordinal) && trimmed.EndsWith(")", StringComparison.Ordinal) && trimmed.Length >= 3)
+            return trimmed.Substring(2, trimmed.Length - 3);
+
+        return trimmed;
+    }
+
+    private static IEnumerable<string> ExtractQuotedStrings(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            yield break;
+
+        foreach (Match match in Regex.Matches(value, "['\"](?<value>[^'\"]+)['\"]", RegexOptions.CultureInvariant, RegexTimeout))
+        {
+            var extracted = match.Groups["value"].Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(extracted))
+                yield return extracted;
+        }
+    }
+
+    private static string? ReadHashtableValue(string body, string key)
+    {
+        if (string.IsNullOrWhiteSpace(body) || string.IsNullOrWhiteSpace(key))
+            return null;
+
+        var pattern = $"(?im)\\b{Regex.Escape(key)}\\b\\s*=\\s*(?<value>('([^']|'')*')|(\"([^\"]|\"\")*\")|[^;\\r\\n]+)";
+        var match = Regex.Match(body, pattern, RegexOptions.CultureInvariant, RegexTimeout);
+        if (!match.Success)
+            return null;
+
+        return NormalizePsd1ScalarValue(match.Groups["value"].Value);
+    }
+
+    private static string? NormalizePsd1ScalarValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim().TrimEnd(',').Trim();
+        if (trimmed.StartsWith("'", StringComparison.Ordinal) && trimmed.EndsWith("'", StringComparison.Ordinal) && trimmed.Length >= 2)
+            trimmed = trimmed.Substring(1, trimmed.Length - 2);
+        else if (trimmed.StartsWith("\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal) && trimmed.Length >= 2)
+            trimmed = trimmed.Substring(1, trimmed.Length - 2);
+
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed.Trim();
     }
 
     private static List<string> SplitList(string? value)

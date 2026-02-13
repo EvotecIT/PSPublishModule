@@ -32,6 +32,8 @@ It complements `Docs/PowerForge.Web.Roadmap.md` by turning parity goals into imp
    - New CLI/pipeline task `xref-merge` to combine multiple xref maps with duplicate handling and CI warning control.
 4. Wired website pipelines:
    - HtmlForgeX, IntelligenceX, and CodeGlyphX now merge API maps into `data/xrefmap.json` and rebuild before LLMS export.
+5. Added package/module metadata generation:
+   - New pipeline task `package-hub` emits unified library/module JSON from `.csproj` + `.psd1` inputs (frameworks, dependencies, exported commands, module requirements).
 
 ## Immediate Next Features (Highest ROI)
 
@@ -46,12 +48,12 @@ Site impact:
 - HtmlForgeX and CodeGlyphX can deep-link guides to exact API members.
 - IntelligenceX can deep-link command parameter docs in onboarding flows.
 
-### 2) Package/Module Hub Generator
+### 2) Package/Module Hub Generator (V2)
 
-- New task (`package-hub`) that builds release metadata pages from:
-  - `.csproj` + NuGet metadata + changelog/release assets.
-  - `.psd1` + exported commands + compatibility metadata.
-- Emit compatibility tables (TFM/PS edition), dependencies, and migration notes.
+- Extend `package-hub` beyond raw metadata JSON:
+  - emit turnkey markdown/HTML-ready data blocks for release pages.
+  - include changelog/release assets and richer compatibility narratives.
+  - add version-lifecycle signals (stable/prerelease/deprecated) and migration notes.
 
 Site impact:
 - All three websites get consistent release hubs without manual markdown churn.

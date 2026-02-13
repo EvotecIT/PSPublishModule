@@ -45,7 +45,12 @@ public class WebPipelineRunnerPackageHubTests
                   Description = 'Tooling module'
                   PowerShellVersion = '7.2'
                   CompatiblePSEditions = @('Desktop','Core')
-                  RequiredModules = @('Pester','PSFramework')
+                  FunctionsToExport = @('Get-ContosoTool')
+                  CmdletsToExport = @('Set-ContosoTool')
+                  RequiredModules = @(
+                    @{ ModuleName = 'Pester'; RequiredVersion = '5.5.0' }
+                    'PSFramework'
+                  )
                 }
                 """);
 
@@ -89,6 +94,18 @@ public class WebPipelineRunnerPackageHubTests
             var firstModule = modules[0];
             Assert.Equal("2.1.0", firstModule.GetProperty("version").GetString());
             Assert.Equal("7.2", firstModule.GetProperty("powerShellVersion").GetString());
+            Assert.Contains(firstModule.GetProperty("exportedCommands").EnumerateArray(), command =>
+                string.Equals(command.GetString(), "Get-ContosoTool", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(firstModule.GetProperty("exportedCommands").EnumerateArray(), command =>
+                string.Equals(command.GetString(), "Set-ContosoTool", StringComparison.OrdinalIgnoreCase));
+
+            var requiredModules = firstModule.GetProperty("requiredModules");
+            Assert.Equal(2, requiredModules.GetArrayLength());
+            Assert.Contains(requiredModules.EnumerateArray(), dependency =>
+                string.Equals(dependency.GetProperty("name").GetString(), "Pester", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(dependency.GetProperty("version").GetString(), "5.5.0", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(requiredModules.EnumerateArray(), dependency =>
+                string.Equals(dependency.GetProperty("name").GetString(), "PSFramework", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
