@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace PowerForge.Web;
@@ -123,6 +124,18 @@ public static partial class WebApiDocsGenerator
         AddAlias(type.FullName);
 
         return aliases;
+    }
+
+    private static string[] GetTypeAliases(
+        ApiTypeModel type,
+        string displayName,
+        IReadOnlyDictionary<string, string[]> typeAliasMap)
+    {
+        if (typeAliasMap.TryGetValue(type.Slug, out var aliases))
+            return aliases;
+
+        Debug.Fail($"Type alias map entry missing for slug '{type.Slug}' ({type.FullName}).");
+        return ResolveTypeAliases(type, displayName).ToArray();
     }
 
     private static string ResolveTypeDisplayName(ApiTypeModel type, IReadOnlyDictionary<string, string> typeDisplayNames)

@@ -325,9 +325,7 @@ public static partial class WebApiDocsGenerator
             ["types"] = types.Select(t =>
             {
                 var displayName = ResolveTypeDisplayName(t, typeDisplayNames);
-                var aliases = typeAliasMap.TryGetValue(t.Slug, out var mappedAliases)
-                    ? mappedAliases
-                    : ResolveTypeAliases(t, displayName).ToArray();
+                var aliases = GetTypeAliases(t, displayName, typeAliasMap);
                 return new Dictionary<string, object?>
                 {
                     ["name"] = t.Name,
@@ -353,9 +351,7 @@ public static partial class WebApiDocsGenerator
         var search = types.Select(t =>
         {
             var displayName = ResolveTypeDisplayName(t, typeDisplayNames);
-            var aliases = typeAliasMap.TryGetValue(t.Slug, out var mappedAliases)
-                ? mappedAliases
-                : ResolveTypeAliases(t, displayName).ToArray();
+            var aliases = GetTypeAliases(t, displayName, typeAliasMap);
             return new Dictionary<string, object?>
             {
                 ["title"] = t.FullName,
@@ -377,9 +373,7 @@ public static partial class WebApiDocsGenerator
         foreach (var type in types)
         {
             var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-            var aliases = typeAliasMap.TryGetValue(type.Slug, out var mappedAliases)
-                ? mappedAliases
-                : ResolveTypeAliases(type, displayName).ToArray();
+            var aliases = GetTypeAliases(type, displayName, typeAliasMap);
             var typeModel = new Dictionary<string, object?>
             {
                 ["name"] = type.Name,

@@ -300,15 +300,7 @@ public static partial class WebApiDocsGenerator
     {
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
-        var normalized = value.Replace('\\', '/').Trim().Trim('/');
-        while (normalized.StartsWith("../", StringComparison.Ordinal) || normalized.StartsWith("./", StringComparison.Ordinal))
-        {
-            normalized = normalized.StartsWith("../", StringComparison.Ordinal)
-                ? normalized.Substring(3)
-                : normalized.Substring(2);
-        }
-
-        return normalized.Trim('/');
+        return TrimLeadingRelativeSegments(value.Replace('\\', '/').Trim().Trim('/'));
     }
 
     private static bool PathMatchesPrefixForValidation(string path, string prefix)
