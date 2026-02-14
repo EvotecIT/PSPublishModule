@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-02-13
+Last updated: 2026-02-14
 
 This document is the single source of truth for:
 
@@ -60,8 +60,10 @@ Legend:
 - **Have**: RSS output (`rss.xml`) for section and taxonomy pages; feed settings via `FeedSpec`.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.OutputRendering.cs` (`RenderRssOutput`)
   - Model: `PowerForge.Web/Models/FeedSpec.cs`
+- **Have**: Atom (`index.atom.xml`) and JSON Feed (`index.feed.json`) outputs via explicit output rules, or implicitly via `Feed.IncludeAtom` / `Feed.IncludeJsonFeed`.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.OutputRendering.cs` (`RenderAtomOutput`, `RenderJsonFeedOutput`)
+  - Schema: `Schemas/powerforge.web.sitespec.schema.json` (`Feed.IncludeAtom`, `Feed.IncludeJsonFeed`)
 - **Partial**: “Blog UX defaults” (archives pages, featured posts, series) are theme-driven, not standardized by engine.
-- **Missing**: Atom feed and JSON Feed formats (RSS only today; RSS uses Atom namespace only for self-link metadata).
 
 ### Search
 
@@ -138,10 +140,32 @@ Legend:
   - CLI: `powerforge-web optimize --help`
 - **Partial**: Incremental builds beyond “pipeline cache + skip heavy steps” (Hugo-tier invalidation) are not there yet.
 
+### Source Sync + Hosting Targets
+
+- **Have**: `git-sync` pipeline task can clone/fetch public or private Git repos (via token env) into deterministic local folders before downstream steps run (single or batch `repos`, optional submodule sync, optional manifest output, configurable shorthand base URL for enterprise/mirror hosts including nested group paths, explicit auth mode `auto|token|ssh|none`, retry controls, and lock file verify/update mode for commit pinning).
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.GitSync.cs`
+  - Schema: `Schemas/powerforge.web.pipelinespec.schema.json` (`GitSyncStep`)
+- **Have**: `hosting` pipeline task can keep/remove host artifacts for selected targets (`netlify`, `azure`, `vercel`, `apache`/`apache2`, `nginx`, `iis`) after site build.
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.Hosting.cs`
+  - Schema: `Schemas/powerforge.web.pipelinespec.schema.json` (`HostingStep`)
+- **Have**: Redirect build emits host-specific artifacts for Netlify, Azure SWA, Vercel, Apache (`.htaccess`), Nginx (`nginx.redirects.conf`), and IIS (`web.config`).
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.Redirects.cs`
+
 ### Extensibility
 
-- **Partial**: Pipeline steps cover many needs, but there is no first-class plugin/hook system for custom transforms without forking.
-- **Missing**: “Hook points” API (pre/post build, per-page HTML transform, pre-render data transforms) as a stable contract.
+- **Have**: Pipeline includes a first-class `hook` step for named plugin hooks with command execution, deterministic context/env injection, and optional stdout/stderr/context artifacts.
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.Hook.cs`
+  - Schema: `Schemas/powerforge.web.pipelinespec.schema.json` (`HookStep`)
+- **Have**: Pipeline includes a first-class `html-transform` step for per-page HTML transforms with include/exclude globs, tokenized command arguments, and in-place/stdout write modes.
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.HtmlTransform.cs`
+  - Schema: `Schemas/powerforge.web.pipelinespec.schema.json` (`HtmlTransformStep`)
+- **Have**: Pipeline includes a first-class `data-transform` step for pre-render or pre-publish data shaping with explicit input/output contracts (stdin/file + stdout/passthrough modes).
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.DataTransform.cs`
+  - Schema: `Schemas/powerforge.web.pipelinespec.schema.json` (`DataTransformStep`)
+- **Have**: Pipeline includes a first-class `model-transform` step with typed JSON operations (`set`, `replace`, `insert`, `remove`, `append`, `merge`, `copy`, `move`) for engine-native structural transforms, including wildcard selectors (`[*]`, `*`, `**`) with deterministic ordering, optional per-operation target-count guards, and optional conditional filters (`when`/`where` for targets plus `fromWhen`/`sourceWhen` for copy/move sources).
+  - CLI wiring: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.ModelTransform.cs`
+  - Schema: `Schemas/powerforge.web.pipelinespec.schema.json` (`ModelTransformStep`)
+- **Partial**: Direct collection/page model transforms (without JSON file boundary) are still future work.
 
 ## Milestones (Stop Regressions First)
 
@@ -165,10 +189,8 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
   - Verify:
     - warn in dev, fail in CI when `features` require a surface but site/theme doesn’t provide it.
 
-### M2: Blog UX Defaults + Feed Parity (Next)
+### M2: Blog UX Defaults (Next)
 
-- Implement Atom output (in addition to RSS).
-- Implement JSON Feed output (optional).
 - Standardize blog list/term layouts in scaffold themes, so blog becomes turnkey.
 
 ### M3: DocFX-class Docs Conveniences (Later)
@@ -194,3 +216,4 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Pipeline:
   - Add a `verify-ci` step (`modes:["ci"]`) with `failOnNewWarnings:true` + baseline.
   - Add audit/doctor baselines and a `maxTotalFiles` budget.
+

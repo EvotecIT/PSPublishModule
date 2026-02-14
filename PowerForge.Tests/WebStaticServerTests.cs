@@ -125,6 +125,73 @@ public class WebStaticServerTests
         }
     }
 
+    [Fact]
+    public async Task ServeWithPortFallback_DoesNotServeFilesOutsideRoot_ForTraversalPath()
+    {
+        var parent = Path.Combine(Path.GetTempPath(), "pf-web-static-server-traversal-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(parent, "site");
+        var sibling = Path.Combine(parent, "site2");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(sibling);
+        File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><html><body>root</body></html>");
+        File.WriteAllText(Path.Combine(sibling, "secret.html"), "<!doctype html><html><body>TOP SECRET</body></html>");
+
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        try
+        {
+            var logs = new ConcurrentQueue<string>();
+            cts = new CancellationTokenSource();
+            var preferredPort = GetFreePort();
+            serverTask = Task.Run(() =>
+            {
+                WebStaticServer.ServeWithPortFallback(
+                    root,
+                    "localhost",
+                    preferredPort,
+                    cts.Token,
+                    message => logs.Enqueue(message),
+                    maxPortAttempts: 10);
+            });
+
+            var listeningLog = await WaitForLogAsync(
+                logs,
+                message => message.StartsWith("Listening on http://localhost:", StringComparison.OrdinalIgnoreCase),
+                TimeSpan.FromSeconds(5));
+            if (listeningLog is null && serverTask.IsCompleted && serverTask.Exception is not null)
+                throw new Xunit.Sdk.XunitException($"Server task faulted before listening: {serverTask.Exception.GetBaseException().Message}");
+            Assert.NotNull(listeningLog);
+            var boundPort = ExtractPortFromListeningLog(listeningLog!);
+
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            using var response = await http.GetAsync($"http://localhost:{boundPort}/..%2Fsite2%2Fsecret.html");
+            var body = await response.Content.ReadAsStringAsync();
+
+            Assert.True(
+                response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Forbidden,
+                $"Expected NotFound or Forbidden, got {(int)response.StatusCode} ({response.StatusCode}).");
+            Assert.DoesNotContain("TOP SECRET", body, StringComparison.OrdinalIgnoreCase);
+
+            cts.Cancel();
+            await serverTask.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally
+        {
+            if (cts is not null)
+            {
+                try { cts.Cancel(); } catch { }
+            }
+            if (serverTask is not null)
+            {
+                try { await serverTask.WaitAsync(TimeSpan.FromSeconds(1)); } catch { }
+            }
+            if (Directory.Exists(parent))
+            {
+                try { Directory.Delete(parent, true); } catch { }
+            }
+        }
+    }
+
     private static int GetFreePort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);

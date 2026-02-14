@@ -1,6 +1,6 @@
 # PowerForge.Web Parity Notes (DocFX, Hugo, Gatsby, Ghost, Jekyll, Astro)
 
-Last updated: 2026-02-10
+Last updated: 2026-02-14
 
 This is a pragmatic parity cheat-sheet for maintainers and agents.
 It is not intended to be a perfect feature-by-feature comparison of every ecosystem plugin.
@@ -32,17 +32,19 @@ If you want to verify a PowerForge item, start with:
 | Blog posts | Have | Partial | Built-in | Built-in | Built-in | Built-in | Built-in |
 | Tags/categories | Have | Ecosystem | Built-in | Built-in | Built-in | Built-in | Built-in |
 | RSS feeds | Have | Ecosystem | Built-in | Ecosystem | Built-in | Built-in | Ecosystem |
-| Atom feed | Missing | Ecosystem | Built-in | Ecosystem | Built-in | Ecosystem | Ecosystem |
-| JSON Feed | Missing | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
+| Atom feed | Have | Ecosystem | Built-in | Ecosystem | Built-in | Ecosystem | Ecosystem |
+| JSON Feed | Have | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | Taxonomy pages (list + term) | Have | Ecosystem | Built-in | Built-in | Built-in | Built-in | Built-in |
 | API reference from .NET XML docs | Have | Built-in | N/A | N/A | N/A | N/A | N/A |
 | Package/module metadata hub (csproj + psd1) | Have/Partial | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | XRef/cross refs (docs <-> api) | Partial | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
 | Multi-version docs conventions | Partial | Built-in | Ecosystem | Ecosystem | N/A | Ecosystem | Ecosystem |
 | i18n routing | Have | Ecosystem | Built-in | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
-| Output formats (html/rss/json) | Have | Built-in | Built-in | Built-in | Built-in | Built-in | Built-in |
+| Output formats (html/rss/atom/jsonfeed/json) | Have | Built-in | Built-in | Built-in | Built-in | Built-in | Built-in |
+| Pipeline source sync from Git repos (public/private) | Have | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
+| Host redirect artifacts (Netlify/Azure/Vercel/Apache/Nginx/IIS) | Have | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | Incremental build graph | Partial | Partial | Built-in | Ecosystem | Built-in | Partial | Built-in |
-| Plugin/hook system | Missing | Ecosystem | Built-in | Built-in | Built-in | Ecosystem | Built-in |
+| Plugin/hook system | Partial | Ecosystem | Built-in | Built-in | Built-in | Ecosystem | Built-in |
 | Asset pipeline (minify/hash) | Have | Ecosystem | Built-in | Built-in | Built-in | Ecosystem | Built-in |
 | Critical CSS | Have | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
 | Image optimization | Partial | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem | Ecosystem |
@@ -62,11 +64,11 @@ If you want to verify a PowerForge item, start with:
 These are the gaps that most often cause surprises when compared to DocFX/Hugo/Astro-class experiences:
 
 1. **Extensibility hooks**
-   - Stable pre/post build hooks, per-page transforms, and data transforms without forking.
+   - Pipeline hook, per-page HTML transform, file-based data transform, and typed JSON model-transform steps are available (including wildcard path transforms for JSON models).
+   - Direct collection/page model transforms (without JSON file boundary) are still future work.
 2. **DocFX-class cross references**
    - `xref:` link resolution exists and API docs now emit DocFX-style `xrefmap.json` for C# + PowerShell symbols.
    - Full symbol graph parity and richer UID coverage are still in progress.
-3. **Feed parity**
-   - Add Atom and JSON Feed alongside RSS.
-4. **Incremental rebuild**
+3. **Incremental rebuild**
    - Hugo-tier invalidation (content-hash dependency graph) so big sites rebuild fast and deterministically.
+

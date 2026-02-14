@@ -701,6 +701,213 @@ Notes:
 - `defineConstants` maps to `-p:DefineConstants=...` for multi-variant Blazor publishes.
 - `skipIfProjectMissing` (`skipIfMissingProject`, `skip-if-project-missing`) makes the step succeed with a skip message when the project path is absent (useful for worktree-only/partial checkouts).
 
+#### hook
+Runs a named hook command with deterministic pipeline context and optional output capture.
+```json
+{
+  "task": "hook",
+  "event": "pre-build",
+  "command": "dotnet",
+  "args": "--version",
+  "contextPath": "./_reports/hooks/pre-build.json",
+  "stdoutPath": "./_reports/hooks/pre-build.stdout.log",
+  "stderrPath": "./_reports/hooks/pre-build.stderr.log",
+  "env": {
+    "PF_HOOK_PROFILE": "docs"
+  }
+}
+```
+
+Notes:
+- `event` (aliases: `hook`, `name`) and `command` (aliases: `cmd`, `file`) are required.
+- Arguments work the same as `exec` (`args`/`arguments` or `argsList`/`argumentsList`).
+- `contextPath` writes a JSON payload with hook metadata (`event`, `mode`, step label/id, directories, UTC timestamp).
+- Built-in environment variables are injected automatically:
+  - `POWERFORGE_HOOK_EVENT`
+  - `POWERFORGE_HOOK_LABEL`
+  - `POWERFORGE_HOOK_MODE`
+  - `POWERFORGE_HOOK_WORKDIR`
+  - `POWERFORGE_HOOK_BASEDIR`
+  - `POWERFORGE_HOOK_CONTEXT` (when `contextPath` is set)
+- `env` (`environment`) adds or overrides environment variables for the hook process.
+- `stdoutPath` / `stderrPath` persist captured process streams for CI diagnostics.
+- `allowFailure` (`continueOnError`) keeps the pipeline green when the hook exits non-zero.
+- `hook` steps are intentionally not cacheable (external side effects/plugins).
+
+#### html-transform
+Runs an external transform command for each HTML file under `siteRoot` with include/exclude filtering.
+```json
+{
+  "task": "html-transform",
+  "siteRoot": "./_site",
+  "include": ["docs/**", "index.html"],
+  "exclude": ["docs/drafts/**"],
+  "command": "my-transform",
+  "argsList": ["--input", "{file}", "--mode", "docs"],
+  "writeMode": "inplace",
+  "reportPath": "./_reports/html-transform.json"
+}
+```
+
+Filter-style mode (command writes transformed HTML to stdout):
+```json
+{
+  "task": "html-transform",
+  "siteRoot": "./_site",
+  "command": "my-html-filter",
+  "args": "--file {file}",
+  "writeMode": "stdout",
+  "requireOutput": true
+}
+```
+
+Notes:
+- `siteRoot` (`site-root`) and `command` (`cmd`, `file`) are required.
+- `include` / `exclude` support array or comma-separated string globs relative to `siteRoot`.
+- `extensions` defaults to `.html,.htm`.
+- `writeMode`:
+  - `inplace` (default): command updates files directly.
+  - `stdout`: engine replaces file content with captured stdout.
+- Token expansion in `args` / `argsList` / `env` values:
+  - `{file}` absolute file path
+  - `{relative}` relative path from `siteRoot`
+  - `{siteRoot}` absolute site root
+  - `{index}` zero-based file index
+- Built-in per-file environment variables:
+  - `POWERFORGE_TRANSFORM_FILE`
+  - `POWERFORGE_TRANSFORM_RELATIVE`
+  - `POWERFORGE_TRANSFORM_SITE_ROOT`
+  - `POWERFORGE_TRANSFORM_INDEX`
+- `stdin: true` pipes original file content to process stdin.
+- `allowFailure` (`continueOnError`) continues processing and reports allowed failures.
+- `reportPath` emits JSON with processed/changed/failed counts and per-file outcomes.
+- `html-transform` steps are intentionally not cacheable (external side effects/plugins).
+
+#### data-transform
+Runs a single data transform command with explicit input/output paths.
+```json
+{
+  "task": "data-transform",
+  "input": "./_temp/data/source.json",
+  "out": "./_temp/data/transformed.json",
+  "command": "my-data-filter",
+  "argsList": ["--input", "{input}", "--output", "{output}"],
+  "inputMode": "file",
+  "writeMode": "passthrough",
+  "reportPath": "./_reports/data-transform.json"
+}
+```
+
+Filter-style mode (input through stdin, transformed data from stdout):
+```json
+{
+  "task": "data-transform",
+  "input": "./_temp/data/source.json",
+  "out": "./_temp/data/transformed.json",
+  "command": "my-json-filter",
+  "args": "--pretty",
+  "inputMode": "stdin",
+  "writeMode": "stdout"
+}
+```
+
+Notes:
+- Required:
+  - input: `input` (`inputPath`, `source`, etc.)
+  - output: `out` (`output`, `outputPath`, `destination`, etc.)
+  - command: `command` (`cmd`, `file`)
+- `inputMode` (`input-mode`, `transformMode`, `transform-mode`):
+  - `stdin` (default): input file content is piped to process stdin.
+  - `file`: process reads input path directly.
+- `writeMode`:
+  - `stdout` (default): process stdout becomes output file content.
+  - `passthrough`: process is expected to write output file itself.
+- Token expansion in args/env values:
+  - `{input}`
+  - `{output}`
+  - `{baseDir}`
+- Built-in environment variables:
+  - `POWERFORGE_DATA_INPUT`
+  - `POWERFORGE_DATA_OUTPUT`
+  - `POWERFORGE_DATA_BASEDIR`
+  - `POWERFORGE_DATA_MODE`
+  - `POWERFORGE_DATA_WRITE_MODE`
+- `allowFailure` (`continueOnError`) keeps pipeline green on non-zero exit and reports as allowed failure.
+- `reportPath` writes a JSON result summary (exit code, changed flag, mode/writeMode, timestamp).
+- `data-transform` steps are intentionally not cacheable (external side effects/plugins).
+
+#### model-transform
+Runs built-in typed JSON model operations without external tools.
+```json
+{
+  "task": "model-transform",
+  "input": "./_temp/data/source.json",
+  "out": "./_temp/data/transformed.json",
+  "operations": [
+    { "op": "set", "path": "site.name", "value": "PowerForge" },
+    { "op": "replace", "path": "site.name", "value": "PowerForge.Web" },
+    { "op": "insert", "path": "items", "index": 0, "value": { "id": 0 } },
+    { "op": "copy", "from": "site.name", "path": "site.displayName" },
+    { "op": "move", "from": "legacy.items", "path": "items" },
+    { "op": "append", "path": "items", "value": { "id": 3 } },
+    { "op": "merge", "path": "site", "value": { "environment": "ci" } },
+    { "op": "remove", "path": "draft" }
+  ],
+  "strict": true,
+  "pretty": true,
+  "reportPath": "./_reports/model-transform.json"
+}
+```
+
+Notes:
+- Required:
+  - input: `input` (`inputPath`, `source`, etc.)
+  - output: `out` (`output`, `outputPath`, `destination`, etc.)
+  - operations: `operations` (`ops`, `transforms`)
+- Supported operations:
+  - `set`: set/replace value at path
+  - `replace`: replace value at existing path (fails when target is missing)
+  - `insert`: insert value into array at `index`
+  - `remove`: remove property/array item at path
+  - `append`: append value to array at path
+  - `merge`: shallow-merge object properties at path
+  - `copy`: copy value from `from` path to `path`
+  - `move`: move value from `from` path to `path`
+- Path syntax:
+  - dot notation: `site.name`
+  - array index: `items[0]`
+  - wildcard selector: `items[*].title` (and `*` for object keys)
+  - recursive selector: `**.enabled` (matches property at any depth)
+  - quoted property keys: `meta['x.y']`, `meta[\"z[0]\"]` (for keys containing dots/brackets/spaces)
+  - root: `$`
+- Wildcard transfer behavior (`copy`/`move`):
+  - wildcard source + wildcard target: values are paired in deterministic order
+  - single source + wildcard target: source value is applied to all targets
+  - wildcard source + single target: requires exactly one source match
+- Optional target guards (per operation):
+  - `minTargets` / `maxTargets` / `exactTargets` enforce matched target count
+  - `exactTargets` cannot be combined with `minTargets`/`maxTargets`
+- Optional conditional guard (per operation):
+  - `when` (`where`) object can filter targets before applying operation
+  - supported keys: `exists` (`present`), `type` (`kind`), `equals` (`eq`), `notEquals` (`not-equals`, `neq`)
+  - supports path-based operations (`set`, `replace`, `insert`, `remove`, `append`, `merge`) and destination filtering for `copy`/`move`
+  - for wildcard `copy`/`move` source-to-destination pairing, filtered destination count must still match source wildcard count
+  - for `copy`/`move`, source filtering is also supported via `fromWhen`/`sourceWhen` (same condition keys)
+- Operation aliases:
+  - op: `op` or `type`
+  - path: `path` or `target`
+  - insert index: `index` or `at`
+  - source path (copy/move): `from` or `source`
+  - target guards: `minTargets`/`min-targets`, `maxTargets`/`max-targets`, `exactTargets`/`exact-targets`
+  - condition object: `when` or `where`
+  - source condition object (copy/move): `fromWhen`, `sourceWhen`, `fromWhere`, `sourceWhere` (plus kebab-case aliases)
+  - value: `value` / `with` / `item` (depending on operation)
+- `strict` defaults to `true`:
+  - when `true`, invalid paths/types fail the step
+  - when `false`, operation-level errors are recorded in report and execution continues
+- `pretty` defaults to `true`; `validateJson` defaults to `true`.
+- `reportPath` writes operation outcomes and summary counts (including `TargetsApplied` per operation).
+
 #### exec
 Runs an external command from the pipeline (extensibility hook for custom generators/tools).
 ```json
@@ -719,6 +926,70 @@ Notes:
 - `allowFailure` (`continueOnError`) keeps the pipeline green when the command exits non-zero.
 - `exec` steps are intentionally not cacheable (they can have external side effects).
 
+#### git-sync
+Syncs a local working folder from a Git repository (public/private via token env), so pipeline inputs do not need to be pre-cloned.
+```json
+{
+  "task": "git-sync",
+  "repo": "EvotecIT/IntelligenceX",
+  "repoBaseUrl": "https://github.com",
+  "authType": "ssh",
+  "destination": "./_temp/src/IntelligenceX",
+  "ref": "master",
+  "tokenEnv": "GITHUB_TOKEN",
+  "retry": 2,
+  "retryDelayMs": 750,
+  "lockMode": "update",
+  "lockPath": "./.powerforge/git-sync-lock.json",
+  "writeManifest": true,
+  "manifestPath": "./_reports/git-sync.json",
+  "clean": true,
+  "depth": 1
+}
+```
+
+Batch mode:
+```json
+{
+  "task": "git-sync",
+  "tokenEnv": "GITHUB_TOKEN",
+  "repos": [
+    {
+      "repo": "EvotecIT/IntelligenceX",
+      "destination": "./_temp/src/IntelligenceX",
+      "ref": "main"
+    },
+    {
+      "repo": "EvotecIT/CodeGlyphX",
+      "destination": "./_temp/src/CodeGlyphX",
+      "ref": "main",
+      "submodules": true
+    }
+  ]
+}
+```
+
+Notes:
+- `repo` supports URL/path or `owner/name` shorthand (auto-expands to `https://github.com/<owner>/<name>.git`).
+- `repoBaseUrl` (`repositoryBaseUrl`, `repoHost`) overrides shorthand expansion base (for example GitHub Enterprise, internal mirrors, or local filesystem mirrors), including nested paths like `group/subgroup/repo`.
+- `destination` is required in single-repo mode.
+- `repos`/`repositories` enables batch sync in one step (each item must define its own repo + destination).
+- Optional `ref` can be a branch/tag/commit.
+- `authType` supports `auto` (default), `token`, `ssh`, or `none`.
+- For private repositories, set `tokenEnv` (defaults to `GITHUB_TOKEN`) in CI secrets.
+- `authType: token` enforces credential presence and fails fast if `token`/`tokenEnv` is missing.
+- `authType: ssh` disables HTTP auth headers and resolves shorthand repos to SSH-style remotes (for example `git@host:group/repo.git`).
+- `retry` + `retryDelayMs` control retry attempts for transient git command failures.
+- `lockMode`:
+  - `off` (default): no lock file behavior.
+  - `update`: writes/refreshes commit lock entries.
+  - `verify`: requires lock file entries and fails when resolved commits differ from locked commits.
+- `lockPath` (`lock`) sets the lock file path. Defaults to `.powerforge/git-sync-lock.json` when `lockMode` is `verify`/`update`.
+- `sparseCheckout` (array) or `sparsePaths` (comma-separated) can reduce checkout size.
+- `submodules: true` initializes submodules; add `submodulesRecursive` and `submoduleDepth` for large mono-repo trees.
+- `writeManifest` + `manifestPath` can emit a JSON file with resolved refs and destinations for downstream automation.
+- `git-sync` steps are intentionally not cacheable (remote state can change without pipeline spec changes).
+
 #### overlay
 Copies a static overlay directory into another (useful for Blazor outputs).
 ```json
@@ -736,6 +1007,30 @@ Notes:
 - `include` and `exclude` are comma-separated patterns in pipeline JSON.
 - Example: `"include": "**/*.html,**/*.css"`
 - `clean: true` deletes the destination folder before copying (avoids stale files).
+
+#### hosting
+Keeps only selected host redirect artifacts in the built site output (useful when one deployment target should not ship other host configs).
+```json
+{
+  "task": "hosting",
+  "siteRoot": "./_site",
+  "targets": "apache,iis",
+  "removeUnselected": true
+}
+```
+
+Notes:
+- Supported targets: `netlify`, `azure`, `vercel`, `apache`/`apache2`, `nginx`, `iis` (or `all`).
+- Reads/writes host artifact files under `siteRoot`:
+  - `netlify` -> `_redirects`
+  - `azure` -> `staticwebapp.config.json`
+  - `vercel` -> `vercel.json`
+  - `apache` -> `.htaccess`
+  - `nginx` -> `nginx.redirects.conf`
+  - `iis` -> `web.config`
+- `removeUnselected` defaults to `true`.
+- `strict: true` fails if selected target artifacts are missing.
+- `site-root` is supported as an alias for `siteRoot`.
 
 ## Publish spec (`powerforge-web publish`)
 

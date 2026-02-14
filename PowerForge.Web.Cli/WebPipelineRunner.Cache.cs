@@ -22,6 +22,14 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("hook", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("html-transform", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("data-transform", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (task.Equals("git-sync", StringComparison.OrdinalIgnoreCase))
+            return false;
 
         return true;
     }
@@ -242,6 +250,98 @@ internal static partial class WebPipelineRunner
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "overlay":
                 return ResolveOutputCandidates(baseDir, GetString(step, "destination") ?? GetString(step, "dest"));
+            case "html-transform":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path")));
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "data-transform":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "destination") ??
+                    GetString(step, "dest")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path")));
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "model-transform":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir,
+                    GetString(step, "out") ??
+                    GetString(step, "output") ??
+                    GetString(step, "outputPath") ??
+                    GetString(step, "output-path") ??
+                    GetString(step, "destination") ??
+                    GetString(step, "dest")));
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path")));
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "git-sync":
+            {
+                var outputs = new List<string>();
+                outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(step, "destination") ?? GetString(step, "dest") ?? GetString(step, "path")));
+
+                var repos = GetArrayOfObjects(step, "repos") ?? GetArrayOfObjects(step, "repositories");
+                if (repos is { Length: > 0 })
+                {
+                    foreach (var repo in repos)
+                        outputs.AddRange(ResolveOutputCandidates(baseDir, GetString(repo, "destination") ?? GetString(repo, "dest") ?? GetString(repo, "path")));
+                }
+
+                var manifestPath = ResolveGitSyncManifestPath(step, baseDir);
+                if (!string.IsNullOrWhiteSpace(manifestPath))
+                    outputs.Add(manifestPath);
+                var lockMode = NormalizeGitLockMode(GetString(step, "lockMode") ?? GetString(step, "lock-mode"));
+                var lockPath = ResolveGitSyncLockPath(step, baseDir, lockMode);
+                if (!string.IsNullOrWhiteSpace(lockPath))
+                    outputs.Add(lockPath);
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "hosting":
+            {
+                var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                if (string.IsNullOrWhiteSpace(siteRoot))
+                    return Array.Empty<string>();
+
+                var outputs = new List<string> { Path.GetFullPath(siteRoot) };
+                string[] targets;
+                try
+                {
+                    targets = ResolveHostingTargets(step);
+                }
+                catch
+                {
+                    targets = HostingTargetsAll;
+                }
+
+                foreach (var target in targets)
+                {
+                    var file = ResolveHostingFileName(target);
+                    if (string.IsNullOrWhiteSpace(file))
+                        continue;
+                    outputs.Add(Path.GetFullPath(Path.Combine(siteRoot, file)));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             case "changelog":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
             case "version-hub":

@@ -127,7 +127,7 @@ PowerForge.Web emits redirects in two ways:
 Build output writes:
 - `Artifacts/site/_powerforge/redirects.json` (full list)
 
-That file can be transformed into host-specific formats later (Netlify, nginx, etc).
+PowerForge.Web emits common host redirect files (`_redirects`, `staticwebapp.config.json`, `vercel.json`, `.htaccess`, `nginx.redirects.conf`, `web.config`) and keeps the full canonical list in `_powerforge/redirects.json`.
 
 ## 7) Assets and theming (central control)
 

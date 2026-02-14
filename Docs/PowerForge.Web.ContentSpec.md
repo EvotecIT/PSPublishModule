@@ -659,6 +659,9 @@ Notes:
   - `_redirects` (Netlify)
   - `staticwebapp.config.json` (Azure Static Web Apps)
   - `vercel.json` (Vercel)
+  - `.htaccess` (Apache/mod_rewrite)
+  - `nginx.redirects.conf` (Nginx include snippet)
+  - `web.config` (IIS URL Rewrite)
 - A full machine-readable list is written to:
   - `_powerforge/redirects.json`
 
