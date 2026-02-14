@@ -111,7 +111,7 @@ public static partial class WebApiDocsGenerator
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
-        var typeDisplayNames = BuildTypeDisplayNameMap(types);
+        var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
         var overviewHtml = BuildDocsOverview(options, types, baseUrl, typeDisplayNames);
@@ -412,97 +412,6 @@ public static partial class WebApiDocsGenerator
         "Pdf417Code",
         "AztecCode"
     };
-
-    private static IReadOnlyDictionary<string, string> BuildTypeDisplayNameMap(IReadOnlyList<ApiTypeModel> types)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var type in types)
-        {
-            map[type.Slug] = type.Name;
-        }
-
-        var duplicateGroups = types
-            .Where(type => !string.IsNullOrWhiteSpace(type.Name))
-            .GroupBy(type => type.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Count() > 1);
-
-        foreach (var group in duplicateGroups)
-        {
-            var candidates = group.ToList();
-            var maxDepth = candidates
-                .Select(static type => (type.Namespace ?? string.Empty).Split('.', StringSplitOptions.RemoveEmptyEntries).Length)
-                .DefaultIfEmpty(0)
-                .Max();
-            var hasUniqueNamespaceLabels = false;
-            var namespaceLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            for (var depth = 1; depth <= Math.Max(1, maxDepth); depth++)
-            {
-                namespaceLabels.Clear();
-                var unique = true;
-                foreach (var type in candidates)
-                {
-                    var label = BuildNamespaceSuffixLabel(type.Namespace, depth);
-                    if (namespaceLabels.Values.Contains(label, StringComparer.OrdinalIgnoreCase))
-                    {
-                        unique = false;
-                        break;
-                    }
-
-                    namespaceLabels[type.Slug] = label;
-                }
-
-                if (!unique)
-                    continue;
-
-                hasUniqueNamespaceLabels = true;
-                break;
-            }
-
-            foreach (var type in candidates)
-            {
-                if (hasUniqueNamespaceLabels && namespaceLabels.TryGetValue(type.Slug, out var namespaceLabel))
-                {
-                    map[type.Slug] = $"{type.Name} ({namespaceLabel})";
-                }
-                else if (!string.IsNullOrWhiteSpace(type.FullName))
-                {
-                    map[type.Slug] = type.FullName;
-                }
-                else
-                {
-                    map[type.Slug] = type.Name;
-                }
-            }
-        }
-
-        return map;
-    }
-
-    private static string BuildNamespaceSuffixLabel(string? ns, int depth)
-    {
-        if (string.IsNullOrWhiteSpace(ns))
-            return "(global)";
-
-        var parts = ns
-            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length == 0)
-            return "(global)";
-
-        var take = Math.Min(Math.Max(1, depth), parts.Length);
-        return string.Join(".", parts.Skip(parts.Length - take));
-    }
-
-    private static string ResolveTypeDisplayName(ApiTypeModel type, IReadOnlyDictionary<string, string> typeDisplayNames)
-    {
-        if (typeDisplayNames.TryGetValue(type.Slug, out var displayName) && !string.IsNullOrWhiteSpace(displayName))
-            return displayName;
-
-        if (!string.IsNullOrWhiteSpace(type.Name))
-            return type.Name;
-
-        return string.IsNullOrWhiteSpace(type.FullName) ? "Type" : type.FullName;
-    }
 
     private static string BuildDocsSidebar(
         WebApiDocsOptions options,

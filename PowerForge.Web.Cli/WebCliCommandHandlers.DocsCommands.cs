@@ -35,6 +35,7 @@ internal static partial class WebCliCommandHandlers
         var docsHome = TryGetOptionValue(subArgs, "--docs-home") ?? TryGetOptionValue(subArgs, "--docs-home-url");
         var sidebarPosition = TryGetOptionValue(subArgs, "--sidebar") ?? TryGetOptionValue(subArgs, "--sidebar-position");
         var bodyClass = TryGetOptionValue(subArgs, "--body-class") ?? TryGetOptionValue(subArgs, "--bodyClass");
+        var displayNameMode = TryGetOptionValue(subArgs, "--display-name-mode") ?? TryGetOptionValue(subArgs, "--displayNameMode");
         var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
         var sourcePathPrefix = TryGetOptionValue(subArgs, "--source-path-prefix");
         var sourceUrl = TryGetOptionValue(subArgs, "--source-url") ?? TryGetOptionValue(subArgs, "--source-pattern");
@@ -109,6 +110,7 @@ internal static partial class WebCliCommandHandlers
             DocsHomeUrl = docsHome,
             SidebarPosition = sidebarPosition,
             BodyClass = bodyClass,
+            DisplayNameMode = displayNameMode,
             SourceRootPath = sourceRoot,
             SourcePathPrefix = sourcePathPrefix,
             SourceUrlPattern = sourceUrl,
