@@ -173,6 +173,8 @@ public static partial class WebSitemapGenerator
                 : Path.GetFullPath(options.JsonOutputPath);
         }
 
+        CollapseHtmlRouteAliases(entries);
+
         if (options.IncludeLanguageAlternates && localization is not null)
             ApplyLanguageAlternates(entries, htmlRoutes, localization);
 
@@ -546,6 +548,71 @@ public static partial class WebSitemapGenerator
             LastModified = update.LastModified,
             Alternates = update.Alternates
         };
+    }
+
+    private static void CollapseHtmlRouteAliases(Dictionary<string, WebSitemapEntry> entries)
+    {
+        if (entries.Count == 0)
+            return;
+
+        var htmlKeys = entries.Keys
+            .Where(static key => key.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            .Where(static key => !key.EndsWith("/404.html", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        foreach (var htmlKey in htmlKeys)
+        {
+            if (!entries.TryGetValue(htmlKey, out var htmlEntry))
+                continue;
+
+            var slashAlias = ToSlashAliasRoute(htmlKey);
+            if (string.IsNullOrWhiteSpace(slashAlias))
+                continue;
+            if (!entries.TryGetValue(slashAlias, out var canonicalEntry))
+                continue;
+
+            MergeEntryMetadata(canonicalEntry, htmlEntry);
+            entries.Remove(htmlKey);
+        }
+    }
+
+    private static string ToSlashAliasRoute(string htmlRoute)
+    {
+        if (string.IsNullOrWhiteSpace(htmlRoute))
+            return string.Empty;
+        if (!htmlRoute.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        var withoutExtension = htmlRoute[..^".html".Length];
+        if (string.IsNullOrWhiteSpace(withoutExtension) || withoutExtension == "/")
+            return "/";
+        if (!withoutExtension.EndsWith("/", StringComparison.Ordinal))
+            withoutExtension += "/";
+
+        return NormalizeRoute(withoutExtension);
+    }
+
+    private static void MergeEntryMetadata(WebSitemapEntry destination, WebSitemapEntry source)
+    {
+        if (destination is null || source is null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(destination.Title) && !string.IsNullOrWhiteSpace(source.Title))
+            destination.Title = source.Title;
+        if (string.IsNullOrWhiteSpace(destination.Description) && !string.IsNullOrWhiteSpace(source.Description))
+            destination.Description = source.Description;
+        if (string.IsNullOrWhiteSpace(destination.Section) && !string.IsNullOrWhiteSpace(source.Section))
+            destination.Section = source.Section;
+        if (string.IsNullOrWhiteSpace(destination.ChangeFrequency) && !string.IsNullOrWhiteSpace(source.ChangeFrequency))
+            destination.ChangeFrequency = source.ChangeFrequency;
+        if (string.IsNullOrWhiteSpace(destination.Priority) && !string.IsNullOrWhiteSpace(source.Priority))
+            destination.Priority = source.Priority;
+        if (string.IsNullOrWhiteSpace(destination.LastModified) && !string.IsNullOrWhiteSpace(source.LastModified))
+            destination.LastModified = source.LastModified;
+        if ((destination.Alternates is null || destination.Alternates.Length == 0) &&
+            source.Alternates is { Length: > 0 })
+        {
+            destination.Alternates = source.Alternates;
+        }
     }
 
     private static string ReplaceHost(string input, string baseUrl)
