@@ -1015,4 +1015,65 @@ public class WebApiDocsGeneratorContractTests
             }
         }
     }
+
+    [Fact]
+    public void GenerateDocsHtml_UsesConsistentSidebarTitleState_OnIndexAndTypePages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sidebar-state-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            var indexHtmlPath = Path.Combine(outputPath, "index.html");
+            Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");
+            var indexHtml = File.ReadAllText(indexHtmlPath);
+            Assert.Contains("class=\"sidebar-title active\"", indexHtml, StringComparison.OrdinalIgnoreCase);
+
+            var typeIndexPath = Directory
+                .GetFiles(outputPath, "index.html", SearchOption.AllDirectories)
+                .FirstOrDefault(path => !string.Equals(path, indexHtmlPath, StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.IsNullOrWhiteSpace(typeIndexPath), "Expected at least one generated type index page.");
+
+            var typeHtml = File.ReadAllText(typeIndexPath!);
+            Assert.Contains("class=\"sidebar-title active\"", typeHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
 }

@@ -424,7 +424,8 @@ public static partial class WebApiDocsGenerator
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
         sb.AppendLine("    <div class=\"sidebar-header\">");
-        var active = string.IsNullOrWhiteSpace(activeSlug) ? " active" : string.Empty;
+        // Keep API reference chrome consistent between index and type pages.
+        var active = " active";
         sb.AppendLine($"      <a href=\"{indexUrl}\" class=\"sidebar-title{active}\">");
         sb.AppendLine("        <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" width=\"18\" height=\"18\">");
         sb.AppendLine("          <path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"/>");
