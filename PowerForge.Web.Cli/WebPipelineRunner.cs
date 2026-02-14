@@ -21,6 +21,11 @@ internal static partial class WebPipelineRunner
     private static readonly HashSet<string> FingerprintPathKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "config", "siteRoot", "site-root", "project", "solution", "path",
+        "repos", "repositories",
+        "repoBaseUrl", "repo-base-url", "repositoryBaseUrl", "repository-base-url", "repoHost", "repo-host",
+        "lockPath", "lock-path", "lock", "lockMode", "lock-mode",
+        "retry", "retries", "retryCount", "retry-count", "retryDelayMs", "retry-delay-ms", "retryDelay", "retry-delay",
+        "contextPath", "context-path", "context", "stdoutPath", "stdout-path", "stdout", "stderrPath", "stderr-path", "stderr",
         "projects", "projectFiles", "project-files",
         "module", "modules", "moduleFiles", "module-files",
         "out", "output", "source", "destination", "dest",

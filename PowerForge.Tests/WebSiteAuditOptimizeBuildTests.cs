@@ -275,12 +275,123 @@ public partial class WebSiteAuditOptimizeBuildTests
             Assert.Contains("/docs/stable/ /docs/v3/ 301", netlify, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/docs/legacy/ /docs/v2/ 301", netlify, StringComparison.OrdinalIgnoreCase);
 
+            var apache = File.ReadAllText(Path.Combine(result.OutputPath, ".htaccess"));
+            Assert.Contains("RewriteEngine On", apache, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("docs/latest", apache, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("docs/lts", apache, StringComparison.OrdinalIgnoreCase);
+
+            var nginx = File.ReadAllText(Path.Combine(result.OutputPath, "nginx.redirects.conf"));
+            Assert.Contains("location =", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/latest/", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/lts/", nginx, StringComparison.OrdinalIgnoreCase);
+
+            var webConfig = XDocument.Load(Path.Combine(result.OutputPath, "web.config"));
+            var ruleUrls = webConfig
+                .Descendants("action")
+                .Select(action => action.Attribute("url")?.Value ?? string.Empty)
+                .ToArray();
+            Assert.Contains("/docs/v3/", ruleUrls, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("/docs/v2/", ruleUrls, StringComparer.OrdinalIgnoreCase);
+
             var metadataPath = Path.Combine(result.OutputPath, "_powerforge", "redirects.json");
             var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
             var redirects = metadata.RootElement.GetProperty("redirects");
             Assert.Contains(redirects.EnumerateArray(), entry =>
                 string.Equals(entry.GetProperty("from").GetString(), "/docs/latest/", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(entry.GetProperty("to").GetString(), "/docs/v3/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Build_GeneratesApacheAndIisRedirectArtifacts_ForWildcardRedirects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-host-redirect-artifacts-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "host-redirect-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"),
+                """
+                <!doctype html>
+                <html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.json"),
+                """
+                {
+                  "name": "host-redirect-test",
+                  "engine": "scriban",
+                  "defaultLayout": "home"
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Host Redirect Artifact Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "host-redirect-test",
+                ThemesRoot = "themes",
+                Redirects = new[]
+                {
+                    new RedirectSpec
+                    {
+                        From = "/docs/api/*",
+                        To = "/api/{path}",
+                        Status = 301,
+                        MatchType = RedirectMatchType.Wildcard,
+                        PreserveQuery = true
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var outPath = Path.Combine(root, "_site");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteBuilder.Build(spec, plan, outPath);
+
+            var apache = File.ReadAllText(Path.Combine(result.OutputPath, ".htaccess"));
+            Assert.Contains("docs/api", apache, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/api/$1", apache, StringComparison.OrdinalIgnoreCase);
+
+            var nginx = File.ReadAllText(Path.Combine(result.OutputPath, "nginx.redirects.conf"));
+            Assert.Contains("location ~ ^/docs/api", nginx, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("return 301 /api/$1$is_args$args;", nginx, StringComparison.OrdinalIgnoreCase);
+
+            var webConfig = XDocument.Load(Path.Combine(result.OutputPath, "web.config"));
+            var actionUrls = webConfig
+                .Descendants("action")
+                .Select(action => action.Attribute("url")?.Value ?? string.Empty)
+                .ToArray();
+            Assert.Contains("/api/{R:1}", actionUrls, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

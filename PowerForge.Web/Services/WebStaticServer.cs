@@ -6,6 +6,10 @@ namespace PowerForge.Web;
 /// <summary>Lightweight static file server for local preview.</summary>
 public static class WebStaticServer
 {
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+
     /// <summary>Starts a blocking static file server.</summary>
     /// <param name="rootPath">Root directory to serve.</param>
     /// <param name="host">Host/IP to bind.</param>
@@ -217,13 +221,14 @@ public static class WebStaticServer
 
     private static string? ResolveFilePath(string basePath, string urlPath)
     {
+        var normalizedRoot = NormalizeRootPath(basePath);
         var relative = urlPath.TrimStart('/');
         relative = relative.Replace('/', Path.DirectorySeparatorChar);
         if (string.IsNullOrWhiteSpace(relative))
             relative = "index.html";
 
         var candidate = Path.GetFullPath(Path.Combine(basePath, relative));
-        if (!candidate.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathWithinRoot(normalizedRoot, candidate))
             return null;
 
         if (Directory.Exists(candidate))
@@ -246,6 +251,18 @@ public static class WebStaticServer
         }
 
         return candidate;
+    }
+
+    private static string NormalizeRootPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+    }
+
+    private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
+    {
+        var full = Path.GetFullPath(candidatePath);
+        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
     private static void WriteFile(HttpListenerResponse response, string filePath, int statusCode, bool headOnly = false)

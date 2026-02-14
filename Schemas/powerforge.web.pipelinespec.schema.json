@@ -39,8 +39,14 @@
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
         { "$ref": "#/$defs/OverlayStep" },
+        { "$ref": "#/$defs/HostingStep" },
         { "$ref": "#/$defs/CloudflareStep" },
-        { "$ref": "#/$defs/ExecStep" }
+        { "$ref": "#/$defs/HookStep" },
+        { "$ref": "#/$defs/HtmlTransformStep" },
+        { "$ref": "#/$defs/DataTransformStep" },
+        { "$ref": "#/$defs/ModelTransformStep" },
+        { "$ref": "#/$defs/ExecStep" },
+        { "$ref": "#/$defs/GitSyncStep" }
       ]
     },
     "BuildStep": {
@@ -261,6 +267,596 @@
         { "required": ["zone-id"] }
       ]
     },
+    "HookStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "hook" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "event": { "type": "string", "description": "Hook event name (for example pre-build, post-build)." },
+        "hook": { "type": "string", "description": "Alias for event." },
+        "name": { "type": "string", "description": "Alias for event." },
+
+        "command": { "type": "string", "description": "Executable/command to run. Trusted pipeline input only." },
+        "cmd": { "type": "string", "description": "Alias for command." },
+        "file": { "type": "string", "description": "Alias for command." },
+        "args": { "type": "string" },
+        "arguments": { "type": "string", "description": "Alias for args." },
+        "argsList": { "type": "array", "items": { "type": "string" } },
+        "args-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "argumentsList": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "arguments-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "workingDirectory": { "type": "string" },
+        "workingDir": { "type": "string", "description": "Alias for workingDirectory." },
+        "cwd": { "type": "string", "description": "Alias for workingDirectory." },
+        "allowFailure": { "type": "boolean" },
+        "continueOnError": { "type": "boolean", "description": "Alias for allowFailure." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." },
+
+        "contextPath": { "type": "string", "description": "Optional JSON context output path. Exposed to the process as POWERFORGE_HOOK_CONTEXT." },
+        "context-path": { "type": "string", "description": "Alias for contextPath." },
+        "context": { "type": "string", "description": "Alias for contextPath." },
+        "stdoutPath": { "type": "string", "description": "Optional file path to write captured stdout." },
+        "stdout-path": { "type": "string", "description": "Alias for stdoutPath." },
+        "stdout": { "type": "string", "description": "Alias for stdoutPath." },
+        "stderrPath": { "type": "string", "description": "Optional file path to write captured stderr." },
+        "stderr-path": { "type": "string", "description": "Alias for stderrPath." },
+        "stderr": { "type": "string", "description": "Alias for stderrPath." },
+
+        "env": {
+          "type": "object",
+          "description": "Environment variables injected into the hook process.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        },
+        "environment": {
+          "type": "object",
+          "description": "Alias for env.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["event"] },
+            { "required": ["hook"] },
+            { "required": ["name"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["command"] },
+            { "required": ["cmd"] },
+            { "required": ["file"] }
+          ]
+        }
+      ]
+    },
+    "HtmlTransformStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "html-transform" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "siteRoot": { "type": "string" },
+        "site-root": { "type": "string" },
+
+        "command": { "type": "string", "description": "Executable/command to run. Trusted pipeline input only." },
+        "cmd": { "type": "string", "description": "Alias for command." },
+        "file": { "type": "string", "description": "Alias for command." },
+        "args": { "type": "string" },
+        "arguments": { "type": "string", "description": "Alias for args." },
+        "argsList": { "type": "array", "items": { "type": "string" } },
+        "args-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "argumentsList": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "arguments-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "workingDirectory": { "type": "string" },
+        "workingDir": { "type": "string", "description": "Alias for workingDirectory." },
+        "cwd": { "type": "string", "description": "Alias for workingDirectory." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." },
+        "allowFailure": { "type": "boolean" },
+        "continueOnError": { "type": "boolean", "description": "Alias for allowFailure." },
+
+        "include": {
+          "oneOf": [
+            { "type": "string", "description": "Comma-separated include patterns (relative to siteRoot)." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "includes": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for include." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "includePatterns": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for include." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "include-patterns": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for includePatterns." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "exclude": {
+          "oneOf": [
+            { "type": "string", "description": "Comma-separated exclude patterns (relative to siteRoot)." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "excludes": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for exclude." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "excludePatterns": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for exclude." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "exclude-patterns": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for excludePatterns." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+
+        "extensions": {
+          "oneOf": [
+            { "type": "string", "description": "Comma-separated file extensions to process (default .html,.htm)." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "ext": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for extensions." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "fileExtensions": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for extensions." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "file-extensions": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for fileExtensions." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "maxFiles": { "type": "integer", "minimum": 0 },
+        "max-files": { "type": "integer", "minimum": 0, "description": "Alias for maxFiles." },
+        "writeMode": { "type": "string", "description": "Output mode: inplace (default) or stdout." },
+        "write-mode": { "type": "string", "description": "Alias for writeMode." },
+        "stdin": { "type": "boolean", "description": "When true, pass original file content to process stdin." },
+        "passContentToStdin": { "type": "boolean", "description": "Alias for stdin." },
+        "pass-content-to-stdin": { "type": "boolean", "description": "Alias for stdin." },
+        "passToStdin": { "type": "boolean", "description": "Alias for stdin." },
+        "requireOutput": { "type": "boolean", "description": "When writeMode=stdout, require non-empty stdout output." },
+        "require-output": { "type": "boolean", "description": "Alias for requireOutput." },
+        "reportPath": { "type": "string", "description": "Optional JSON report path for transform results." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "env": {
+          "type": "object",
+          "description": "Environment variables injected into each transform process.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        },
+        "environment": {
+          "type": "object",
+          "description": "Alias for env.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["command"] },
+            { "required": ["cmd"] },
+            { "required": ["file"] }
+          ]
+        }
+      ]
+    },
+    "DataTransformStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "data-transform" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "inputMode": { "type": "string", "description": "Input mode: stdin (default) or file." },
+        "input-mode": { "type": "string", "description": "Alias for inputMode." },
+        "transformMode": { "type": "string", "description": "Alias for inputMode." },
+        "transform-mode": { "type": "string", "description": "Alias for inputMode." },
+
+        "input": { "type": "string" },
+        "inputPath": { "type": "string", "description": "Alias for input." },
+        "input-path": { "type": "string", "description": "Alias for input." },
+        "source": { "type": "string", "description": "Alias for input." },
+        "sourcePath": { "type": "string", "description": "Alias for input." },
+        "source-path": { "type": "string", "description": "Alias for input." },
+
+        "out": { "type": "string" },
+        "output": { "type": "string", "description": "Alias for out." },
+        "outputPath": { "type": "string", "description": "Alias for out." },
+        "output-path": { "type": "string", "description": "Alias for out." },
+        "destination": { "type": "string", "description": "Alias for out." },
+        "dest": { "type": "string", "description": "Alias for out." },
+
+        "command": { "type": "string" },
+        "cmd": { "type": "string", "description": "Alias for command." },
+        "file": { "type": "string", "description": "Alias for command." },
+        "args": { "type": "string" },
+        "arguments": { "type": "string", "description": "Alias for args." },
+        "argsList": { "type": "array", "items": { "type": "string" } },
+        "args-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "argumentsList": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "arguments-list": { "type": "array", "items": { "type": "string" }, "description": "Alias for argsList." },
+        "workingDirectory": { "type": "string" },
+        "workingDir": { "type": "string", "description": "Alias for workingDirectory." },
+        "cwd": { "type": "string", "description": "Alias for workingDirectory." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." },
+        "allowFailure": { "type": "boolean" },
+        "continueOnError": { "type": "boolean", "description": "Alias for allowFailure." },
+
+        "writeMode": { "type": "string", "description": "Output mode: stdout (default) or passthrough." },
+        "write-mode": { "type": "string", "description": "Alias for writeMode." },
+        "requireOutput": { "type": "boolean", "description": "Require output content/file after successful run (default true)." },
+        "require-output": { "type": "boolean", "description": "Alias for requireOutput." },
+        "reportPath": { "type": "string", "description": "Optional JSON report path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+
+        "env": {
+          "type": "object",
+          "description": "Environment variables injected into the transform process.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        },
+        "environment": {
+          "type": "object",
+          "description": "Alias for env.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" }
+            ]
+          }
+        }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["input"] },
+            { "required": ["inputPath"] },
+            { "required": ["input-path"] },
+            { "required": ["source"] },
+            { "required": ["sourcePath"] },
+            { "required": ["source-path"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["out"] },
+            { "required": ["output"] },
+            { "required": ["outputPath"] },
+            { "required": ["output-path"] },
+            { "required": ["destination"] },
+            { "required": ["dest"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["command"] },
+            { "required": ["cmd"] },
+            { "required": ["file"] }
+          ]
+        }
+      ]
+    },
+    "ModelTransformStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "model-transform" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "input": { "type": "string" },
+        "inputPath": { "type": "string", "description": "Alias for input." },
+        "input-path": { "type": "string", "description": "Alias for input." },
+        "source": { "type": "string", "description": "Alias for input." },
+        "sourcePath": { "type": "string", "description": "Alias for input." },
+        "source-path": { "type": "string", "description": "Alias for input." },
+
+        "out": { "type": "string" },
+        "output": { "type": "string", "description": "Alias for out." },
+        "outputPath": { "type": "string", "description": "Alias for out." },
+        "output-path": { "type": "string", "description": "Alias for out." },
+        "destination": { "type": "string", "description": "Alias for out." },
+        "dest": { "type": "string", "description": "Alias for out." },
+        "reportPath": { "type": "string", "description": "Optional JSON report path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "strict": { "type": "boolean", "description": "When true, fail on unsupported/missing transform targets." },
+        "pretty": { "type": "boolean", "description": "When true, write indented JSON output." },
+        "validateJson": { "type": "boolean", "description": "When true, validate transformed output JSON before writing." },
+        "validate-json": { "type": "boolean", "description": "Alias for validateJson." },
+
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ModelTransformOperation" }
+        },
+        "ops": {
+          "type": "array",
+          "description": "Alias for operations.",
+          "items": { "$ref": "#/$defs/ModelTransformOperation" }
+        },
+        "transforms": {
+          "type": "array",
+          "description": "Alias for operations.",
+          "items": { "$ref": "#/$defs/ModelTransformOperation" }
+        }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["input"] },
+            { "required": ["inputPath"] },
+            { "required": ["input-path"] },
+            { "required": ["source"] },
+            { "required": ["sourcePath"] },
+            { "required": ["source-path"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["out"] },
+            { "required": ["output"] },
+            { "required": ["outputPath"] },
+            { "required": ["output-path"] },
+            { "required": ["destination"] },
+            { "required": ["dest"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["operations"] },
+            { "required": ["ops"] },
+            { "required": ["transforms"] }
+          ]
+        }
+      ]
+    },
+    "ModelTransformOperation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "op": { "type": "string", "description": "Operation name: set, replace, insert, remove, append, merge, copy, move. Paths support dot/index syntax and wildcard selectors like [*] and recursive **." },
+        "type": { "type": "string", "description": "Alias for op." },
+        "path": { "type": "string", "description": "Target path (dot/index notation, for example 'site.name' or 'items[0]'). Wildcards are supported (for example 'items[*].title') including recursive selectors like '**.enabled'. Use quoted brackets for special property keys, for example \"meta['x.y']\"." },
+        "target": { "type": "string", "description": "Alias for path." },
+        "from": { "type": "string", "description": "Source path for copy/move operations. Wildcards are supported and pair with wildcard targets in deterministic order." },
+        "source": { "type": "string", "description": "Alias for from." },
+        "index": { "type": "integer", "minimum": 0, "description": "Insert index for insert operations." },
+        "at": { "type": "integer", "minimum": 0, "description": "Alias for index." },
+        "minTargets": { "type": "integer", "minimum": 0, "description": "Optional minimum required matched target count for this operation." },
+        "min-targets": { "type": "integer", "minimum": 0, "description": "Alias for minTargets." },
+        "maxTargets": { "type": "integer", "minimum": 0, "description": "Optional maximum allowed matched target count for this operation." },
+        "max-targets": { "type": "integer", "minimum": 0, "description": "Alias for maxTargets." },
+        "exactTargets": { "type": "integer", "minimum": 0, "description": "Optional exact matched target count required for this operation (cannot be combined with minTargets/maxTargets)." },
+        "exact-targets": { "type": "integer", "minimum": 0, "description": "Alias for exactTargets." },
+        "when": { "$ref": "#/$defs/ModelTransformCondition", "description": "Optional condition filter evaluated against each resolved target path before operation execution (for copy/move, evaluated against destination targets)." },
+        "where": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for when." },
+        "fromWhen": { "$ref": "#/$defs/ModelTransformCondition", "description": "Optional source condition filter for copy/move operations, evaluated against resolved source paths." },
+        "from-when": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "sourceWhen": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "source-when": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "fromWhere": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "from-where": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "sourceWhere": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "source-where": { "$ref": "#/$defs/ModelTransformCondition", "description": "Alias for fromWhen." },
+        "value": {},
+        "with": {},
+        "item": {}
+      },
+      "anyOf": [
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "set" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "set" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["value"] }, { "required": ["with"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "replace" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "replace" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["value"] }, { "required": ["with"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "insert" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "insert" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["index"] }, { "required": ["at"] }] },
+            { "anyOf": [{ "required": ["value"] }, { "required": ["item"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "remove" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "remove" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "append" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "append" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["value"] }, { "required": ["item"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "merge" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "merge" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["value"] }, { "required": ["with"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "copy" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "copy" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["from"] }, { "required": ["source"] }] }
+          ]
+        },
+        {
+          "allOf": [
+            { "anyOf": [{ "required": ["op"] }, { "required": ["type"] }] },
+            {
+              "anyOf": [
+                { "properties": { "op": { "const": "move" } }, "required": ["op"] },
+                { "properties": { "type": { "const": "move" } }, "required": ["type"] }
+              ]
+            },
+            { "anyOf": [{ "required": ["path"] }, { "required": ["target"] }] },
+            { "anyOf": [{ "required": ["from"] }, { "required": ["source"] }] }
+          ]
+        }
+      ]
+    },
+    "ModelTransformCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exists": { "type": "boolean", "description": "Require target to exist (true) or be missing (false)." },
+        "present": { "type": "boolean", "description": "Alias for exists." },
+        "type": { "type": "string", "description": "Require target value type: object, array, string, number, boolean, null." },
+        "kind": { "type": "string", "description": "Alias for type." },
+        "equals": { "description": "Require target value to deep-equal this JSON value." },
+        "eq": { "description": "Alias for equals." },
+        "notEquals": { "description": "Require target value to not deep-equal this JSON value." },
+        "not-equals": { "description": "Alias for notEquals." },
+        "neq": { "description": "Alias for notEquals." }
+      }
+    },
     "ExecStep": {
       "type": "object",
       "additionalProperties": false,
@@ -296,6 +892,188 @@
         { "required": ["command"] },
         { "required": ["cmd"] },
         { "required": ["file"] }
+      ]
+    },
+    "GitSyncStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "git-sync" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "repos": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Batch sync list. Per-item values override top-level defaults.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "repo": { "type": "string", "description": "Repository URL/path or owner/name shorthand." },
+              "repository": { "type": "string", "description": "Alias for repo." },
+              "url": { "type": "string", "description": "Alias for repo." },
+              "destination": { "type": "string" },
+              "dest": { "type": "string", "description": "Alias for destination." },
+              "path": { "type": "string", "description": "Alias for destination." },
+              "ref": { "type": "string", "description": "Branch/tag/commit to check out after sync." },
+              "branch": { "type": "string", "description": "Alias for ref." },
+              "tag": { "type": "string", "description": "Alias for ref." },
+              "commit": { "type": "string", "description": "Alias for ref." },
+              "clean": { "type": "boolean", "description": "When true, delete destination before sync." },
+              "depth": { "type": "integer", "minimum": 0, "description": "Clone depth (0 = full history)." },
+              "fetchTags": { "type": "boolean", "description": "When true, fetch tags when updating an existing checkout." },
+              "fetch-tags": { "type": "boolean", "description": "Alias for fetchTags." },
+              "sparseCheckout": { "type": "array", "items": { "type": "string" }, "description": "Sparse checkout include paths/patterns." },
+              "sparse-checkout": { "type": "array", "items": { "type": "string" }, "description": "Alias for sparseCheckout." },
+              "sparsePaths": { "type": "string", "description": "Comma-separated sparse checkout patterns." },
+              "sparse-paths": { "type": "string", "description": "Alias for sparsePaths." },
+              "tokenEnv": { "type": "string", "description": "Env var containing repository token. Defaults to GITHUB_TOKEN." },
+              "token-env": { "type": "string", "description": "Alias for tokenEnv." },
+              "token": { "type": "string", "description": "Inline token (discouraged; prefer tokenEnv + CI secrets). Runtime emits [PFWEB.GITSYNC.SECURITY] when present." },
+              "authType": { "type": "string", "description": "Authentication mode: auto (default), token, ssh, or none." },
+              "auth-type": { "type": "string", "description": "Alias for authType." },
+              "auth": { "type": "string", "description": "Alias for authType." },
+              "authentication": { "type": "string", "description": "Alias for authType." },
+              "username": { "type": "string", "description": "Username paired with token for HTTP Basic auth (default x-access-token)." },
+              "repoBaseUrl": { "type": "string", "description": "Base URL/path used to expand owner/repo shorthand (defaults to https://github.com)." },
+              "repo-base-url": { "type": "string", "description": "Alias for repoBaseUrl." },
+              "repositoryBaseUrl": { "type": "string", "description": "Alias for repoBaseUrl." },
+              "repository-base-url": { "type": "string", "description": "Alias for repoBaseUrl." },
+              "repoHost": { "type": "string", "description": "Alias for repoBaseUrl (host-only values imply https)." },
+              "repo-host": { "type": "string", "description": "Alias for repoBaseUrl." },
+              "submodules": { "type": "boolean", "description": "Initialize/update submodules after sync." },
+              "submodule": { "type": "boolean", "description": "Alias for submodules." },
+              "submodulesRecursive": { "type": "boolean", "description": "When true, update submodules recursively." },
+              "submodules-recursive": { "type": "boolean", "description": "Alias for submodulesRecursive." },
+              "recursiveSubmodules": { "type": "boolean", "description": "Alias for submodulesRecursive." },
+              "recursive-submodules": { "type": "boolean", "description": "Alias for submodulesRecursive." },
+              "submoduleDepth": { "type": "integer", "minimum": 0, "description": "Submodule clone depth (0 = full history)." },
+              "submodule-depth": { "type": "integer", "minimum": 0, "description": "Alias for submoduleDepth." },
+              "retry": { "type": "integer", "minimum": 0, "description": "Retry attempts for git command failures." },
+              "retries": { "type": "integer", "minimum": 0, "description": "Alias for retry." },
+              "retryCount": { "type": "integer", "minimum": 0, "description": "Alias for retry." },
+              "retry-count": { "type": "integer", "minimum": 0, "description": "Alias for retry." },
+              "retryDelayMs": { "type": "integer", "minimum": 0, "description": "Delay between retry attempts in milliseconds." },
+              "retry-delay-ms": { "type": "integer", "minimum": 0, "description": "Alias for retryDelayMs." },
+              "retryDelay": { "type": "integer", "minimum": 0, "description": "Alias for retryDelayMs." },
+              "retry-delay": { "type": "integer", "minimum": 0, "description": "Alias for retryDelayMs." },
+              "timeoutSeconds": { "type": "integer", "minimum": 1 },
+              "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." }
+            },
+            "allOf": [
+              {
+                "anyOf": [
+                  { "required": ["repo"] },
+                  { "required": ["repository"] },
+                  { "required": ["url"] }
+                ]
+              },
+              {
+                "anyOf": [
+                  { "required": ["destination"] },
+                  { "required": ["dest"] },
+                  { "required": ["path"] }
+                ]
+              }
+            ]
+          }
+        },
+        "repositories": { "type": "array", "items": { "$ref": "#/$defs/GitSyncStep/properties/repos/items" }, "description": "Alias for repos." },
+
+        "repo": { "type": "string", "description": "Repository URL/path or owner/name shorthand." },
+        "repository": { "type": "string", "description": "Alias for repo." },
+        "url": { "type": "string", "description": "Alias for repo." },
+        "destination": { "type": "string" },
+        "dest": { "type": "string", "description": "Alias for destination." },
+        "path": { "type": "string", "description": "Alias for destination." },
+        "ref": { "type": "string", "description": "Branch/tag/commit to check out after sync." },
+        "branch": { "type": "string", "description": "Alias for ref." },
+        "tag": { "type": "string", "description": "Alias for ref." },
+        "commit": { "type": "string", "description": "Alias for ref." },
+        "clean": { "type": "boolean", "description": "When true, delete destination before sync." },
+        "depth": { "type": "integer", "minimum": 0, "description": "Clone depth (0 = full history)." },
+        "fetchTags": { "type": "boolean", "description": "When true, fetch tags when updating an existing checkout." },
+        "fetch-tags": { "type": "boolean", "description": "Alias for fetchTags." },
+        "sparseCheckout": { "type": "array", "items": { "type": "string" }, "description": "Sparse checkout include paths/patterns." },
+        "sparse-checkout": { "type": "array", "items": { "type": "string" }, "description": "Alias for sparseCheckout." },
+        "sparsePaths": { "type": "string", "description": "Comma-separated sparse checkout patterns." },
+        "sparse-paths": { "type": "string", "description": "Alias for sparsePaths." },
+        "tokenEnv": { "type": "string", "description": "Env var containing repository token. Defaults to GITHUB_TOKEN." },
+        "token-env": { "type": "string", "description": "Alias for tokenEnv." },
+        "token": { "type": "string", "description": "Inline token (discouraged; prefer tokenEnv + CI secrets). Runtime emits [PFWEB.GITSYNC.SECURITY] when present." },
+        "authType": { "type": "string", "description": "Authentication mode: auto (default), token, ssh, or none." },
+        "auth-type": { "type": "string", "description": "Alias for authType." },
+        "auth": { "type": "string", "description": "Alias for authType." },
+        "authentication": { "type": "string", "description": "Alias for authType." },
+        "username": { "type": "string", "description": "Username paired with token for HTTP Basic auth (default x-access-token)." },
+        "repoBaseUrl": { "type": "string", "description": "Base URL/path used to expand owner/repo shorthand (defaults to https://github.com)." },
+        "repo-base-url": { "type": "string", "description": "Alias for repoBaseUrl." },
+        "repositoryBaseUrl": { "type": "string", "description": "Alias for repoBaseUrl." },
+        "repository-base-url": { "type": "string", "description": "Alias for repoBaseUrl." },
+        "repoHost": { "type": "string", "description": "Alias for repoBaseUrl (host-only values imply https)." },
+        "repo-host": { "type": "string", "description": "Alias for repoBaseUrl." },
+        "writeManifest": { "type": "boolean", "description": "When true, write a JSON manifest of synchronized repositories." },
+        "write-manifest": { "type": "boolean", "description": "Alias for writeManifest." },
+        "manifestPath": { "type": "string", "description": "Path to git-sync manifest JSON file." },
+        "manifest-path": { "type": "string", "description": "Alias for manifestPath." },
+        "manifest": { "type": "string", "description": "Alias for manifestPath." },
+        "submodules": { "type": "boolean", "description": "Initialize/update submodules after sync." },
+        "submodule": { "type": "boolean", "description": "Alias for submodules." },
+        "submodulesRecursive": { "type": "boolean", "description": "When true, update submodules recursively." },
+        "submodules-recursive": { "type": "boolean", "description": "Alias for submodulesRecursive." },
+        "recursiveSubmodules": { "type": "boolean", "description": "Alias for submodulesRecursive." },
+        "recursive-submodules": { "type": "boolean", "description": "Alias for submodulesRecursive." },
+        "submoduleDepth": { "type": "integer", "minimum": 0, "description": "Submodule clone depth (0 = full history)." },
+        "submodule-depth": { "type": "integer", "minimum": 0, "description": "Alias for submoduleDepth." },
+        "retry": { "type": "integer", "minimum": 0, "description": "Retry attempts for git command failures." },
+        "retries": { "type": "integer", "minimum": 0, "description": "Alias for retry." },
+        "retryCount": { "type": "integer", "minimum": 0, "description": "Alias for retry." },
+        "retry-count": { "type": "integer", "minimum": 0, "description": "Alias for retry." },
+        "retryDelayMs": { "type": "integer", "minimum": 0, "description": "Delay between retry attempts in milliseconds." },
+        "retry-delay-ms": { "type": "integer", "minimum": 0, "description": "Alias for retryDelayMs." },
+        "retryDelay": { "type": "integer", "minimum": 0, "description": "Alias for retryDelayMs." },
+        "retry-delay": { "type": "integer", "minimum": 0, "description": "Alias for retryDelayMs." },
+        "lockPath": { "type": "string", "description": "Path to commit lock file used by lockMode." },
+        "lock-path": { "type": "string", "description": "Alias for lockPath." },
+        "lock": { "type": "string", "description": "Alias for lockPath." },
+        "lockMode": { "type": "string", "description": "Lock behavior: off (default), verify, or update." },
+        "lock-mode": { "type": "string", "description": "Alias for lockMode." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["repos"] },
+            { "required": ["repositories"] },
+            {
+              "allOf": [
+                {
+                  "anyOf": [
+                    { "required": ["repo"] },
+                    { "required": ["repository"] },
+                    { "required": ["url"] }
+                  ]
+                },
+                {
+                  "anyOf": [
+                    { "required": ["destination"] },
+                    { "required": ["dest"] },
+                    { "required": ["path"] }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     "ApiDocsStep": {
@@ -738,7 +1516,15 @@
         "apiMaxTypes": { "type": "integer", "minimum": 0 },
         "apiMaxMembers": { "type": "integer", "minimum": 0 }
       },
-      "required": ["task", "siteRoot"]
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        }
+      ]
     },
     "CompatMatrixStep": {
       "type": "object",
@@ -943,7 +1729,15 @@
         "cacheHeadersAssets": { "type": "string" },
         "cacheHeadersPaths": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["task", "siteRoot"]
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        }
+      ]
     },
     "AuditStep": {
       "type": "object",
@@ -1151,6 +1945,63 @@
       },
       "required": ["task", "source", "destination"]
     },
+    "HostingStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "hosting" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "siteRoot": { "type": "string" },
+        "site-root": { "type": "string" },
+        "target": { "type": "string", "description": "Single hosting target (netlify, azure, vercel, apache/apache2, nginx, iis)." },
+        "targets": {
+          "oneOf": [
+            { "type": "string", "description": "Comma-separated hosting targets." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "hosts": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for targets." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "hostTargets": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for targets." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "host-targets": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for targets." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "removeUnselected": { "type": "boolean", "description": "When true, delete known host artifacts not in selected targets." },
+        "remove-unselected": { "type": "boolean", "description": "Alias for removeUnselected." },
+        "clean": { "type": "boolean", "description": "Alias for removeUnselected." },
+        "strict": { "type": "boolean", "description": "When true, fail if selected target artifacts are missing." },
+        "dryRun": { "type": "boolean" },
+        "dry-run": { "type": "boolean", "description": "Alias for dryRun." }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        }
+      ]
+    },
     "SitemapEntry": {
       "type": "object",
       "additionalProperties": false,
@@ -1185,3 +2036,4 @@
     }
   }
 }
+

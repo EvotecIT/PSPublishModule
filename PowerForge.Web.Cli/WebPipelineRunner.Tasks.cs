@@ -70,11 +70,29 @@ internal static partial class WebPipelineRunner
             case "overlay":
                 ExecuteOverlay(step, baseDir, stepResult);
                 break;
+            case "hosting":
+                ExecuteHosting(step, baseDir, stepResult);
+                break;
             case "cloudflare":
                 ExecuteCloudflare(step, baseDir, stepResult);
                 break;
+            case "hook":
+                ExecuteHook(step, label, baseDir, effectiveMode, stepResult);
+                break;
+            case "html-transform":
+                ExecuteHtmlTransform(step, label, baseDir, stepResult);
+                break;
+            case "data-transform":
+                ExecuteDataTransform(step, baseDir, stepResult);
+                break;
+            case "model-transform":
+                ExecuteModelTransform(step, baseDir, stepResult);
+                break;
             case "exec":
                 ExecuteExec(step, baseDir, stepResult);
+                break;
+            case "git-sync":
+                ExecuteGitSync(step, baseDir, logger, stepResult);
                 break;
             default:
                 stepResult.Success = false;
