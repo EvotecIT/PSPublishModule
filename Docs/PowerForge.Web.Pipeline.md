@@ -36,6 +36,15 @@ Minimal pipeline:
 - `--skip <task[,task...]>`: skip the specified tasks.
 - `--watch`: rerun the pipeline when files change (watches the pipeline folder, ignores output folders).
 
+### Security model
+
+Pipeline specs are treated as trusted build code.
+
+- Only run `pipeline.json` files from repositories/branches you trust.
+- Steps such as `hook`, `exec`, `html-transform`, and `data-transform` execute external commands and can run arbitrary code on the build agent.
+- Never store long-lived secrets directly in pipeline JSON; prefer environment-variable indirection (`tokenEnv`) and CI secret stores.
+- `git-sync` emits `[PFWEB.GITSYNC.SECURITY]` when an inline `token` is detected to help prevent accidental secret commits.
+
 ### Step modes
 
 Pipelines can gate individual steps by mode to keep local iteration fast while keeping CI exhaustive.
@@ -720,6 +729,7 @@ Runs a named hook command with deterministic pipeline context and optional outpu
 
 Notes:
 - `event` (aliases: `hook`, `name`) and `command` (aliases: `cmd`, `file`) are required.
+- Security: `hook` runs external processes from pipeline config. Treat hook-enabled pipeline files as trusted code only.
 - Arguments work the same as `exec` (`args`/`arguments` or `argsList`/`argumentsList`).
 - `contextPath` writes a JSON payload with hook metadata (`event`, `mode`, step label/id, directories, UTC timestamp).
 - Built-in environment variables are injected automatically:
@@ -922,6 +932,7 @@ Runs an external command from the pipeline (extensibility hook for custom genera
 
 Notes:
 - `command` (aliases: `cmd`, `file`) is required.
+- Security: `exec` runs arbitrary external commands from pipeline config. Use only with trusted pipeline files.
 - Pass arguments with `args`/`arguments` or `argsList`/`argumentsList`.
 - `allowFailure` (`continueOnError`) keeps the pipeline green when the command exits non-zero.
 - `exec` steps are intentionally not cacheable (they can have external side effects).
@@ -977,6 +988,7 @@ Notes:
 - Optional `ref` can be a branch/tag/commit.
 - `authType` supports `auto` (default), `token`, `ssh`, or `none`.
 - For private repositories, set `tokenEnv` (defaults to `GITHUB_TOKEN`) in CI secrets.
+- Inline `token` values are supported for compatibility but discouraged; pipeline runtime emits `[PFWEB.GITSYNC.SECURITY]` when detected.
 - `authType: token` enforces credential presence and fails fast if `token`/`tokenEnv` is missing.
 - `authType: ssh` disables HTTP auth headers and resolves shorthand repos to SSH-style remotes (for example `git@host:group/repo.git`).
 - `retry` + `retryDelayMs` control retry attempts for transient git command failures.

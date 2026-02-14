@@ -530,6 +530,94 @@ public class WebPipelineRunnerGitSyncTests
     }
 
     [Fact]
+    public void RunPipeline_GitSync_InlineToken_EmitsSecurityWarningInStepMessage()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-inline-token-warning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var checkout = Path.Combine(root, "checkout");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "inline-token-warning");
+            InitializeRepository(source, "inline-token-warning-init");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "git-sync",
+                      "repo": "{{EscapeJson(source)}}",
+                      "destination": "{{EscapeJson(checkout)}}",
+                      "token": "do-not-inline-secrets"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("warning=[PFWEB.GITSYNC.SECURITY]", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_GitSync_TokenEnvOnly_DoesNotEmitInlineTokenWarning()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-git-sync-token-env-only-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            var checkout = Path.Combine(root, "checkout");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "token-env-only");
+            InitializeRepository(source, "token-env-only-init");
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "git-sync",
+                      "repo": "{{EscapeJson(source)}}",
+                      "destination": "{{EscapeJson(checkout)}}",
+                      "tokenEnv": "GITHUB_TOKEN"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.DoesNotContain("PFWEB.GITSYNC.SECURITY", result.Steps[0].Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_GitSync_AuthTypeAliasAuthentication_DisablesAuthHeader()
     {
         if (!IsGitAvailable())

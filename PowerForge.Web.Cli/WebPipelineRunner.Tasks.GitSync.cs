@@ -57,8 +57,18 @@ internal static partial class WebPipelineRunner
         public string Commit { get; init; } = string.Empty;
     }
 
-    private static void ExecuteGitSync(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    private static void ExecuteGitSync(
+        JsonElement step,
+        string baseDir,
+        WebConsoleLogger? logger,
+        WebPipelineStepResult stepResult)
     {
+        var hasInlineToken = HasInlineGitToken(step);
+        if (hasInlineToken)
+        {
+            logger?.Warn("[PFWEB.GITSYNC.SECURITY] git-sync detected inline 'token' value in pipeline configuration. Prefer tokenEnv + CI secrets.");
+        }
+
         var requests = ResolveGitSyncRequests(step, baseDir);
         if (requests.Length == 0)
             throw new InvalidOperationException("git-sync has no repositories to sync.");
@@ -140,7 +150,27 @@ internal static partial class WebPipelineRunner
             message += $" manifest={manifestPath}";
         if (!string.IsNullOrWhiteSpace(lockPath))
             message += $" lock={lockPath} mode={lockMode}";
+        if (hasInlineToken)
+            message += " warning=[PFWEB.GITSYNC.SECURITY]";
         stepResult.Message = message;
+    }
+
+    private static bool HasInlineGitToken(JsonElement step)
+    {
+        if (!string.IsNullOrWhiteSpace(GetString(step, "token")))
+            return true;
+
+        var entries = GetArrayOfObjects(step, "repos") ?? GetArrayOfObjects(step, "repositories");
+        if (entries is null || entries.Length == 0)
+            return false;
+
+        foreach (var entry in entries)
+        {
+            if (!string.IsNullOrWhiteSpace(GetString(entry, "token")))
+                return true;
+        }
+
+        return false;
     }
 
     private static GitSyncRequest[] ResolveGitSyncRequests(JsonElement step, string baseDir)

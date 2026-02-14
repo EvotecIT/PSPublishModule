@@ -92,7 +92,7 @@ internal static partial class WebPipelineRunner
                 ExecuteExec(step, baseDir, stepResult);
                 break;
             case "git-sync":
-                ExecuteGitSync(step, baseDir, stepResult);
+                ExecuteGitSync(step, baseDir, logger, stepResult);
                 break;
             default:
                 stepResult.Success = false;
