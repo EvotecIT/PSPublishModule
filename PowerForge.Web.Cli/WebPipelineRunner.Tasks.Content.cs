@@ -55,6 +55,7 @@ internal static partial class WebPipelineRunner
                        GetString(step, "docs-home") ?? GetString(step, "docs-home-url");
         var sidebar = GetString(step, "sidebar") ?? GetString(step, "sidebarPosition") ?? GetString(step, "sidebar-position");
         var bodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class");
+        var displayNameMode = GetString(step, "displayNameMode") ?? GetString(step, "display-name-mode");
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
         var sourcePathPrefix = GetString(step, "sourcePathPrefix") ?? GetString(step, "source-path-prefix");
         var sourceUrl = GetString(step, "sourceUrl") ?? GetString(step, "source-url") ??
@@ -242,6 +243,7 @@ internal static partial class WebPipelineRunner
             DocsHomeUrl = docsHome,
             SidebarPosition = sidebar,
             BodyClass = bodyClass,
+            DisplayNameMode = displayNameMode,
             SourceRootPath = sourceRoot,
             SourcePathPrefix = sourcePathPrefix,
             SourceUrlPattern = sourceUrl,

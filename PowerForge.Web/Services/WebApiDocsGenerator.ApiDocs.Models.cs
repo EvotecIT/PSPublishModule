@@ -382,14 +382,14 @@ public static partial class WebApiDocsGenerator
         {
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
-            return value.Replace('\\', '/').Trim().Trim('/');
+            return WebApiDocsGenerator.TrimLeadingRelativeSegments(value.Replace('\\', '/').Trim().Trim('/'));
         }
 
         private static string NormalizePathPrefix(string value)
         {
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
-            return value.Replace('\\', '/').Trim().Trim('/');
+            return WebApiDocsGenerator.TrimLeadingRelativeSegments(value.Replace('\\', '/').Trim().Trim('/'));
         }
 
         private static void ValidateSourceUrlTemplatePattern(string pattern, string label, List<string>? warnings)

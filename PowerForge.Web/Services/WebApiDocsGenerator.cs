@@ -122,6 +122,11 @@ public sealed class WebApiDocsOptions
     /// </summary>
     public List<string> QuickStartTypeNames { get; } = new();
     /// <summary>
+    /// Controls type display labels in docs output and JSON metadata.
+    /// Supported values: <c>short</c>, <c>namespace-suffix</c>, <c>full</c>.
+    /// </summary>
+    public string? DisplayNameMode { get; set; }
+    /// <summary>
     /// Generates a machine-readable coverage report with API documentation completeness stats.
     /// </summary>
     public bool GenerateCoverageReport { get; set; } = true;
@@ -300,9 +305,12 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
+        var typeAliasMap = BuildTypeAliasMap(types, typeDisplayNames);
 
         ValidateSourceUrlPatternConsistency(options, types, warnings);
         ValidateConfiguredQuickStartTypes(types, options, warnings);
+        ValidateDuplicateMemberSignatures(types, warnings);
 
         var index = new Dictionary<string, object?>
         {
@@ -314,33 +322,47 @@ public static partial class WebApiDocsGenerator
                 ["assemblyVersion"] = assemblyVersion
             },
             ["typeCount"] = types.Count,
-            ["types"] = types.Select(t => new Dictionary<string, object?>
+            ["types"] = types.Select(t =>
             {
-                ["name"] = t.Name,
-                ["fullName"] = t.FullName,
-                ["namespace"] = t.Namespace,
-                ["kind"] = t.Kind,
-                ["slug"] = t.Slug,
-                ["summary"] = t.Summary,
-                ["typeParameters"] = t.TypeParameters.Select(tp => new Dictionary<string, object?>
+                var displayName = ResolveTypeDisplayName(t, typeDisplayNames);
+                var aliases = GetTypeAliases(t, displayName, typeAliasMap);
+                return new Dictionary<string, object?>
                 {
-                    ["name"] = tp.Name,
-                    ["summary"] = tp.Summary
-                }).ToList()
+                    ["name"] = t.Name,
+                    ["displayName"] = displayName,
+                    ["aliases"] = aliases,
+                    ["fullName"] = t.FullName,
+                    ["namespace"] = t.Namespace,
+                    ["kind"] = t.Kind,
+                    ["slug"] = t.Slug,
+                    ["summary"] = t.Summary,
+                    ["typeParameters"] = t.TypeParameters.Select(tp => new Dictionary<string, object?>
+                    {
+                        ["name"] = tp.Name,
+                        ["summary"] = tp.Summary
+                    }).ToList()
+                };
             }).ToList()
         };
 
         var indexPath = Path.Combine(outputPath, "index.json");
         WriteJson(indexPath, index);
 
-        var search = types.Select(t => new Dictionary<string, object?>
+        var search = types.Select(t =>
         {
-            ["title"] = t.FullName,
-            ["summary"] = t.Summary ?? string.Empty,
-            ["kind"] = t.Kind,
-            ["namespace"] = t.Namespace,
-            ["slug"] = t.Slug,
-            ["url"] = $"{options.BaseUrl.TrimEnd('/')}/types/{t.Slug}.json"
+            var displayName = ResolveTypeDisplayName(t, typeDisplayNames);
+            var aliases = GetTypeAliases(t, displayName, typeAliasMap);
+            return new Dictionary<string, object?>
+            {
+                ["title"] = t.FullName,
+                ["displayName"] = displayName,
+                ["aliases"] = aliases,
+                ["summary"] = t.Summary ?? string.Empty,
+                ["kind"] = t.Kind,
+                ["namespace"] = t.Namespace,
+                ["slug"] = t.Slug,
+                ["url"] = $"{options.BaseUrl.TrimEnd('/')}/types/{t.Slug}.json"
+            };
         }).ToList();
 
         var searchPath = Path.Combine(outputPath, "search.json");
@@ -350,9 +372,13 @@ public static partial class WebApiDocsGenerator
         Directory.CreateDirectory(typesDir);
         foreach (var type in types)
         {
+            var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+            var aliases = GetTypeAliases(type, displayName, typeAliasMap);
             var typeModel = new Dictionary<string, object?>
             {
                 ["name"] = type.Name,
+                ["displayName"] = displayName,
+                ["aliases"] = aliases,
                 ["fullName"] = type.FullName,
                 ["namespace"] = type.Namespace,
                 ["assembly"] = type.Assembly,
@@ -649,6 +675,10 @@ public static partial class WebApiDocsGenerator
 
         if (trimmed.StartsWith("API docs: quickStartTypes", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.QUICKSTART] " + warning;
+        if (trimmed.StartsWith("API docs display names:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.DISPLAY] " + warning;
+        if (trimmed.StartsWith("API docs member signatures:", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.MEMBER.SIGNATURES] " + warning;
         if (trimmed.StartsWith("API docs coverage:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.COVERAGE] " + warning;
         if (trimmed.StartsWith("API docs xref:", StringComparison.OrdinalIgnoreCase))

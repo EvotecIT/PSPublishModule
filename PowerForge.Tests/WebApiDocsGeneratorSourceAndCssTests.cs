@@ -55,6 +55,57 @@ public class WebApiDocsGeneratorSourceAndCssTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_SourceUrlMappings_MatchWhenSourceRootUsesParentDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sourcemap-parent-root-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(WebApiDocsGenerator).Assembly.Location;
+        var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+        Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
+        Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
+
+        var sourceRoot = Path.GetDirectoryName(assemblyPath) ?? root;
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = sourceRoot,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.SourceUrlMappings.Add(new WebApiDocsSourceUrlMapping
+        {
+            PathPrefix = "PowerForge.Web",
+            UrlPattern = "https://example.invalid/PowerForge.Web/blob/main/{pathNoPrefix}#L{line}",
+            StripPathPrefix = true
+        });
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.True(result.TypeCount > 0);
+
+            Assert.DoesNotContain(result.Warnings, w =>
+                w.Contains("sourceurlmappings entry for 'PowerForge.Web'", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("did not match any discovered source paths", StringComparison.OrdinalIgnoreCase));
+
+            var htmlFiles = Directory.GetFiles(outputPath, "*.html", SearchOption.AllDirectories);
+            Assert.True(htmlFiles.Length > 0, "Expected generated HTML pages.");
+            var html = string.Join(Environment.NewLine, htmlFiles.Select(File.ReadAllText));
+            Assert.Contains("https://example.invalid/PowerForge.Web/blob/main/", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.invalid/PowerForge.Web/blob/main/../", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_AlwaysIncludesFallbackCssBaseline_WhenCustomCssIsConfigured()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-fallback-css-" + Guid.NewGuid().ToString("N"));

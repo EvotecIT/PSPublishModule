@@ -20,7 +20,8 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         IReadOnlyDictionary<string, ApiTypeModel> typeIndex,
         IReadOnlyDictionary<string, List<ApiTypeModel>> derivedMap,
-        string codeLanguage)
+        string codeLanguage,
+        string displayName)
     {
         var sb = new StringBuilder();
         var inheritanceChain = BuildInheritanceChain(type, typeIndex);
@@ -31,14 +32,14 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine("      <nav class=\"breadcrumb\">");
         sb.AppendLine($"        <a href=\"{indexUrl}\">API Reference</a>");
         sb.AppendLine("        <span class=\"sep\">/</span>");
-        sb.AppendLine($"        <span class=\"current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</span>");
+        sb.AppendLine($"        <span class=\"current\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
         sb.AppendLine("      </nav>");
 
         sb.AppendLine("      <header class=\"type-header\" id=\"overview\">");
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
         sb.AppendLine("        <div class=\"type-title-row\">");
         sb.AppendLine($"          <span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
-        sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(type.Name)}</h1>");
+        sb.AppendLine($"          <h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
         sb.AppendLine("        </div>");
         var sourceAction = RenderTypeSourceAction(type.Source);
         if (!string.IsNullOrWhiteSpace(sourceAction))

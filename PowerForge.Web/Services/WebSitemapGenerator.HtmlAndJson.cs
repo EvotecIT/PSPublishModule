@@ -297,6 +297,7 @@ public static partial class WebSitemapGenerator
                 ["priority"] = e.Priority
             })
             .ToList();
+        DisambiguateDuplicateTitles(items);
         var groups = items
             .GroupBy(
                 static item => item.TryGetValue("section", out var section) ? section?.ToString() ?? "Pages" : "Pages",
@@ -334,6 +335,34 @@ public static partial class WebSitemapGenerator
         context.PushGlobal(globals);
 
         return parsed.Render(context);
+    }
+
+    private static void DisambiguateDuplicateTitles(List<Dictionary<string, object?>> items)
+    {
+        if (items is null || items.Count == 0)
+            return;
+
+        var duplicateGroups = items
+            .Where(static item => item.TryGetValue("title", out var title) && !string.IsNullOrWhiteSpace(title?.ToString()))
+            .GroupBy(
+                static item => item.TryGetValue("title", out var title) ? title?.ToString() ?? string.Empty : string.Empty,
+                StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .ToArray();
+
+        foreach (var group in duplicateGroups)
+        {
+            foreach (var item in group)
+            {
+                if (!item.TryGetValue("path", out var pathValue))
+                    continue;
+                var path = pathValue?.ToString();
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                item["title"] = $"{group.Key} ({path})";
+            }
+        }
     }
 
     private const string DefaultHtmlTemplate = @"<!doctype html>

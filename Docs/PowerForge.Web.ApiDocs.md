@@ -39,6 +39,10 @@ Overview identity and quick start:
 - `title` is used as both document title and visible API overview heading (`<h1>`).
 - `quickStartTypes` (aliases: `quickstartTypes`, `quick-start-types`) accepts comma-separated type names for the "Quick Start" and "Main API" sections.
 - CLI equivalent: `--quickstart-types TypeA,TypeB`.
+- `displayNameMode` (pipeline) / `--display-name-mode` (CLI) controls type labels in docs + JSON:
+  - `short` keeps short names only
+  - `namespace-suffix` (default) disambiguates duplicates as `Type (Namespace.Part)`
+  - `full` uses full type names
 
 If your site uses `Navigation.Profiles` (route/layout specific menus), set:
 - `navContextPath` (defaults to `/`)
@@ -341,5 +345,8 @@ Notes:
   - likely duplicated GitHub path prefixes (a common cause of 404 "Edit on GitHub" links)
   - source URL templates missing a path token (`{path}`, `{pathNoRoot}`, or `{pathNoPrefix}`)
   - unsupported source URL template tokens (anything outside `{path}`, `{line}`, `{root}`, `{pathNoRoot}`, `{pathNoPrefix}`)
+- Display + member diagnostics:
+  - `[PFWEB.APIDOCS.DISPLAY]` when `displayNameMode` is unknown (falls back to `namespace-suffix`)
+  - `[PFWEB.APIDOCS.MEMBER.SIGNATURES]` when duplicate member signature groups are detected
 - PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.
