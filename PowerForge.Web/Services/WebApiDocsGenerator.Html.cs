@@ -111,9 +111,10 @@ public static partial class WebApiDocsGenerator
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
-        var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl);
+        var typeDisplayNames = BuildTypeDisplayNameMap(types);
+        var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
-        var overviewHtml = BuildDocsOverview(options, types, baseUrl);
+        var overviewHtml = BuildDocsOverview(options, types, baseUrl, typeDisplayNames);
         var slugMap = BuildTypeSlugMap(types);
         var typeIndex = BuildTypeIndex(types);
         var derivedMap = BuildDerivedTypeMap(types, typeIndex);
@@ -136,11 +137,12 @@ public static partial class WebApiDocsGenerator
 
         foreach (var type in types)
         {
-            var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl);
+            var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl, typeDisplayNames);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, GetDefaultCodeLanguage(options));
+            var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, GetDefaultCodeLanguage(options), displayName);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
-            var pageTitle = $"{type.Name} - {options.Title}";
+            var pageTitle = $"{displayName} - {options.Title}";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
@@ -411,7 +413,104 @@ public static partial class WebApiDocsGenerator
         "AztecCode"
     };
 
-    private static string BuildDocsSidebar(WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, string baseUrl, string activeSlug, string docsHomeUrl)
+    private static IReadOnlyDictionary<string, string> BuildTypeDisplayNameMap(IReadOnlyList<ApiTypeModel> types)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var type in types)
+        {
+            map[type.Slug] = type.Name;
+        }
+
+        var duplicateGroups = types
+            .Where(type => !string.IsNullOrWhiteSpace(type.Name))
+            .GroupBy(type => type.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1);
+
+        foreach (var group in duplicateGroups)
+        {
+            var candidates = group.ToList();
+            var maxDepth = candidates
+                .Select(static type => (type.Namespace ?? string.Empty).Split('.', StringSplitOptions.RemoveEmptyEntries).Length)
+                .DefaultIfEmpty(0)
+                .Max();
+            var hasUniqueNamespaceLabels = false;
+            var namespaceLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            for (var depth = 1; depth <= Math.Max(1, maxDepth); depth++)
+            {
+                namespaceLabels.Clear();
+                var unique = true;
+                foreach (var type in candidates)
+                {
+                    var label = BuildNamespaceSuffixLabel(type.Namespace, depth);
+                    if (namespaceLabels.Values.Contains(label, StringComparer.OrdinalIgnoreCase))
+                    {
+                        unique = false;
+                        break;
+                    }
+
+                    namespaceLabels[type.Slug] = label;
+                }
+
+                if (!unique)
+                    continue;
+
+                hasUniqueNamespaceLabels = true;
+                break;
+            }
+
+            foreach (var type in candidates)
+            {
+                if (hasUniqueNamespaceLabels && namespaceLabels.TryGetValue(type.Slug, out var namespaceLabel))
+                {
+                    map[type.Slug] = $"{type.Name} ({namespaceLabel})";
+                }
+                else if (!string.IsNullOrWhiteSpace(type.FullName))
+                {
+                    map[type.Slug] = type.FullName;
+                }
+                else
+                {
+                    map[type.Slug] = type.Name;
+                }
+            }
+        }
+
+        return map;
+    }
+
+    private static string BuildNamespaceSuffixLabel(string? ns, int depth)
+    {
+        if (string.IsNullOrWhiteSpace(ns))
+            return "(global)";
+
+        var parts = ns
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+            return "(global)";
+
+        var take = Math.Min(Math.Max(1, depth), parts.Length);
+        return string.Join(".", parts.Skip(parts.Length - take));
+    }
+
+    private static string ResolveTypeDisplayName(ApiTypeModel type, IReadOnlyDictionary<string, string> typeDisplayNames)
+    {
+        if (typeDisplayNames.TryGetValue(type.Slug, out var displayName) && !string.IsNullOrWhiteSpace(displayName))
+            return displayName;
+
+        if (!string.IsNullOrWhiteSpace(type.Name))
+            return type.Name;
+
+        return string.IsNullOrWhiteSpace(type.FullName) ? "Type" : type.FullName;
+    }
+
+    private static string BuildDocsSidebar(
+        WebApiDocsOptions options,
+        IReadOnlyList<ApiTypeModel> types,
+        string baseUrl,
+        string activeSlug,
+        string docsHomeUrl,
+        IReadOnlyDictionary<string, string> typeDisplayNames)
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var sb = new StringBuilder();
@@ -496,7 +595,7 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("        <div class=\"nav-section-content\">");
             foreach (var type in mainTypes)
             {
-                sb.AppendLine(BuildSidebarTypeItem(type, baseUrl, activeSlug));
+                sb.AppendLine(BuildSidebarTypeItem(type, baseUrl, activeSlug, typeDisplayNames));
             }
             sb.AppendLine("        </div>");
             sb.AppendLine("      </div>");
@@ -519,7 +618,7 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("        <div class=\"nav-section-content\">");
             foreach (var type in group.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
             {
-                sb.AppendLine(BuildSidebarTypeItem(type, baseUrl, activeSlug));
+                sb.AppendLine(BuildSidebarTypeItem(type, baseUrl, activeSlug, typeDisplayNames));
             }
             sb.AppendLine("        </div>");
             sb.AppendLine("      </div>");
@@ -538,13 +637,18 @@ public static partial class WebApiDocsGenerator
         return sb.ToString().TrimEnd();
     }
 
-    private static string BuildSidebarTypeItem(ApiTypeModel type, string baseUrl, string activeSlug)
+    private static string BuildSidebarTypeItem(
+        ApiTypeModel type,
+        string baseUrl,
+        string activeSlug,
+        IReadOnlyDictionary<string, string> typeDisplayNames)
     {
         var active = string.Equals(activeSlug, type.Slug, StringComparison.OrdinalIgnoreCase) ? " active" : string.Empty;
         var summary = StripCrefTokens(type.Summary);
-        var search = $"{type.Name} {type.FullName} {summary}".Trim();
+        var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+        var search = $"{displayName} {type.Name} {type.FullName} {summary}".Trim();
         var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
-        var name = System.Web.HttpUtility.HtmlEncode(type.Name);
+        var name = System.Web.HttpUtility.HtmlEncode(displayName);
         var kind = NormalizeKind(type.Kind);
         var icon = RenderApiGlyphSpan($"type-icon {kind}", "type-icon-glyph", GetTypeIcon(type.Kind));
         var ns = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
@@ -553,7 +657,11 @@ public static partial class WebApiDocsGenerator
                $"{icon}<span class=\"type-name\">{name}</span></a>";
     }
 
-    private static string BuildDocsOverview(WebApiDocsOptions options, IReadOnlyList<ApiTypeModel> types, string baseUrl)
+    private static string BuildDocsOverview(
+        WebApiDocsOptions options,
+        IReadOnlyList<ApiTypeModel> types,
+        string baseUrl,
+        IReadOnlyDictionary<string, string> typeDisplayNames)
     {
         var sb = new StringBuilder();
         var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? "API Reference" : options.Title.Trim();
@@ -571,12 +679,13 @@ public static partial class WebApiDocsGenerator
             foreach (var type in mainTypes.Take(6))
             {
                 var summary = Truncate(StripCrefTokens(type.Summary), 100);
+                var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
                 var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
                 var quickIcon = RenderApiGlyphSpan($"type-icon large {NormalizeKind(type.Kind)}", "type-icon-glyph", GetTypeIcon(type.Kind));
                 sb.AppendLine($"          <a href=\"{quickHref}\" class=\"quick-card\">");
                 sb.AppendLine("            <div class=\"quick-card-header\">");
                 sb.AppendLine($"              {quickIcon}");
-                sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(type.Name)}</strong>");
+                sb.AppendLine($"              <strong>{System.Web.HttpUtility.HtmlEncode(displayName)}</strong>");
                 sb.AppendLine("            </div>");
                 if (!string.IsNullOrWhiteSpace(summary))
                 {
@@ -601,7 +710,8 @@ public static partial class WebApiDocsGenerator
             foreach (var type in group.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
             {
                 var summary = StripCrefTokens(type.Summary);
-                var search = $"{type.Name} {type.FullName} {summary}".Trim();
+                var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
+                var search = $"{displayName} {type.Name} {type.FullName} {summary}".Trim();
                 var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
                 var kind = NormalizeKind(type.Kind);
                 var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
@@ -609,7 +719,7 @@ public static partial class WebApiDocsGenerator
                 var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
                 sb.AppendLine($"            <a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\">");
                 sb.AppendLine($"              {chipIcon}");
-                sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</span>");
+                sb.AppendLine($"              <span class=\"chip-name\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
                 sb.AppendLine("            </a>");
             }
             sb.AppendLine("          </div>");
