@@ -180,7 +180,7 @@ Notes:
 - `failOnWarnings`: fail the pipeline step when API docs emits warnings
   - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
 - `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
-  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`, `[PFWEB.APIDOCS.XREF]`
+  - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`, `[PFWEB.APIDOCS.XREF]`, `[PFWEB.APIDOCS.DISPLAY]`, `[PFWEB.APIDOCS.MEMBER.SIGNATURES]`
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
 - Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
 - Source URL templates are validated preflight:
@@ -194,6 +194,10 @@ Notes:
 - `includeNamespace` / `excludeNamespace` are comma-separated namespace prefixes (pipeline only)
 - `includeType` / `excludeType` accept comma-separated full type names (supports `*` suffix for prefix match)
 - `quickStartTypes` (aliases: `quickstartTypes`, `quick-start-types`) accepts comma-separated simple type names for the "Quick Start" and "Main API" sections
+- `displayNameMode` (alias: `display-name-mode`) controls generated type labels:
+  - `short` keeps short names only
+  - `namespace-suffix` (default) disambiguates duplicate short names
+  - `full` uses full type names in docs and JSON search/index artifacts
 - API coverage reports and gates:
   - `coverageReport`: write coverage JSON (default: `coverage.json` under apidocs output)
   - `generateCoverageReport`: enable/disable coverage report generation (default: `true`)

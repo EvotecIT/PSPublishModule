@@ -71,7 +71,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--source-root <dir>] [--source-path-prefix <prefix>] [--source-url <pattern>] [--source-map <prefix[(:strip)]=pattern>] [--documented-only]");
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
         Console.WriteLine("                     [--nav <file>] [--nav-surface <name>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
-        Console.WriteLine("                     [--quickstart-types <type[,type]>]");
+        Console.WriteLine("                     [--quickstart-types <type[,type]>] [--display-name-mode short|namespace-suffix|full]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
         Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");
         Console.WriteLine("  powerforge-web optimize --site-root <dir> [--config <site.json>] [--critical-css <file>] [--css-pattern <regex>]");
