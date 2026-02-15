@@ -49,7 +49,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--nav-required-link <path[,path]>]");
         Console.WriteLine("                     [--min-nav-coverage <0-100>] [--required-route <path[,path]>]");
         Console.WriteLine("                     [--nav-optional]");
-        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--max-total-files <n>]");
+        Console.WriteLine("                     [--baseline <file>] [--fail-on-warnings] [--fail-on-new] [--max-errors <n>] [--max-warnings <n>] [--fail-category <name[,name]>] [--fail-issue <pattern[,pattern]>] [--max-total-files <n>]");
         Console.WriteLine("                     [--baseline-generate] [--baseline-update]");
         Console.WriteLine("                     [--no-utf8] [--no-meta-charset] [--no-replacement-char-check]");
         Console.WriteLine("                     [--no-network-hints] [--no-render-blocking] [--max-head-blocking <n>]");
@@ -301,6 +301,7 @@ internal static class WebCliHelpers
         var maxHeadBlockingText = TryGetOptionValue(argv, "--max-head-blocking");
         var maxTotalFilesText = TryGetOptionValue(argv, "--max-total-files") ?? TryGetOptionValue(argv, "--max-files-total");
         var suppressIssues = ReadOptionList(argv, "--suppress-issue", "--suppress-issues");
+        var failIssueCodes = ReadOptionList(argv, "--fail-issue", "--fail-issues", "--fail-issue-code", "--fail-issue-codes");
 
         if (requiredRoutes.Count == 0)
             requiredRoutes.Add("/404.html");
@@ -326,6 +327,7 @@ internal static class WebCliHelpers
             UseDefaultExcludes = useDefaultExclude,
             MaxTotalFiles = Math.Max(0, maxTotalFiles),
             SuppressIssues = suppressIssues.ToArray(),
+            FailOnIssueCodes = failIssueCodes.ToArray(),
             IgnoreNavFor = ignoreNavPatterns,
             IgnoreMediaFor = ignoreMediaPatterns,
             NavSelector = navSelector,
