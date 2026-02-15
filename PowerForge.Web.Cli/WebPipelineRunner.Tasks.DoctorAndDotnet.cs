@@ -348,8 +348,12 @@ internal static partial class WebPipelineRunner
         var noRestore = GetBool(step, "noRestore") ?? false;
         var baseHref = GetString(step, "baseHref");
         var defineConstants = GetString(step, "defineConstants") ?? GetString(step, "define-constants");
-        var noBlazorFixes = GetBool(step, "noBlazorFixes") ?? false;
-        var blazorFixes = GetBool(step, "blazorFixes") ?? !noBlazorFixes;
+        var noBlazorFixes = GetBool(step, "noBlazorFixes") ??
+                            GetBool(step, "no-blazor-fixes") ??
+                            false;
+        var blazorFixes = GetBool(step, "blazorFixes") ??
+                          GetBool(step, "blazor-fixes") ??
+                          !noBlazorFixes;
         var skipIfProjectMissing = GetBool(step, "skipIfProjectMissing") ??
                                    GetBool(step, "skipIfMissingProject") ??
                                    GetBool(step, "skip-if-project-missing") ??
