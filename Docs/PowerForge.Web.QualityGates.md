@@ -56,7 +56,8 @@ Example `pipeline.json`:
       "baseline": "./.powerforge/audit-baseline.json",
       "failOnNewIssues": true,
       "maxTotalFiles": 2000,
-      "failOnCategories": "budget"
+      "failOnCategories": "budget",
+      "failOnIssueCodes": "media-img-dimensions,heading-order,head-render-blocking"
     }
   ]
 }
@@ -65,6 +66,7 @@ Example `pipeline.json`:
 Notes:
 - `verify` baselines are stored under `./.powerforge/verify-baseline.json` by default when generated from the CLI.
 - `audit` already supports baselines (`failOnNewIssues`) and can gate on categories (useful for budgets).
+- Use `failOnIssueCodes` for surgical CI blocking when only specific warnings should fail the build.
 - Use `suppressWarnings` as a scalpel; prefer baselines for "existing debt".
 - Use `suppressIssues` (audit) as a scalpel too (e.g. `PFAUDIT.BUDGET`), but prefer baselines for existing debt and `failOnCategories` for enforceable budgets.
 - Verify baseline keys strip any leading `[CODE]` prefix for stability (so adding/changing warning codes does not break baselines).

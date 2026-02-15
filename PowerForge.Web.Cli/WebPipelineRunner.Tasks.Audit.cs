@@ -80,6 +80,8 @@ internal static partial class WebPipelineRunner
         var maxErrors = GetInt(step, "maxErrors") ?? -1;
         var maxWarnings = GetInt(step, "maxWarnings") ?? -1;
         var failOnCategories = GetString(step, "failOnCategories") ?? GetString(step, "failCategories");
+        var failOnIssueCodes = GetString(step, "failOnIssueCodes") ?? GetString(step, "failIssueCodes") ??
+                               GetString(step, "failOnIssues") ?? GetString(step, "failIssues");
         var navCanonicalPath = GetString(step, "navCanonicalPath") ?? GetString(step, "navCanonical");
         var navCanonicalSelector = GetString(step, "navCanonicalSelector");
         var navCanonicalRequired = GetBool(step, "navCanonicalRequired") ?? false;
@@ -209,6 +211,7 @@ internal static partial class WebPipelineRunner
             MaxErrors = maxErrors,
             MaxWarnings = maxWarnings,
             FailOnCategories = CliPatternHelper.SplitPatterns(failOnCategories),
+            FailOnIssueCodes = CliPatternHelper.SplitPatterns(failOnIssueCodes),
             NavCanonicalPath = navCanonicalPath,
             NavCanonicalSelector = navCanonicalSelector,
             NavCanonicalRequired = navCanonicalRequired,

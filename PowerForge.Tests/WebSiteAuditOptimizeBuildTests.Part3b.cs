@@ -46,6 +46,88 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_FailOnIssueCodes_TriggersGateForMatchingIssueHint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-gate-issue-codes-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <nav><a href="/">Home</a></nav>
+                  <main>
+                    <img src="/images/hero.jpg" loading="lazy" decoding="async" />
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                FailOnIssueCodes = new[] { "media-img-dimensions" }
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(result.Errors, error => error.Contains("fail issue codes", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Issues, issue => issue.Hint.Equals("media-img-dimensions", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_FailOnIssueCodes_DoesNotFailWhenPatternDoesNotMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-gate-issue-codes-nonmatching-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <nav><a href="/">Home</a></nav>
+                  <main>
+                    <img src="/images/hero.jpg" loading="lazy" decoding="async" />
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                FailOnIssueCodes = new[] { "heading-order" }
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Issues, issue => issue.Hint.Equals("media-img-dimensions", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Errors, error => error.Contains("fail issue codes", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_Baseline_SuppressesExistingIssuesForFailOnNew()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-baseline-" + Guid.NewGuid().ToString("N"));

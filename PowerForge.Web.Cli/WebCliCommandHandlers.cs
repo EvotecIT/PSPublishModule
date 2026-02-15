@@ -465,6 +465,7 @@ internal static partial class WebCliCommandHandlers
         var maxErrorsText = TryGetOptionValue(subArgs, "--max-errors");
         var maxWarningsText = TryGetOptionValue(subArgs, "--max-warnings");
         var failCategories = ReadOptionList(subArgs, "--fail-category", "--fail-categories");
+        var failIssueCodes = ReadOptionList(subArgs, "--fail-issue", "--fail-issues", "--fail-issue-code", "--fail-issue-codes");
         var navCanonical = TryGetOptionValue(subArgs, "--nav-canonical");
         var navCanonicalSelector = TryGetOptionValue(subArgs, "--nav-canonical-selector");
         var navCanonicalRequired = HasOption(subArgs, "--nav-canonical-required");
@@ -554,6 +555,7 @@ internal static partial class WebCliCommandHandlers
             MaxErrors = maxErrors,
             MaxWarnings = maxWarnings,
             FailOnCategories = failCategories.ToArray(),
+            FailOnIssueCodes = failIssueCodes.ToArray(),
             NavCanonicalPath = navCanonical,
             NavCanonicalSelector = navCanonicalSelector,
             NavCanonicalRequired = navCanonicalRequired,

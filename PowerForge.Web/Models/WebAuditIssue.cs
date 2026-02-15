@@ -7,6 +7,10 @@ public sealed class WebAuditIssue
     public string Severity { get; set; } = "warning";
     /// <summary>Issue category (for thresholds/baselines).</summary>
     public string Category { get; set; } = "general";
+    /// <summary>Issue code (for example <c>PFAUDIT.MEDIA.MEDIA-IMG-DIMENSIONS</c>).</summary>
+    public string Code { get; set; } = string.Empty;
+    /// <summary>Normalized issue hint token used by gates (for example <c>media-img-dimensions</c>).</summary>
+    public string Hint { get; set; } = string.Empty;
     /// <summary>Optional page path related to the issue.</summary>
     public string? Path { get; set; }
     /// <summary>Human readable issue message.</summary>

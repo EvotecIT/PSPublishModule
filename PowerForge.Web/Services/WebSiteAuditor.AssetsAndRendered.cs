@@ -210,28 +210,67 @@ public static partial class WebSiteAuditor
 
     private static string BuildIssueKey(string severity, string category, string? path, string hint)
     {
-        static string Normalize(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return string.Empty;
-            var trimmed = value.Trim().ToLowerInvariant();
-            var chars = trimmed.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
-            var normalized = new string(chars);
-            while (normalized.Contains("--", StringComparison.Ordinal))
-                normalized = normalized.Replace("--", "-", StringComparison.Ordinal);
-            return normalized.Trim('-');
-        }
-
         var normalizedPath = string.IsNullOrWhiteSpace(path)
             ? string.Empty
             : path.Replace('\\', '/').Trim().ToLowerInvariant();
         return string.Join("|", new[]
         {
-            Normalize(severity),
-            Normalize(category),
-            Normalize(normalizedPath),
-            Normalize(hint)
+            NormalizeIssueToken(severity),
+            NormalizeIssueToken(category),
+            NormalizeIssueToken(normalizedPath),
+            NormalizeIssueToken(hint)
         });
+    }
+
+    private static string NormalizeIssueToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        var trimmed = value.Trim().ToLowerInvariant();
+        var chars = trimmed.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
+        var normalized = new string(chars);
+        while (normalized.Contains("--", StringComparison.Ordinal))
+            normalized = normalized.Replace("--", "-", StringComparison.Ordinal);
+        return normalized.Trim('-');
+    }
+
+    private static string BuildIssueCategoryCode(string category)
+    {
+        var normalizedCategory = NormalizeIssueToken(category);
+        if (string.IsNullOrWhiteSpace(normalizedCategory))
+            normalizedCategory = "general";
+        return "PFAUDIT." + normalizedCategory.ToUpperInvariant();
+    }
+
+    private static string BuildIssueRuleCode(string category, string? hint)
+    {
+        var categoryCode = BuildIssueCategoryCode(category);
+        var normalizedHint = NormalizeIssueToken(hint);
+        if (string.IsNullOrWhiteSpace(normalizedHint))
+            return categoryCode;
+        return categoryCode + "." + normalizedHint.ToUpperInvariant();
+    }
+
+    private static bool MatchesFailIssuePatterns(WebAuditIssue issue, string[] patterns)
+    {
+        if (issue is null || patterns.Length == 0)
+            return false;
+
+        var categoryCode = BuildIssueCategoryCode(issue.Category);
+        var ruleCode = string.IsNullOrWhiteSpace(issue.Code)
+            ? BuildIssueRuleCode(issue.Category, issue.Hint)
+            : issue.Code.Trim();
+        var hint = NormalizeIssueToken(issue.Hint);
+        var key = issue.Key ?? string.Empty;
+        var path = issue.Path ?? string.Empty;
+        var message = issue.Message ?? string.Empty;
+        var descriptor = $"[{categoryCode}] [{ruleCode}] hint:{hint} key:{key} path:{path} message:{message}";
+
+        return WebSuppressionMatcher.IsSuppressed(ruleCode, ruleCode, patterns) ||
+               WebSuppressionMatcher.IsSuppressed(categoryCode, categoryCode, patterns) ||
+               WebSuppressionMatcher.IsSuppressed(hint, ruleCode, patterns) ||
+               WebSuppressionMatcher.IsSuppressed(key, ruleCode, patterns) ||
+               WebSuppressionMatcher.IsSuppressed(descriptor, ruleCode, patterns);
     }
 
     private static HashSet<string> LoadBaselineIssueKeys(

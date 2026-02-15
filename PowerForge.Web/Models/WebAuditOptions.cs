@@ -159,4 +159,11 @@ public sealed class WebAuditOptions
     public int MaxWarnings { get; set; } = -1;
     /// <summary>Fail audit when any issue in selected categories is found.</summary>
     public string[] FailOnCategories { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Fail audit when any issue matches these issue codes/patterns.
+    /// Matching supports exact codes (for example <c>PFAUDIT.MEDIA.MEDIA-IMG-DIMENSIONS</c>),
+    /// normalized hint tokens (for example <c>media-img-dimensions</c>), substrings,
+    /// wildcard (<c>*</c>/<c>?</c>), and <c>re:</c> regex patterns.
+    /// </summary>
+    public string[] FailOnIssueCodes { get; set; } = Array.Empty<string>();
 }

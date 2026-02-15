@@ -54,6 +54,7 @@ public static partial class WebSiteAuditor
             .Where(category => !string.IsNullOrWhiteSpace(category))
             .Select(category => category.Trim().ToLowerInvariant())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var failIssuePatterns = WebSuppressionMatcher.NormalizePatterns(options.FailOnIssueCodes);
         var minNavCoveragePercent = Math.Clamp(options.MinNavCoveragePercent, 0, 100);
 
         void AddIssue(string severity, string category, string? path, string message, string? keyHint = null)
@@ -68,12 +69,14 @@ public static partial class WebSiteAuditor
             var issueText = string.IsNullOrWhiteSpace(issuePath)
                 ? message
                 : $"{issuePath}: {message}";
-            var issueKey = BuildIssueKey(normalizedSeverity, normalizedCategory, issuePath, keyHint ?? message);
+            var issueHint = NormalizeIssueToken(keyHint ?? message);
+            var issueKey = BuildIssueKey(normalizedSeverity, normalizedCategory, issuePath, issueHint);
 
-            var suppressionCode = $"PFAUDIT.{normalizedCategory.ToUpperInvariant()}";
+            var suppressionCode = BuildIssueCategoryCode(normalizedCategory);
+            var issueCode = BuildIssueRuleCode(normalizedCategory, issueHint);
             if (suppressIssuePatterns.Length > 0)
             {
-                var suppressionText = $"[{suppressionCode}] {issueText} (key:{issueKey})";
+                var suppressionText = $"[{suppressionCode}] [{issueCode}] {issueText} (hint:{issueHint}) (key:{issueKey})";
                 if (WebSuppressionMatcher.IsSuppressed(suppressionText, suppressionCode, suppressIssuePatterns))
                     return;
             }
@@ -83,6 +86,8 @@ public static partial class WebSiteAuditor
             {
                 Severity = normalizedSeverity,
                 Category = normalizedCategory,
+                Code = issueCode,
+                Hint = issueHint,
                 Path = issuePath,
                 Message = message,
                 Key = issueKey
@@ -614,6 +619,19 @@ public static partial class WebSiteAuditor
                 AddIssue("error", "gate", null,
                     $"Audit gate failed: {categoryHits} issue(s) match fail categories [{string.Join(", ", failCategories.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))}].",
                     "gate-category");
+            }
+        }
+
+        if (failIssuePatterns.Length > 0)
+        {
+            var issueHits = issues.Count(issue =>
+                !issue.Category.Equals("gate", StringComparison.OrdinalIgnoreCase) &&
+                MatchesFailIssuePatterns(issue, failIssuePatterns));
+            if (issueHits > 0)
+            {
+                AddIssue("error", "gate", null,
+                    $"Audit gate failed: {issueHits} issue(s) match fail issue codes [{string.Join(", ", failIssuePatterns.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))}].",
+                    "gate-issue-code");
             }
         }
 
