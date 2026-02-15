@@ -471,6 +471,18 @@ internal static class WebCliHelpers
         return Path.GetFullPath(Path.Combine(baseDir, value));
     }
 
+    internal static string GetDefaultNavExportOutputPath(SiteSpec spec, string rootPath)
+    {
+        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+        var relativeRoot = Path.IsPathRooted(dataRoot)
+            ? "data"
+            : dataRoot.TrimStart('/', '\\');
+        if (string.IsNullOrWhiteSpace(relativeRoot))
+            relativeRoot = "data";
+
+        return Path.Combine(rootPath, "static", relativeRoot, "site-nav.json");
+    }
+
     internal static string ApplyArchetypeTemplate(string template, string title, string slug, string collection)
     {
         var date = DateTime.UtcNow.ToString("yyyy-MM-dd");

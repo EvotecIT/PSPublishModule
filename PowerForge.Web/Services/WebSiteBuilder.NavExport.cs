@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -85,9 +86,17 @@ public static partial class WebSiteBuilder
                 return true;
             }
         }
-        catch
+        catch (JsonException)
         {
-            // ignore invalid JSON and treat as user-managed file
+            // invalid JSON -> treat as user-managed file
+        }
+        catch (IOException)
+        {
+            // file access error -> treat as user-managed file
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // treat as user-managed file
         }
 
         return false;
@@ -109,12 +118,22 @@ public static partial class WebSiteBuilder
         AddVersioningAliasRedirects(spec, redirects);
 
         var data = LoadData(spec, plan, projectSpecs);
-        var projectMap = projectSpecs
+
+        var projectSlugGroups = projectSpecs
             .Where(p => !string.IsNullOrWhiteSpace(p.Slug))
-            .ToDictionary(p => p.Slug, StringComparer.OrdinalIgnoreCase);
-        var projectContentMap = projectSpecs
+            .GroupBy(p => p.Slug, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var g in projectSlugGroups.Where(g => g.Count() > 1))
+            Trace.TraceWarning($"Duplicate project slug '{g.Key}' detected. Using first occurrence for nav export.");
+        var projectMap = projectSlugGroups.ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        var projectContentSlugGroups = projectSpecs
             .Where(p => p.Content is not null && !string.IsNullOrWhiteSpace(p.Slug))
-            .ToDictionary(p => p.Slug, p => p.Content!, StringComparer.OrdinalIgnoreCase);
+            .GroupBy(p => p.Slug, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var g in projectContentSlugGroups.Where(g => g.Count() > 1))
+            Trace.TraceWarning($"Duplicate project content slug '{g.Key}' detected. Using first occurrence for nav export.");
+        var projectContentMap = projectContentSlugGroups.ToDictionary(g => g.Key, g => g.First().Content!, StringComparer.OrdinalIgnoreCase);
         var cacheRoot = ResolveCacheRoot(spec, plan.RootPath);
 
         var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);

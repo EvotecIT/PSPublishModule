@@ -24,7 +24,7 @@ internal static partial class WebCliCommandHandlers
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
 
         var resolvedOut = string.IsNullOrWhiteSpace(outPath)
-            ? GetDefaultNavExportOutputPath(spec, plan)
+            ? GetDefaultNavExportOutputPath(spec, plan.RootPath)
             : ResolveOutputPath(plan.RootPath, outPath);
 
         var result = WebSiteBuilder.ExportSiteNavJson(spec, plan, resolvedOut, overwrite, WebCliJson.Options);
@@ -56,18 +56,6 @@ internal static partial class WebCliCommandHandlers
         logger.Success($"Nav export: {result.OutputPath}");
         logger.Info(result.Changed ? "Nav export updated." : "Nav export up-to-date.");
         return 0;
-    }
-
-    private static string GetDefaultNavExportOutputPath(SiteSpec spec, WebSitePlan plan)
-    {
-        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
-        var relativeRoot = Path.IsPathRooted(dataRoot)
-            ? "data"
-            : dataRoot.TrimStart('/', '\\');
-        if (string.IsNullOrWhiteSpace(relativeRoot))
-            relativeRoot = "data";
-
-        return Path.Combine(plan.RootPath, "static", relativeRoot, "site-nav.json");
     }
 
     private static string ResolveOutputPath(string rootPath, string outputPath)

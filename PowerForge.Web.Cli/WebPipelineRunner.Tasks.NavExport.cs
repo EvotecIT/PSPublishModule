@@ -20,7 +20,7 @@ internal static partial class WebPipelineRunner
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
 
         var outPath = string.IsNullOrWhiteSpace(outValue)
-            ? GetDefaultNavExportOutputPath(spec, plan.RootPath)
+            ? WebCliHelpers.GetDefaultNavExportOutputPath(spec, plan.RootPath)
             : ResolvePath(baseDir, outValue) ?? throw new InvalidOperationException("nav-export requires out to resolve.");
 
         var result = WebSiteBuilder.ExportSiteNavJson(spec, plan, outPath, overwrite, WebCliJson.Options);
@@ -29,17 +29,5 @@ internal static partial class WebPipelineRunner
 
         stepResult.Success = true;
         stepResult.Message = result.Changed ? "nav-export updated" : "nav-export ok";
-    }
-
-    private static string GetDefaultNavExportOutputPath(SiteSpec spec, string rootPath)
-    {
-        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
-        var relativeRoot = Path.IsPathRooted(dataRoot)
-            ? "data"
-            : dataRoot.TrimStart('/', '\\');
-        if (string.IsNullOrWhiteSpace(relativeRoot))
-            relativeRoot = "data";
-
-        return Path.Combine(rootPath, "static", relativeRoot, "site-nav.json");
     }
 }

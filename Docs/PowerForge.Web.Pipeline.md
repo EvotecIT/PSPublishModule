@@ -93,6 +93,11 @@ Notes:
   - By default, `nav-export` will only overwrite an existing file when it is marked `"generated": true`.
   - Set `overwrite: true` to force overwrite of a user-managed file.
 
+Force overwrite example:
+```json
+{ "task": "nav-export", "config": "./site.json", "out": "./static/data/site-nav.json", "overwrite": true }
+```
+
 #### verify
 Validates content + routing consistency from the site config.
 ```json
