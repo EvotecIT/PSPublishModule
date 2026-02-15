@@ -155,6 +155,13 @@ internal static partial class WebPipelineRunner
         stepResult.Message = message;
     }
 
+    internal static WebPipelineStepResult RunGitSyncStepForCli(JsonElement step, string baseDir, WebConsoleLogger? logger)
+    {
+        var stepResult = new WebPipelineStepResult { Task = "git-sync" };
+        ExecuteGitSync(step, baseDir, logger, stepResult);
+        return stepResult;
+    }
+
     private static bool HasInlineGitToken(JsonElement step)
     {
         if (!string.IsNullOrWhiteSpace(GetString(step, "token")))
