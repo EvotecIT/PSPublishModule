@@ -47,7 +47,8 @@
         { "$ref": "#/$defs/DataTransformStep" },
         { "$ref": "#/$defs/ModelTransformStep" },
         { "$ref": "#/$defs/ExecStep" },
-        { "$ref": "#/$defs/GitSyncStep" }
+        { "$ref": "#/$defs/GitSyncStep" },
+        { "$ref": "#/$defs/SourcesSyncStep" }
       ]
     },
     "BuildStep": {
@@ -1096,6 +1097,36 @@
           ]
         }
       ]
+    },
+    "SourcesSyncStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "sources-sync" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "config": { "type": "string", "description": "Path to site.json containing Sources entries." },
+
+        "lockMode": { "type": "string", "description": "Passed through to git-sync lockMode (off|verify|update)." },
+        "lock-mode": { "type": "string", "description": "Alias for lockMode." },
+        "lockPath": { "type": "string", "description": "Passed through to git-sync lockPath." },
+        "lock-path": { "type": "string", "description": "Alias for lockPath." },
+        "lock": { "type": "string", "description": "Alias for lockPath." },
+
+        "writeManifest": { "type": "boolean", "description": "Passed through to git-sync writeManifest." },
+        "write-manifest": { "type": "boolean", "description": "Alias for writeManifest." },
+        "manifestPath": { "type": "string", "description": "Passed through to git-sync manifestPath." },
+        "manifest-path": { "type": "string", "description": "Alias for manifestPath." },
+        "manifest": { "type": "string", "description": "Alias for manifestPath." }
+      },
+      "required": ["task", "config"]
     },
     "ApiDocsStep": {
       "type": "object",

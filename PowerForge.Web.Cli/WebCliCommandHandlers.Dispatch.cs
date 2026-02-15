@@ -23,6 +23,7 @@ collection: {{collection}}
             "build" => HandleBuild(subArgs, outputJson, logger, outputSchemaVersion),
             "nav-export" => HandleNavExport(subArgs, outputJson, logger, outputSchemaVersion),
             "git-sync" => HandleGitSync(subArgs, outputJson, logger, outputSchemaVersion),
+            "sources-sync" => HandleSourcesSync(subArgs, outputJson, logger, outputSchemaVersion),
             "publish" => HandlePublish(subArgs, outputJson, logger, outputSchemaVersion),
             "verify" => HandleVerify(subArgs, outputJson, logger, outputSchemaVersion),
             "doctor" => HandleDoctor(subArgs, outputJson, logger, outputSchemaVersion),

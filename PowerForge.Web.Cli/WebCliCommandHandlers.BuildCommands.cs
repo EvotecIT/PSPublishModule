@@ -60,6 +60,7 @@ internal static partial class WebCliCommandHandlers
                       TryGetOptionValue(subArgs, "--out-path") ??
                       TryGetOptionValue(subArgs, "--output-path");
         var cleanOutput = HasOption(subArgs, "--clean") || HasOption(subArgs, "--clean-out");
+        var syncSources = HasOption(subArgs, "--sync-sources") || HasOption(subArgs, "--syncSources");
 
         if (string.IsNullOrWhiteSpace(configPath))
             return Fail("Missing required --config.", outputJson, logger, "web.build");
@@ -69,6 +70,60 @@ internal static partial class WebCliCommandHandlers
         var fullConfigPath = ResolveExistingFilePath(configPath);
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+
+        if (syncSources)
+        {
+            try
+            {
+                // Reuse the sources-sync command path so behavior stays consistent.
+                var sourcesExit = HandleSourcesSync(new[] { "--config", specPath }, outputJson: false, logger, outputSchemaVersion);
+                if (sourcesExit != 0)
+                {
+                    if (outputJson)
+                    {
+                        WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                        {
+                            SchemaVersion = outputSchemaVersion,
+                            Command = "web.build",
+                            Success = false,
+                            ExitCode = 1,
+                            Config = "web",
+                            ConfigPath = specPath,
+                            Spec = WebCliJson.SerializeToElement(spec, WebCliJson.Context.SiteSpec),
+                            Plan = WebCliJson.SerializeToElement(plan, WebCliJson.Context.WebSitePlan),
+                            Error = "sources-sync failed (use 'powerforge-web sources-sync' for details)."
+                        });
+                        return 1;
+                    }
+
+                    logger.Error("sources-sync failed. Run `powerforge-web sources-sync --config <site.json>` for details.");
+                    return 1;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (outputJson)
+                {
+                    WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                    {
+                        SchemaVersion = outputSchemaVersion,
+                        Command = "web.build",
+                        Success = false,
+                        ExitCode = 1,
+                        Config = "web",
+                        ConfigPath = specPath,
+                        Spec = WebCliJson.SerializeToElement(spec, WebCliJson.Context.SiteSpec),
+                        Plan = WebCliJson.SerializeToElement(plan, WebCliJson.Context.WebSitePlan),
+                        Error = ex.Message
+                    });
+                    return 1;
+                }
+
+                logger.Error(ex.Message);
+                return 1;
+            }
+        }
+
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
         var result = WebSiteBuilder.Build(spec, plan, outPath, WebCliJson.Options);

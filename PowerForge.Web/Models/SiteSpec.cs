@@ -21,6 +21,13 @@ public sealed class SiteSpec
     public string[] ContentRoots { get; set; } = Array.Empty<string>();
     /// <summary>Optional projects root.</summary>
     public string? ProjectsRoot { get; set; }
+
+    /// <summary>
+    /// Optional repository sources that can be synchronized into ProjectsRoot via `powerforge-web sources-sync`
+    /// (or `powerforge-web build --sync-sources`). This keeps `build` deterministic by default while allowing
+    /// one-command bootstrap when explicitly requested.
+    /// </summary>
+    public SourceRepoSpec[] Sources { get; set; } = Array.Empty<SourceRepoSpec>();
     /// <summary>Optional themes root.</summary>
     public string? ThemesRoot { get; set; }
     /// <summary>Optional shared content root.</summary>
