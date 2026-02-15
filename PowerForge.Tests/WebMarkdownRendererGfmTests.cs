@@ -45,6 +45,33 @@ public class WebMarkdownRendererGfmTests
         Assert.DoesNotContain("**Q:", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_HeadingWithInlineCode_RendersCodeInsideHeading()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Tool Catalog
+
+            ## Builtin Packs
+
+            ### Event Log (`eventlog`)
+
+            Representative tools.
+            """);
+
+        var headingMatch = System.Text.RegularExpressions.Regex.Match(
+            html,
+            "<h3[^>]*>(?<text>.*?)</h3>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        Assert.True(headingMatch.Success, "Expected an <h3> heading in rendered HTML.");
+        var headingText = headingMatch.Groups["text"].Value;
+
+        Assert.Contains("<code", headingText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("eventlog", headingText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("`eventlog`", headingText, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(string markdown)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));
