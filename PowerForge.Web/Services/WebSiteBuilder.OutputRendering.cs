@@ -70,7 +70,10 @@ public static partial class WebSiteBuilder
 
         var cssHtml = RenderCssLinks(cssLinks, assetRegistry);
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer></script>"));
-        var descriptionMeta = string.IsNullOrWhiteSpace(item.Description) ? string.Empty : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(item.Description)}\" />";
+        var pageDescription = ResolveMetaDescription(spec, item);
+        var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)
+            ? string.Empty
+            : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(pageDescription)}\" />";
         projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
         var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
         var fullListItems = ResolveListItems(item, allItems);
@@ -589,6 +592,24 @@ public static partial class WebSiteBuilder
             orderedItems = orderedItems.Take(maxItems);
 
         return orderedItems;
+    }
+
+    private static string ResolveMetaDescription(SiteSpec spec, ContentItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Description))
+            return item.Description.Trim();
+
+        var socialDescription = GetMetaString(item.Meta, "social_description");
+        if (!string.IsNullOrWhiteSpace(socialDescription))
+            return socialDescription.Trim();
+
+        var snippet = BuildSnippet(item.HtmlContent, 180);
+        if (!string.IsNullOrWhiteSpace(snippet))
+            return snippet.Trim();
+
+        return string.IsNullOrWhiteSpace(spec.Name)
+            ? "Documentation and reference."
+            : $"{spec.Name} documentation and reference.";
     }
 
     private static IEnumerable<string> ResolveRssCategories(ContentItem item)

@@ -43,6 +43,7 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -79,6 +80,7 @@ public static partial class WebApiDocsGenerator
             {
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
+                ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {type.FullName} in {options.Title}."),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -123,6 +125,7 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -146,6 +149,7 @@ public static partial class WebApiDocsGenerator
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
+                ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {displayName} in {options.Title}."),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -257,6 +261,15 @@ public static partial class WebApiDocsGenerator
         var preview = string.Join(", ", missing.Take(6));
         var more = missing.Length > 6 ? $" (+{missing.Length - 6} more)" : string.Empty;
         warnings.Add($"API docs CSS contract: combined CSS ({string.Join(", ", checkedHrefs)}) is missing expected selectors: {preview}{more}.");
+    }
+
+    private static string BuildDescriptionMetaTag(string description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return string.Empty;
+
+        var encoded = System.Web.HttpUtility.HtmlEncode(description.Trim());
+        return $"<meta name=\"description\" content=\"{encoded}\" />";
     }
 
     private static string ResolveCriticalCss(WebApiDocsOptions options, List<string> warnings)
