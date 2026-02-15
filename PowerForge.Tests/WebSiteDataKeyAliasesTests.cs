@@ -3,6 +3,8 @@ using System.IO;
 using PowerForge.Web;
 using Xunit;
 
+namespace PowerForge.Tests;
+
 public class WebSiteDataKeyAliasesTests
 {
     [Fact]
@@ -182,4 +184,3 @@ public class WebSiteDataKeyAliasesTests
         }
     }
 }
-
