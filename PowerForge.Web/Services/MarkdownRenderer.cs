@@ -42,14 +42,37 @@ internal static class MarkdownRenderer
             return string.Empty;
 
         return System.Text.RegularExpressions.Regex.Replace(html,
-            "<h(?<level>[1-6])>(?<text>.*?)</h\\1>",
+            "<h(?<level>[1-6])(?<attrs>[^>]*)>(?<text>.*?)</h\\1>",
             match =>
             {
-                var text = System.Text.RegularExpressions.Regex.Replace(match.Groups["text"].Value, "<.*?>", string.Empty);
+                var level = match.Groups["level"].Value;
+                var attrs = match.Groups["attrs"].Value;
+                var headingHtml = NormalizeInlineCodeInHeading(match.Groups["text"].Value);
+                var text = System.Text.RegularExpressions.Regex.Replace(headingHtml, "<.*?>", string.Empty);
                 var id = Slugify(text);
-                return $"<h{match.Groups["level"].Value} id=\"{id}\">{match.Groups["text"].Value}</h{match.Groups["level"].Value}>";
+                var hasId = System.Text.RegularExpressions.Regex.IsMatch(
+                    attrs,
+                    "\\sid\\s*=",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+                var attrsWithId = hasId
+                    ? attrs
+                    : (string.IsNullOrWhiteSpace(attrs) ? $" id=\"{id}\"" : $"{attrs} id=\"{id}\"");
+                return $"<h{level}{attrsWithId}>{headingHtml}</h{level}>";
             },
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+    }
+
+    private static string NormalizeInlineCodeInHeading(string headingHtml)
+    {
+        if (string.IsNullOrWhiteSpace(headingHtml))
+            return string.Empty;
+        if (headingHtml.Contains("<code", StringComparison.OrdinalIgnoreCase))
+            return headingHtml;
+
+        return System.Text.RegularExpressions.Regex.Replace(
+            headingHtml,
+            "(?<!\\\\)`(?<code>[^`]+)`",
+            "<code>${code}</code>");
     }
 
     private static string Slugify(string text)
