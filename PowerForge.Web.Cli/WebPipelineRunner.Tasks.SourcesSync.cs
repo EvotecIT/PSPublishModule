@@ -22,6 +22,10 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("sources-sync: site.json has no Sources entries.");
 
         var repos = new List<Dictionary<string, object?>>();
+        var destinationComparer = FileSystemPathComparison == StringComparison.OrdinalIgnoreCase
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var usedDestinations = new HashSet<string>(destinationComparer);
         foreach (var source in sources)
         {
             if (source is null) continue;
@@ -39,6 +43,12 @@ internal static partial class WebPipelineRunner
                 var projectsRoot = string.IsNullOrWhiteSpace(spec.ProjectsRoot) ? "projects" : spec.ProjectsRoot!;
                 destinationValue = Path.Combine(projectsRoot, slug);
             }
+
+            var destinationFull = Path.GetFullPath(Path.IsPathRooted(destinationValue)
+                ? destinationValue
+                : Path.Combine(plan.RootPath, destinationValue));
+            if (!usedDestinations.Add(destinationFull))
+                throw new InvalidOperationException($"sources-sync has duplicate destination: {destinationFull}");
 
             repos.Add(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
@@ -124,4 +134,3 @@ internal static partial class WebPipelineRunner
         return v.Trim();
     }
 }
-

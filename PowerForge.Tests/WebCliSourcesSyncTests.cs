@@ -74,6 +74,71 @@ public class WebCliSourcesSyncTests
     }
 
     [Fact]
+    public void HandleSubCommand_SourcesSync_FailsOnDuplicateDestinations()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-sources-sync-dup-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "hello from source");
+
+            RunGit(source, "init");
+            RunGit(source, "config", "user.email", "pf-tests@example.local");
+            RunGit(source, "config", "user.name", "PowerForge Tests");
+            RunGit(source, "add", ".");
+            RunGit(source, "commit", "-m", "init", "--quiet");
+
+            Directory.CreateDirectory(Path.Combine(root, "content", "pages"));
+            File.WriteAllText(Path.Combine(root, "content", "pages", "index.md"),
+                """
+                ---
+                title: Home
+                slug: /
+                ---
+
+                # Home
+                """);
+
+            var siteJson = Path.Combine(root, "site.json");
+            File.WriteAllText(siteJson,
+                $$"""
+                {
+                  "Name": "Sources Sync Dup Test",
+                  "BaseUrl": "https://example.test",
+                  "ContentRoot": "content",
+                  "ProjectsRoot": "projects",
+                  "Collections": [
+                    { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                  ],
+                  "Sources": [
+                    { "Repo": "{{EscapeJson(source)}}", "Slug": "dup" },
+                    { "Repo": "{{EscapeJson(source)}}", "Slug": "dup" }
+                  ]
+                }
+                """);
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "sources-sync",
+                new[] { "--config", siteJson },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(1, exitCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void HandleSubCommand_Build_WithSyncSources_BuildsAndClones()
     {
         if (!IsGitAvailable())
@@ -219,4 +284,3 @@ public class WebCliSourcesSyncTests
         return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 }
-

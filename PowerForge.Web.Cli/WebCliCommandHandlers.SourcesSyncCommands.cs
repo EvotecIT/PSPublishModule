@@ -24,12 +24,11 @@ internal static partial class WebCliCommandHandlers
         if (sources.Length == 0)
             return Fail("site.json has no Sources entries.", outputJson, logger, "web.sources-sync");
 
-        var defaults = ParseSourceDefaultsFromArgs(subArgs);
-        var gitSyncStep = BuildGitSyncStepFromSources(spec, plan, sources, defaults);
-
         WebPipelineStepResult stepResult;
         try
         {
+            var defaults = ParseSourceDefaultsFromArgs(subArgs);
+            var gitSyncStep = BuildGitSyncStepFromSources(spec, plan, sources, defaults);
             stepResult = WebPipelineRunner.RunGitSyncStepForCli(gitSyncStep, plan.RootPath, logger);
         }
         catch (Exception ex)
@@ -252,4 +251,3 @@ internal static partial class WebCliCommandHandlers
         return v.Trim();
     }
 }
-
