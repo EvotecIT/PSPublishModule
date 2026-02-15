@@ -12,7 +12,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 
 ## Non-Negotiables (Best Practices)
 
-- Always set `features` explicitly in `site.json`.
+- Always set `Features` explicitly in `site.json`.
 - Always use a theme manifest (`theme.manifest.json` preferred; legacy `theme.json` allowed).
 - Always run with two modes:
   - dev: warn, summarize, stay fast
@@ -31,14 +31,16 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - `.powerforge/verify-baseline.json`
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
-   - set `defaultTheme`
-   - set `features` explicitly (for example `["docs","apiDocs","search"]`)
+   - set `DefaultTheme`
+   - set `Features` explicitly (for example `["docs","apiDocs","search"]`)
    - define navigation menus + actions
    - define `Navigation.Surfaces` explicitly (canonical: `main`, `docs`, `apidocs`, optional `products`; `api` is treated as an alias of `apidocs`) to keep docs/API navigation deterministic
    - configure quality gates:
      - verify: `baseline`, `failOnNewWarnings`
      - audit: `baseline`, `failOnNewIssues`, budgets (`maxTotalFiles`, etc.)
 3. `pipeline.json`:
+   - if your site depends on content/projects sourced from other repos, declare them under `Sources` in `site.json`
+     and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes
    - run heavy steps only in CI (`modes:["ci"]`):
      - `audit` (and rendered checks if enabled)
@@ -63,6 +65,55 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
    - If your site uses `Navigation.Profiles` and you want API pages to select an `/api/` profile override for nav token injection, set `navContextPath: "/api/"` on the apidocs pipeline step.
 
+## Repo Sources (Optional, Recommended When You Depend On Other Repos)
+
+If your site needs content/projects from other repositories (public or private), declare them in `site.json` under `Sources` and sync them as part of your build.
+
+Best practices:
+- Prefer `TokenEnv` (defaults to `GITHUB_TOKEN`) over inline `Token` for private repos.
+- In CI, use a lock file: `lockMode: "verify"` and commit `.powerforge/git-sync-lock.json`.
+- In dev, you can refresh locks intentionally with `lockMode: "update"`.
+- Keep `build` deterministic:
+  - Use `sources-sync` (or `build --sync-sources`) explicitly, rather than auto-downloading inside normal builds.
+
+How destinations work:
+- If `Destination` is omitted, PowerForge.Web clones each repo to:
+  - `<ProjectsRoot>/<Slug>` (or `./projects/<Slug>` when `ProjectsRoot` is not set).
+- If `Slug` is omitted, it is inferred from the repo URL/name.
+- If you need a different folder layout, set `Destination`.
+
+Example `site.json` snippet:
+```json
+{
+  "ProjectsRoot": "projects",
+  "Sources": [
+    {
+      "Repo": "EvotecIT/IntelligenceX",
+      "Slug": "intelligencex",
+      "Ref": "main",
+      "AuthType": "token",
+      "TokenEnv": "GITHUB_TOKEN"
+    }
+  ]
+}
+```
+
+Dev bootstrap (refresh lock intentionally):
+```powershell
+powerforge-web sources-sync --config ./site.json --lock-mode update --lock-path ./.powerforge/git-sync-lock.json
+```
+
+Example `pipeline.json` snippet:
+```json
+{
+  "steps": [
+    { "task": "sources-sync", "config": "./site.json", "lockMode": "verify", "lockPath": "./.powerforge/git-sync-lock.json" },
+    { "task": "build", "config": "./site.json", "out": "./_site" },
+    { "task": "verify", "config": "./site.json" }
+  ]
+}
+```
+
 ## Optional: CDN Cache Purge (Cloudflare)
 
 If your site is behind Cloudflare and caches HTML, consider purging key HTML URLs after deploy
@@ -83,7 +134,7 @@ Recommendation:
 
 In `AGENTS.md` (site repo):
 - repo purpose + build commands
-- list of enabled `features`
+- list of enabled `Features`
 - theme structure + whether it uses `extends`
 - where API docs config lives (apidocs steps + css list)
 - where baselines/budgets live and how to update them
