@@ -78,6 +78,7 @@ internal static partial class WebCliCommandHandlers
         }
         catch (Exception ex)
         {
+            var errorMessage = RedactGitSyncSecrets(ex.Message, stepElement);
             if (outputJson)
             {
                 WebCliJsonWriter.Write(new WebCliJsonEnvelope
@@ -86,12 +87,12 @@ internal static partial class WebCliCommandHandlers
                     Command = "web.git-sync",
                     Success = false,
                     ExitCode = 1,
-                    Error = ex.Message
+                    Error = errorMessage
                 });
                 return 1;
             }
 
-            logger.Error(ex.Message);
+            logger.Error(errorMessage);
             return 1;
         }
 
@@ -122,5 +123,49 @@ internal static partial class WebCliCommandHandlers
 
         logger.Error(stepResult.Message ?? "git-sync failed");
         return 1;
+    }
+
+    private static string RedactGitSyncSecrets(string message, JsonElement step)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return message;
+
+        var tokens = new System.Collections.Generic.List<string>();
+        TryCollectGitSyncToken(step, tokens);
+        if (tokens.Count == 0)
+            return message;
+
+        var redacted = message;
+        foreach (var token in tokens)
+        {
+            if (string.IsNullOrWhiteSpace(token)) continue;
+            redacted = redacted.Replace(token, "***", StringComparison.Ordinal);
+        }
+
+        return redacted;
+    }
+
+    private static void TryCollectGitSyncToken(JsonElement element, System.Collections.Generic.List<string> tokens)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return;
+
+        if (element.TryGetProperty("token", out var tokenElement) && tokenElement.ValueKind == JsonValueKind.String)
+        {
+            var token = tokenElement.GetString();
+            if (!string.IsNullOrWhiteSpace(token))
+                tokens.Add(token);
+        }
+
+        if (element.TryGetProperty("repos", out var repos) && repos.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in repos.EnumerateArray())
+                TryCollectGitSyncToken(entry, tokens);
+        }
+        else if (element.TryGetProperty("repositories", out var repositories) && repositories.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in repositories.EnumerateArray())
+                TryCollectGitSyncToken(entry, tokens);
+        }
     }
 }

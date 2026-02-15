@@ -4,6 +4,8 @@ using System.IO;
 using PowerForge.Web.Cli;
 using Xunit;
 
+namespace PowerForge.Tests;
+
 public class WebCliGitSyncTests
 {
     [Fact]
@@ -47,6 +49,65 @@ public class WebCliGitSyncTests
         {
             TryDeleteDirectory(root);
         }
+    }
+
+    [Fact]
+    public void HandleSubCommand_GitSync_SpecMode_ClonesRepository()
+    {
+        if (!IsGitAvailable())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-git-sync-spec-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var source = Path.Combine(root, "source");
+            Directory.CreateDirectory(source);
+            File.WriteAllText(Path.Combine(source, "README.md"), "hello from spec");
+
+            RunGit(source, "init");
+            RunGit(source, "config", "user.email", "pf-tests@example.local");
+            RunGit(source, "config", "user.name", "PowerForge Tests");
+            RunGit(source, "add", ".");
+            RunGit(source, "commit", "-m", "init", "--quiet");
+
+            var specPath = Path.Combine(root, "git-sync.json");
+            File.WriteAllText(specPath,
+                $$"""
+                {
+                  "repo": "{{EscapeJson(source)}}",
+                  "destination": "./checkout"
+                }
+                """);
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "git-sync",
+                new[] { "--spec", specPath },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal("hello from spec", File.ReadAllText(Path.Combine(root, "checkout", "README.md")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void HandleSubCommand_GitSync_FailsWhenDestinationMissing()
+    {
+        var exitCode = WebCliCommandHandlers.HandleSubCommand(
+            "git-sync",
+            new[] { "--repo", "EvotecIT/IntelligenceX" },
+            outputJson: true,
+            logger: new WebConsoleLogger(),
+            outputSchemaVersion: 1);
+
+        Assert.Equal(2, exitCode);
     }
 
     private static bool IsGitAvailable()
@@ -109,5 +170,11 @@ public class WebCliGitSyncTests
             // ignore cleanup failures in tests
         }
     }
-}
 
+    private static string EscapeJson(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+}
