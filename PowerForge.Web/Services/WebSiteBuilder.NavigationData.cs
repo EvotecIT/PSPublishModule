@@ -21,7 +21,12 @@ public static partial class WebSiteBuilder
 
         var outputPath = Path.Combine(dataDir, "site-nav.json");
         Directory.CreateDirectory(dataDir);
+        var json = BuildSiteNavJson(spec, menuSpecs);
+        WriteAllTextIfChanged(outputPath, json);
+    }
 
+    private static string BuildSiteNavJson(SiteSpec spec, MenuSpec[] menuSpecs)
+    {
         var menus = menuSpecs.ToDictionary(
             m => m.Name,
             m => MapMenuItems(m.Items),
@@ -50,7 +55,7 @@ public static partial class WebSiteBuilder
             surfaces = MapSurfaces(spec, menuSpecs)
         };
 
-        WriteAllTextIfChanged(outputPath, JsonSerializer.Serialize(payload, WebJson.Options));
+        return JsonSerializer.Serialize(payload, WebJson.Options);
     }
 
     private static object? MapSurfaces(SiteSpec spec, MenuSpec[] menuSpecs)

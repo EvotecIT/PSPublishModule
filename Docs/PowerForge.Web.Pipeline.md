@@ -82,6 +82,17 @@ Builds markdown + theme into static HTML.
 Notes:
 - `clean: true` clears the output directory before building (avoids stale files).
 
+#### nav-export
+Exports a deterministic `site-nav.json` payload (including `surfaces` + `profiles`) from `site.json` + discovered content, without building HTML output.
+```json
+{ "task": "nav-export", "config": "./site.json", "out": "./static/data/site-nav.json", "overwrite": false }
+```
+Notes:
+- If `out` is omitted, the default output is `static/<dataRoot>/site-nav.json` under the site root (absolute `dataRoot` values fall back to `static/data/site-nav.json`).
+- Safe overwrite behavior:
+  - By default, `nav-export` will only overwrite an existing file when it is marked `"generated": true`.
+  - Set `overwrite: true` to force overwrite of a user-managed file.
+
 #### verify
 Validates content + routing consistency from the site config.
 ```json

@@ -22,6 +22,9 @@ internal static partial class WebPipelineRunner
             case "build":
                 ExecuteBuild(step, baseDir, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
                 break;
+            case "nav-export":
+                ExecuteNavExport(step, baseDir, stepResult);
+                break;
             case "verify":
                 ExecuteVerify(step, baseDir, fast, effectiveMode, stepResult);
                 break;

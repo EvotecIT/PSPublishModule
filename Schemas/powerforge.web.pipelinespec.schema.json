@@ -23,6 +23,7 @@
       "type": "object",
       "oneOf": [
         { "$ref": "#/$defs/BuildStep" },
+        { "$ref": "#/$defs/NavExportStep" },
         { "$ref": "#/$defs/VerifyStep" },
         { "$ref": "#/$defs/DoctorStep" },
         { "$ref": "#/$defs/MarkdownFixStep" },
@@ -71,6 +72,26 @@
         }
       },
       "required": ["task", "config", "out"]
+    },
+    "NavExportStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "nav-export" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "config": { "type": "string" },
+        "out": { "type": "string", "description": "Output file path for site-nav export (defaults to static/<dataRoot>/site-nav.json under site root)." },
+        "output": { "type": "string", "description": "Alias for out." },
+        "overwrite": { "type": "boolean", "description": "When true, overwrite an existing site-nav export even if it is not marked generated:true." }
+      },
+      "required": ["task", "config"]
     },
     "VerifyStep": {
       "type": "object",
