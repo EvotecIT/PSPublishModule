@@ -21,6 +21,7 @@ collection: {{collection}}
         {
             "plan" => HandlePlan(subArgs, outputJson, logger, outputSchemaVersion),
             "build" => HandleBuild(subArgs, outputJson, logger, outputSchemaVersion),
+            "nav-export" => HandleNavExport(subArgs, outputJson, logger, outputSchemaVersion),
             "publish" => HandlePublish(subArgs, outputJson, logger, outputSchemaVersion),
             "verify" => HandleVerify(subArgs, outputJson, logger, outputSchemaVersion),
             "doctor" => HandleDoctor(subArgs, outputJson, logger, outputSchemaVersion),

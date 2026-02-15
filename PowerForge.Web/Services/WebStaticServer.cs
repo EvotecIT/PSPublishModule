@@ -151,12 +151,18 @@ public static class WebStaticServer
     private static bool IsPortUnavailableForBinding(HttpListenerException ex)
     {
         var code = ex.NativeErrorCode;
-        if (code == 5 || code == 183 || code == 10048 || code == 98)
+        // These platform-specific codes indicate the requested prefix/port is not bindable.
+        // 5: Access denied (common when URL ACL is missing or prefix already registered)
+        // 32: Sharing violation (seen when another listener holds the prefix)
+        // 98/10048: Address already in use
+        // 183: Already exists
+        if (code == 5 || code == 32 || code == 183 || code == 10048 || code == 98)
             return true;
 
         var message = ex.Message ?? string.Empty;
         if (message.IndexOf("access is denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
-            message.IndexOf("permission denied", StringComparison.OrdinalIgnoreCase) >= 0)
+            message.IndexOf("permission denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            message.IndexOf("being used by another process", StringComparison.OrdinalIgnoreCase) >= 0)
             return true;
 
         return message.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||

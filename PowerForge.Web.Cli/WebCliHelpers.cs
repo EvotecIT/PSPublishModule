@@ -19,6 +19,7 @@ internal static class WebCliHelpers
         Console.WriteLine("Usage:");
         Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
         Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
+        Console.WriteLine("  powerforge-web nav-export --config <site.json> [--out <file>] [--overwrite] [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
         Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
@@ -468,6 +469,18 @@ internal static class WebCliHelpers
         if (Path.IsPathRooted(value))
             return Path.GetFullPath(value);
         return Path.GetFullPath(Path.Combine(baseDir, value));
+    }
+
+    internal static string GetDefaultNavExportOutputPath(SiteSpec spec, string rootPath)
+    {
+        var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
+        var relativeRoot = Path.IsPathRooted(dataRoot)
+            ? "data"
+            : dataRoot.TrimStart('/', '\\');
+        if (string.IsNullOrWhiteSpace(relativeRoot))
+            relativeRoot = "data";
+
+        return Path.Combine(rootPath, "static", relativeRoot, "site-nav.json");
     }
 
     internal static string ApplyArchetypeTemplate(string template, string title, string slug, string collection)
