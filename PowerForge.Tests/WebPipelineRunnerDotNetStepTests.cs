@@ -121,6 +121,45 @@ public class WebPipelineRunnerDotNetStepTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_DotNetPublish_FailsOnConflictingBlazorFixSettings()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-dotnet-publish-conflict-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "dotnet-publish",
+                      "project": "./src/Missing/Missing.csproj",
+                      "output": "./Artifacts/publish",
+                      "configuration": "Release",
+                      "blazor-fixes": true,
+                      "no-blazor-fixes": true,
+                      "skipIfProjectMissing": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("conflicting", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

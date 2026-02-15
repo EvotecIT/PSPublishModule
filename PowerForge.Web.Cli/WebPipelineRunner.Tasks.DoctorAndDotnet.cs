@@ -348,12 +348,22 @@ internal static partial class WebPipelineRunner
         var noRestore = GetBool(step, "noRestore") ?? false;
         var baseHref = GetString(step, "baseHref");
         var defineConstants = GetString(step, "defineConstants") ?? GetString(step, "define-constants");
-        var noBlazorFixes = GetBool(step, "noBlazorFixes") ??
-                            GetBool(step, "no-blazor-fixes") ??
-                            false;
-        var blazorFixes = GetBool(step, "blazorFixes") ??
-                          GetBool(step, "blazor-fixes") ??
-                          !noBlazorFixes;
+        var noBlazorFixesExplicit = GetBool(step, "noBlazorFixes") ??
+                                    GetBool(step, "no-blazor-fixes");
+        var blazorFixesExplicit = GetBool(step, "blazorFixes") ??
+                                  GetBool(step, "blazor-fixes");
+
+        if (noBlazorFixesExplicit.HasValue && blazorFixesExplicit.HasValue)
+        {
+            // If both are specified, they must be logically consistent:
+            // - enable:  blazorFixes:true  + noBlazorFixes:false
+            // - disable: blazorFixes:false + noBlazorFixes:true
+            if (noBlazorFixesExplicit.Value == blazorFixesExplicit.Value)
+                throw new InvalidOperationException("dotnet-publish: conflicting Blazor fixes settings. Use either blazorFixes/blazor-fixes or noBlazorFixes/no-blazor-fixes (or ensure they are logically consistent).");
+        }
+
+        var noBlazorFixes = noBlazorFixesExplicit ?? false;
+        var blazorFixes = blazorFixesExplicit ?? !noBlazorFixes;
         var skipIfProjectMissing = GetBool(step, "skipIfProjectMissing") ??
                                    GetBool(step, "skipIfMissingProject") ??
                                    GetBool(step, "skip-if-project-missing") ??
