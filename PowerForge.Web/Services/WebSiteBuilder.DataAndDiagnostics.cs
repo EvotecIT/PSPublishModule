@@ -82,7 +82,11 @@ public static partial class WebSiteBuilder
         if (!Directory.Exists(basePath))
             return;
 
-        foreach (var file in Directory.EnumerateFiles(basePath, "*.json", SearchOption.AllDirectories))
+        // Ensure deterministic load order across platforms/filesystems (and reduce alias collision surprises).
+        var files = Directory.EnumerateFiles(basePath, "*.json", SearchOption.AllDirectories)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        foreach (var file in files)
         {
             object? value;
             try
@@ -103,7 +107,14 @@ public static partial class WebSiteBuilder
                 .ToArray();
             if (segments.Length == 0) continue;
             segments[^1] = Path.GetFileNameWithoutExtension(segments[^1]);
-            AddNestedData(data, segments, value);
+
+            // Always load the canonical key path (matches on-disk relative path).
+            AddNestedData(data, segments, value, overwrite: true);
+
+            // Also add an alias path that is safe for dot-access in Scriban (dashes/dots/spaces -> underscores).
+            var aliasSegments = NormalizeDataKeySegments(segments);
+            if (aliasSegments is not null)
+                AddNestedData(data, aliasSegments, value, overwrite: false);
         }
     }
 
@@ -125,7 +136,68 @@ public static partial class WebSiteBuilder
         };
     }
 
-    private static void AddNestedData(Dictionary<string, object?> data, string[] segments, object? value)
+    private static string[]? NormalizeDataKeySegments(string[] segments)
+    {
+        if (segments.Length == 0) return null;
+
+        string[]? normalized = null;
+        for (var i = 0; i < segments.Length; i++)
+        {
+            var current = segments[i];
+            var next = NormalizeDataKeySegment(current);
+            if (string.Equals(current, next, StringComparison.Ordinal))
+                continue;
+
+            normalized ??= (string[])segments.Clone();
+            normalized[i] = next;
+        }
+
+        return normalized;
+    }
+
+    private static string NormalizeDataKeySegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return value;
+
+        // Keep ASCII-only and predictable. We aim for "identifier-ish" keys that work as `data.foo_bar`.
+        var trimmed = value.Trim();
+        var sb = new System.Text.StringBuilder(trimmed.Length);
+        var previousUnderscore = false;
+        for (var i = 0; i < trimmed.Length; i++)
+        {
+            var ch = trimmed[i];
+            var isOk = (ch is >= 'a' and <= 'z') ||
+                       (ch is >= 'A' and <= 'Z') ||
+                       (ch is >= '0' and <= '9') ||
+                       ch == '_';
+            if (isOk)
+            {
+                sb.Append(ch);
+                previousUnderscore = false;
+                continue;
+            }
+
+            // Common filename separators: dash/dot/space (and anything else) becomes underscore.
+            if (!previousUnderscore)
+            {
+                sb.Append('_');
+                previousUnderscore = true;
+            }
+        }
+
+        var normalized = sb.ToString().Trim('_');
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "data";
+
+        // Scriban identifiers can start with underscore but not with a digit.
+        if (normalized.Length > 0 && normalized[0] is >= '0' and <= '9')
+            normalized = "_" + normalized;
+
+        return normalized;
+    }
+
+    private static void AddNestedData(Dictionary<string, object?> data, string[] segments, object? value, bool overwrite)
     {
         var current = data;
         for (var i = 0; i < segments.Length - 1; i++)
@@ -133,13 +205,31 @@ public static partial class WebSiteBuilder
             var key = segments[i];
             if (!current.TryGetValue(key, out var existing) || existing is not Dictionary<string, object?> child)
             {
+                if (existing is not null && existing is not Dictionary<string, object?>)
+                {
+                    Trace.TraceWarning($"Data key collision: cannot nest under '{key}' because it is already a scalar. Path='{string.Join('/', segments)}'");
+                    return;
+                }
                 child = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 current[key] = child;
             }
             current = child;
         }
 
-        current[segments[^1]] = value;
+        var leaf = segments[^1];
+        if (overwrite)
+        {
+            current[leaf] = value;
+            return;
+        }
+
+        if (current.ContainsKey(leaf))
+        {
+            Trace.TraceWarning($"Data alias collision: '{leaf}' already exists. AliasPath='{string.Join('/', segments)}'");
+            return;
+        }
+
+        current[leaf] = value;
     }
 
     private static object? ConvertJsonElement(JsonElement element)
