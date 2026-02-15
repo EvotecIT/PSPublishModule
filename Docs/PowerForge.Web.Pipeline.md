@@ -721,8 +721,9 @@ Runs `dotnet publish` and (optionally) applies Blazor fixes.
 ```
 
 Notes:
-- `blazorFixes` defaults to `true` in the CLI.
-- Schema uses `noBlazorFixes` today; CLI reads `blazorFixes`. We should align these later.
+- Blazor publish fixes are enabled by default.
+  - Disable via `blazorFixes: false` (alias: `blazor-fixes: false`) or `noBlazorFixes: true` (alias: `no-blazor-fixes: true`).
+- If you specify both `blazorFixes` and `noBlazorFixes`, they must be logically consistent; conflicting values fail the step.
 - `defineConstants` maps to `-p:DefineConstants=...` for multi-variant Blazor publishes.
 - `skipIfProjectMissing` (`skipIfMissingProject`, `skip-if-project-missing`) makes the step succeed with a skip message when the project path is absent (useful for worktree-only/partial checkouts).
 
