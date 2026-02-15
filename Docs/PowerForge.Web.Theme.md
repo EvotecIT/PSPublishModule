@@ -129,7 +129,7 @@ Example:
 Notes:
 - `requiredPartials` and `requiredLayouts` are validated using theme resolution (including `extends`).
 - `requiredSlots` ensures `slots.<name>` exists and resolves to a real partial file.
-- `requiredSurfaces` is only enforced when the site explicitly defines `Navigation.Surfaces`.
+- `requiredSurfaces` requires the site to define `Navigation.Surfaces` explicitly; verify emits a theme-contract warning when surfaces are required but missing.
 - `requiredCssSelectors` is validated by scanning local CSS files:
   - if `cssHrefs` is provided, those hrefs are scanned
   - otherwise, the engine infers CSS from route bundles for representative routes (`/docs/`, `/api/`, `/blog/`)

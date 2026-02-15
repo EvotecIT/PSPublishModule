@@ -37,6 +37,7 @@ public static partial class WebSiteBuilder
 
         var payload = new
         {
+            schemaVersion = 1,
             generated = true,
             primary,
             menus,

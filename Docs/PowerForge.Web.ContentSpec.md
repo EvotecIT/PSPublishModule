@@ -315,8 +315,11 @@ If you provide your own `data/site-nav.json` (for example via `static/data`),
 the generator will **not** overwrite it.
 
 The generated `site-nav.json` also includes:
+- `schemaVersion`: export payload version (allows safe evolution for external consumers)
 - `profiles`: exported `Navigation.Profiles` rules (so other tools can select the same nav your theme uses)
-- `surfaces`: resolved navigation projections for stable "nav surfaces" like `main`, `docs`, `apidocs`, `products`. Use `Navigation.Surfaces` in `site.json` to define/override; each surface captures the selected profile context and resolved menu projections (`primary`, optional `sidebar`, optional `products`).
+- `surfaces`: resolved navigation projections for stable "nav surfaces" like `main`, `docs`, `apidocs`, `products`.
+  - `api` / `apiDocs` are treated as aliases for `apidocs` when validating/normalizing surface names.
+  - Use `Navigation.Surfaces` in `site.json` to define/override; each surface captures the selected profile context and resolved menu projections (`primary`, optional `sidebar`, optional `products`).
 
 ### Markdown-friendly data fields
 Data keys ending with `_md` or `_markdown` are automatically rendered as HTML.
