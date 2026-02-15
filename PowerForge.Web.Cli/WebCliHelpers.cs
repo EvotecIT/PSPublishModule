@@ -20,6 +20,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
         Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--output json]");
         Console.WriteLine("  powerforge-web nav-export --config <site.json> [--out <file>] [--overwrite] [--output json]");
+        Console.WriteLine("  powerforge-web git-sync (--repo <repo> --destination <dir> | --spec <file.json>) [--output json]");
         Console.WriteLine("  powerforge-web publish --config <publish.json> [--output json]");
         Console.WriteLine("  powerforge-web verify --config <site.json> [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
