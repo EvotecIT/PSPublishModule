@@ -1972,6 +1972,7 @@
         "skip-if-project-missing": { "type": "boolean", "description": "Alias of skipIfProjectMissing." },
         "baseHref": { "type": "string" },
         "defineConstants": { "type": "string" },
+        "define-constants": { "type": "string", "description": "Alias of defineConstants." },
         "blazorFixes": { "type": "boolean", "description": "When true, apply Blazor publish fixes (default true when not specified)." },
         "blazor-fixes": { "type": "boolean", "description": "Alias of blazorFixes." },
         "noBlazorFixes": { "type": "boolean", "description": "When true, disable Blazor publish fixes." },

@@ -80,6 +80,47 @@ public class WebPipelineRunnerDotNetStepTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_DotNetPublish_AcceptsOutputAliasAndBlazorFixAliases()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-dotnet-publish-aliases-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "dotnet-publish",
+                      "project": "./src/Missing/Missing.csproj",
+                      "output": "./Artifacts/publish",
+                      "configuration": "Release",
+                      "define-constants": "DOCS_BUILD",
+                      "blazor-fixes": false,
+                      "no-blazor-fixes": true,
+                      "skipIfProjectMissing": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("dotnet publish skipped", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("project path not found", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
