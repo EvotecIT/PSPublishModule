@@ -72,7 +72,7 @@ public sealed class ThemeFeatureContractSpec
 
     /// <summary>
     /// Navigation surfaces expected by the theme (for example: main, docs, apidocs, products).
-    /// Only enforced when the site explicitly defines Navigation.Surfaces.
+    /// Enforced by verify when the site enables the feature; requires the site to define Navigation.Surfaces explicitly.
     /// </summary>
     public string[] RequiredSurfaces { get; set; } = Array.Empty<string>();
 

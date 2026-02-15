@@ -143,11 +143,25 @@ public static partial class WebSiteVerifier
 
         var siteSurfaces = spec.Navigation?.Surfaces ?? Array.Empty<NavigationSurfaceSpec>();
         if (siteSurfaces.Length == 0)
-            return; // only enforce when the site opts into explicit surfaces
+        {
+            var requiredPreview = string.Join(", ", required
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => NormalizeSurfaceName(s))
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(8));
+            if (string.IsNullOrWhiteSpace(requiredPreview))
+                requiredPreview = "main,docs,apidocs";
+
+            warnings.Add($"Theme contract: feature '{feature}' requires nav surfaces ({requiredPreview}), but site.json Navigation.Surfaces is empty. Define explicit surfaces so themes and API docs can resolve navigation deterministically.");
+            return;
+        }
 
         var defined = new HashSet<string>(siteSurfaces
             .Where(s => s is not null && !string.IsNullOrWhiteSpace(s.Name))
-            .Select(s => s.Name.Trim()), StringComparer.OrdinalIgnoreCase);
+            .Select(s => NormalizeSurfaceName(s.Name))
+            .Where(s => !string.IsNullOrWhiteSpace(s)),
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var surface in required)
         {
@@ -155,8 +169,17 @@ public static partial class WebSiteVerifier
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
-            if (!defined.Contains(name))
-                warnings.Add($"Navigation lint: theme requires nav surface '{name}' for feature '{feature}', but site.json Navigation.Surfaces does not define it.");
+            var normalized = NormalizeSurfaceName(name);
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            if (!defined.Contains(normalized))
+            {
+                var display = string.Equals(normalized, name, StringComparison.OrdinalIgnoreCase)
+                    ? normalized
+                    : $"{normalized} (from '{name}')";
+                warnings.Add($"Theme contract: feature '{feature}' requires nav surface '{display}', but site.json Navigation.Surfaces does not define it.");
+            }
         }
     }
 

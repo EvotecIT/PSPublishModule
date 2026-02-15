@@ -34,7 +34,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - set `defaultTheme`
    - set `features` explicitly (for example `["docs","apiDocs","search"]`)
    - define navigation menus + actions
-   - define `Navigation.Surfaces` explicitly (`main`, `docs`, `apidocs`, optional `products`) to keep docs/API navigation deterministic
+   - define `Navigation.Surfaces` explicitly (canonical: `main`, `docs`, `apidocs`, optional `products`; `api` is treated as an alias of `apidocs`) to keep docs/API navigation deterministic
    - configure quality gates:
      - verify: `baseline`, `failOnNewWarnings`
      - audit: `baseline`, `failOnNewIssues`, budgets (`maxTotalFiles`, etc.)

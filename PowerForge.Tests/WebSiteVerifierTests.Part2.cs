@@ -335,6 +335,188 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_ThemeFeatureContracts_WarnWhenRequiredSurfacesMissingAndSiteDoesNotDefineSurfaces()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-required-surfaces-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "required-surfaces-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "required-surfaces-test",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "home",
+                  "features": ["apiDocs"],
+                  "featureContracts": {
+                    "apiDocs": {
+                      "requiredSurfaces": ["api"]
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Theme RequiredSurfaces Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "required-surfaces-test",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[] { new MenuItemSpec { Title = "Home", Url = "/" } }
+                        }
+                    }
+                    // Surfaces intentionally omitted.
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("Theme contract:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("requires nav surfaces", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("Navigation.Surfaces", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_ThemeFeatureContracts_RespectsApiSurfaceAliasesWhenSurfacesAreDefined()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-required-surfaces-alias-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "required-surfaces-alias-test");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "home.html"), "<html>{{ content }}</html>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "required-surfaces-alias-test",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "home",
+                  "features": ["apiDocs"],
+                  "featureContracts": {
+                    "apiDocs": {
+                      "requiredSurfaces": ["api"]
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Theme RequiredSurfaces Alias Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "required-surfaces-alias-test",
+                ThemesRoot = "themes",
+                Features = new[] { "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[] { new MenuItemSpec { Title = "Home", Url = "/" } }
+                        }
+                    },
+                    Surfaces = new[]
+                    {
+                        // Define the API surface using a different alias to ensure normalization works.
+                        new NavigationSurfaceSpec { Name = "apiDocs", Path = "/api/", Layout = "apiDocs", PrimaryMenu = "main" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, w =>
+                w.Contains("requires nav surface", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("api", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains("Navigation.Surfaces", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhenCustomSiteNavIsMissingProfilesAndSurfaces()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-site-nav-shape-" + Guid.NewGuid().ToString("N"));

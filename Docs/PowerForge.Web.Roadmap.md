@@ -184,7 +184,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
   - Surfaces runtime projection: `Navigation.Surfaces` -> `navigation.surfaces`
   - Scriban `pf.*` reference renderer helpers
 - Remaining:
-  - Standardize surface names (minimum: `main`, `docs`, `api`, `products`) in starter docs.
+  - Standardize surface names (canonical: `main`, `docs`, `apidocs`, `products`; treat `api` as alias for `apidocs`) in starter docs.
   - Generate an engine-owned JSON payload suitable as a stable reference renderer input for non-Scriban consumers.
   - Verify:
     - warn in dev, fail in CI when `features` require a surface but site/theme doesn’t provide it.
