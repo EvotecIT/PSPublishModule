@@ -26,6 +26,16 @@
     "TrailingSlash": { "type": "string", "enum": ["always", "never", "ignore"] },
     "ContentRoot": { "type": "string" },
     "ProjectsRoot": { "type": "string" },
+    "Sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/SourceRepoSpec" },
+      "description": "Optional repository sources for `powerforge-web sources-sync` and `powerforge-web build --sync-sources`."
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/SourceRepoSpec" },
+      "description": "Alias for Sources."
+    },
     "ThemesRoot": { "type": "string" },
     "SharedRoot": { "type": "string" },
     "DataRoot": { "type": "string" },
@@ -127,6 +137,56 @@
         "PreserveQuery": { "type": "boolean" }
       },
       "required": ["From", "To"]
+    },
+    "SourceRepoSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Repo": { "type": "string", "description": "Repository URL/path or owner/name shorthand." },
+        "repo": { "type": "string", "description": "Alias for Repo." },
+        "Destination": { "type": "string", "description": "Checkout destination directory (defaults to <ProjectsRoot>/<Slug>)." },
+        "destination": { "type": "string", "description": "Alias for Destination." },
+        "Slug": { "type": "string", "description": "Optional slug used for default destination inference." },
+        "slug": { "type": "string", "description": "Alias for Slug." },
+        "Ref": { "type": "string", "description": "Branch/tag/commit to check out after sync." },
+        "ref": { "type": "string", "description": "Alias for Ref." },
+        "RepoBaseUrl": { "type": "string", "description": "Base URL/path used to expand owner/repo shorthand." },
+        "repoBaseUrl": { "type": "string", "description": "Alias for RepoBaseUrl." },
+        "AuthType": { "type": "string", "description": "Authentication mode: auto (default), token, ssh, or none." },
+        "authType": { "type": "string", "description": "Alias for AuthType." },
+        "TokenEnv": { "type": "string", "description": "Env var containing repository token (default GITHUB_TOKEN)." },
+        "tokenEnv": { "type": "string", "description": "Alias for TokenEnv." },
+        "Token": { "type": "string", "description": "Inline token (discouraged; prefer TokenEnv + CI secrets)." },
+        "token": { "type": "string", "description": "Alias for Token." },
+        "Username": { "type": "string", "description": "Username paired with token for HTTP Basic auth (default x-access-token)." },
+        "username": { "type": "string", "description": "Alias for Username." },
+        "Clean": { "type": "boolean", "description": "When true, delete destination before sync." },
+        "clean": { "type": "boolean", "description": "Alias for Clean." },
+        "Depth": { "type": "integer", "minimum": 0, "description": "Clone depth (0 = full history)." },
+        "depth": { "type": "integer", "minimum": 0, "description": "Alias for Depth." },
+        "FetchTags": { "type": "boolean", "description": "When true, fetch tags when updating an existing checkout." },
+        "fetchTags": { "type": "boolean", "description": "Alias for FetchTags." },
+        "SparseCheckout": { "type": "array", "items": { "type": "string" }, "description": "Sparse checkout include paths/patterns." },
+        "sparseCheckout": { "type": "array", "items": { "type": "string" }, "description": "Alias for SparseCheckout." },
+        "SparsePaths": { "type": "string", "description": "Comma-separated sparse checkout patterns." },
+        "sparsePaths": { "type": "string", "description": "Alias for SparsePaths." },
+        "Submodules": { "type": "boolean", "description": "Initialize/update submodules after sync." },
+        "submodules": { "type": "boolean", "description": "Alias for Submodules." },
+        "SubmodulesRecursive": { "type": "boolean", "description": "When true, update submodules recursively." },
+        "submodulesRecursive": { "type": "boolean", "description": "Alias for SubmodulesRecursive." },
+        "SubmoduleDepth": { "type": "integer", "minimum": 0, "description": "Submodule clone depth (0 = full history)." },
+        "submoduleDepth": { "type": "integer", "minimum": 0, "description": "Alias for SubmoduleDepth." },
+        "TimeoutSeconds": { "type": "integer", "minimum": 1, "description": "Git command timeout in seconds." },
+        "timeoutSeconds": { "type": "integer", "minimum": 1, "description": "Alias for TimeoutSeconds." },
+        "Retry": { "type": "integer", "minimum": 0, "description": "Retry attempts for git command failures." },
+        "retry": { "type": "integer", "minimum": 0, "description": "Alias for Retry." },
+        "RetryDelayMs": { "type": "integer", "minimum": 0, "description": "Delay between retry attempts in milliseconds." },
+        "retryDelayMs": { "type": "integer", "minimum": 0, "description": "Alias for RetryDelayMs." }
+      },
+      "anyOf": [
+        { "required": ["Repo"] },
+        { "required": ["repo"] }
+      ]
     },
     "AssetRegistrySpec": {
       "type": "object",

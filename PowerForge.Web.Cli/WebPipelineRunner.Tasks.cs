@@ -97,6 +97,9 @@ internal static partial class WebPipelineRunner
             case "git-sync":
                 ExecuteGitSync(step, baseDir, logger, stepResult);
                 break;
+            case "sources-sync":
+                ExecuteSourcesSync(step, baseDir, logger, stepResult);
+                break;
             default:
                 stepResult.Success = false;
                 stepResult.Message = "Unknown task";

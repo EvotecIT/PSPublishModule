@@ -1018,6 +1018,21 @@ Notes:
 - `writeManifest` + `manifestPath` can emit a JSON file with resolved refs and destinations for downstream automation.
 - `git-sync` steps are intentionally not cacheable (remote state can change without pipeline spec changes).
 
+#### sources-sync
+Synchronizes `SiteSpec.Sources` from `site.json` using the same implementation as `git-sync`.
+This is a convenience wrapper that lets you declare repos once (in `site.json`) and reuse them in both local builds and CI.
+
+```json
+{ "task": "sources-sync", "config": "./site.json", "lockMode": "update", "writeManifest": true }
+```
+
+Notes:
+- Reads `Sources` from `site.json` and maps each entry to a `git-sync` repo item.
+- Lock/manifest settings are passed through to the underlying `git-sync` implementation (`lockMode`, `lockPath`, `writeManifest`, `manifestPath`).
+- Recommended workflow:
+  - In CI: use `lockMode: verify` with a committed lock file.
+  - In dev: use `lockMode: update` to refresh locks when you intentionally bump refs.
+
 #### overlay
 Copies a static overlay directory into another (useful for Blazor outputs).
 ```json
