@@ -111,6 +111,7 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.True(rootElement.TryGetProperty("outputTypes", out _));
 
             var methods = rootElement.GetProperty("methods");
+            Assert.True(methods[0].GetProperty("includesCommonParameters").GetBoolean());
             var parameters = methods[0].GetProperty("parameters");
             Assert.False(parameters[0].GetProperty("isOptional").GetBoolean());
             Assert.Equal("Name value from command parameters.", parameters[0].GetProperty("summary").GetString());
@@ -127,6 +128,8 @@ public class WebApiDocsGeneratorPowerShellTests
             var html = File.ReadAllText(htmlPath);
             Assert.Contains("type-examples", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
+            Assert.Contains("[&lt;CommonParameters&gt;]", html, StringComparison.Ordinal);
+            Assert.Contains("Common Parameters", html, StringComparison.Ordinal);
             Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);
             Assert.Contains("Category from command parameters.", html, StringComparison.Ordinal);
             Assert.Contains("position: named", html, StringComparison.OrdinalIgnoreCase);
@@ -431,6 +434,93 @@ public class WebApiDocsGeneratorPowerShellTests
             WebApiDocsGenerator.Generate(options);
             using var functionJson = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplefunction.json")));
             Assert.Equal("Function", functionJson.RootElement.GetProperty("kind").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_InfersParameterSetLabelsAndRendersCommonParametersSection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-parameter-sets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleData</command:name>
+                      <maml:description><maml:para>Gets sample data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem parameterSetName="ByName">
+                        <command:name>Get-SampleData</command:name>
+                        <command:parameter required="true" position="named">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                      <command:syntaxItem>
+                        <command:name>Get-SampleData</command:name>
+                        <command:parameter required="true" position="named">
+                          <maml:name>Id</maml:name>
+                          <command:parameterValue required="true">int</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true" position="named">
+                        <maml:name>Name</maml:name>
+                        <maml:description><maml:para>Name selector.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                      </command:parameter>
+                      <command:parameter required="true" position="named">
+                        <maml:name>Id</maml:name>
+                        <maml:description><maml:para>Numeric selector.</maml:para></maml:description>
+                        <command:parameterValue required="true">int</command:parameterValue>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "get-sampledata.json")));
+            var methods = json.RootElement.GetProperty("methods");
+            Assert.Equal(2, methods.GetArrayLength());
+            Assert.Equal("ByName", methods[0].GetProperty("parameterSetName").GetString());
+            Assert.Equal("By Id", methods[1].GetProperty("parameterSetName").GetString());
+            Assert.True(methods[0].GetProperty("includesCommonParameters").GetBoolean());
+            Assert.True(methods[1].GetProperty("includesCommonParameters").GetBoolean());
+            Assert.Contains("[<CommonParameters>]", methods[0].GetProperty("signature").GetString(), StringComparison.Ordinal);
+            Assert.Contains("[<CommonParameters>]", methods[1].GetProperty("signature").GetString(), StringComparison.Ordinal);
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "get-sampledata", "index.html"));
+            Assert.Contains("id=\"common-parameters\"", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("about_CommonParameters", html, StringComparison.Ordinal);
+            Assert.Contains("Parameter set: <code>ByName</code>", html, StringComparison.Ordinal);
+            Assert.Contains("Parameter set: <code>By Id</code>", html, StringComparison.Ordinal);
         }
         finally
         {

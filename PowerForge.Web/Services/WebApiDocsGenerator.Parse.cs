@@ -142,12 +142,13 @@ public static partial class WebApiDocsGenerator
             }
             var commandAliases = ParsePowerShellCommandAliases(command, details, commandNs, mamlNs);
 
+            var commandKind = ResolvePowerShellCommandKind(name!, kindHints, details?.Element(commandNs + "commandType")?.Value);
             var type = new ApiTypeModel
             {
                 Name = name!,
                 FullName = name!,
                 Namespace = moduleName ?? string.Empty,
-                Kind = ResolvePowerShellCommandKind(name!, kindHints, details?.Element(commandNs + "commandType")?.Value),
+                Kind = commandKind,
                 Slug = Slugify(name!),
                 Summary = summary,
                 Remarks = remarks
@@ -161,6 +162,7 @@ public static partial class WebApiDocsGenerator
 
             var syntax = command.Element(commandNs + "syntax");
             var commandParameterMap = BuildPowerShellParameterMap(command, commandNs, mamlNs, devNs);
+            var includesCommonParameters = SupportsPowerShellCommonParameters(command, details, commandNs, mamlNs, commandKind);
             if (syntax is not null)
             {
                 foreach (var syntaxItem in syntax.Elements(commandNs + "syntaxItem"))
@@ -169,6 +171,8 @@ public static partial class WebApiDocsGenerator
                     {
                         Name = name!,
                         Kind = "CommandSyntax",
+                        ParameterSetName = ResolvePowerShellParameterSetName(syntaxItem, commandNs, mamlNs, devNs),
+                        IncludesCommonParameters = includesCommonParameters,
                         Returns = returns,
                         ReturnType = type.OutputTypes.Count == 1 ? type.OutputTypes[0] : null
                     };
@@ -214,9 +218,10 @@ public static partial class WebApiDocsGenerator
                             parameterModel.Aliases.Add(alias);
                         member.Parameters.Add(parameterModel);
                     }
-                    member.Signature = BuildPowerShellSyntaxSignature(name!, member.Parameters);
+                    member.Signature = BuildPowerShellSyntaxSignature(name!, member.Parameters, member.IncludesCommonParameters);
                     type.Methods.Add(member);
                 }
+                AssignPowerShellParameterSetNames(type.Methods);
             }
 
             AppendPowerShellExamples(type, command, commandNs, mamlNs, devNs);
@@ -555,7 +560,148 @@ public static partial class WebApiDocsGenerator
             .ToList();
     }
 
-    private static string BuildPowerShellSyntaxSignature(string commandName, IReadOnlyList<ApiParameterModel> parameters)
+    private static bool SupportsPowerShellCommonParameters(
+        XElement command,
+        XElement? details,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        string? commandKind)
+    {
+        if (string.Equals(commandKind, "Alias", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(commandKind, "About", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (string.Equals(commandKind, "Cmdlet", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(commandKind, "Function", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(commandKind, "Command", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var detailsText = details?.Value ?? string.Empty;
+        var descriptionText = command.Element(mamlNs + "description")?.Value ?? string.Empty;
+        var linksText = command.Element(commandNs + "relatedLinks")?.Value ?? string.Empty;
+        var combined = string.Join("\n", new[] { detailsText, descriptionText, linksText });
+        return combined.Contains("about_CommonParameters", StringComparison.OrdinalIgnoreCase) ||
+               combined.Contains("common parameter", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ResolvePowerShellParameterSetName(
+        XElement syntaxItem,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
+    {
+        if (syntaxItem is null)
+            return null;
+
+        var candidates = new[]
+        {
+            syntaxItem.Attribute("parameterSetName")?.Value,
+            syntaxItem.Attribute("setName")?.Value,
+            syntaxItem.Element(commandNs + "parameterSetName")?.Value,
+            syntaxItem.Element(mamlNs + "parameterSetName")?.Value,
+            syntaxItem.Element(devNs + "parameterSetName")?.Value
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var normalized = candidate.Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+                continue;
+
+            if (normalized.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
+                return "All Parameter Sets";
+            if (normalized.Equals("(All)", StringComparison.OrdinalIgnoreCase))
+                return "All Parameter Sets";
+            return normalized;
+        }
+
+        return null;
+    }
+
+    private static void AssignPowerShellParameterSetNames(List<ApiMemberModel> members)
+    {
+        if (members is null || members.Count <= 1)
+            return;
+
+        var parameterSets = members
+            .Select(member => new HashSet<string>(
+                member.Parameters
+                    .Where(static parameter => !string.IsNullOrWhiteSpace(parameter.Name))
+                    .Select(static parameter => parameter.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        var requiredParameterSets = members
+            .Select(member => new HashSet<string>(
+                member.Parameters
+                    .Where(static parameter => !parameter.IsOptional && !string.IsNullOrWhiteSpace(parameter.Name))
+                    .Select(static parameter => parameter.Name.Trim()),
+                StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        for (var index = 0; index < members.Count; index++)
+        {
+            if (!string.IsNullOrWhiteSpace(members[index].ParameterSetName))
+                continue;
+
+            var uniqueRequired = GetPowerShellUniqueParameterNames(requiredParameterSets, index);
+            if (uniqueRequired.Count > 0)
+            {
+                members[index].ParameterSetName = "By " + string.Join(" + ", uniqueRequired);
+                continue;
+            }
+
+            var uniqueAny = GetPowerShellUniqueParameterNames(parameterSets, index);
+            if (uniqueAny.Count > 0)
+            {
+                members[index].ParameterSetName = "By " + string.Join(" + ", uniqueAny);
+                continue;
+            }
+
+            members[index].ParameterSetName = $"Set {index + 1}";
+        }
+
+        var seen = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in members)
+        {
+            if (string.IsNullOrWhiteSpace(member.ParameterSetName))
+                continue;
+
+            if (!seen.TryAdd(member.ParameterSetName, 1))
+            {
+                seen[member.ParameterSetName]++;
+                member.ParameterSetName = $"{member.ParameterSetName} ({seen[member.ParameterSetName]})";
+            }
+        }
+    }
+
+    private static List<string> GetPowerShellUniqueParameterNames(List<HashSet<string>> sets, int currentIndex)
+    {
+        if (sets is null || currentIndex < 0 || currentIndex >= sets.Count)
+            return new List<string>();
+
+        var current = sets[currentIndex];
+        if (current.Count == 0)
+            return new List<string>();
+
+        var unique = current
+            .Where(parameterName => sets
+                .Where((_, index) => index != currentIndex)
+                .All(other => !other.Contains(parameterName)))
+            .OrderBy(parameterName => parameterName, StringComparer.OrdinalIgnoreCase)
+            .Take(2)
+            .ToList();
+
+        return unique;
+    }
+
+    private static string BuildPowerShellSyntaxSignature(
+        string commandName,
+        IReadOnlyList<ApiParameterModel> parameters,
+        bool includeCommonParameters = false)
     {
         var parts = new List<string> { commandName };
         foreach (var parameter in parameters)
@@ -578,6 +724,9 @@ public static partial class WebApiDocsGenerator
 
             parts.Add(token);
         }
+
+        if (includeCommonParameters)
+            parts.Add("[<CommonParameters>]");
 
         return string.Join(" ", parts);
     }

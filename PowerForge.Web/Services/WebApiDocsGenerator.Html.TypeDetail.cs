@@ -31,6 +31,7 @@ public static partial class WebApiDocsGenerator
         var methodSectionId = isPowerShellCommand ? "syntax" : "methods";
         var memberFilterLabel = isPowerShellCommand ? "Filter syntax" : "Filter members";
         var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
+        var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
         var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
         sb.AppendLine("    <article class=\"type-detail\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
@@ -251,6 +252,17 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("      </section>");
         }
 
+        if (hasPowerShellCommonParameters)
+        {
+            var commonParametersLink = ResolvePowerShellCommonParametersUrl(baseUrl, slugMap);
+            var commonParametersLinkTarget = IsExternal(commonParametersLink) ? " target=\"_blank\" rel=\"noopener\"" : string.Empty;
+            sb.AppendLine("      <section class=\"type-common-parameters\" id=\"common-parameters\">");
+            sb.AppendLine("        <h2>Common Parameters</h2>");
+            sb.AppendLine("        <p>This command supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.</p>");
+            sb.AppendLine($"        <p>For more information, see <a href=\"{System.Web.HttpUtility.HtmlAttributeEncode(commonParametersLink)}\"{commonParametersLinkTarget}>about_CommonParameters</a>.</p>");
+            sb.AppendLine("      </section>");
+        }
+
         var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
         if (totalMembers > 0)
         {
@@ -413,7 +425,7 @@ public static partial class WebApiDocsGenerator
         var signature = !string.IsNullOrWhiteSpace(member.Signature)
             ? member.Signature
             : BuildSignature(member, sectionLabel);
-        var search = $"{member.Name} {signature} {member.Summary}".Trim();
+        var search = $"{member.Name} {signature} {member.Summary} {member.ParameterSetName}".Trim();
         var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
         var inherited = member.IsInherited ? "true" : "false";
         var inheritedNote = member.IsInherited && !string.IsNullOrWhiteSpace(member.DeclaringType)
@@ -425,6 +437,8 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
         sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
         sb.AppendLine("          </div>");
+        if (string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(member.ParameterSetName))
+            sb.AppendLine($"          <div class=\"member-parameter-set\">Parameter set: <code>{System.Web.HttpUtility.HtmlEncode(member.ParameterSetName)}</code></div>");
         if (member.Source is not null)
             sb.AppendLine($"          <div class=\"member-source\">{RenderSourceLink(member.Source)}</div>");
         if (!string.IsNullOrWhiteSpace(member.ReturnType) && (sectionLabel.Contains("Method") || memberKind == "extension"))
@@ -598,7 +612,7 @@ public static partial class WebApiDocsGenerator
         }
         if (section == "Syntax")
         {
-            return BuildPowerShellSyntaxSignature(displayName, member.Parameters);
+            return BuildPowerShellSyntaxSignature(displayName, member.Parameters, member.IncludesCommonParameters);
         }
 
         if (!string.IsNullOrWhiteSpace(member.ReturnType))
@@ -635,6 +649,14 @@ public static partial class WebApiDocsGenerator
         }
 
         return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
+    }
+
+    private static string ResolvePowerShellCommonParametersUrl(string baseUrl, IReadOnlyDictionary<string, string> slugMap)
+    {
+        if (slugMap.TryGetValue("about_CommonParameters", out var slug))
+            return BuildDocsTypeUrl(baseUrl, slug);
+
+        return "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_commonparameters";
     }
 
     private static string BuildMemberPrefix(ApiMemberModel member)

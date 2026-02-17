@@ -415,6 +415,8 @@ public static partial class WebApiDocsGenerator
                     ["displayName"] = m.DisplayName,
                     ["summary"] = m.Summary,
                     ["kind"] = m.Kind,
+                    ["parameterSetName"] = m.ParameterSetName,
+                    ["includesCommonParameters"] = m.IncludesCommonParameters,
                     ["signature"] = m.Signature,
                     ["returnType"] = m.ReturnType,
                     ["declaringType"] = m.DeclaringType,
