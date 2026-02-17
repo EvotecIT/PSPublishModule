@@ -260,9 +260,10 @@ internal static partial class WebPipelineRunner
     private static void AppendAssemblyFingerprint(List<string> parts, string label, Assembly assembly)
     {
         var name = assembly.GetName();
+        var assemblyName = name.Name ?? "unknown";
         var version = name.Version?.ToString() ?? "0.0.0.0";
         var infoVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? string.Empty;
         var mvid = assembly.ManifestModule.ModuleVersionId.ToString("N");
-        parts.Add($"{label}:{name.Name}:{version}:{infoVersion}:{mvid}");
+        parts.Add($"{label}:{assemblyName}:{version}:{infoVersion}:{mvid}");
     }
 }
