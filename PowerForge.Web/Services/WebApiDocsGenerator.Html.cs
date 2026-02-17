@@ -29,9 +29,11 @@ public static partial class WebApiDocsGenerator
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
         var criticalCss = ResolveCriticalCss(options, warnings);
+        var codeLanguage = GetDefaultCodeLanguage(options);
+        var (prismCss, prismScripts) = BuildApiPrismAssets(options, codeLanguage);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
-        var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);
+        var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var typeLinks = new StringBuilder();
@@ -39,7 +41,9 @@ public static partial class WebApiDocsGenerator
         {
             typeLinks.AppendLine($"      <a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
         }
-        var searchScript = WrapScript(LoadAsset(options, "search.js", options.SearchScriptPath));
+        var searchScript = JoinHtmlFragments(
+            WrapScript(LoadAsset(options, "search.js", options.SearchScriptPath)),
+            prismScripts);
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
@@ -61,7 +65,6 @@ public static partial class WebApiDocsGenerator
         foreach (var type in types)
         {
             var memberHtml = new StringBuilder();
-            var codeLanguage = GetDefaultCodeLanguage(options);
             AppendMembers(memberHtml, "Methods", type.Methods, codeLanguage);
             AppendMembers(memberHtml, "Properties", type.Properties, codeLanguage);
             AppendMembers(memberHtml, "Fields", type.Fields, codeLanguage);
@@ -88,7 +91,8 @@ public static partial class WebApiDocsGenerator
                 ["BODY_CLASS"] = bodyClass,
                 ["TYPE_SUMMARY"] = summaryHtml,
                 ["TYPE_REMARKS"] = remarksHtml,
-                ["MEMBERS"] = memberHtml.ToString().TrimEnd()
+                ["MEMBERS"] = memberHtml.ToString().TrimEnd(),
+                ["TYPE_SCRIPT"] = prismScripts
             });
 
             File.WriteAllText(Path.Combine(typesDir, $"{type.Slug}.html"), typeHtml, Encoding.UTF8);
@@ -106,12 +110,16 @@ public static partial class WebApiDocsGenerator
         ApplyNavTokens(options, warnings, ref header, ref footer);
         var bodyClass = ResolveBodyClass(options.BodyClass);
         var criticalCss = ResolveCriticalCss(options, warnings);
+        var codeLanguage = GetDefaultCodeLanguage(options);
+        var (prismCss, prismScripts) = BuildApiPrismAssets(options, codeLanguage);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
-        var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);
+        var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
-        var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
+        var docsScript = JoinHtmlFragments(
+            WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath)),
+            prismScripts);
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames);
@@ -143,7 +151,7 @@ public static partial class WebApiDocsGenerator
             var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl, typeDisplayNames);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
             var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, GetDefaultCodeLanguage(options), displayName);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, codeLanguage, displayName);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{displayName} - {options.Title}";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
@@ -315,14 +323,149 @@ public static partial class WebApiDocsGenerator
         return sb.ToString();
     }
 
-    private static string BuildCssBlockWithFallback(string fallbackCss, string cssLinks)
+    private static string BuildCssBlockWithFallback(string fallbackCss, string cssLinks, string extraCssLinks = "")
     {
         var fallbackBlock = WrapStyle(fallbackCss);
-        if (string.IsNullOrWhiteSpace(cssLinks))
-            return fallbackBlock;
-        if (string.IsNullOrWhiteSpace(fallbackBlock))
-            return cssLinks;
-        return $"{fallbackBlock}{Environment.NewLine}{cssLinks}";
+        return JoinHtmlFragments(fallbackBlock, cssLinks, extraCssLinks);
+    }
+
+    private static string JoinHtmlFragments(params string?[] fragments)
+    {
+        var parts = fragments
+            .Where(static fragment => !string.IsNullOrWhiteSpace(fragment))
+            .Select(static fragment => fragment!.Trim())
+            .ToList();
+        return parts.Count == 0 ? string.Empty : string.Join(Environment.NewLine, parts);
+    }
+
+    private static (string cssLinks, string scripts) BuildApiPrismAssets(WebApiDocsOptions options, string codeLanguage)
+    {
+        if (options is null || !options.InjectPrismAssets || string.IsNullOrWhiteSpace(codeLanguage))
+            return (string.Empty, string.Empty);
+        if (string.Equals(options.Prism?.Mode, "off", StringComparison.OrdinalIgnoreCase))
+            return (string.Empty, string.Empty);
+
+        var source = options.Prism?.Source;
+        if (string.IsNullOrWhiteSpace(source))
+            source = options.AssetPolicyMode;
+        if (string.IsNullOrWhiteSpace(source))
+            source = "cdn";
+
+        var useLocal = source.Equals("local", StringComparison.OrdinalIgnoreCase) ||
+                       source.Equals("hybrid", StringComparison.OrdinalIgnoreCase);
+
+        if (useLocal)
+        {
+            var local = options.Prism?.Local;
+            var light = ResolveApiPrismThemeHref(
+                local?.ThemeLight ?? options.Prism?.ThemeLight,
+                isCdn: false,
+                cdnBase: null,
+                defaultCdnName: "prism",
+                defaultLocalPath: "/assets/prism/prism.css");
+            var dark = ResolveApiPrismThemeHref(
+                local?.ThemeDark ?? options.Prism?.ThemeDark,
+                isCdn: false,
+                cdnBase: null,
+                defaultCdnName: "prism-okaidia",
+                defaultLocalPath: "/assets/prism/prism-okaidia.css");
+            var core = local?.Core ?? "/assets/prism/prism-core.js";
+            var autoloader = local?.Autoloader ?? "/assets/prism/prism-autoloader.js";
+            var languagesPath = local?.LanguagesPath ?? "/assets/prism/components/";
+
+            var css = JoinHtmlFragments(
+                $"<link rel=\"stylesheet\" href=\"{light}\" media=\"(prefers-color-scheme: light)\" />",
+                $"<link rel=\"stylesheet\" href=\"{dark}\" media=\"(prefers-color-scheme: dark)\" />");
+            var scripts = JoinHtmlFragments(
+                $"<script src=\"{core}\"></script>",
+                $"<script src=\"{autoloader}\"></script>",
+                BuildApiPrismInitScript(languagesPath));
+            return (css, scripts);
+        }
+
+        var cdn = options.Prism?.CdnBase;
+        if (string.IsNullOrWhiteSpace(cdn))
+            cdn = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
+        cdn = cdn.TrimEnd('/');
+
+        var cdnLight = ResolveApiPrismThemeHref(
+            options.Prism?.ThemeLight,
+            isCdn: true,
+            cdnBase: cdn,
+            defaultCdnName: "prism",
+            defaultLocalPath: "/assets/prism/prism.css");
+        var cdnDark = ResolveApiPrismThemeHref(
+            options.Prism?.ThemeDark,
+            isCdn: true,
+            cdnBase: cdn,
+            defaultCdnName: "prism-okaidia",
+            defaultLocalPath: "/assets/prism/prism-okaidia.css");
+        var cssLinks = JoinHtmlFragments(
+            $"<link rel=\"stylesheet\" href=\"{cdnLight}\" media=\"(prefers-color-scheme: light)\" />",
+            $"<link rel=\"stylesheet\" href=\"{cdnDark}\" media=\"(prefers-color-scheme: dark)\" />");
+        var scriptsLinks = JoinHtmlFragments(
+            $"<script src=\"{cdn}/components/prism-core.min.js\"></script>",
+            $"<script src=\"{cdn}/plugins/autoloader/prism-autoloader.min.js\"></script>",
+            BuildApiPrismInitScript($"{cdn}/components/"));
+        return (cssLinks, scriptsLinks);
+    }
+
+    private static string ResolveApiPrismThemeHref(
+        string? value,
+        bool isCdn,
+        string? cdnBase,
+        string defaultCdnName,
+        string defaultLocalPath)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            if (!isCdn)
+                return defaultLocalPath;
+            var cdn = (cdnBase ?? string.Empty).TrimEnd('/');
+            return $"{cdn}/themes/{defaultCdnName}.min.css";
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            return trimmed;
+
+        if (trimmed.Contains("/", StringComparison.Ordinal))
+            return "/" + trimmed.TrimStart('/');
+
+        if (!isCdn)
+        {
+            if (trimmed.EndsWith(".css", StringComparison.OrdinalIgnoreCase))
+                return "/" + trimmed.TrimStart('/');
+            return "/assets/prism/prism-" + trimmed + ".css";
+        }
+
+        var name = trimmed.EndsWith(".css", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^4]
+            : trimmed;
+        var cdnRoot = (cdnBase ?? string.Empty).TrimEnd('/');
+        return $"{cdnRoot}/themes/{name}.min.css";
+    }
+
+    private static string BuildApiPrismInitScript(string languagesPath)
+    {
+        var safePath = (languagesPath ?? string.Empty).Replace("'", "\\'", StringComparison.Ordinal);
+        return
+            "<script>(function(){" +
+            "var p=window.Prism;" +
+            "if(!p){return;}" +
+            "if(p.plugins&&p.plugins.autoloader){p.plugins.autoloader.languages_path='" + safePath + "';}" +
+            "var run=function(){" +
+            "var root=document.querySelector('.api-content')||document;" +
+            "if(!root.querySelector('code[class*=\\\"language-\\\"]')){return;}" +
+            "if(p.highlightAllUnder){p.highlightAllUnder(root);}else{p.highlightAll();}" +
+            "};" +
+            "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{run();}" +
+            "})();</script>";
     }
 
     private static string[] SplitCssHrefs(string? cssHref)

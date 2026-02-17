@@ -29,6 +29,8 @@ internal static partial class WebPipelineRunner
         }
 
         string? injectedCriticalCssHtml = null;
+        PrismSpec? prismSpec = null;
+        string? assetPolicyMode = null;
 
         var typeText = GetString(step, "type");
         var xml = ResolvePath(baseDir, GetString(step, "xml"));
@@ -215,6 +217,17 @@ internal static partial class WebPipelineRunner
                     // Best-effort: critical CSS injection is optional.
                 }
             }
+
+            try
+            {
+                var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+                prismSpec = spec.Prism;
+                assetPolicyMode = spec.AssetPolicy?.Mode;
+            }
+            catch
+            {
+                // Best-effort: API docs can still fall back to default Prism CDN settings.
+            }
         }
 
         var options = new WebApiDocsOptions
@@ -243,6 +256,9 @@ internal static partial class WebPipelineRunner
             DocsHomeUrl = docsHome,
             SidebarPosition = sidebar,
             BodyClass = bodyClass,
+            InjectPrismAssets = GetBool(step, "injectPrism") ?? GetBool(step, "inject-prism") ?? true,
+            Prism = prismSpec,
+            AssetPolicyMode = assetPolicyMode,
             DisplayNameMode = displayNameMode,
             SourceRootPath = sourceRoot,
             SourcePathPrefix = sourcePathPrefix,

@@ -128,6 +128,11 @@ public class WebApiDocsGeneratorPowerShellTests
             var html = File.ReadAllText(htmlPath);
             Assert.Contains("type-examples", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
+            Assert.Contains("<pre class=\"member-signature language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<pre class=\"language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("prism-core.min.js", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("[&lt;CommonParameters&gt;]", html, StringComparison.Ordinal);
             Assert.Contains("Common Parameters", html, StringComparison.Ordinal);
             Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);

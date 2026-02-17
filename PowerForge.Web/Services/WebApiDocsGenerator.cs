@@ -32,8 +32,14 @@ public sealed class WebApiDocsOptions
       public string? DocsHomeUrl { get; set; }
       /// <summary>Sidebar position for docs template (left or right).</summary>
       public string? SidebarPosition { get; set; }
-      /// <summary>Optional CSS class applied to the &lt;body&gt; element.</summary>
-      public string? BodyClass { get; set; }
+    /// <summary>Optional CSS class applied to the &lt;body&gt; element.</summary>
+    public string? BodyClass { get; set; }
+    /// <summary>Whether Prism assets should be injected for API code highlighting.</summary>
+    public bool InjectPrismAssets { get; set; } = true;
+    /// <summary>Optional Prism configuration inherited from site settings.</summary>
+    public PrismSpec? Prism { get; set; }
+    /// <summary>Optional global asset policy mode (used when Prism source is not explicitly set).</summary>
+    public string? AssetPolicyMode { get; set; }
     /// <summary>Output format hint (json, html, hybrid, both).</summary>
     public string? Format { get; set; }
     /// <summary>Optional stylesheet href for HTML output.</summary>
@@ -223,6 +229,7 @@ public static partial class WebApiDocsGenerator
         ".filter-button",
         ".member-card",
         ".member-signature",
+        ".member-header pre.member-signature",
         ".member-card pre::-webkit-scrollbar",
         ".member-card pre::-webkit-scrollbar-track",
         ".member-card pre::-webkit-scrollbar-thumb"
