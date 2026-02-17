@@ -369,6 +369,22 @@ public static partial class WebApiDocsGenerator
                     aliases.Add($"{module}:{command}.{paramName}");
                     aliases.Add($"{module}::{command}.{paramName}");
                 }
+                if (parameter?.Aliases is not null)
+                {
+                    foreach (var parameterAlias in parameter.Aliases)
+                    {
+                        if (string.IsNullOrWhiteSpace(parameterAlias))
+                            continue;
+                        aliases.Add($"{command}.{parameterAlias}");
+                        aliases.Add($"{command}/-{parameterAlias}");
+                        aliases.Add($"param:{command}.{parameterAlias}");
+                        if (!string.IsNullOrWhiteSpace(module))
+                        {
+                            aliases.Add($"{module}\\{command}.{parameterAlias}");
+                            aliases.Add($"{module}:{command}.{parameterAlias}");
+                        }
+                    }
+                }
 
                 refs[uid] = new ApiXrefReference
                 {
