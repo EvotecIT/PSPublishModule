@@ -426,6 +426,17 @@ public static partial class WebApiDocsGenerator
         }
 
         var trimmed = value.Trim();
+        if (!trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase) &&
+            trimmed.Contains("..", StringComparison.Ordinal))
+        {
+            if (!isCdn)
+                return defaultLocalPath;
+            var safeCdn = (cdnBase ?? string.Empty).TrimEnd('/');
+            return $"{safeCdn}/themes/{defaultCdnName}.min.css";
+        }
+
         if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("//", StringComparison.OrdinalIgnoreCase))
@@ -462,7 +473,8 @@ public static partial class WebApiDocsGenerator
             "var run=function(){" +
             "var root=document.querySelector('.api-content')||document;" +
             "if(!root.querySelector('code[class*=\\\"language-\\\"]')){return;}" +
-            "if(p.highlightAllUnder){p.highlightAllUnder(root);}else{p.highlightAll();}" +
+            "try{if(p.highlightAllUnder){p.highlightAllUnder(root);}else{p.highlightAll();}}" +
+            "catch(e){if(window.console&&console.warn){console.warn('Prism highlighting failed.',e);}}" +
             "};" +
             "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{run();}" +
             "})();</script>";
