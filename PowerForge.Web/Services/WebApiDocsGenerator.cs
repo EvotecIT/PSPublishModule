@@ -203,6 +203,8 @@ public static partial class WebApiDocsGenerator
     private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>[^\\]]+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HrefTokenRegex = new("\\[\\[href:(?<url>[^|\\]]+)\\|(?<label>[^\\]]*)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex AboutTokenRegex = new("\\babout_[A-Za-z0-9_.-]+\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, RegexTimeout);
+    private static readonly Regex ParagraphSplitRegex = new("\\n\\s*\\n", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ParagraphLineBreakNormalizeRegex = new("\\s*\\n\\s*", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 
     // Minimal selector contract: enough to catch "API generator added new structure but theme CSS didn't follow".
     private static readonly string[] RequiredSelectorsSimple = { ".pf-api", ".pf-api-search", ".pf-api-types", ".pf-api-type", ".pf-api-section" };
@@ -379,8 +381,11 @@ public static partial class WebApiDocsGenerator
                 ["name"] = type.Name,
                 ["displayName"] = displayName,
                 ["aliases"] = aliases,
+                ["commandAliases"] = type.Aliases,
                 ["fullName"] = type.FullName,
                 ["namespace"] = type.Namespace,
+                ["inputTypes"] = type.InputTypes,
+                ["outputTypes"] = type.OutputTypes,
                 ["assembly"] = type.Assembly,
                 ["source"] = BuildSourceJson(type.Source),
                 ["baseType"] = type.BaseType,
@@ -445,6 +450,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = p.Name,
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
+                        ["aliases"] = p.Aliases,
                         ["isOptional"] = p.IsOptional,
                         ["defaultValue"] = p.DefaultValue,
                         ["position"] = p.Position,
@@ -491,6 +497,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = p.Name,
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
+                        ["aliases"] = p.Aliases,
                         ["isOptional"] = p.IsOptional,
                         ["defaultValue"] = p.DefaultValue,
                         ["position"] = p.Position,
@@ -619,8 +626,11 @@ public static partial class WebApiDocsGenerator
                         ["name"] = p.Name,
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
+                        ["aliases"] = p.Aliases,
                         ["isOptional"] = p.IsOptional,
-                        ["defaultValue"] = p.DefaultValue
+                        ["defaultValue"] = p.DefaultValue,
+                        ["position"] = p.Position,
+                        ["pipelineInput"] = p.PipelineInput
                     }).ToList()
                 }).ToList()
             };

@@ -26,6 +26,9 @@ public static partial class WebApiDocsGenerator
         public string Name { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string Namespace { get; set; } = string.Empty;
+        public List<string> Aliases { get; } = new();
+        public List<string> InputTypes { get; } = new();
+        public List<string> OutputTypes { get; } = new();
         public string? Assembly { get; set; }
         public ApiSourceLink? Source { get; set; }
         public string? BaseType { get; set; }
@@ -81,6 +84,7 @@ public static partial class WebApiDocsGenerator
         public string Name { get; set; } = string.Empty;
         public string? Type { get; set; }
         public string? Summary { get; set; }
+        public List<string> Aliases { get; } = new();
         public bool IsOptional { get; set; }
         public string? DefaultValue { get; set; }
         public string? Position { get; set; }

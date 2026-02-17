@@ -108,6 +108,9 @@ public static partial class WebApiDocsGenerator
 
     private static List<(string id, string label)> BuildTypeToc(ApiTypeModel type, bool hasInheritance, bool hasDerived)
     {
+        var isPowerShellCommand = IsPowerShellCommandType(type);
+        var methodSectionId = isPowerShellCommand ? "syntax" : "methods";
+        var methodSectionLabel = isPowerShellCommand ? "Syntax" : "Methods";
         var list = new List<(string id, string label)>
         {
             ("overview", "Overview")
@@ -127,7 +130,7 @@ public static partial class WebApiDocsGenerator
         if (type.Constructors.Count > 0)
             list.Add(("constructors", "Constructors"));
         if (type.Methods.Count > 0)
-            list.Add(("methods", "Methods"));
+            list.Add((methodSectionId, methodSectionLabel));
         if (type.Properties.Count > 0)
             list.Add(("properties", "Properties"));
         if (type.Fields.Count > 0)

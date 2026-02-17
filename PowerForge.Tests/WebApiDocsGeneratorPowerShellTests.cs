@@ -95,11 +95,20 @@ public class WebApiDocsGeneratorPowerShellTests
             var examples = rootElement.GetProperty("examples");
             Assert.True(examples.GetArrayLength() >= 2);
             Assert.Contains(examples.EnumerateArray(),
-                ex => ex.GetProperty("kind").GetString() == "text" &&
-                      ex.GetProperty("text").GetString()!.Contains("Example 1: Basic usage.", StringComparison.Ordinal));
+                ex =>
+                {
+                    var kind = ex.GetProperty("kind").GetString();
+                    return (string.Equals(kind, "heading", StringComparison.Ordinal) ||
+                           string.Equals(kind, "text", StringComparison.Ordinal)) &&
+                           ex.GetProperty("text").GetString()!.Contains("Example 1: Basic usage.", StringComparison.Ordinal);
+                });
+            Assert.Contains(examples.EnumerateArray(),
+                ex => ex.GetProperty("kind").GetString() == "heading");
             Assert.Contains(examples.EnumerateArray(),
                 ex => ex.GetProperty("kind").GetString() == "code" &&
                       ex.GetProperty("text").GetString()!.Contains("New-SampleCmdlet -Name \"Demo\"", StringComparison.Ordinal));
+            Assert.True(rootElement.TryGetProperty("inputTypes", out _));
+            Assert.True(rootElement.TryGetProperty("outputTypes", out _));
 
             var methods = rootElement.GetProperty("methods");
             var parameters = methods[0].GetProperty("parameters");
