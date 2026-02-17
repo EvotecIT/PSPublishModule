@@ -80,8 +80,16 @@ public sealed class WebApiDocsOptions
     public string? SiteName { get; set; }
     /// <summary>Optional social preview image URL override for generated API HTML pages.</summary>
     public string? SocialImage { get; set; }
+    /// <summary>Optional social preview image width for generated API HTML pages.</summary>
+    public int? SocialImageWidth { get; set; }
+    /// <summary>Optional social preview image height for generated API HTML pages.</summary>
+    public int? SocialImageHeight { get; set; }
     /// <summary>Optional Twitter card override for generated API HTML pages.</summary>
     public string? SocialTwitterCard { get; set; }
+    /// <summary>Optional Twitter site handle override (for example: @myproject).</summary>
+    public string? SocialTwitterSite { get; set; }
+    /// <summary>Optional Twitter creator handle override (for example: @author).</summary>
+    public string? SocialTwitterCreator { get; set; }
     /// <summary>When true, generate per-page API social card PNG files from page content.</summary>
     public bool AutoGenerateSocialCards { get; set; }
     /// <summary>Output URL prefix for generated API social card files.</summary>

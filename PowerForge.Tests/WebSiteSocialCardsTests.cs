@@ -27,7 +27,11 @@ public class WebSiteSocialCardsTests
                 Enabled = true,
                 SiteName = "Example Site",
                 Image = "/assets/social/card.png",
-                TwitterCard = "summary_large_image"
+                ImageWidth = 1200,
+                ImageHeight = 630,
+                TwitterCard = "summary_large_image",
+                TwitterSite = "evotecit",
+                TwitterCreator = "@exampleAuthor"
             };
 
             var html = BuildAndRead(root, spec, "index.html");
@@ -36,7 +40,11 @@ public class WebSiteSocialCardsTests
             Assert.Contains("property=\"og:type\" content=\"website\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/card.png\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image:alt\" content=\"Home\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:width\" content=\"1200\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:height\" content=\"630\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:card\" content=\"summary_large_image\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:site\" content=\"@evotecit\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:creator\" content=\"@exampleAuthor\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image:alt\" content=\"Home\"", html, StringComparison.Ordinal);
         }
@@ -191,6 +199,8 @@ public class WebSiteSocialCardsTests
             var relativePath = imageUrl.Replace("https://example.test/", string.Empty, StringComparison.Ordinal);
             var generatedPath = Path.Combine(root, "_site", relativePath.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(generatedPath), $"Generated social card missing: {generatedPath}");
+            Assert.Contains("property=\"og:image:width\" content=\"1200\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:height\" content=\"630\"", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -270,7 +280,9 @@ public class WebSiteSocialCardsTests
             };
 
             var html = BuildAndRead(root, spec, "index.html");
-            Assert.Contains("\"@type\": \"BreadcrumbList\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"@type\":\"BreadcrumbList\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"@type\":\"WebSite\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"@type\":\"Organization\"", html, StringComparison.Ordinal);
         }
         finally
         {
@@ -303,7 +315,71 @@ public class WebSiteSocialCardsTests
             };
 
             var html = BuildAndRead(root, spec, "index.html");
-            Assert.DoesNotContain("\"@type\": \"BreadcrumbList\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"@type\":\"BreadcrumbList\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"@type\":\"WebSite\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"@type\":\"Organization\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_EmitsArticleStructuredData_ForBlogPages()
+    {
+        var root = CreateTempRoot("pf-web-structured-article-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "ship-log.md"),
+                """
+                ---
+                title: Ship Log
+                slug: ship-log
+                date: 2026-02-17
+                ---
+
+                Shipping updates.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "pages",
+                    Input = "content/pages",
+                    Output = "/"
+                },
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Input = "content/blog",
+                    Output = "/blog"
+                }
+            };
+            spec.StructuredData = new StructuredDataSpec
+            {
+                Enabled = true,
+                Breadcrumbs = true,
+                Article = true
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("blog", "ship-log", "index.html"));
+            Assert.Contains("\"@type\":\"Article\"", html, StringComparison.Ordinal);
+            Assert.Contains("\"headline\":\"Ship Log\"", html, StringComparison.Ordinal);
         }
         finally
         {

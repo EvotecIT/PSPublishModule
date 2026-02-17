@@ -37,6 +37,8 @@ public sealed class WebAuditOptions
     public bool CheckMediaEmbeds { get; set; } = true;
     /// <summary>When true, detect heading level skips (for example h2 -> h4).</summary>
     public bool CheckHeadingOrder { get; set; } = true;
+    /// <summary>When true, validate canonical/OpenGraph/Twitter metadata consistency.</summary>
+    public bool CheckSeoMeta { get; set; }
     /// <summary>When true, warn when the same link label points to multiple destinations.</summary>
     public bool CheckLinkPurposeConsistency { get; set; } = true;
     /// <summary>When true, validate internal links.</summary>

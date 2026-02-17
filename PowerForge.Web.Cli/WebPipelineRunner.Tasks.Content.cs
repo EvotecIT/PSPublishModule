@@ -96,7 +96,11 @@ internal static partial class WebPipelineRunner
                               GetString(step, "quick-start-types") ?? GetString(step, "quickstart-types");
         var siteName = GetString(step, "siteName") ?? GetString(step, "site-name");
         var socialImage = GetString(step, "socialImage") ?? GetString(step, "social-image");
+        var socialImageWidth = GetInt(step, "socialImageWidth") ?? GetInt(step, "social-image-width");
+        var socialImageHeight = GetInt(step, "socialImageHeight") ?? GetInt(step, "social-image-height");
         var socialTwitterCard = GetString(step, "socialTwitterCard") ?? GetString(step, "social-twitter-card");
+        var socialTwitterSite = GetString(step, "socialTwitterSite") ?? GetString(step, "social-twitter-site");
+        var socialTwitterCreator = GetString(step, "socialTwitterCreator") ?? GetString(step, "social-twitter-creator");
         var socialAutoGenerate = GetBool(step, "socialAutoGenerate") ?? GetBool(step, "social-auto-generate");
         var socialCardPath = GetString(step, "socialCardPath") ?? GetString(step, "social-card-path");
         var socialCardWidth = GetInt(step, "socialCardWidth") ?? GetInt(step, "social-card-width");
@@ -231,7 +235,11 @@ internal static partial class WebPipelineRunner
                 assetPolicyMode = spec.AssetPolicy?.Mode;
                 siteName ??= spec.Social?.SiteName ?? spec.Name;
                 socialImage ??= spec.Social?.Image;
+                socialImageWidth ??= spec.Social?.ImageWidth;
+                socialImageHeight ??= spec.Social?.ImageHeight;
                 socialTwitterCard ??= spec.Social?.TwitterCard;
+                socialTwitterSite ??= spec.Social?.TwitterSite;
+                socialTwitterCreator ??= spec.Social?.TwitterCreator;
                 socialAutoGenerate ??= spec.Social?.AutoGenerateCards;
                 var generatedCardsPath = spec.Social?.GeneratedCardsPath;
                 socialCardPath ??= string.IsNullOrWhiteSpace(generatedCardsPath)
@@ -299,7 +307,11 @@ internal static partial class WebPipelineRunner
             NavSurfaceName = navSurfaceName,
             SiteName = siteName,
             SocialImage = socialImage,
+            SocialImageWidth = socialImageWidth,
+            SocialImageHeight = socialImageHeight,
             SocialTwitterCard = socialTwitterCard,
+            SocialTwitterSite = socialTwitterSite,
+            SocialTwitterCreator = socialTwitterCreator,
             AutoGenerateSocialCards = socialAutoGenerate ?? false,
             SocialCardPath = socialCardPath,
             SocialCardWidth = socialCardWidth ?? 1200,

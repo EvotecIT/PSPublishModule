@@ -29,7 +29,11 @@ public class WebApiDocsSocialMetaTests
                   "BaseUrl": "https://example.test",
                   "Social": {
                     "Image": "/assets/social/share-card.png",
-                    "TwitterCard": "summary_large_image"
+                    "ImageWidth": 1200,
+                    "ImageHeight": 630,
+                    "TwitterCard": "summary_large_image",
+                    "TwitterSite": "evotecit",
+                    "TwitterCreator": "@apiAuthor"
                   }
                 }
                 """);
@@ -54,7 +58,11 @@ public class WebApiDocsSocialMetaTests
             Assert.Contains("property=\"og:url\" content=\"https://example.test/api\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/share-card.png\"", html, StringComparison.Ordinal);
             Assert.Contains("property=\"og:image:alt\" content=\"Sample API Reference\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:width\" content=\"1200\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:height\" content=\"630\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:card\" content=\"summary_large_image\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:site\" content=\"@evotecit\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:creator\" content=\"@apiAuthor\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/social/share-card.png\"", html, StringComparison.Ordinal);
             Assert.Contains("name=\"twitter:image:alt\" content=\"Sample API Reference\"", html, StringComparison.Ordinal);
             Assert.Contains("<link rel=\"canonical\" href=\"https://example.test/api\"", html, StringComparison.Ordinal);
@@ -108,7 +116,9 @@ public class WebApiDocsSocialMetaTests
                 Template = "docs",
                 NavJsonPath = navJsonPath,
                 AutoGenerateSocialCards = true,
-                SocialCardPath = "/assets/social/generated/api"
+                SocialCardPath = "/assets/social/generated/api",
+                SocialCardWidth = 1400,
+                SocialCardHeight = 735
             });
 
             var htmlIndexPath = Path.Combine(outPath, "index.html");
@@ -129,6 +139,8 @@ public class WebApiDocsSocialMetaTests
             var relativePath = imageUrl.Replace("https://example.test/", string.Empty, StringComparison.Ordinal);
             var generatedPath = Path.Combine(root, "_site", relativePath.Replace('/', Path.DirectorySeparatorChar));
             Assert.True(File.Exists(generatedPath), $"Generated API social card missing: {generatedPath}");
+            Assert.Contains("property=\"og:image:width\" content=\"1400\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:height\" content=\"735\"", html, StringComparison.Ordinal);
         }
         finally
         {

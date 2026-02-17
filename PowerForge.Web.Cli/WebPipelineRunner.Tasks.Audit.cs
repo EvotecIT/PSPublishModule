@@ -47,6 +47,7 @@ internal static partial class WebPipelineRunner
         var checkTitles = GetBool(step, "checkTitles") ?? true;
         var checkIds = GetBool(step, "checkDuplicateIds") ?? true;
         var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
+        var checkSeoMeta = GetBool(step, "checkSeoMeta") ?? GetBool(step, "check-seo-meta") ?? false;
         var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
         var checkMediaEmbeds = GetBool(step, "checkMediaEmbeds") ?? GetBool(step, "checkMedia") ?? true;
         var checkStructure = GetBool(step, "checkHtmlStructure") ?? true;
@@ -182,6 +183,7 @@ internal static partial class WebPipelineRunner
             CheckTitles = checkTitles,
             CheckDuplicateIds = checkIds,
             CheckHeadingOrder = checkHeadingOrder,
+            CheckSeoMeta = checkSeoMeta,
             CheckLinkPurposeConsistency = checkLinkPurpose,
             CheckMediaEmbeds = checkMediaEmbeds,
             CheckHtmlStructure = checkStructure,
