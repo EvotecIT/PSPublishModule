@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -18,6 +19,7 @@ internal static partial class WebPipelineRunner
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
+    private static readonly string PipelineToolFingerprint = BuildPipelineToolFingerprint();
     private static readonly HashSet<string> FingerprintPathKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "config", "siteRoot", "site-root", "project", "solution", "path",
@@ -169,7 +171,8 @@ internal static partial class WebPipelineRunner
             var cacheable = cacheEnabled && cacheStateLocal is not null && IsCacheableTask(task);
             if (cacheable)
             {
-                stepFingerprint = ComputeStepFingerprint(baseDir, step, fast ? "fast" : null);
+                var fingerprintSalt = fast ? $"fast|{PipelineToolFingerprint}" : PipelineToolFingerprint;
+                stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
                 if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
@@ -244,5 +247,23 @@ internal static partial class WebPipelineRunner
             result.ProfilePath = profilePath;
         }
         return result;
+    }
+
+    private static string BuildPipelineToolFingerprint()
+    {
+        var parts = new List<string>(capacity: 2);
+        AppendAssemblyFingerprint(parts, "cli", typeof(WebPipelineRunner).Assembly);
+        AppendAssemblyFingerprint(parts, "engine", typeof(WebSiteBuilder).Assembly);
+        return string.Join("|", parts);
+    }
+
+    private static void AppendAssemblyFingerprint(List<string> parts, string label, Assembly assembly)
+    {
+        var name = assembly.GetName();
+        var assemblyName = name.Name ?? "unknown";
+        var version = name.Version?.ToString() ?? "0.0.0.0";
+        var infoVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? string.Empty;
+        var mvid = assembly.ManifestModule.ModuleVersionId.ToString("N");
+        parts.Add($"{label}:{assemblyName}:{version}:{infoVersion}:{mvid}");
     }
 }
