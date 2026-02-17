@@ -253,9 +253,20 @@ body.pf-api-docs .quick-card-header strong{line-height:1.25}
 [data-theme="light"] body.pf-api-docs .pf-combobox-option,
 [data-theme="light"] body.pf-api-docs .type-item,
 [data-theme="light"] body.pf-api-docs .current{color:var(--pf-ink,#0f172a)}
+[data-theme="light"] body.pf-api-docs .member-card pre code{color:var(--pf-ink,#0f172a)}
 [data-theme="light"] body.pf-api-docs .member-source a,
 [data-theme="light"] body.pf-api-docs .type-meta-source a,
 [data-theme="light"] body.pf-api-docs .type-source-action{color:var(--pf-accent,#0e7490)}
+[data-theme="light"] body.pf-api-docs .filter-button.active,
+[data-theme="light"] body.pf-api-docs .member-kind.active{
+  background:rgba(14,116,144,.12);
+  border-color:rgba(14,116,144,.35);
+  color:var(--pf-accent,#0e7490)
+}
+[data-theme="light"] body.pf-api-docs .type-item.active{
+  background:rgba(14,116,144,.12);
+  color:var(--pf-accent,#0e7490)
+}
 [data-theme="light"] body.pf-api-docs .type-source-action{
   border-color:rgba(14,116,144,.35);
   background:rgba(14,116,144,.1)
