@@ -202,3 +202,87 @@ body.pf-api-docs .chip-icon{width:1.1rem;height:1.1rem;font-size:.62rem;font-fam
 body.pf-api-docs .chip-name{display:block;line-height:1.2;font-weight:600;text-decoration:none}
 body.pf-api-docs .type-badge{display:inline-flex;align-items:center;justify-content:center;min-height:1.45rem;line-height:1}
 body.pf-api-docs .quick-card-header strong{line-height:1.25}
+
+/* Light-mode safety net:
+   API docs fallback styles are dark-first, so provide explicit light overrides
+   when a site enables theme switching via html[data-theme="light"]. */
+[data-theme="light"] body.pf-api-docs{color:var(--pf-ink,#1e293b)}
+[data-theme="light"] body.pf-api-docs .api-sidebar,
+[data-theme="light"] body.pf-api-docs .type-toc,
+[data-theme="light"] body.pf-api-docs .remarks,
+[data-theme="light"] body.pf-api-docs .member-card,
+[data-theme="light"] body.pf-api-docs .member-group,
+[data-theme="light"] body.pf-api-docs .pf-combobox-panel,
+[data-theme="light"] body.pf-api-docs .nav-dropdown-menu,
+[data-theme="light"] body.pf-api-docs .pf-api-result,
+[data-theme="light"] body.pf-api-docs .type-chip,
+[data-theme="light"] body.pf-api-docs .type-badge,
+[data-theme="light"] body.pf-api-docs .member-signature,
+[data-theme="light"] body.pf-api-docs .member-card pre,
+[data-theme="light"] body.pf-api-docs .member-attributes code,
+[data-theme="light"] body.pf-api-docs .type-meta-list code,
+[data-theme="light"] body.pf-api-docs .param-meta-chip,
+[data-theme="light"] body.pf-api-docs .filter-button,
+[data-theme="light"] body.pf-api-docs .member-kind,
+[data-theme="light"] body.pf-api-docs .sidebar-tools button,
+[data-theme="light"] body.pf-api-docs .sidebar-reset,
+[data-theme="light"] body.pf-api-docs .namespace-select,
+[data-theme="light"] body.pf-api-docs .pf-combobox-trigger,
+[data-theme="light"] body.pf-api-docs .sidebar-search input,
+[data-theme="light"] body.pf-api-docs .member-filter input{
+  background:var(--pf-card-bg,#ffffff);
+  border-color:var(--pf-border,rgba(148,163,184,.45));
+  color:var(--pf-ink,#0f172a)
+}
+[data-theme="light"] body.pf-api-docs .type-toc-title,
+[data-theme="light"] body.pf-api-docs .member-return,
+[data-theme="light"] body.pf-api-docs .member-inherited,
+[data-theme="light"] body.pf-api-docs .member-source,
+[data-theme="light"] body.pf-api-docs .member-value,
+[data-theme="light"] body.pf-api-docs .param-list dd,
+[data-theme="light"] body.pf-api-docs .type-meta-label,
+[data-theme="light"] body.pf-api-docs .member-filter label,
+[data-theme="light"] body.pf-api-docs .sidebar-count,
+[data-theme="light"] body.pf-api-docs .filter-label,
+[data-theme="light"] body.pf-api-docs .nav-section-header,
+[data-theme="light"] body.pf-api-docs .nav-dropdown-menu .nav-dropdown-label{color:var(--pf-muted,#64748b)}
+[data-theme="light"] body.pf-api-docs .type-summary,
+[data-theme="light"] body.pf-api-docs .inheritance-current,
+[data-theme="light"] body.pf-api-docs .member-summary,
+[data-theme="light"] body.pf-api-docs .type-toc a,
+[data-theme="light"] body.pf-api-docs .pf-combobox-option,
+[data-theme="light"] body.pf-api-docs .type-item,
+[data-theme="light"] body.pf-api-docs .current{color:var(--pf-ink,#0f172a)}
+[data-theme="light"] body.pf-api-docs .member-card pre code{color:var(--pf-ink,#0f172a)}
+[data-theme="light"] body.pf-api-docs .member-source a,
+[data-theme="light"] body.pf-api-docs .type-meta-source a,
+[data-theme="light"] body.pf-api-docs .type-source-action{color:var(--pf-accent,#0e7490)}
+[data-theme="light"] body.pf-api-docs .filter-button.active,
+[data-theme="light"] body.pf-api-docs .member-kind.active{
+  background:rgba(14,116,144,.12);
+  border-color:rgba(14,116,144,.35);
+  color:var(--pf-accent,#0e7490)
+}
+[data-theme="light"] body.pf-api-docs .type-item.active{
+  background:rgba(14,116,144,.12);
+  color:var(--pf-accent,#0e7490)
+}
+[data-theme="light"] body.pf-api-docs .type-source-action{
+  border-color:rgba(14,116,144,.35);
+  background:rgba(14,116,144,.1)
+}
+[data-theme="light"] body.pf-api-docs .nav-dropdown-menu a:hover,
+[data-theme="light"] body.pf-api-docs .pf-combobox-option:hover,
+[data-theme="light"] body.pf-api-docs .pf-combobox-option:focus-visible{
+  background:rgba(14,116,144,.12);
+  color:var(--pf-ink,#0f172a)
+}
+[data-theme="light"] body.pf-api-docs .member-toggle input{
+  background:#ffffff;
+  border-color:var(--pf-border,rgba(148,163,184,.55))
+}
+[data-theme="light"] body.pf-api-docs .member-toggle input:checked{
+  background:var(--pf-accent,#0e7490);
+  border-color:var(--pf-accent,#0e7490)
+}
+[data-theme="light"] body.pf-api-docs .member-toggle input:checked::after{border-color:#ffffff}
