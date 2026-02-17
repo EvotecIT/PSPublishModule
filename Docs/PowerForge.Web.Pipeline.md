@@ -191,6 +191,11 @@ Notes:
   - `docsHome` / `docsHomeUrl` override the "Back to Docs" link in the sidebar (default `/docs/`)
   - `sidebar` (`left` or `right`) controls the docs sidebar position (`template: docs`)
   - `bodyClass` sets the `<body>` class on API docs pages (default `pf-api-docs`)
+  - social preview controls:
+    - `socialImage` / `socialTwitterCard` set default OG/Twitter image and card type
+    - `socialAutoGenerate: true` enables per-page API social card PNG generation
+    - `socialCardPath` sets output URL prefix (default `/assets/social/generated/api`)
+    - `socialCardWidth` / `socialCardHeight` control generated card dimensions (default `1200x630`)
   - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
   - `sourcePathPrefix` prepends a stable prefix to resolved source paths before URL token expansion (useful for mixed-repo or nested-source layouts)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs

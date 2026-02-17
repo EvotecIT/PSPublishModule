@@ -11,4 +11,12 @@ public sealed class SocialSpec
     public string? Image { get; set; }
     /// <summary>Twitter card type (summary, summary_large_image, etc.).</summary>
     public string? TwitterCard { get; set; } = "summary";
+    /// <summary>When true, generate per-page social card PNG files from page content.</summary>
+    public bool AutoGenerateCards { get; set; }
+    /// <summary>Output URL prefix for generated social card files.</summary>
+    public string? GeneratedCardsPath { get; set; } = "/assets/social/generated";
+    /// <summary>Width of generated social card PNG files.</summary>
+    public int GeneratedCardWidth { get; set; } = 1200;
+    /// <summary>Height of generated social card PNG files.</summary>
+    public int GeneratedCardHeight { get; set; } = 630;
 }

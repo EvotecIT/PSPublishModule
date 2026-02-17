@@ -95,6 +95,12 @@ internal static partial class WebPipelineRunner
         var quickStartTypes = GetString(step, "quickStartTypes") ?? GetString(step, "quickstartTypes") ??
                               GetString(step, "quick-start-types") ?? GetString(step, "quickstart-types");
         var siteName = GetString(step, "siteName") ?? GetString(step, "site-name");
+        var socialImage = GetString(step, "socialImage") ?? GetString(step, "social-image");
+        var socialTwitterCard = GetString(step, "socialTwitterCard") ?? GetString(step, "social-twitter-card");
+        var socialAutoGenerate = GetBool(step, "socialAutoGenerate") ?? GetBool(step, "social-auto-generate");
+        var socialCardPath = GetString(step, "socialCardPath") ?? GetString(step, "social-card-path");
+        var socialCardWidth = GetInt(step, "socialCardWidth") ?? GetInt(step, "social-card-width");
+        var socialCardHeight = GetInt(step, "socialCardHeight") ?? GetInt(step, "social-card-height");
         var brandUrl = GetString(step, "brandUrl") ?? GetString(step, "brand-url");
         var brandIcon = GetString(step, "brandIcon") ?? GetString(step, "brand-icon");
         var suppressWarnings = GetArrayOfStrings(step, "suppressWarnings");
@@ -223,6 +229,16 @@ internal static partial class WebPipelineRunner
                 var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
                 prismSpec = spec.Prism;
                 assetPolicyMode = spec.AssetPolicy?.Mode;
+                siteName ??= spec.Social?.SiteName ?? spec.Name;
+                socialImage ??= spec.Social?.Image;
+                socialTwitterCard ??= spec.Social?.TwitterCard;
+                socialAutoGenerate ??= spec.Social?.AutoGenerateCards;
+                var generatedCardsPath = spec.Social?.GeneratedCardsPath;
+                socialCardPath ??= string.IsNullOrWhiteSpace(generatedCardsPath)
+                    ? null
+                    : generatedCardsPath.TrimEnd('/') + "/api";
+                socialCardWidth ??= spec.Social?.GeneratedCardWidth;
+                socialCardHeight ??= spec.Social?.GeneratedCardHeight;
             }
             catch
             {
@@ -282,6 +298,12 @@ internal static partial class WebPipelineRunner
             NavContextProject = navContextProject,
             NavSurfaceName = navSurfaceName,
             SiteName = siteName,
+            SocialImage = socialImage,
+            SocialTwitterCard = socialTwitterCard,
+            AutoGenerateSocialCards = socialAutoGenerate ?? false,
+            SocialCardPath = socialCardPath,
+            SocialCardWidth = socialCardWidth ?? 1200,
+            SocialCardHeight = socialCardHeight ?? 630,
             BrandUrl = brandUrl,
             BrandIcon = brandIcon
         };

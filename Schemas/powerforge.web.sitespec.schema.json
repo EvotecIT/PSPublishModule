@@ -368,7 +368,11 @@
         "Enabled": { "type": "boolean" },
         "SiteName": { "type": "string" },
         "Image": { "type": "string" },
-        "TwitterCard": { "type": "string" }
+        "TwitterCard": { "type": "string" },
+        "AutoGenerateCards": { "type": "boolean" },
+        "GeneratedCardsPath": { "type": "string" },
+        "GeneratedCardWidth": { "type": "integer", "minimum": 600, "maximum": 2400 },
+        "GeneratedCardHeight": { "type": "integer", "minimum": 315, "maximum": 1400 }
       }
     },
     "StructuredDataSpec": {
