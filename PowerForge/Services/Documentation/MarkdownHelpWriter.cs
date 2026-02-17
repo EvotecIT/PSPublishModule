@@ -197,6 +197,7 @@ internal sealed class MarkdownHelpWriter
             sb.AppendLine($"Type: {p.Type}");
             sb.AppendLine($"Parameter Sets: {FormatParameterSets(p)}");
             sb.AppendLine($"Aliases: {FormatAliases(p)}");
+            sb.AppendLine($"Possible values: {FormatPossibleValues(p)}");
             sb.AppendLine();
             sb.AppendLine($"Required: {Bool(p.Required)}");
             sb.AppendLine($"Position: {p.Position}");
@@ -283,6 +284,17 @@ internal sealed class MarkdownHelpWriter
             .ToArray();
 
         return aliases.Length == 0 ? string.Empty : string.Join(", ", aliases);
+    }
+
+    private static string FormatPossibleValues(DocumentationParameterHelp p)
+    {
+        var values = (p.PossibleValues ?? Enumerable.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return values.Length == 0 ? string.Empty : string.Join(", ", values);
     }
 
     private static string DefaultValue(string value)

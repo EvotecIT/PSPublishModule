@@ -530,6 +530,104 @@ public class WebApiDocsGeneratorPowerShellTests
     }
 
     [Fact]
+    public void Generate_PowerShellHelp_RendersValidateSetAndEnumValuesInSyntaxAndParameters()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-possible-values-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module-help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Invoke-SampleMode</command:name>
+                      <command:commandType>Function</command:commandType>
+                      <maml:description><maml:para>Invokes sample mode.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Invoke-SampleMode</command:name>
+                        <command:parameter required="true" position="named">
+                          <maml:name>Mode</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                          <command:parameterValueGroup>
+                            <command:parameterValue required="false" variableLength="false">Basic</command:parameterValue>
+                            <command:parameterValue required="false" variableLength="false">Advanced</command:parameterValue>
+                          </command:parameterValueGroup>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                    <command:parameters>
+                      <command:parameter required="true" position="named">
+                        <maml:name>Mode</maml:name>
+                        <maml:description><maml:para>Mode selector.</maml:para></maml:description>
+                        <command:parameterValue required="true">string</command:parameterValue>
+                        <command:parameterValueGroup>
+                          <command:parameterValue required="false" variableLength="false">Basic</command:parameterValue>
+                          <command:parameterValue required="false" variableLength="false">Advanced</command:parameterValue>
+                        </command:parameterValueGroup>
+                      </command:parameter>
+                    </command:parameters>
+                  </command:command>
+                </helpItems>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psd1"),
+                """
+                @{
+                    CmdletsToExport = @()
+                    FunctionsToExport = @('Invoke-SampleMode')
+                    AliasesToExport = @()
+                    RootModule = 'Sample.Module.psm1'
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "Sample.Module.psm1"), "function Invoke-SampleMode { param([string]$Mode) }");
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "both"
+            };
+
+            WebApiDocsGenerator.Generate(options);
+
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(outputPath, "types", "invoke-samplemode.json")));
+            var method = json.RootElement.GetProperty("methods")[0];
+            var parameter = method.GetProperty("parameters")[0];
+
+            Assert.Contains("Basic|Advanced", method.GetProperty("signature").GetString(), StringComparison.Ordinal);
+            Assert.Equal(2, parameter.GetProperty("possibleValues").GetArrayLength());
+            Assert.Equal("Basic", parameter.GetProperty("possibleValues")[0].GetString());
+            Assert.Equal("Advanced", parameter.GetProperty("possibleValues")[1].GetString());
+
+            var html = File.ReadAllText(Path.Combine(outputPath, "invoke-samplemode", "index.html"));
+            Assert.Contains("Possible values:", html, StringComparison.Ordinal);
+            Assert.Contains("<code>Basic</code>", html, StringComparison.Ordinal);
+            Assert.Contains("<code>Advanced</code>", html, StringComparison.Ordinal);
+
+            var examples = json.RootElement.GetProperty("examples").EnumerateArray().ToArray();
+            Assert.Contains(examples,
+                ex => ex.GetProperty("kind").GetString() == "code" &&
+                      ex.GetProperty("text").GetString()!.Contains("Invoke-SampleMode -Mode 'Basic'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Generate_PowerShellHelp_ImportsFallbackExamplesFromScriptsWhenHelpHasNoExamples()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-fallback-examples-" + Guid.NewGuid().ToString("N"));

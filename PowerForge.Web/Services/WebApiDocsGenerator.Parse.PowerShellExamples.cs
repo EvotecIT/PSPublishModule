@@ -292,7 +292,7 @@ public static partial class WebApiDocsGenerator
             parts.Add("-" + parameter.Name);
             if (IsPowerShellSwitchParameter(parameter.Type))
                 continue;
-            parts.Add(GetPowerShellSampleValue(parameter.Name, parameter.Type));
+            parts.Add(GetPowerShellSampleValue(parameter));
         }
 
         return string.Join(" ", parts.Where(static p => !string.IsNullOrWhiteSpace(p)));
@@ -303,6 +303,28 @@ public static partial class WebApiDocsGenerator
            (typeName.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
             (typeName.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase) &&
              typeName.Length > ".SwitchParameter".Length));
+
+    private static string GetPowerShellSampleValue(ApiParameterModel parameter)
+    {
+        if (parameter is not null && parameter.PossibleValues.Count > 0)
+        {
+            var possibleValue = parameter.PossibleValues
+                .FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value));
+            if (!string.IsNullOrWhiteSpace(possibleValue))
+            {
+                if (bool.TryParse(possibleValue, out var boolValue))
+                    return boolValue ? "$true" : "$false";
+
+                if (int.TryParse(possibleValue, out _))
+                    return possibleValue;
+
+                var escaped = possibleValue.Replace("'", "''", StringComparison.Ordinal);
+                return $"'{escaped}'";
+            }
+        }
+
+        return GetPowerShellSampleValue(parameter?.Name ?? string.Empty, parameter?.Type);
+    }
 
     private static string GetPowerShellSampleValue(string parameterName, string? typeName)
     {

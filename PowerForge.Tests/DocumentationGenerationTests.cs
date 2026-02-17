@@ -1,4 +1,5 @@
 using PowerForge;
+using System.Xml.Linq;
 
 public class DocumentationGenerationTests
 {
@@ -79,5 +80,74 @@ EXAMPLES
         Assert.Contains("First paragraph.", res.Markdown);
         Assert.Contains("Second paragraph.", res.Markdown);
         Assert.Contains("## Examples", res.Markdown);
+    }
+
+    [Fact]
+    public void MamlHelpWriter_WritesParameterSetNameAndPossibleValues()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-maml-help-writer-values-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var payload = new DocumentationExtractionPayload
+            {
+                ModuleName = "TestModule",
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Thing",
+                        CommandType = "Cmdlet",
+                        Synopsis = "Does a thing.",
+                        Description = "Does a thing.",
+                        Syntax = new List<DocumentationSyntaxHelp>
+                        {
+                            new() { Name = "ByMode", IsDefault = true, Text = "Invoke-Thing -Mode <String>" }
+                        },
+                        Parameters = new List<DocumentationParameterHelp>
+                        {
+                            new()
+                            {
+                                Name = "Mode",
+                                Type = "String",
+                                ParameterSets = new List<string> { "ByMode" },
+                                PossibleValues = new List<string> { "Basic", "Advanced" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var writer = new MamlHelpWriter();
+            var path = writer.WriteExternalHelpFile(payload, "TestModule", root);
+            Assert.True(File.Exists(path));
+
+            var doc = XDocument.Load(path);
+            XNamespace commandNs = "http://schemas.microsoft.com/maml/dev/command/2004/10";
+            XNamespace mamlNs = "http://schemas.microsoft.com/maml/2004/10";
+
+            var syntaxItem = doc.Descendants(commandNs + "syntaxItem").FirstOrDefault();
+            Assert.NotNull(syntaxItem);
+            Assert.Equal("ByMode", syntaxItem!.Attribute("parameterSetName")?.Value);
+
+            var parameter = doc.Descendants(commandNs + "parameter")
+                .FirstOrDefault(p => string.Equals(p.Element(mamlNs + "name")?.Value, "Mode", StringComparison.Ordinal));
+            Assert.NotNull(parameter);
+
+            var possibleValues = parameter!
+                .Element(commandNs + "parameterValueGroup")?
+                .Elements(commandNs + "parameterValue")
+                .Select(v => v.Value)
+                .ToArray();
+            Assert.NotNull(possibleValues);
+            Assert.Contains("Basic", possibleValues!);
+            Assert.Contains("Advanced", possibleValues!);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
     }
 }

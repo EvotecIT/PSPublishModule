@@ -110,7 +110,17 @@ try {
       try { if ($pmeta -and $pmeta.Aliases) { foreach ($a in @($pmeta.Aliases)) { $aliases += [string]$a } } } catch { $aliases = @() }
 
       $typeName = ''
-      try { if ($pmeta -and $pmeta.ParameterType) { $typeName = [string]$pmeta.ParameterType.Name } } catch { $typeName = '' }
+      $parameterType = $null
+      try {
+        if ($pmeta -and $pmeta.ParameterType) {
+          $parameterType = $pmeta.ParameterType
+          $typeName = [string]$pmeta.ParameterType.Name
+        }
+      } catch {
+        $parameterType = $null
+        $typeName = ''
+      }
+      $possibleValues = @()
 
       $required = $false
       $named = $true
@@ -137,6 +147,27 @@ try {
           }
         }
       } catch { }
+      try {
+        if ($pmeta -and $pmeta.Attributes) {
+          foreach ($attr in @($pmeta.Attributes)) {
+            if ($null -eq $attr) { continue }
+            if ($attr -is [System.Management.Automation.ValidateSetAttribute]) {
+              foreach ($value in @($attr.ValidValues)) {
+                if ($null -ne $value) { $possibleValues += [string]$value }
+              }
+            }
+          }
+        }
+      } catch { }
+      try {
+        $enumType = $parameterType
+        if ($enumType -and $enumType.IsArray) { $enumType = $enumType.GetElementType() }
+        if ($enumType -and $enumType.IsEnum) {
+          foreach ($enumName in [System.Enum]::GetNames($enumType)) {
+            if ($enumName) { $possibleValues += [string]$enumName }
+          }
+        }
+      } catch { }
 
       $desc = ''
       $hp = $null
@@ -151,9 +182,29 @@ try {
         if ((-not $aliases -or $aliases.Count -eq 0) -and $hp.Aliases) {
           foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
         }
+        try {
+          if ($hp.ValidValues) {
+            foreach ($value in @($hp.ValidValues)) {
+              if ($null -ne $value) { $possibleValues += [string]$value }
+            }
+          }
+        } catch { }
         try { $defaultValue = [string]$hp.DefaultValue } catch { $defaultValue = '' }
         try { $acceptWild = [bool]$hp.Globbing } catch { $acceptWild = $false }
       }
+      $possibleValuesNormalized = @()
+      $seenPossibleValues = @{}
+      foreach ($value in @($possibleValues)) {
+        if (-not $value) { continue }
+        $normalized = ([string]$value).Trim()
+        if (-not $normalized) { continue }
+        $key = $normalized.ToLowerInvariant()
+        if (-not $seenPossibleValues.ContainsKey($key)) {
+          $seenPossibleValues[$key] = $true
+          $possibleValuesNormalized += $normalized
+        }
+      }
+      $possibleValues = @($possibleValuesNormalized)
 
       $sets = @()
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
@@ -172,6 +223,7 @@ try {
         description = $desc
         parameterSets = @($sets)
         aliases = @($aliases)
+        possibleValues = @($possibleValues)
         required = [bool]$required
         position = $positionText
         defaultValue = $defaultValue

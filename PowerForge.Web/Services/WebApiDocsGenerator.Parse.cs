@@ -203,6 +203,9 @@ public static partial class WebApiDocsGenerator
                         var aliases = ParsePowerShellAliases(parameter.Attribute("aliases")?.Value);
                         if (aliases.Count == 0 && commandParameter is not null)
                             aliases.AddRange(commandParameter.Aliases);
+                        var possibleValues = ParsePowerShellParameterPossibleValues(parameter, commandNs, mamlNs);
+                        if (possibleValues.Count == 0 && commandParameter is not null)
+                            possibleValues.AddRange(commandParameter.PossibleValues);
 
                         var parameterModel = new ApiParameterModel
                         {
@@ -216,6 +219,10 @@ public static partial class WebApiDocsGenerator
                         };
                         foreach (var alias in aliases.Distinct(StringComparer.OrdinalIgnoreCase))
                             parameterModel.Aliases.Add(alias);
+                        foreach (var possibleValue in possibleValues
+                                     .Where(static value => !string.IsNullOrWhiteSpace(value))
+                                     .Distinct(StringComparer.OrdinalIgnoreCase))
+                            parameterModel.PossibleValues.Add(possibleValue);
                         member.Parameters.Add(parameterModel);
                     }
                     member.Signature = BuildPowerShellSyntaxSignature(name!, member.Parameters, member.IncludesCommonParameters);
@@ -369,6 +376,7 @@ public static partial class WebApiDocsGenerator
             var position = parameter.Attribute("position")?.Value?.Trim();
             var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
             var aliases = ParsePowerShellAliases(parameter.Attribute("aliases")?.Value);
+            var possibleValues = ParsePowerShellParameterPossibleValues(parameter, commandNs, mamlNs);
 
             map[name] = new PowerShellParameterInfo
             {
@@ -378,7 +386,8 @@ public static partial class WebApiDocsGenerator
                 DefaultValue = defaultValue,
                 Position = position,
                 PipelineInput = pipelineInput,
-                Aliases = aliases
+                Aliases = aliases,
+                PossibleValues = possibleValues
             };
         }
 
@@ -560,6 +569,60 @@ public static partial class WebApiDocsGenerator
             .ToList();
     }
 
+    private static List<string> ParsePowerShellParameterPossibleValues(
+        XElement? parameter,
+        XNamespace commandNs,
+        XNamespace mamlNs)
+    {
+        var possibleValues = new List<string>();
+        if (parameter is null)
+            return possibleValues;
+
+        void AddCandidate(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return;
+
+            var normalized = raw.Trim();
+            if (string.IsNullOrWhiteSpace(normalized))
+                return;
+            if (normalized.Equals("none", StringComparison.OrdinalIgnoreCase) ||
+                normalized.Equals("(none)", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            possibleValues.Add(normalized);
+        }
+
+        foreach (var node in parameter
+                     .Elements(commandNs + "parameterValueGroup")
+                     .Elements(commandNs + "parameterValue"))
+        {
+            AddCandidate(node.Value);
+        }
+
+        foreach (var node in parameter
+                     .Elements(commandNs + "possibleValues")
+                     .Elements(commandNs + "possibleValue"))
+        {
+            AddCandidate(node.Element(mamlNs + "value")?.Value);
+            AddCandidate(node.Element(mamlNs + "name")?.Value);
+            AddCandidate(node.Value);
+        }
+
+        foreach (var node in parameter.Descendants()
+                     .Where(el => el.Name == commandNs + "possibleValue"))
+        {
+            AddCandidate(node.Element(mamlNs + "value")?.Value);
+            AddCandidate(node.Element(mamlNs + "name")?.Value);
+            AddCandidate(node.Value);
+        }
+
+        return possibleValues
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private static bool SupportsPowerShellCommonParameters(
         XElement command,
         XElement? details,
@@ -715,7 +778,7 @@ public static partial class WebApiDocsGenerator
             var token = "-" + name;
             if (!IsPowerShellSwitchParameter(parameter.Type))
             {
-                var displayType = string.IsNullOrWhiteSpace(parameter.Type) ? "Object" : parameter.Type!.Trim();
+                var displayType = GetPowerShellSyntaxParameterPlaceholder(parameter);
                 token += $" <{displayType}>";
             }
 
@@ -729,6 +792,30 @@ public static partial class WebApiDocsGenerator
             parts.Add("[<CommonParameters>]");
 
         return string.Join(" ", parts);
+    }
+
+    private static string GetPowerShellSyntaxParameterPlaceholder(ApiParameterModel parameter)
+    {
+        if (parameter is not null && parameter.PossibleValues.Count > 0)
+        {
+            var values = parameter.PossibleValues
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (values.Count > 0)
+            {
+                if (values.Count <= 5)
+                {
+                    var inline = string.Join("|", values);
+                    if (inline.Length <= 64)
+                        return inline;
+                }
+
+                return values[0];
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(parameter?.Type) ? "Object" : parameter.Type!.Trim();
     }
 
     private static void AppendPowerShellExamples(
@@ -1081,6 +1168,7 @@ public static partial class WebApiDocsGenerator
         public string? Summary { get; set; }
         public string? Type { get; set; }
         public List<string> Aliases { get; set; } = new();
+        public List<string> PossibleValues { get; set; } = new();
         public bool Required { get; set; }
         public string? DefaultValue { get; set; }
         public string? Position { get; set; }

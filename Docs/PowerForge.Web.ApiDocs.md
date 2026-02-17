@@ -264,6 +264,9 @@ Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 Each command is treated as a "type" with parameter sets rendered as methods.
 When explicit parameter set names are unavailable in help XML, PowerForge derives
 stable labels (for example `By Name`, `By Id`, `Set 1`) so users can distinguish syntax choices.
+PowerForge also reads parameter allowed-values metadata (for example `ValidateSet`
+and enum names when present in help payload), showing those values in syntax placeholders,
+parameter details, and fallback examples.
 PowerForge classifies command kinds (`Cmdlet` / `Function` / `Alias`) using
 best-effort module metadata discovery (manifest exports + root module functions)
 when available. If help XML includes `commandType`, it takes precedence over

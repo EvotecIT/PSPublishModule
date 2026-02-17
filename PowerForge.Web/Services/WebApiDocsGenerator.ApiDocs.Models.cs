@@ -87,6 +87,7 @@ public static partial class WebApiDocsGenerator
         public string? Type { get; set; }
         public string? Summary { get; set; }
         public List<string> Aliases { get; } = new();
+        public List<string> PossibleValues { get; } = new();
         public bool IsOptional { get; set; }
         public string? DefaultValue { get; set; }
         public string? Position { get; set; }

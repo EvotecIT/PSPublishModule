@@ -178,6 +178,10 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "aliases")]
     public List<string> Aliases { get; set; } = new();
 
+    /// <summary>Allowed values from ValidateSet or enum parameter types.</summary>
+    [DataMember(Name = "possibleValues")]
+    public List<string> PossibleValues { get; set; } = new();
+
     /// <summary>True when the parameter is required.</summary>
     [DataMember(Name = "required")]
     public bool Required { get; set; }
