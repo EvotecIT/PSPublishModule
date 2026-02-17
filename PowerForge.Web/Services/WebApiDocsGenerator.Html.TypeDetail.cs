@@ -558,7 +558,7 @@ public static partial class WebApiDocsGenerator
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n');
 
-        var blocks = Regex.Split(normalized, "\\n\\s*\\n")
+        var blocks = ParagraphSplitRegex.Split(normalized)
             .Select(block => block.Trim())
             .Where(block => !string.IsNullOrWhiteSpace(block))
             .ToList();

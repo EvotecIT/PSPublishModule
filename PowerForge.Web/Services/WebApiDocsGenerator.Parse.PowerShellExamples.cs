@@ -301,7 +301,8 @@ public static partial class WebApiDocsGenerator
     private static bool IsPowerShellSwitchParameter(string? typeName)
         => !string.IsNullOrWhiteSpace(typeName) &&
            (typeName.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
-            typeName.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase));
+            (typeName.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase) &&
+             typeName.Length > ".SwitchParameter".Length));
 
     private static string GetPowerShellSampleValue(string parameterName, string? typeName)
     {

@@ -316,9 +316,7 @@ public static partial class WebApiDocsGenerator
                 AppendNormalized(block);
         }
 
-        return paragraphs
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return paragraphs;
     }
 
     private static IEnumerable<string> SplitPowerShellParagraphText(string? value)
@@ -330,10 +328,10 @@ public static partial class WebApiDocsGenerator
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n');
 
-        var blocks = Regex.Split(normalized, "\\n\\s*\\n")
+        var blocks = ParagraphSplitRegex.Split(normalized)
             .Select(block => block.Trim())
             .Where(block => !string.IsNullOrWhiteSpace(block))
-            .Select(block => Regex.Replace(block, "\\s*\\n\\s*", " "))
+            .Select(block => ParagraphLineBreakNormalizeRegex.Replace(block, " "))
             .ToList();
 
         return blocks;
