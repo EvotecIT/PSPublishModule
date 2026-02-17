@@ -224,6 +224,7 @@ public static partial class WebApiDocsGenerator
         ".member-card",
         ".member-signature",
         ".member-card pre::-webkit-scrollbar",
+        ".member-card pre::-webkit-scrollbar-track",
         ".member-card pre::-webkit-scrollbar-thumb"
     };
     /// <summary>Generates API documentation output.</summary>

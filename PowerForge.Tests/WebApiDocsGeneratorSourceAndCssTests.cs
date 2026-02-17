@@ -155,6 +155,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("initNamespaceCombobox", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(".pf-combobox-list::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(".member-card pre::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(".member-card pre::-webkit-scrollbar-track", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(".member-card pre::-webkit-scrollbar-thumb", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("[data-theme=\"light\"] body.pf-api-docs .member-card pre::-webkit-scrollbar-thumb", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("initNavDropdowns", html, StringComparison.OrdinalIgnoreCase);
