@@ -483,6 +483,8 @@ public static partial class WebApiDocsGenerator
                 sb.AppendLine($"            <dt><span class=\"param-name\">{System.Web.HttpUtility.HtmlEncode(param.Name)}</span> <span class=\"param-type{optional}\">{System.Web.HttpUtility.HtmlEncode(param.Type)}</span><span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span>{BuildParameterMetaChips(param)}</dt>");
                 if (!string.IsNullOrWhiteSpace(param.Summary))
                     sb.AppendLine($"            <dd>{RenderLinkedText(param.Summary, baseUrl, slugMap)}</dd>");
+                if (param.PossibleValues.Count > 0)
+                    sb.AppendLine($"            <dd class=\"param-possible-values\">Possible values: {RenderPowerShellPossibleValues(param.PossibleValues)}</dd>");
             }
             sb.AppendLine("          </dl>");
         }
@@ -647,8 +649,31 @@ public static partial class WebApiDocsGenerator
             if (!string.IsNullOrWhiteSpace(aliases))
                 chips.Add($"<span class=\"param-meta-chip\">aliases: {System.Web.HttpUtility.HtmlEncode(aliases)}</span>");
         }
+        if (param.PossibleValues.Count > 0)
+        {
+            var count = param.PossibleValues
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            if (count > 0)
+                chips.Add($"<span class=\"param-meta-chip values\">values: {count}</span>");
+        }
 
         return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
+    }
+
+    private static string RenderPowerShellPossibleValues(IReadOnlyList<string> values)
+    {
+        if (values is null || values.Count == 0)
+            return string.Empty;
+
+        var rendered = values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>")
+            .ToList();
+
+        return rendered.Count == 0 ? string.Empty : string.Join(", ", rendered);
     }
 
     private static string ResolvePowerShellCommonParametersUrl(string baseUrl, IReadOnlyDictionary<string, string> slugMap)

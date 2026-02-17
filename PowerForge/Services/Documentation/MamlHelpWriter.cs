@@ -139,6 +139,8 @@ internal sealed class MamlHelpWriter
         IEnumerable<DocumentationParameterHelp>? parameters)
     {
         writer.WriteStartElement("command", "syntaxItem", CommandNs);
+        if (!string.IsNullOrWhiteSpace(setName))
+            writer.WriteAttributeString("parameterSetName", setName.Trim());
         writer.WriteElementString("maml", "name", MamlNs, commandName);
 
         foreach (var p in (parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
@@ -288,6 +290,25 @@ internal sealed class MamlHelpWriter
             writer.WriteAttributeString("variableLength", "false");
             writer.WriteString(typeName);
             writer.WriteEndElement(); // parameterValue
+        }
+
+        var possibleValues = (p.PossibleValues ?? Enumerable.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (possibleValues.Length > 0)
+        {
+            writer.WriteStartElement("command", "parameterValueGroup", CommandNs);
+            foreach (var value in possibleValues)
+            {
+                writer.WriteStartElement("command", "parameterValue", CommandNs);
+                writer.WriteAttributeString("required", "false");
+                writer.WriteAttributeString("variableLength", "false");
+                writer.WriteString(value);
+                writer.WriteEndElement(); // parameterValue
+            }
+            writer.WriteEndElement(); // parameterValueGroup
         }
 
         writer.WriteStartElement("dev", "type", DevNs);
