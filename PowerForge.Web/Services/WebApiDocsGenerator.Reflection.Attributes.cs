@@ -124,6 +124,14 @@ public static partial class WebApiDocsGenerator
                 Position = p.Position,
                 PipelineInput = p.PipelineInput
             }).ToList();
+        for (var i = 0; i < clone.Parameters.Count && i < source.Parameters.Count; i++)
+        {
+            foreach (var alias in source.Parameters[i].Aliases)
+            {
+                if (!string.IsNullOrWhiteSpace(alias))
+                    clone.Parameters[i].Aliases.Add(alias);
+            }
+        }
         return clone;
     }
 

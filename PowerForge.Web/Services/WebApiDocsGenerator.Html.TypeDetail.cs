@@ -26,6 +26,11 @@ public static partial class WebApiDocsGenerator
         var sb = new StringBuilder();
         var inheritanceChain = BuildInheritanceChain(type, typeIndex);
         var derivedTypes = GetDerivedTypes(type, derivedMap);
+        var isPowerShellCommand = IsPowerShellCommandType(type);
+        var methodSectionLabel = isPowerShellCommand ? "Syntax" : "Methods";
+        var methodSectionId = isPowerShellCommand ? "syntax" : "methods";
+        var memberFilterLabel = isPowerShellCommand ? "Filter syntax" : "Filter members";
+        var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
         var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0);
         sb.AppendLine("    <article class=\"type-detail\">");
         var indexUrl = EnsureTrailingSlash(baseUrl);
@@ -63,6 +68,42 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine("          <span class=\"type-meta-label\">Namespace</span>");
         sb.AppendLine($"          <code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>");
         sb.AppendLine("        </div>");
+        if (type.Aliases.Count > 0)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-aliases\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Aliases</span>");
+            sb.AppendLine("          <div class=\"type-meta-list\">");
+            foreach (var alias in type.Aliases.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(alias)}</code>");
+            }
+            sb.AppendLine("          </div>");
+            sb.AppendLine("        </div>");
+        }
+        if (type.InputTypes.Count > 0)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-inputs\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Inputs</span>");
+            sb.AppendLine("          <div class=\"type-meta-list\">");
+            foreach (var input in type.InputTypes.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(input)}</code>");
+            }
+            sb.AppendLine("          </div>");
+            sb.AppendLine("        </div>");
+        }
+        if (type.OutputTypes.Count > 0)
+        {
+            sb.AppendLine("        <div class=\"type-meta-row type-meta-outputs\">");
+            sb.AppendLine("          <span class=\"type-meta-label\">Outputs</span>");
+            sb.AppendLine("          <div class=\"type-meta-list\">");
+            foreach (var output in type.OutputTypes.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                sb.AppendLine($"            <code>{System.Web.HttpUtility.HtmlEncode(output)}</code>");
+            }
+            sb.AppendLine("          </div>");
+            sb.AppendLine("        </div>");
+        }
         if (!string.IsNullOrWhiteSpace(type.Assembly))
         {
             sb.AppendLine("        <div class=\"type-meta-row\">");
@@ -215,24 +256,31 @@ public static partial class WebApiDocsGenerator
         {
             sb.AppendLine("      <div class=\"member-toolbar\" data-member-total=\"" + totalMembers + "\">");
             sb.AppendLine("        <div class=\"member-filter\">");
-            sb.AppendLine("          <label for=\"api-member-filter\">Filter members</label>");
-            sb.AppendLine("          <input id=\"api-member-filter\" type=\"text\" placeholder=\"Search members...\" />");
+            sb.AppendLine($"          <label for=\"api-member-filter\">{memberFilterLabel}</label>");
+            sb.AppendLine($"          <input id=\"api-member-filter\" type=\"text\" placeholder=\"{memberFilterPlaceholder}\" />");
             sb.AppendLine("        </div>");
             sb.AppendLine("        <div class=\"member-kind-filter\">");
             sb.AppendLine($"          <button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
             if (type.Constructors.Count > 0)
                 sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
-            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">Methods ({type.Methods.Count})</button>");
-            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
-            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
-            sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
+            if (type.Methods.Count > 0)
+                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">{methodSectionLabel} ({type.Methods.Count})</button>");
+            if (type.Properties.Count > 0)
+                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
+            if (type.Fields.Count > 0)
+                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
+            if (type.Events.Count > 0)
+                sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
             if (type.ExtensionMethods.Count > 0)
                 sb.AppendLine($"          <button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
             sb.AppendLine("        </div>");
-            sb.AppendLine("        <label class=\"member-toggle\">");
-            sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
-            sb.AppendLine("          Show inherited");
-            sb.AppendLine("        </label>");
+            if (!isPowerShellCommand)
+            {
+                sb.AppendLine("        <label class=\"member-toggle\">");
+                sb.AppendLine("          <input type=\"checkbox\" id=\"api-show-inherited\" />");
+                sb.AppendLine("          Show inherited");
+                sb.AppendLine("        </label>");
+            }
             sb.AppendLine("        <div class=\"member-actions\">");
             sb.AppendLine("          <button class=\"member-expand-all\" type=\"button\">Expand all</button>");
             sb.AppendLine("          <button class=\"member-collapse-all\" type=\"button\">Collapse all</button>");
@@ -241,13 +289,20 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine("      </div>");
 
             var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-            AppendMemberSections(sb, "Methods", "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: "methods");
-            AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
-            AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
-            AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
-            if (type.ExtensionMethods.Count > 0)
-                AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+            if (isPowerShellCommand)
+            {
+                AppendMemberSections(sb, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: false, sectionId: methodSectionId);
+            }
+            else
+            {
+                AppendMemberSections(sb, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+                AppendMemberSections(sb, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: methodSectionId);
+                AppendMemberSections(sb, "Properties", "property", type.Properties, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "properties");
+                AppendMemberSections(sb, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
+                AppendMemberSections(sb, "Events", "event", type.Events, baseUrl, slugMap, codeLanguage, usedMemberIds, sectionId: "events");
+                if (type.ExtensionMethods.Count > 0)
+                    AppendMemberSections(sb, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
+            }
         }
 
         sb.AppendLine("    </article>");
@@ -429,7 +484,8 @@ public static partial class WebApiDocsGenerator
         }
         if (!string.IsNullOrWhiteSpace(member.Returns))
         {
-            sb.AppendLine("          <h3>Returns</h3>");
+            var returnsLabel = string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) ? "Outputs" : "Returns";
+            sb.AppendLine($"          <h3>{returnsLabel}</h3>");
             sb.AppendLine($"          <p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
         }
         if (member.Exceptions.Count > 0)
@@ -479,11 +535,35 @@ public static partial class WebApiDocsGenerator
                 sb.AppendLine(System.Web.HttpUtility.HtmlEncode(example.Text));
                 sb.AppendLine("        </code></pre>");
             }
+            else if (string.Equals(example.Kind, "heading", StringComparison.OrdinalIgnoreCase))
+            {
+                sb.AppendLine($"        <h3 class=\"example-title\">{System.Web.HttpUtility.HtmlEncode(example.Text)}</h3>");
+            }
             else
             {
-                sb.AppendLine($"        <p>{RenderLinkedText(example.Text, baseUrl, slugMap)}</p>");
+                foreach (var paragraph in SplitExampleParagraphs(example.Text))
+                {
+                    sb.AppendLine($"        <p>{RenderLinkedText(paragraph, baseUrl, slugMap)}</p>");
+                }
             }
         }
+    }
+
+    private static IEnumerable<string> SplitExampleParagraphs(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return Array.Empty<string>();
+
+        var normalized = text
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+
+        var blocks = Regex.Split(normalized, "\\n\\s*\\n")
+            .Select(block => block.Trim())
+            .Where(block => !string.IsNullOrWhiteSpace(block))
+            .ToList();
+
+        return blocks.Count == 0 ? new[] { text.Trim() } : blocks;
     }
 
     private static string GetDefaultCodeLanguage(WebApiDocsOptions options)
@@ -516,6 +596,10 @@ public static partial class WebApiDocsGenerator
             var returnType = string.IsNullOrWhiteSpace(member.ReturnType) ? string.Empty : $"{member.ReturnType} ";
             return $"{prefix}{returnType}{displayName}({string.Join(", ", args)})".Trim();
         }
+        if (section == "Syntax")
+        {
+            return BuildPowerShellSyntaxSignature(displayName, member.Parameters);
+        }
 
         if (!string.IsNullOrWhiteSpace(member.ReturnType))
         {
@@ -541,6 +625,14 @@ public static partial class WebApiDocsGenerator
             chips.Add($"<span class=\"param-meta-chip\">position: {System.Web.HttpUtility.HtmlEncode(param.Position)}</span>");
         if (!string.IsNullOrWhiteSpace(param.PipelineInput))
             chips.Add($"<span class=\"param-meta-chip\">pipeline: {System.Web.HttpUtility.HtmlEncode(param.PipelineInput)}</span>");
+        if (param.Aliases.Count > 0)
+        {
+            var aliases = string.Join(", ", param.Aliases
+                .Where(alias => !string.IsNullOrWhiteSpace(alias))
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(aliases))
+                chips.Add($"<span class=\"param-meta-chip\">aliases: {System.Web.HttpUtility.HtmlEncode(aliases)}</span>");
+        }
 
         return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
     }

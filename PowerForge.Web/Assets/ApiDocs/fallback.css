@@ -146,6 +146,7 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-source a,.type-meta-source a{color:#a78bfa}
 .member-summary{margin:0;color:#e2e8f0}
 .type-parameters,.type-examples,.type-see-also{margin:12px 0}
+.example-title{margin:8px 0 2px;font-size:1rem;color:#e6e9f3}
 .typeparam-list,.exception-list,.see-also-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
 .typeparam-list dt{font-weight:600}
 .typeparam-list dd{margin:0;color:#94a3b8}
@@ -249,6 +250,7 @@ body.pf-api-docs .quick-card-header strong{line-height:1.25}
 [data-theme="light"] body.pf-api-docs .type-summary,
 [data-theme="light"] body.pf-api-docs .inheritance-current,
 [data-theme="light"] body.pf-api-docs .member-summary,
+[data-theme="light"] body.pf-api-docs .example-title,
 [data-theme="light"] body.pf-api-docs .type-toc a,
 [data-theme="light"] body.pf-api-docs .pf-combobox-option,
 [data-theme="light"] body.pf-api-docs .type-item,

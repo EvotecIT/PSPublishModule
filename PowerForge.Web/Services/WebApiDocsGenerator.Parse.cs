@@ -130,7 +130,17 @@ public static partial class WebApiDocsGenerator
 
             var summary = GetFirstParagraph(details?.Element(mamlNs + "description"), mamlNs);
             var remarks = JoinParagraphs(command.Element(mamlNs + "description"), mamlNs);
-            var returns = JoinReturnValues(command, commandNs, mamlNs);
+            var (returns, outputTypes) = ParsePowerShellReturnInfo(command, commandNs, mamlNs, devNs);
+            var inputTypes = ParsePowerShellInputTypes(command, commandNs, mamlNs, devNs);
+            if (outputTypes.Count == 0)
+            {
+                foreach (var outputType in ParsePowerShellTypeNames(command.Element(commandNs + "outputTypes"), commandNs, mamlNs, devNs, "outputType"))
+                {
+                    if (!outputTypes.Contains(outputType, StringComparer.OrdinalIgnoreCase))
+                        outputTypes.Add(outputType);
+                }
+            }
+            var commandAliases = ParsePowerShellCommandAliases(command, details, commandNs, mamlNs);
 
             var type = new ApiTypeModel
             {
@@ -142,6 +152,12 @@ public static partial class WebApiDocsGenerator
                 Summary = summary,
                 Remarks = remarks
             };
+            foreach (var alias in commandAliases)
+                type.Aliases.Add(alias);
+            foreach (var inputType in inputTypes)
+                type.InputTypes.Add(inputType);
+            foreach (var outputType in outputTypes)
+                type.OutputTypes.Add(outputType);
 
             var syntax = command.Element(commandNs + "syntax");
             var commandParameterMap = BuildPowerShellParameterMap(command, commandNs, mamlNs, devNs);
@@ -152,8 +168,9 @@ public static partial class WebApiDocsGenerator
                     var member = new ApiMemberModel
                     {
                         Name = name!,
+                        Kind = "CommandSyntax",
                         Returns = returns,
-                        Kind = "Method"
+                        ReturnType = type.OutputTypes.Count == 1 ? type.OutputTypes[0] : null
                     };
                     foreach (var parameter in syntaxItem.Elements(commandNs + "parameter"))
                     {
@@ -179,8 +196,11 @@ public static partial class WebApiDocsGenerator
                         var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
                         if (string.IsNullOrWhiteSpace(pipelineInput))
                             pipelineInput = commandParameter?.PipelineInput;
+                        var aliases = ParsePowerShellAliases(parameter.Attribute("aliases")?.Value);
+                        if (aliases.Count == 0 && commandParameter is not null)
+                            aliases.AddRange(commandParameter.Aliases);
 
-                        member.Parameters.Add(new ApiParameterModel
+                        var parameterModel = new ApiParameterModel
                         {
                             Name = paramName,
                             Type = paramType,
@@ -189,8 +209,12 @@ public static partial class WebApiDocsGenerator
                             DefaultValue = string.IsNullOrWhiteSpace(defaultValue) ? null : defaultValue,
                             Position = string.IsNullOrWhiteSpace(position) ? null : position,
                             PipelineInput = string.IsNullOrWhiteSpace(pipelineInput) ? null : pipelineInput
-                        });
+                        };
+                        foreach (var alias in aliases.Distinct(StringComparer.OrdinalIgnoreCase))
+                            parameterModel.Aliases.Add(alias);
+                        member.Parameters.Add(parameterModel);
                     }
+                    member.Signature = BuildPowerShellSyntaxSignature(name!, member.Parameters);
                     type.Methods.Add(member);
                 }
             }
@@ -252,20 +276,67 @@ public static partial class WebApiDocsGenerator
 
     private static string? GetFirstParagraph(XElement? parent, XNamespace mamlNs)
     {
-        if (parent is null) return null;
-        return parent.Elements(mamlNs + "para")
-            .Select(p => p.Value.Trim())
-            .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p));
+        var paragraphs = ExtractPowerShellParagraphs(parent, mamlNs);
+        return paragraphs.Count == 0 ? null : paragraphs[0];
     }
 
     private static string? JoinParagraphs(XElement? parent, XNamespace mamlNs)
     {
-        if (parent is null) return null;
-        var parts = parent.Elements(mamlNs + "para")
-            .Select(p => p.Value.Trim())
-            .Where(p => !string.IsNullOrWhiteSpace(p))
+        var paragraphs = ExtractPowerShellParagraphs(parent, mamlNs);
+        return paragraphs.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, paragraphs);
+    }
+
+    private static List<string> ExtractPowerShellParagraphs(XElement? parent, XNamespace mamlNs)
+    {
+        var paragraphs = new List<string>();
+        if (parent is null)
+            return paragraphs;
+
+        void AppendNormalized(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+            var normalized = value.Trim();
+            if (!string.IsNullOrWhiteSpace(normalized))
+                paragraphs.Add(normalized);
+        }
+
+        foreach (var para in parent.Elements(mamlNs + "para"))
+            AppendNormalized(para.Value);
+
+        if (paragraphs.Count == 0)
+        {
+            foreach (var para in parent.Descendants(mamlNs + "para"))
+                AppendNormalized(para.Value);
+        }
+
+        if (paragraphs.Count == 0)
+        {
+            foreach (var block in SplitPowerShellParagraphText(parent.Value))
+                AppendNormalized(block);
+        }
+
+        return paragraphs
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
+    }
+
+    private static IEnumerable<string> SplitPowerShellParagraphText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        var normalized = value
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+
+        var blocks = Regex.Split(normalized, "\\n\\s*\\n")
+            .Select(block => block.Trim())
+            .Where(block => !string.IsNullOrWhiteSpace(block))
+            .Select(block => Regex.Replace(block, "\\s*\\n\\s*", " "))
+            .ToList();
+
+        return blocks;
     }
 
     private static Dictionary<string, PowerShellParameterInfo> BuildPowerShellParameterMap(
@@ -294,6 +365,7 @@ public static partial class WebApiDocsGenerator
             var defaultValue = parameter.Attribute("defaultValue")?.Value?.Trim();
             var position = parameter.Attribute("position")?.Value?.Trim();
             var pipelineInput = parameter.Attribute("pipelineInput")?.Value?.Trim();
+            var aliases = ParsePowerShellAliases(parameter.Attribute("aliases")?.Value);
 
             map[name] = new PowerShellParameterInfo
             {
@@ -302,23 +374,214 @@ public static partial class WebApiDocsGenerator
                 Required = required,
                 DefaultValue = defaultValue,
                 Position = position,
-                PipelineInput = pipelineInput
+                PipelineInput = pipelineInput,
+                Aliases = aliases
             };
         }
 
         return map;
     }
 
-    private static string? JoinReturnValues(XElement command, XNamespace commandNs, XNamespace mamlNs)
+    private static (string? text, List<string> outputTypes) ParsePowerShellReturnInfo(
+        XElement command,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
     {
+        var outputTypes = new List<string>();
         var values = command.Element(commandNs + "returnValues");
-        if (values is null) return null;
-        var parts = values.Elements(commandNs + "returnValue")
-            .Select(rv => JoinParagraphs(rv.Element(mamlNs + "description"), mamlNs))
-            .Where(text => !string.IsNullOrWhiteSpace(text))
-            .Select(text => text!)
+        if (values is null)
+            return (null, outputTypes);
+
+        var parts = new List<string>();
+        foreach (var value in values.Elements(commandNs + "returnValue"))
+        {
+            var description = JoinParagraphs(value.Element(mamlNs + "description"), mamlNs);
+            if (string.IsNullOrWhiteSpace(description))
+                description = JoinParagraphs(value.Element(devNs + "remarks"), mamlNs);
+
+            var typeNames = ParsePowerShellTypeNames(value, commandNs, mamlNs, devNs);
+            foreach (var typeName in typeNames)
+            {
+                if (!outputTypes.Contains(typeName, StringComparer.OrdinalIgnoreCase))
+                    outputTypes.Add(typeName);
+            }
+
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                if (typeNames.Count > 0)
+                    parts.Add($"{string.Join(", ", typeNames)}: {description}");
+                else
+                    parts.Add(description);
+            }
+        }
+
+        if (parts.Count == 0 && outputTypes.Count > 0)
+            parts.Add(string.Join(", ", outputTypes));
+
+        return (parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts), outputTypes);
+    }
+
+    private static List<string> ParsePowerShellInputTypes(
+        XElement command,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs)
+    {
+        var inputs = command.Element(commandNs + "inputTypes");
+        return ParsePowerShellTypeNames(inputs, commandNs, mamlNs, devNs, "inputType");
+    }
+
+    private static List<string> ParsePowerShellCommandAliases(
+        XElement command,
+        XElement? details,
+        XNamespace commandNs,
+        XNamespace mamlNs)
+    {
+        var aliases = new List<string>();
+
+        void AppendFrom(XElement? parent)
+        {
+            if (parent is null)
+                return;
+
+            foreach (var alias in parent.Elements(commandNs + "alias").Select(e => e.Value))
+            {
+                foreach (var parsed in ParsePowerShellAliases(alias))
+                    aliases.Add(parsed);
+            }
+
+            foreach (var node in parent.Elements(commandNs + "aliases"))
+            {
+                foreach (var alias in node.Elements(commandNs + "alias").Select(e => e.Value))
+                {
+                    foreach (var parsed in ParsePowerShellAliases(alias))
+                        aliases.Add(parsed);
+                }
+
+                foreach (var alias in ParsePowerShellAliases(node.Value))
+                    aliases.Add(alias);
+            }
+
+            foreach (var node in parent.Elements(mamlNs + "aliases"))
+            {
+                foreach (var alias in node.Elements(mamlNs + "alias").Select(e => e.Value))
+                {
+                    foreach (var parsed in ParsePowerShellAliases(alias))
+                        aliases.Add(parsed);
+                }
+
+                foreach (var alias in ParsePowerShellAliases(node.Value))
+                    aliases.Add(alias);
+            }
+        }
+
+        AppendFrom(details);
+        AppendFrom(command);
+
+        return aliases
+            .Where(alias => !string.IsNullOrWhiteSpace(alias))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(alias => alias, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        return parts.Count == 0 ? null : string.Join(Environment.NewLine + Environment.NewLine, parts);
+    }
+
+    private static List<string> ParsePowerShellTypeNames(
+        XElement? root,
+        XNamespace commandNs,
+        XNamespace mamlNs,
+        XNamespace devNs,
+        string? entryLocalName = null)
+    {
+        var types = new List<string>();
+        if (root is null)
+            return types;
+
+        IEnumerable<XElement> entries;
+        if (string.IsNullOrWhiteSpace(entryLocalName))
+        {
+            var selfAndDescendants = new List<XElement>();
+            if (root.Name == commandNs + "returnValue" || root.Name == commandNs + "outputType" || root.Name == commandNs + "inputType")
+                selfAndDescendants.Add(root);
+            selfAndDescendants.AddRange(root.Descendants()
+                .Where(el => el.Name == commandNs + "returnValue" || el.Name == commandNs + "outputType" || el.Name == commandNs + "inputType"));
+            entries = selfAndDescendants;
+        }
+        else
+        {
+            entries = root.Elements(commandNs + entryLocalName);
+        }
+
+        foreach (var entry in entries)
+        {
+            var directTypeName = entry.Element(devNs + "type")?.Element(mamlNs + "name")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(directTypeName))
+                types.Add(directTypeName);
+
+            foreach (var nested in entry.Descendants(devNs + "type"))
+            {
+                var name = nested.Element(mamlNs + "name")?.Value?.Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    types.Add(name);
+            }
+
+            var outputTypeName = entry.Element(commandNs + "outputTypeName")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(outputTypeName))
+                types.Add(outputTypeName);
+
+            var fallback = entry.Element(mamlNs + "name")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(fallback))
+                types.Add(fallback);
+        }
+
+        return types
+            .Where(type => !string.IsNullOrWhiteSpace(type))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<string> ParsePowerShellAliases(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return new List<string>();
+
+        return value
+            .Split(new[] { ',', ';', '|', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(alias =>
+                !string.IsNullOrWhiteSpace(alias) &&
+                !alias.Equals("none", StringComparison.OrdinalIgnoreCase) &&
+                !alias.Equals("(none)", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(alias => alias, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string BuildPowerShellSyntaxSignature(string commandName, IReadOnlyList<ApiParameterModel> parameters)
+    {
+        var parts = new List<string> { commandName };
+        foreach (var parameter in parameters)
+        {
+            if (parameter is null)
+                continue;
+            var name = parameter.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var token = "-" + name;
+            if (!IsPowerShellSwitchParameter(parameter.Type))
+            {
+                var displayType = string.IsNullOrWhiteSpace(parameter.Type) ? "Object" : parameter.Type!.Trim();
+                token += $" <{displayType}>";
+            }
+
+            if (parameter.IsOptional)
+                token = "[" + token + "]";
+
+            parts.Add(token);
+        }
+
+        return string.Join(" ", parts);
     }
 
     private static void AppendPowerShellExamples(
@@ -335,36 +598,34 @@ public static partial class WebApiDocsGenerator
         if (examples is null)
             return;
 
+        var exampleNumber = 1;
         foreach (var example in examples.Elements(commandNs + "example"))
         {
-            var narrativeParts = new List<string>();
             var title = NormalizePowerShellExampleTitle(example.Element(mamlNs + "title")?.Value);
+            if (string.IsNullOrWhiteSpace(title))
+                title = $"Example {exampleNumber}";
             if (!string.IsNullOrWhiteSpace(title))
-                narrativeParts.Add(title);
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "heading",
+                    Text = title
+                });
+            }
 
-            var introduction = JoinParagraphs(example.Element(mamlNs + "introduction"), mamlNs);
-            if (!string.IsNullOrWhiteSpace(introduction))
-                narrativeParts.Add(introduction);
+            foreach (var introduction in ExtractPowerShellParagraphs(example.Element(mamlNs + "introduction"), mamlNs))
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "text",
+                    Text = introduction
+                });
+            }
 
             var code = example.Element(devNs + "code")?.Value;
             if (string.IsNullOrWhiteSpace(code))
                 code = example.Element(commandNs + "code")?.Value;
             code = code?.Trim();
-
-            var remarks = JoinParagraphs(example.Element(devNs + "remarks"), mamlNs);
-            if (string.IsNullOrWhiteSpace(remarks))
-                remarks = JoinParagraphs(example.Element(mamlNs + "remarks"), mamlNs);
-            if (!string.IsNullOrWhiteSpace(remarks))
-                narrativeParts.Add(remarks);
-
-            if (narrativeParts.Count > 0)
-            {
-                type.Examples.Add(new ApiExampleModel
-                {
-                    Kind = "text",
-                    Text = string.Join(Environment.NewLine + Environment.NewLine, narrativeParts)
-                });
-            }
 
             if (!string.IsNullOrWhiteSpace(code))
             {
@@ -374,6 +635,29 @@ public static partial class WebApiDocsGenerator
                     Text = code
                 });
             }
+
+            foreach (var remark in ExtractPowerShellParagraphs(example.Element(devNs + "remarks"), mamlNs))
+            {
+                type.Examples.Add(new ApiExampleModel
+                {
+                    Kind = "text",
+                    Text = remark
+                });
+            }
+
+            if (example.Element(devNs + "remarks") is null)
+            {
+                foreach (var remark in ExtractPowerShellParagraphs(example.Element(mamlNs + "remarks"), mamlNs))
+                {
+                    type.Examples.Add(new ApiExampleModel
+                    {
+                        Kind = "text",
+                        Text = remark
+                    });
+                }
+            }
+
+            exampleNumber++;
         }
     }
 
@@ -511,17 +795,7 @@ public static partial class WebApiDocsGenerator
         {
             foreach (var pattern in new[] { "about_*.help.txt", "about_*.txt", "about_*.md", "about_*.markdown" })
             {
-                IEnumerable<string> matches;
-                try
-                {
-                    matches = Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories);
-                }
-                catch
-                {
-                    continue;
-                }
-
-                foreach (var match in matches)
+                foreach (var match in SafeEnumerateFiles(root, pattern, SearchOption.AllDirectories))
                     files.Add(match);
             }
         }
@@ -659,6 +933,7 @@ public static partial class WebApiDocsGenerator
     {
         public string? Summary { get; set; }
         public string? Type { get; set; }
+        public List<string> Aliases { get; set; } = new();
         public bool Required { get; set; }
         public string? DefaultValue { get; set; }
         public string? Position { get; set; }

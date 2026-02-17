@@ -300,7 +300,8 @@ public static partial class WebApiDocsGenerator
 
     private static bool IsPowerShellSwitchParameter(string? typeName)
         => !string.IsNullOrWhiteSpace(typeName) &&
-           typeName.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase);
+           (typeName.Equals("SwitchParameter", StringComparison.OrdinalIgnoreCase) ||
+            typeName.EndsWith(".SwitchParameter", StringComparison.OrdinalIgnoreCase));
 
     private static string GetPowerShellSampleValue(string parameterName, string? typeName)
     {
@@ -341,7 +342,7 @@ public static partial class WebApiDocsGenerator
     {
         try
         {
-            return Directory.EnumerateDirectories(path, pattern, searchOption);
+            return Directory.GetDirectories(path, pattern, searchOption);
         }
         catch
         {
@@ -353,7 +354,7 @@ public static partial class WebApiDocsGenerator
     {
         try
         {
-            return Directory.EnumerateFiles(path, pattern, searchOption);
+            return Directory.GetFiles(path, pattern, searchOption);
         }
         catch
         {

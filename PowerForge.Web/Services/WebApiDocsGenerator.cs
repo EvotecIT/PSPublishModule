@@ -379,8 +379,11 @@ public static partial class WebApiDocsGenerator
                 ["name"] = type.Name,
                 ["displayName"] = displayName,
                 ["aliases"] = aliases,
+                ["commandAliases"] = type.Aliases,
                 ["fullName"] = type.FullName,
                 ["namespace"] = type.Namespace,
+                ["inputTypes"] = type.InputTypes,
+                ["outputTypes"] = type.OutputTypes,
                 ["assembly"] = type.Assembly,
                 ["source"] = BuildSourceJson(type.Source),
                 ["baseType"] = type.BaseType,
@@ -445,6 +448,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = p.Name,
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
+                        ["aliases"] = p.Aliases,
                         ["isOptional"] = p.IsOptional,
                         ["defaultValue"] = p.DefaultValue,
                         ["position"] = p.Position,
@@ -491,6 +495,7 @@ public static partial class WebApiDocsGenerator
                         ["name"] = p.Name,
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
+                        ["aliases"] = p.Aliases,
                         ["isOptional"] = p.IsOptional,
                         ["defaultValue"] = p.DefaultValue,
                         ["position"] = p.Position,
@@ -619,8 +624,11 @@ public static partial class WebApiDocsGenerator
                         ["name"] = p.Name,
                         ["type"] = p.Type,
                         ["summary"] = p.Summary,
+                        ["aliases"] = p.Aliases,
                         ["isOptional"] = p.IsOptional,
-                        ["defaultValue"] = p.DefaultValue
+                        ["defaultValue"] = p.DefaultValue,
+                        ["position"] = p.Position,
+                        ["pipelineInput"] = p.PipelineInput
                     }).ToList()
                 }).ToList()
             };
