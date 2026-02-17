@@ -157,7 +157,11 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-group-header{display:flex;align-items:center;justify-content:space-between;font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;color:#94a3b8}
 .member-group-name{color:#e2e8f0}
 .member-group-body{display:grid;gap:8px;margin-top:8px}
-.member-card pre{background:#0b1220;border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 12px;overflow:auto}
+.member-card pre{background:#0b1220;border:1px solid rgba(148,163,184,.2);border-radius:10px;padding:10px 12px;overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.45) rgba(15,23,42,.85)}
+.member-card pre::-webkit-scrollbar{height:10px;width:10px}
+.member-card pre::-webkit-scrollbar-track{background:rgba(15,23,42,.85);border-radius:999px}
+.member-card pre::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.55),rgba(148,163,184,.35));border-radius:999px;border:1px solid rgba(148,163,184,.28)}
+.member-card pre::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(167,139,250,.58),rgba(148,163,184,.42))}
 .member-card pre code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e6e9f3}
 .param-name{font-weight:700}
 .param-meta{display:inline-flex;flex-wrap:wrap;gap:6px;vertical-align:middle;margin-left:8px}
@@ -262,6 +266,10 @@ body.pf-api-docs .quick-card-header strong{line-height:1.25}
 [data-theme="light"] body.pf-api-docs .type-item,
 [data-theme="light"] body.pf-api-docs .current{color:var(--pf-ink,#0f172a)}
 [data-theme="light"] body.pf-api-docs .member-card pre code{color:var(--pf-ink,#0f172a)}
+[data-theme="light"] body.pf-api-docs .member-card pre{scrollbar-color:rgba(100,116,139,.5) rgba(226,232,240,.92)}
+[data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-track{background:rgba(226,232,240,.92)}
+[data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.65),rgba(148,163,184,.45));border-color:rgba(148,163,184,.4)}
+[data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(14,116,144,.48),rgba(14,116,144,.34))}
 [data-theme="light"] body.pf-api-docs .param-possible-values code{background:var(--pf-card-bg,#ffffff);border-color:var(--pf-border,rgba(148,163,184,.45));color:var(--pf-ink,#0f172a)}
 [data-theme="light"] body.pf-api-docs .member-source a,
 [data-theme="light"] body.pf-api-docs .type-meta-source a,

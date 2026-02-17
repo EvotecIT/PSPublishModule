@@ -791,6 +791,76 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
+    public void GenerateDocsHtml_WarnsWhenCssMissingScrollbarSelectors()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-scrollbars-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var xmlPath = Path.Combine(root, "test.xml");
+        File.WriteAllText(xmlPath,
+            """
+            <doc>
+              <assembly><name>Test</name></assembly>
+              <members>
+                <member name="T:MyNamespace.Sample">
+                  <summary>Sample.</summary>
+                </member>
+              </members>
+            </doc>
+            """);
+
+        var cssPath = Path.Combine(root, "css", "api.css");
+        Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
+        File.WriteAllText(cssPath,
+            """
+            .api-layout{}
+            .api-sidebar{}
+            .api-content{}
+            .api-overview{}
+            .type-chips{}
+            .type-chip{}
+            .chip-icon{}
+            .sidebar-count{}
+            .sidebar-toggle{}
+            .type-item{}
+            .filter-button{}
+            .member-card{}
+            .member-signature{}
+            """);
+
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api",
+            CssHref = "/css/api.css"
+        };
+
+        try
+        {
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Contains(result.Warnings, w =>
+                w.Contains("API docs CSS contract:", StringComparison.OrdinalIgnoreCase) &&
+                w.Contains(".member-card pre::-webkit-scrollbar", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
     public void GenerateDocsHtml_DoesNotWarnWhenCssContainsExpectedSelectors()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-css-ok-" + Guid.NewGuid().ToString("N"));
@@ -826,6 +896,9 @@ public class WebApiDocsGeneratorContractTests
             .filter-button{}
             .member-card{}
             .member-signature{}
+            .member-card pre::-webkit-scrollbar{}
+            .member-card pre::-webkit-scrollbar-track{}
+            .member-card pre::-webkit-scrollbar-thumb{}
             """);
 
         var outputPath = Path.Combine(root, "api");
