@@ -896,6 +896,7 @@ public class WebApiDocsGeneratorContractTests
             .filter-button{}
             .member-card{}
             .member-signature{}
+            .member-header pre.member-signature{}
             .member-card pre::-webkit-scrollbar{}
             .member-card pre::-webkit-scrollbar-track{}
             .member-card pre::-webkit-scrollbar-thumb{}

@@ -141,6 +141,12 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-card{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:12px 14px;margin-top:10px;display:grid;gap:8px}
 .member-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .member-signature{display:block;background:#111827;border-radius:8px;padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e2e8f0}
+.member-header .member-signature{margin:0}
+.member-header pre.member-signature{overflow:auto;scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.45) rgba(15,23,42,.85)}
+.member-header pre.member-signature::-webkit-scrollbar{height:10px;width:10px}
+.member-header pre.member-signature::-webkit-scrollbar-track{background:rgba(15,23,42,.85);border-radius:999px}
+.member-header pre.member-signature::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.55),rgba(148,163,184,.35));border-radius:999px;border:1px solid rgba(148,163,184,.28)}
+.member-header pre.member-signature::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(167,139,250,.58),rgba(148,163,184,.42))}
 .member-anchor{color:#94a3b8;font-size:.85rem}
 .member-parameter-set{color:#94a3b8;font-size:.8rem}
 .member-return,.member-inherited,.member-value{color:#94a3b8;font-size:.8rem}
@@ -270,6 +276,10 @@ body.pf-api-docs .quick-card-header strong{line-height:1.25}
 [data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-track{background:rgba(226,232,240,.92)}
 [data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.65),rgba(148,163,184,.45));border-color:rgba(148,163,184,.4)}
 [data-theme="light"] body.pf-api-docs .member-card pre::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(14,116,144,.48),rgba(14,116,144,.34))}
+[data-theme="light"] body.pf-api-docs .member-header pre.member-signature{scrollbar-color:rgba(100,116,139,.5) rgba(226,232,240,.92)}
+[data-theme="light"] body.pf-api-docs .member-header pre.member-signature::-webkit-scrollbar-track{background:rgba(226,232,240,.92)}
+[data-theme="light"] body.pf-api-docs .member-header pre.member-signature::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.65),rgba(148,163,184,.45));border-color:rgba(148,163,184,.4)}
+[data-theme="light"] body.pf-api-docs .member-header pre.member-signature::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(14,116,144,.48),rgba(14,116,144,.34))}
 [data-theme="light"] body.pf-api-docs .param-possible-values code{background:var(--pf-card-bg,#ffffff);border-color:var(--pf-border,rgba(148,163,184,.45));color:var(--pf-ink,#0f172a)}
 [data-theme="light"] body.pf-api-docs .member-source a,
 [data-theme="light"] body.pf-api-docs .type-meta-source a,

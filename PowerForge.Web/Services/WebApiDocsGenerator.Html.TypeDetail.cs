@@ -434,7 +434,7 @@ public static partial class WebApiDocsGenerator
 
         sb.AppendLine($"        <div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
         sb.AppendLine("          <div class=\"member-header\">");
-        sb.AppendLine($"            <code class=\"member-signature\">{System.Web.HttpUtility.HtmlEncode(signature)}</code>");
+        sb.AppendLine($"            {BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage)}");
         sb.AppendLine($"            <a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
         sb.AppendLine("          </div>");
         if (string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(member.ParameterSetName))
@@ -660,6 +660,19 @@ public static partial class WebApiDocsGenerator
         }
 
         return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
+    }
+
+    private static string BuildMemberSignatureHtml(string signature, string sectionLabel, string codeLanguage)
+    {
+        var encoded = System.Web.HttpUtility.HtmlEncode(signature);
+        if (!string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase))
+            return $"<code class=\"member-signature\">{encoded}</code>";
+
+        var language = string.IsNullOrWhiteSpace(codeLanguage)
+            ? "powershell"
+            : codeLanguage.Trim().ToLowerInvariant();
+        var languageClass = $"language-{language}";
+        return $"<pre class=\"member-signature {languageClass}\"><code class=\"{languageClass}\">{encoded}</code></pre>";
     }
 
     private static string RenderPowerShellPossibleValues(IReadOnlyList<string> values)

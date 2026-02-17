@@ -128,12 +128,76 @@ public class WebApiDocsGeneratorPowerShellTests
             var html = File.ReadAllText(htmlPath);
             Assert.Contains("type-examples", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
+            Assert.Contains("<pre class=\"member-signature language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<pre class=\"language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("prism-core.min.js", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("[&lt;CommonParameters&gt;]", html, StringComparison.Ordinal);
             Assert.Contains("Common Parameters", html, StringComparison.Ordinal);
             Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);
             Assert.Contains("Category from command parameters.", html, StringComparison.Ordinal);
             Assert.Contains("position: named", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pipeline: false", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_PowerShellHelp_DoesNotInjectPrismAssets_WhenPrismModeOff()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-apidocs-powershell-prism-off-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var helpPath = Path.Combine(root, "Sample.Module.dll-Help.xml");
+            File.WriteAllText(helpPath,
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <helpItems schema="maml" xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10">
+                  <command:command>
+                    <command:details>
+                      <command:name>Get-SampleData</command:name>
+                      <maml:description><maml:para>Gets sample data.</maml:para></maml:description>
+                    </command:details>
+                    <command:syntax>
+                      <command:syntaxItem>
+                        <command:name>Get-SampleData</command:name>
+                        <command:parameter required="true" position="named">
+                          <maml:name>Name</maml:name>
+                          <command:parameterValue required="true">string</command:parameterValue>
+                        </command:parameter>
+                      </command:syntaxItem>
+                    </command:syntax>
+                  </command:command>
+                </helpItems>
+                """);
+
+            var outputPath = Path.Combine(root, "_site", "api", "powershell");
+            var options = new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell,
+                HelpPath = helpPath,
+                OutputPath = outputPath,
+                Title = "PowerShell API",
+                BaseUrl = "/api/powershell",
+                Template = "docs",
+                Format = "html",
+                Prism = new PrismSpec { Mode = "off" }
+            };
+
+            WebApiDocsGenerator.Generate(options);
+            var html = File.ReadAllText(Path.Combine(outputPath, "get-sampledata", "index.html"));
+
+            Assert.Contains("language-powershell", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("prism-core", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("prism-autoloader", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
