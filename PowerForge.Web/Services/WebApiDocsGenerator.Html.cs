@@ -34,6 +34,8 @@ public static partial class WebApiDocsGenerator
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
+        var social = ResolveApiSocialProfile(options);
+        var indexRoute = NormalizeApiRoute(options.BaseUrl);
 
         var indexTemplate = LoadTemplate(options, "index.html", options.IndexTemplatePath);
         var typeLinks = new StringBuilder();
@@ -48,6 +50,7 @@ public static partial class WebApiDocsGenerator
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", indexRoute),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -79,11 +82,13 @@ public static partial class WebApiDocsGenerator
 
             var typeTitle = $"{type.FullName} - {options.Title}";
             var typeTemplate = LoadTemplate(options, "type.html", options.TypeTemplatePath);
+            var typeRoute = $"{NormalizeApiRoute(options.BaseUrl).TrimEnd('/')}/types/{type.Slug}.html";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {type.FullName} in {options.Title}."),
+                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, $"API reference for {type.FullName} in {options.Title}.", typeRoute),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -121,6 +126,7 @@ public static partial class WebApiDocsGenerator
             WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath)),
             prismScripts);
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
+        var social = ResolveApiSocialProfile(options);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
@@ -134,6 +140,7 @@ public static partial class WebApiDocsGenerator
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {options.Title}."),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, $"API reference for {options.Title}.", NormalizeApiRoute(baseUrl)),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -154,10 +161,12 @@ public static partial class WebApiDocsGenerator
             var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, codeLanguage, displayName);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{displayName} - {options.Title}";
+            var typeRoute = $"{NormalizeApiRoute(baseUrl).TrimEnd('/')}/{type.Slug}/";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag($"API reference for {displayName} in {options.Title}."),
+                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, $"API reference for {displayName} in {options.Title}.", typeRoute),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -278,6 +287,118 @@ public static partial class WebApiDocsGenerator
 
         var encoded = System.Web.HttpUtility.HtmlEncode(description.Trim());
         return $"<meta name=\"description\" content=\"{encoded}\" />";
+    }
+
+    private static string BuildApiOpenGraphMetaTags(WebApiDocsOptions options, ApiSocialProfile social, string pageTitle, string description, string route)
+    {
+        if (string.IsNullOrWhiteSpace(pageTitle))
+            pageTitle = options.Title;
+
+        var title = pageTitle?.Trim() ?? string.Empty;
+        var desc = description?.Trim() ?? string.Empty;
+        var siteName = string.IsNullOrWhiteSpace(social.SiteName) ? options.Title : social.SiteName;
+        var url = ResolveApiAbsoluteUrl(social.SiteBaseUrl, route);
+        var imagePath = ResolveApiSocialImagePath(options, social, title, desc, route);
+        var image = ResolveApiAbsoluteUrl(social.SiteBaseUrl, imagePath);
+        var imageAlt = title;
+        var twitterCard = string.IsNullOrWhiteSpace(social.TwitterCard)
+            ? (string.IsNullOrWhiteSpace(image) ? "summary" : "summary_large_image")
+            : social.TwitterCard;
+
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(url))
+            sb.AppendLine($"<link rel=\"canonical\" href=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+        sb.AppendLine("<!-- Open Graph -->");
+        sb.AppendLine($"<meta property=\"og:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
+        if (!string.IsNullOrWhiteSpace(desc))
+            sb.AppendLine($"<meta property=\"og:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
+        sb.AppendLine("<meta property=\"og:type\" content=\"website\" />");
+        if (!string.IsNullOrWhiteSpace(url))
+            sb.AppendLine($"<meta property=\"og:url\" content=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+        if (!string.IsNullOrWhiteSpace(image))
+            sb.AppendLine($"<meta property=\"og:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
+        if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
+            sb.AppendLine($"<meta property=\"og:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
+        if (!string.IsNullOrWhiteSpace(siteName))
+            sb.AppendLine($"<meta property=\"og:site_name\" content=\"{System.Web.HttpUtility.HtmlEncode(siteName)}\" />");
+
+        sb.AppendLine();
+        sb.AppendLine("<!-- Twitter Card -->");
+        sb.AppendLine($"<meta name=\"twitter:card\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCard)}\" />");
+        sb.AppendLine($"<meta name=\"twitter:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
+        if (!string.IsNullOrWhiteSpace(desc))
+            sb.AppendLine($"<meta name=\"twitter:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
+        if (!string.IsNullOrWhiteSpace(url))
+            sb.AppendLine($"<meta name=\"twitter:url\" content=\"{System.Web.HttpUtility.HtmlEncode(url)}\" />");
+        if (!string.IsNullOrWhiteSpace(image))
+            sb.AppendLine($"<meta name=\"twitter:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
+        if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
+            sb.AppendLine($"<meta name=\"twitter:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private static ApiSocialProfile ResolveApiSocialProfile(WebApiDocsOptions options)
+    {
+        var nav = LoadNavConfig(options);
+        var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, options.Title);
+        var siteBaseUrl = FirstNonEmpty(nav?.SiteBaseUrl);
+        var image = FirstNonEmpty(options.SocialImage, nav?.SocialImage, nav?.BrandIcon);
+        var twitterCard = FirstNonEmpty(options.SocialTwitterCard, nav?.SocialTwitterCard, "summary");
+
+        return new ApiSocialProfile(
+            siteName ?? string.Empty,
+            siteBaseUrl ?? string.Empty,
+            image ?? string.Empty,
+            twitterCard ?? "summary");
+    }
+
+    private static string NormalizeApiRoute(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        var trimmed = route.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        if (!trimmed.StartsWith("/"))
+            trimmed = "/" + trimmed;
+        return trimmed;
+    }
+
+    private static string ResolveApiAbsoluteUrl(string? siteBaseUrl, string? routeOrUrl)
+    {
+        if (string.IsNullOrWhiteSpace(routeOrUrl))
+            return string.Empty;
+
+        var value = routeOrUrl.Trim();
+        if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return value;
+
+        if (string.IsNullOrWhiteSpace(siteBaseUrl))
+            return value;
+
+        var trimmedBase = siteBaseUrl.Trim().TrimEnd('/');
+        if (!trimmedBase.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !trimmedBase.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return value;
+
+        var path = value.StartsWith("/") ? value : "/" + value;
+        return trimmedBase + path;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return null;
     }
 
     private static string ResolveCriticalCss(WebApiDocsOptions options, List<string> warnings)

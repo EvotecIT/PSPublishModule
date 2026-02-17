@@ -223,52 +223,73 @@ public static partial class WebSiteBuilder
         return string.Join(" ", classes.Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
-    private static string BuildOpenGraphHtml(SiteSpec spec, ContentItem item)
+    private static string BuildOpenGraphHtml(SiteSpec spec, ContentItem item, string outputRoot)
     {
         if (spec.Social is null || !spec.Social.Enabled)
             return string.Empty;
 
+        // Social metadata defaults to enabled when site social is enabled.
+        // Authors can opt out per page with: meta.social: false
         if (TryGetMetaBool(item.Meta, "social", out var enabled) && !enabled)
-            return string.Empty;
-
-        if (TryGetMetaBool(item.Meta, "social", out enabled) == false)
             return string.Empty;
 
         var title = GetMetaString(item.Meta, "social_title");
         if (string.IsNullOrWhiteSpace(title))
             title = item.Title;
+        if (string.IsNullOrWhiteSpace(title))
+            title = spec.Name;
         var description = GetMetaString(item.Meta, "social_description");
         if (string.IsNullOrWhiteSpace(description))
             description = item.Description;
-        var url = string.IsNullOrWhiteSpace(item.Canonical)
-            ? ResolveAbsoluteUrl(spec.BaseUrl, item.OutputPath)
-            : item.Canonical;
+        if (string.IsNullOrWhiteSpace(description))
+            description = BuildSnippet(item.HtmlContent, 200);
+        var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var url = ResolveAbsoluteUrl(spec.BaseUrl, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
         var imageOverride = GetMetaString(item.Meta, "social_image");
-        var image = ResolveAbsoluteUrl(spec.BaseUrl, string.IsNullOrWhiteSpace(imageOverride) ? spec.Social.Image : imageOverride);
+        var imagePath = ResolveSocialImagePath(spec, item, outputRoot, title, description, siteName, imageOverride);
+        var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
         var twitterCard = string.IsNullOrWhiteSpace(spec.Social.TwitterCard) ? "summary" : spec.Social.TwitterCard;
+        var imageAlt = GetMetaString(item.Meta, "social_image_alt");
+        if (string.IsNullOrWhiteSpace(imageAlt))
+            imageAlt = title;
+        var isArticle = IsArticleLikePage(item);
+        var publishedTime = item.Date?.ToUniversalTime().ToString("O");
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("<!-- Open Graph -->");
         sb.AppendLine($@"<meta property=""og:title"" content=""{System.Web.HttpUtility.HtmlEncode(title)}"" />");
         if (!string.IsNullOrWhiteSpace(description))
             sb.AppendLine($@"<meta property=""og:description"" content=""{System.Web.HttpUtility.HtmlEncode(description)}"" />");
-        sb.AppendLine(@"<meta property=""og:type"" content=""website"" />");
+        sb.AppendLine($@"<meta property=""og:type"" content=""{(isArticle ? "article" : "website")}"" />");
         if (!string.IsNullOrWhiteSpace(url))
             sb.AppendLine($@"<meta property=""og:url"" content=""{System.Web.HttpUtility.HtmlEncode(url)}"" />");
         if (!string.IsNullOrWhiteSpace(image))
             sb.AppendLine($@"<meta property=""og:image"" content=""{System.Web.HttpUtility.HtmlEncode(image)}"" />");
+        if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
+            sb.AppendLine($@"<meta property=""og:image:alt"" content=""{System.Web.HttpUtility.HtmlEncode(imageAlt)}"" />");
         if (!string.IsNullOrWhiteSpace(siteName))
             sb.AppendLine($@"<meta property=""og:site_name"" content=""{System.Web.HttpUtility.HtmlEncode(siteName)}"" />");
+        if (isArticle && !string.IsNullOrWhiteSpace(publishedTime))
+            sb.AppendLine($@"<meta property=""article:published_time"" content=""{System.Web.HttpUtility.HtmlEncode(publishedTime)}"" />");
+        if (isArticle && item.Tags is { Length: > 0 })
+        {
+            foreach (var tag in item.Tags.Where(static tag => !string.IsNullOrWhiteSpace(tag)).Distinct(StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($@"<meta property=""article:tag"" content=""{System.Web.HttpUtility.HtmlEncode(tag.Trim())}"" />");
+        }
 
         sb.AppendLine();
         sb.AppendLine("<!-- Twitter Card -->");
         sb.AppendLine($@"<meta name=""twitter:card"" content=""{System.Web.HttpUtility.HtmlEncode(twitterCard)}"" />");
         sb.AppendLine($@"<meta name=""twitter:title"" content=""{System.Web.HttpUtility.HtmlEncode(title)}"" />");
+        if (!string.IsNullOrWhiteSpace(url))
+            sb.AppendLine($@"<meta name=""twitter:url"" content=""{System.Web.HttpUtility.HtmlEncode(url)}"" />");
         if (!string.IsNullOrWhiteSpace(description))
             sb.AppendLine($@"<meta name=""twitter:description"" content=""{System.Web.HttpUtility.HtmlEncode(description)}"" />");
         if (!string.IsNullOrWhiteSpace(image))
             sb.AppendLine($@"<meta name=""twitter:image"" content=""{System.Web.HttpUtility.HtmlEncode(image)}"" />");
+        if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
+            sb.AppendLine($@"<meta name=""twitter:image:alt"" content=""{System.Web.HttpUtility.HtmlEncode(imageAlt)}"" />");
 
         return sb.ToString().TrimEnd();
     }
@@ -278,10 +299,9 @@ public static partial class WebSiteBuilder
         if (spec.StructuredData is null || !spec.StructuredData.Enabled)
             return string.Empty;
 
+        // Structured data defaults to enabled when site structured data is enabled.
+        // Authors can opt out per page with: meta.structured_data: false
         if (TryGetMetaBool(item.Meta, "structured_data", out var enabled) && !enabled)
-            return string.Empty;
-
-        if (TryGetMetaBool(item.Meta, "structured_data", out enabled) == false)
             return string.Empty;
 
         if (!spec.StructuredData.Breadcrumbs || breadcrumbs.Length == 0)
@@ -312,6 +332,18 @@ public static partial class WebSiteBuilder
         lines.Add("  </script>");
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private static bool IsArticleLikePage(ContentItem item)
+    {
+        if (item is null)
+            return false;
+        if (item.Kind != PageKind.Page)
+            return false;
+        if (!string.IsNullOrWhiteSpace(item.Collection) &&
+            item.Collection.Equals("blog", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return item.Date.HasValue;
     }
 
     private static string? ResolveMetaFilePath(ContentItem item, string rootPath, string filePath)

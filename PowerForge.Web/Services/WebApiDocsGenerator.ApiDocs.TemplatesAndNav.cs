@@ -87,6 +87,25 @@ public static partial class WebApiDocsGenerator
             nav.SiteName = nameProp.GetString() ?? nav.SiteName;
         if (root.TryGetProperty("siteName", out var siteProp) && siteProp.ValueKind == JsonValueKind.String)
             nav.SiteName = siteProp.GetString() ?? nav.SiteName;
+        if (TryGetProperty(root, "BaseUrl", out var baseUrlProp) && baseUrlProp.ValueKind == JsonValueKind.String)
+            nav.SiteBaseUrl = baseUrlProp.GetString() ?? nav.SiteBaseUrl;
+        if (TryGetProperty(root, "baseUrl", out var lowerBaseUrlProp) && lowerBaseUrlProp.ValueKind == JsonValueKind.String)
+            nav.SiteBaseUrl = lowerBaseUrlProp.GetString() ?? nav.SiteBaseUrl;
+
+        if (TryGetProperty(root, "Social", out var socialProp) && socialProp.ValueKind == JsonValueKind.Object)
+        {
+            if (TryGetProperty(socialProp, "Image", out var imageProp) && imageProp.ValueKind == JsonValueKind.String)
+                nav.SocialImage = imageProp.GetString() ?? nav.SocialImage;
+            if (TryGetProperty(socialProp, "TwitterCard", out var twitterCardProp) && twitterCardProp.ValueKind == JsonValueKind.String)
+                nav.SocialTwitterCard = twitterCardProp.GetString() ?? nav.SocialTwitterCard;
+        }
+        if (TryGetProperty(root, "social", out var lowerSocialProp) && lowerSocialProp.ValueKind == JsonValueKind.Object)
+        {
+            if (TryGetProperty(lowerSocialProp, "image", out var lowerImageProp) && lowerImageProp.ValueKind == JsonValueKind.String)
+                nav.SocialImage = lowerImageProp.GetString() ?? nav.SocialImage;
+            if (TryGetProperty(lowerSocialProp, "twitterCard", out var lowerTwitterCardProp) && lowerTwitterCardProp.ValueKind == JsonValueKind.String)
+                nav.SocialTwitterCard = lowerTwitterCardProp.GetString() ?? nav.SocialTwitterCard;
+        }
 
         if (TryGetProperty(root, "Head", out var headProp) && headProp.ValueKind == JsonValueKind.Object)
         {

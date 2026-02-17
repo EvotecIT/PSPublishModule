@@ -78,6 +78,18 @@ public sealed class WebApiDocsOptions
     public string? NavSurfaceName { get; set; }
     /// <summary>Optional site display name override.</summary>
     public string? SiteName { get; set; }
+    /// <summary>Optional social preview image URL override for generated API HTML pages.</summary>
+    public string? SocialImage { get; set; }
+    /// <summary>Optional Twitter card override for generated API HTML pages.</summary>
+    public string? SocialTwitterCard { get; set; }
+    /// <summary>When true, generate per-page API social card PNG files from page content.</summary>
+    public bool AutoGenerateSocialCards { get; set; }
+    /// <summary>Output URL prefix for generated API social card files.</summary>
+    public string? SocialCardPath { get; set; } = "/assets/social/generated/api";
+    /// <summary>Width of generated API social card PNG files.</summary>
+    public int SocialCardWidth { get; set; } = 1200;
+    /// <summary>Height of generated API social card PNG files.</summary>
+    public int SocialCardHeight { get; set; } = 630;
     /// <summary>Optional brand URL override.</summary>
     public string? BrandUrl { get; set; }
     /// <summary>Optional brand icon URL override.</summary>

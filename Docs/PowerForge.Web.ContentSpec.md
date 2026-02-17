@@ -713,7 +713,11 @@ themes/nova/assets/app.css
     "Enabled": true,
     "SiteName": "ProductX",
     "Image": "/assets/icon.png",
-    "TwitterCard": "summary"
+    "TwitterCard": "summary",
+    "AutoGenerateCards": true,
+    "GeneratedCardsPath": "/assets/social/generated",
+    "GeneratedCardWidth": 1200,
+    "GeneratedCardHeight": 630
   },
   "StructuredData": {
     "Enabled": true,
@@ -721,10 +725,24 @@ themes/nova/assets/app.css
   }
 }
 ```
-Pages opt‑in using front matter:
+When enabled in `site.json`, social tags and breadcrumbs are emitted by default for pages.
+When `Social.AutoGenerateCards` is `true`, PowerForge.Web generates PNG social cards from
+page title/description and uses them for `og:image`/`twitter:image` (unless a page sets `meta.social_image`).
+By default this applies to share-priority pages (`home`, section pages, `pages` collection, `blog` collection).
+Per-page override:
+`meta.social_card: true` to force generation, `meta.social_card: false` to skip.
+Pages can opt out using front matter:
 ```
-meta.social: true
-meta.structured_data: true
+meta.social: false
+meta.structured_data: false
+```
+
+Optional per-page social overrides:
+```
+meta.social_title: "Custom share title"
+meta.social_description: "Custom share description"
+meta.social_image: "/assets/social/custom-card.png"
+meta.social_image_alt: "Card image alt text"
 ```
 
 ## Head links + meta (site.json)

@@ -38,13 +38,14 @@ public static partial class WebSiteBuilder
             var outputDirectory = Path.GetDirectoryName(outputFile);
             if (!string.IsNullOrWhiteSpace(outputDirectory))
                 Directory.CreateDirectory(outputDirectory);
-            var content = RenderOutput(spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format, outputs, alternateHeadLinksHtml);
+            var content = RenderOutput(outputRoot, spec, rootPath, item, allItems, effectiveData, projectMap, menuSpecs, format, outputs, alternateHeadLinksHtml);
             WriteAllTextIfChanged(outputFile, content);
         }
         CopyPageResources(item, isNotFoundRoute ? outputRoot : targetDir);
     }
 
     private static string RenderHtmlPage(
+        string outputRoot,
         SiteSpec spec,
         string rootPath,
         ContentItem item,
@@ -81,7 +82,7 @@ public static partial class WebSiteBuilder
         var listItems = ApplyPagination(fullListItems, pagination);
         var headHtml = BuildHeadHtml(spec, item, allItems, rootPath);
         var bodyClass = BuildBodyClass(spec, item);
-        var openGraph = BuildOpenGraphHtml(spec, item);
+        var openGraph = BuildOpenGraphHtml(spec, item, outputRoot);
         var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);
         var extraCss = GetMetaString(item.Meta, "extra_css");
         var extraScripts = BuildExtraScriptsHtml(item, rootPath);
@@ -351,6 +352,7 @@ public static partial class WebSiteBuilder
     }
 
     private static string RenderOutput(
+        string outputRoot,
         SiteSpec spec,
         string rootPath,
         ContentItem item,
@@ -369,7 +371,7 @@ public static partial class WebSiteBuilder
             "rss" => RenderRssOutput(spec, item, allItems),
             "atom" => RenderAtomOutput(spec, item, allItems),
             "jsonfeed" => RenderJsonFeedOutput(spec, item, allItems),
-            _ => RenderHtmlPage(spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml)
+            _ => RenderHtmlPage(outputRoot, spec, rootPath, item, allItems, data, projectMap, menuSpecs, outputs, alternateHeadLinksHtml)
         };
     }
 
