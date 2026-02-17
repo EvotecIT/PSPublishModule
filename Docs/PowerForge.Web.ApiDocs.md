@@ -262,6 +262,8 @@ referenced type exists in the generated API docs.
 Set `type: PowerShell` and point `help`/`helpPath` to a PowerShell help XML file
 (for example `Module/en-US/MyModule-help.xml`) or a directory containing one.
 Each command is treated as a "type" with parameter sets rendered as methods.
+When explicit parameter set names are unavailable in help XML, PowerForge derives
+stable labels (for example `By Name`, `By Id`, `Set 1`) so users can distinguish syntax choices.
 PowerForge classifies command kinds (`Cmdlet` / `Function` / `Alias`) using
 best-effort module metadata discovery (manifest exports + root module functions)
 when available. If help XML includes `commandType`, it takes precedence over
@@ -348,5 +350,7 @@ Notes:
 - Display + member diagnostics:
   - `[PFWEB.APIDOCS.DISPLAY]` when `displayNameMode` is unknown (falls back to `namespace-suffix`)
   - `[PFWEB.APIDOCS.MEMBER.SIGNATURES]` when duplicate member signature groups are detected
+- PowerShell syntax signatures append `[<CommonParameters>]` for command kinds that support common parameters,
+  and docs pages render a dedicated `Common Parameters` section with an `about_CommonParameters` reference.
 - PowerShell fallback examples are enabled by default (`generatePowerShellFallbackExamples:true`) and can source snippets from `psExamplesPath` or discovered `Examples/` folders.
 - In pipeline `apidocs` steps, you can gate quality with coverage thresholds (for example `minPowerShellCodeExamplesPercent`, `minMemberSummaryPercent`) and enforce via `failOnCoverage:true`.

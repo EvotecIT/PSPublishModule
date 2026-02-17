@@ -109,6 +109,7 @@ public static partial class WebApiDocsGenerator
     private static List<(string id, string label)> BuildTypeToc(ApiTypeModel type, bool hasInheritance, bool hasDerived)
     {
         var isPowerShellCommand = IsPowerShellCommandType(type);
+        var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
         var methodSectionId = isPowerShellCommand ? "syntax" : "methods";
         var methodSectionLabel = isPowerShellCommand ? "Syntax" : "Methods";
         var list = new List<(string id, string label)>
@@ -127,6 +128,8 @@ public static partial class WebApiDocsGenerator
             list.Add(("examples", "Examples"));
         if (type.SeeAlso.Count > 0)
             list.Add(("see-also", "See Also"));
+        if (hasPowerShellCommonParameters)
+            list.Add(("common-parameters", "Common Parameters"));
         if (type.Constructors.Count > 0)
             list.Add(("constructors", "Constructors"));
         if (type.Methods.Count > 0)
@@ -140,6 +143,14 @@ public static partial class WebApiDocsGenerator
         if (type.ExtensionMethods.Count > 0)
             list.Add(("extensions", "Extension Methods"));
         return list;
+    }
+
+    private static bool HasPowerShellCommonParameters(ApiTypeModel type)
+    {
+        if (type is null || type.Methods.Count == 0)
+            return false;
+
+        return type.Methods.Any(static member => member.IncludesCommonParameters);
     }
 
     private static string RenderLinkedText(string text, string baseUrl, IReadOnlyDictionary<string, string> slugMap)

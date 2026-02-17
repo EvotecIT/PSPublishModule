@@ -120,6 +120,7 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .inheritance-list,.derived-list{list-style:none;padding:0;margin:0;display:grid;gap:6px}
 .inheritance-current{color:#e6e9f3;font-weight:600}
 .remarks{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:12px 14px;margin:12px 0}
+.type-common-parameters{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:12px 14px;margin:12px 0}
 .member-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:16px 0}
 .member-filter label{display:block;font-size:.75rem;color:#94a3b8;margin-bottom:6px}
 .member-kind-filter{display:flex;flex-wrap:wrap;gap:6px}
@@ -141,6 +142,7 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .member-signature{display:block;background:#111827;border-radius:8px;padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e2e8f0}
 .member-anchor{color:#94a3b8;font-size:.85rem}
+.member-parameter-set{color:#94a3b8;font-size:.8rem}
 .member-return,.member-inherited,.member-value{color:#94a3b8;font-size:.8rem}
 .member-source{color:#94a3b8;font-size:.75rem}
 .member-source a,.type-meta-source a{color:#a78bfa}
@@ -211,6 +213,7 @@ body.pf-api-docs .quick-card-header strong{line-height:1.25}
 [data-theme="light"] body.pf-api-docs .api-sidebar,
 [data-theme="light"] body.pf-api-docs .type-toc,
 [data-theme="light"] body.pf-api-docs .remarks,
+[data-theme="light"] body.pf-api-docs .type-common-parameters,
 [data-theme="light"] body.pf-api-docs .member-card,
 [data-theme="light"] body.pf-api-docs .member-group,
 [data-theme="light"] body.pf-api-docs .pf-combobox-panel,
@@ -239,6 +242,7 @@ body.pf-api-docs .quick-card-header strong{line-height:1.25}
 [data-theme="light"] body.pf-api-docs .member-return,
 [data-theme="light"] body.pf-api-docs .member-inherited,
 [data-theme="light"] body.pf-api-docs .member-source,
+[data-theme="light"] body.pf-api-docs .member-parameter-set,
 [data-theme="light"] body.pf-api-docs .member-value,
 [data-theme="light"] body.pf-api-docs .param-list dd,
 [data-theme="light"] body.pf-api-docs .type-meta-label,
