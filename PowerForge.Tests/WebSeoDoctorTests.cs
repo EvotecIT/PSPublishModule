@@ -196,6 +196,56 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_StructuredDataProfiles_FlagsMissingProfileFields()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-profiles-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Structured profile checks</title>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage"}</script>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Publish module"}</script>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Release","author":{"@type":"Organization","name":"Evotec"},"publisher":{"@type":"Organization","name":"Evotec"}}</script>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product"}</script>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication"}</script>
+                </head>
+                <body>
+                  <h1>Structured profile checks</h1>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = true
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-faq-main-entity" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-howto-step" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-news-date-published" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-product-name" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-software-name" && issue.Path == "index.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_RequireFlags_FlagsMissingCanonicalHreflangAndStructuredData()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-required-" + Guid.NewGuid().ToString("N"));

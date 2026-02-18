@@ -641,8 +641,266 @@ public static class WebSeoDoctor
                         "structured-data-missing-type",
                         itemLabel);
                 }
+
+                ValidateStructuredDataProfiles(parsed.RootElement, relativePath, itemLabel, addIssue);
             }
         }
+    }
+
+    private static void ValidateStructuredDataProfiles(
+        JsonElement root,
+        string relativePath,
+        string itemLabel,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        var objectIndex = 0;
+        foreach (var obj in EnumerateJsonLdObjects(root))
+        {
+            objectIndex++;
+            var objectLabel = $"{itemLabel}-obj-{objectIndex}";
+            var types = GetJsonLdTypes(obj);
+            if (types.Length == 0)
+                continue;
+
+            foreach (var type in types)
+            {
+                if (type.Equals("FAQPage", StringComparison.OrdinalIgnoreCase))
+                {
+                    ValidateFaqProfile(obj, relativePath, objectLabel, addIssue);
+                    continue;
+                }
+
+                if (type.Equals("HowTo", StringComparison.OrdinalIgnoreCase))
+                {
+                    ValidateHowToProfile(obj, relativePath, objectLabel, addIssue);
+                    continue;
+                }
+
+                if (type.Equals("Product", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!JsonLdObjectHasNonEmptyValue(obj, "name"))
+                    {
+                        addIssue("warning", "structured-data", relativePath,
+                            $"JSON-LD payload ({objectLabel}) type Product should include name.",
+                            "structured-data-product-name",
+                            objectLabel);
+                    }
+                    continue;
+                }
+
+                if (type.Equals("SoftwareApplication", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!JsonLdObjectHasNonEmptyValue(obj, "name"))
+                    {
+                        addIssue("warning", "structured-data", relativePath,
+                            $"JSON-LD payload ({objectLabel}) type SoftwareApplication should include name.",
+                            "structured-data-software-name",
+                            objectLabel);
+                    }
+                    continue;
+                }
+
+                if (type.Equals("Article", StringComparison.OrdinalIgnoreCase) ||
+                    type.Equals("NewsArticle", StringComparison.OrdinalIgnoreCase))
+                {
+                    ValidateArticleLikeProfile(obj, type, relativePath, objectLabel, addIssue);
+                }
+            }
+        }
+    }
+
+    private static void ValidateFaqProfile(
+        JsonElement obj,
+        string relativePath,
+        string objectLabel,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (!obj.TryGetProperty("mainEntity", out var mainEntity))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type FAQPage should include mainEntity.",
+                "structured-data-faq-main-entity",
+                objectLabel);
+            return;
+        }
+
+        var questions = mainEntity.ValueKind switch
+        {
+            JsonValueKind.Array => mainEntity.EnumerateArray().Where(static element => element.ValueKind == JsonValueKind.Object).ToArray(),
+            JsonValueKind.Object => new[] { mainEntity },
+            _ => Array.Empty<JsonElement>()
+        };
+
+        if (questions.Length == 0)
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) FAQPage mainEntity should contain Question entries.",
+                "structured-data-faq-empty",
+                objectLabel);
+            return;
+        }
+
+        var hasInvalidQuestion = questions.Any(question =>
+            !JsonLdObjectHasNonEmptyValue(question, "name") ||
+            !TryGetFaqAnswerText(question));
+        if (hasInvalidQuestion)
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) FAQPage questions should include name and acceptedAnswer.text.",
+                "structured-data-faq-question-shape",
+                objectLabel);
+        }
+    }
+
+    private static bool TryGetFaqAnswerText(JsonElement question)
+    {
+        if (!question.TryGetProperty("acceptedAnswer", out var answer))
+            return false;
+
+        if (answer.ValueKind == JsonValueKind.Object)
+            return JsonLdObjectHasNonEmptyValue(answer, "text");
+
+        if (answer.ValueKind != JsonValueKind.Array)
+            return false;
+
+        foreach (var item in answer.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Object && JsonLdObjectHasNonEmptyValue(item, "text"))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void ValidateHowToProfile(
+        JsonElement obj,
+        string relativePath,
+        string objectLabel,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (!JsonLdObjectHasNonEmptyValue(obj, "name"))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type HowTo should include name.",
+                "structured-data-howto-name",
+                objectLabel);
+        }
+
+        if (!obj.TryGetProperty("step", out var step))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type HowTo should include step.",
+                "structured-data-howto-step",
+                objectLabel);
+            return;
+        }
+
+        var steps = step.ValueKind switch
+        {
+            JsonValueKind.Array => step.EnumerateArray().Where(static element => element.ValueKind == JsonValueKind.Object).ToArray(),
+            JsonValueKind.Object => new[] { step },
+            _ => Array.Empty<JsonElement>()
+        };
+
+        if (steps.Length == 0)
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) HowTo step should contain HowToStep entries.",
+                "structured-data-howto-empty-step",
+                objectLabel);
+            return;
+        }
+
+        var hasInvalidStep = steps.Any(item =>
+            !JsonLdObjectHasNonEmptyValue(item, "name") &&
+            !JsonLdObjectHasNonEmptyValue(item, "text"));
+        if (hasInvalidStep)
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) HowTo steps should include name or text.",
+                "structured-data-howto-step-shape",
+                objectLabel);
+        }
+    }
+
+    private static void ValidateArticleLikeProfile(
+        JsonElement obj,
+        string type,
+        string relativePath,
+        string objectLabel,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (!JsonLdObjectHasNonEmptyValue(obj, "headline"))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type {type} should include headline.",
+                "structured-data-article-headline",
+                objectLabel);
+        }
+
+        if (!JsonLdObjectHasNonEmptyValue(obj, "author"))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type {type} should include author.",
+                "structured-data-article-author",
+                objectLabel);
+        }
+
+        if (!JsonLdObjectHasNonEmptyValue(obj, "publisher"))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type {type} should include publisher.",
+                "structured-data-article-publisher",
+                objectLabel);
+        }
+
+        if (type.Equals("NewsArticle", StringComparison.OrdinalIgnoreCase) &&
+            !JsonLdObjectHasNonEmptyValue(obj, "datePublished"))
+        {
+            addIssue("warning", "structured-data", relativePath,
+                $"JSON-LD payload ({objectLabel}) type NewsArticle should include datePublished.",
+                "structured-data-news-date-published",
+                objectLabel);
+        }
+    }
+
+    private static JsonElement[] EnumerateJsonLdObjects(JsonElement root)
+    {
+        if (root.ValueKind == JsonValueKind.Object)
+            return new[] { root };
+
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            return root.EnumerateArray()
+                .Where(static value => value.ValueKind == JsonValueKind.Object)
+                .ToArray();
+        }
+
+        return Array.Empty<JsonElement>();
+    }
+
+    private static string[] GetJsonLdTypes(JsonElement obj)
+    {
+        if (!obj.TryGetProperty("@type", out var typeValue))
+            return Array.Empty<string>();
+
+        if (typeValue.ValueKind == JsonValueKind.String)
+        {
+            var type = NormalizeWhitespace(typeValue.GetString());
+            return string.IsNullOrWhiteSpace(type) ? Array.Empty<string>() : new[] { type };
+        }
+
+        if (typeValue.ValueKind == JsonValueKind.Array)
+        {
+            return typeValue.EnumerateArray()
+                .Where(static value => value.ValueKind == JsonValueKind.String)
+                .Select(value => NormalizeWhitespace(value.GetString()))
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return Array.Empty<string>();
     }
 
     private static bool TryValidateJsonLdElement(JsonElement root, out bool hasContext, out bool hasType)
