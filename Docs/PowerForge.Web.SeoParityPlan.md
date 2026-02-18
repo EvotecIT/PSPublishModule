@@ -30,7 +30,7 @@ Legend:
 | Internal linking suggestions | Link recommendations + orphan detection | Missing | We lint nav/docs structure but no content link-graph advisor. |
 | Schema breadth | FAQ/HowTo/Product/Software/News schemas | Missing | Baseline schema only; no richer schema profiles yet. |
 | Vertical sitemaps | News/Image/Video sitemap modes | Missing | Only generic sitemap today. |
-| Fast indexing ping | IndexNow support | Missing | No IndexNow pipeline step currently. |
+| Fast indexing ping | IndexNow support | Have | `indexnow` pipeline step supports batching/retry/dry-run/reporting and changed-file scoping. |
 | Crawl controls UX | Fine-grained crawl/index directives | Partial | We support robots/noindex patterns but not a consolidated crawl policy model. |
 
 ## What We Should Build Next
@@ -94,9 +94,9 @@ Why:
 ### M5: Discovery + Crawl Controls
 
 Deliverables:
-- Optional `indexnow` step:
+- `indexnow` step (implemented):
   - submit changed canonical URLs after deploy
-  - retry + batching + dry-run
+  - retry + batching + dry-run + report/summary output
 - Crawl policy block in `site.json`:
   - named bot directives
   - route-scoped index/follow defaults
@@ -151,7 +151,7 @@ Pipeline spec (new steps):
 2. Add template/token resolution and preview artifact.
 3. Expand structured data profiles with strict validation.
 4. Add specialized sitemap outputs + index.
-5. Add IndexNow and crawl policy model.
+5. Add crawl policy model.
 6. Add redirect assistant for migration-heavy sites.
 
 ## References

@@ -79,7 +79,9 @@ Legend:
   - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
 - **Partial**: `seo-doctor` pipeline step provides deterministic editorial checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase), but search-appearance templating and richer schema/sitemap families are still pending.
   - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
-- **Missing**: search appearance token templates/preview, expanded schema profiles (`FAQ/HowTo/Product/SoftwareApplication/NewsArticle`), dedicated news/image/video sitemaps, and IndexNow submission support.
+- **Have**: IndexNow submission pipeline step (`indexnow`) for canonical URL push (batch/retry/dry-run/report + changed-file scoping).
+  - Code: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.IndexNow.cs`, `PowerForge.Web.Cli/IndexNowSubmitter.cs`
+- **Missing**: search appearance token templates/preview, expanded schema profiles (`FAQ/HowTo/Product/SoftwareApplication/NewsArticle`), and dedicated news/image/video sitemaps.
   - Plan: `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ### Themes + Contracts
@@ -206,11 +208,11 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 
 ### M2.5: SEO Parity Foundation (Next)
 
-- Implement `seo-doctor` pipeline step with deterministic content + technical checks and baseline/fail-on-new support.
+- Expand `seo-doctor` with canonical/hreflang/schema-oriented checks and richer fix hints.
 - Add SEO title/description template token resolution and preview artifacts.
 - Expand structured data profiles for docs/product/news use cases.
 - Add specialized sitemap family (news/images/videos) and sitemap index output support.
-- Add IndexNow step and crawl-policy model for explicit discovery controls.
+- Add crawl-policy model for explicit discovery controls.
 
 ### M3: DocFX-class Docs Conveniences (Later)
 

@@ -43,6 +43,7 @@
         { "$ref": "#/$defs/OverlayStep" },
         { "$ref": "#/$defs/HostingStep" },
         { "$ref": "#/$defs/CloudflareStep" },
+        { "$ref": "#/$defs/IndexNowStep" },
         { "$ref": "#/$defs/HookStep" },
         { "$ref": "#/$defs/HtmlTransformStep" },
         { "$ref": "#/$defs/DataTransformStep" },
@@ -295,6 +296,90 @@
         { "required": ["zoneId"] },
         { "required": ["zone-id"] }
       ]
+    },
+    "IndexNowStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "indexnow" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "baseUrl": { "type": "string", "description": "Base URL used when converting relative paths to absolute URLs." },
+        "base-url": { "type": "string", "description": "Alias for baseUrl." },
+        "siteRoot": { "type": "string", "description": "Site output root used with scopeFromBuildUpdated." },
+        "site-root": { "type": "string", "description": "Alias for siteRoot." },
+        "scopeFromBuildUpdated": { "type": "boolean", "description": "When true (or in --fast mode by default), include HTML files updated by the previous build step." },
+        "scope-from-build-updated": { "type": "boolean", "description": "Alias for scopeFromBuildUpdated." },
+
+        "urls": { "type": "string", "description": "Comma-separated absolute URLs to submit." },
+        "url": { "type": "string", "description": "Alias for urls." },
+        "paths": { "type": "string", "description": "Comma-separated relative paths combined with baseUrl." },
+        "path": { "type": "string", "description": "Alias for paths." },
+        "urlFile": { "type": "string", "description": "Text file with URLs/paths (one per line)." },
+        "url-file": { "type": "string", "description": "Alias for urlFile." },
+        "sitemap": { "type": "string", "description": "Optional sitemap.xml path; <loc> entries are submitted." },
+        "sitemapPath": { "type": "string", "description": "Alias for sitemap." },
+        "sitemap-path": { "type": "string", "description": "Alias for sitemap." },
+        "maxUrls": { "type": "integer", "minimum": 0, "description": "Maximum URLs submitted in this step (0 disables limit)." },
+        "max-urls": { "type": "integer", "minimum": 0, "description": "Alias for maxUrls." },
+        "truncateToMaxUrls": { "type": "boolean", "description": "When true, trim URL list to maxUrls instead of failing." },
+        "truncate-to-max-urls": { "type": "boolean", "description": "Alias for truncateToMaxUrls." },
+
+        "endpoint": { "type": "string", "description": "Single IndexNow endpoint URL." },
+        "apiEndpoint": { "type": "string", "description": "Alias for endpoint." },
+        "endpoints": {
+          "oneOf": [
+            { "type": "string", "description": "Comma-separated endpoint URLs." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "engine": { "type": "string", "description": "Alias for endpoint." },
+        "engines": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for endpoints." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "host": { "type": "string", "description": "Optional host override for IndexNow payload grouping." },
+        "key": { "type": "string", "description": "IndexNow key value." },
+        "keyPath": { "type": "string", "description": "Path to file containing key value." },
+        "key-path": { "type": "string", "description": "Alias for keyPath." },
+        "keyEnv": { "type": "string", "description": "Env var name used when key is not provided. Defaults to INDEXNOW_KEY." },
+        "key-env": { "type": "string", "description": "Alias for keyEnv." },
+        "keyLocation": { "type": "string", "description": "Absolute/relative key file URL. Defaults to https://<host>/<key>.txt." },
+        "key-location": { "type": "string", "description": "Alias for keyLocation." },
+
+        "batchSize": { "type": "integer", "minimum": 1, "description": "URLs per request batch (max 10000)." },
+        "batch-size": { "type": "integer", "minimum": 1, "description": "Alias for batchSize." },
+        "retry": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "retry-count": { "type": "integer", "minimum": 0 },
+        "retryDelayMs": { "type": "integer", "minimum": 0 },
+        "retry-delay-ms": { "type": "integer", "minimum": 0 },
+        "retryDelay": { "type": "integer", "minimum": 0 },
+        "retry-delay": { "type": "integer", "minimum": 0 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." },
+
+        "dryRun": { "type": "boolean" },
+        "dry-run": { "type": "boolean", "description": "Alias for dryRun." },
+        "continueOnError": { "type": "boolean", "description": "When true, request failures are warnings and step stays green." },
+        "failOnRequestError": { "type": "boolean", "description": "Overrides continueOnError behavior." },
+        "failOnEmpty": { "type": "boolean", "description": "When true, fail if no URLs are collected." },
+        "reportPath": { "type": "string" },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string" },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
+      },
+      "required": ["task"]
     },
     "HookStep": {
       "type": "object",

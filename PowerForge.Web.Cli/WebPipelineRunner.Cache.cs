@@ -20,6 +20,8 @@ internal static partial class WebPipelineRunner
         // Tasks with external side-effects should not be cached.
         if (task.Equals("cloudflare", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
             return false;
         if (task.Equals("hook", StringComparison.OrdinalIgnoreCase))
@@ -489,6 +491,21 @@ internal static partial class WebPipelineRunner
                         baselinePath = ".powerforge/seo-baseline.json";
                     outputs.AddRange(ResolveOutputCandidates(baseDir, baselinePath));
                 }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            case "indexnow":
+            {
+                var outputs = new List<string>();
+                var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
+                if (!string.IsNullOrWhiteSpace(reportPath))
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, reportPath));
+
+                var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
+                if (!string.IsNullOrWhiteSpace(summaryPath))
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, summaryPath));
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)

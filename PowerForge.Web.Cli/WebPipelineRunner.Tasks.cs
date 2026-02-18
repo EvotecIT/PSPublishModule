@@ -82,6 +82,9 @@ internal static partial class WebPipelineRunner
             case "cloudflare":
                 ExecuteCloudflare(step, baseDir, stepResult);
                 break;
+            case "indexnow":
+                ExecuteIndexNow(step, baseDir, fast, lastBuildOutPath, lastBuildUpdatedFiles, stepResult);
+                break;
             case "hook":
                 ExecuteHook(step, label, baseDir, effectiveMode, stepResult);
                 break;

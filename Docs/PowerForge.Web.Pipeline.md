@@ -1124,6 +1124,57 @@ Notes:
 - `strict: true` fails if selected target artifacts are missing.
 - `site-root` is supported as an alias for `siteRoot`.
 
+#### indexnow
+Submits changed or selected canonical URLs to IndexNow-compatible endpoints.
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://intelligencex.dev",
+  "siteRoot": "./_site",
+  "scopeFromBuildUpdated": true,
+  "keyEnv": "INDEXNOW_KEY",
+  "keyLocation": "https://intelligencex.dev/your-indexnow-key.txt",
+  "batchSize": 500,
+  "retryCount": 2,
+  "retryDelayMs": 750,
+  "reportPath": "./_reports/indexnow.json",
+  "summaryPath": "./_reports/indexnow.md"
+}
+```
+
+Explicit URL/path mode:
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://codeglyphx.com",
+  "keyEnv": "INDEXNOW_KEY",
+  "paths": "/,/docs/,/api/,/blog/",
+  "sitemap": "./_site/sitemap.xml",
+  "dryRun": true
+}
+```
+
+Notes:
+- URL sources can be combined:
+  - `urls` / `url` (absolute URLs)
+  - `paths` / `path` (combined with `baseUrl`)
+  - `urlFile` (newline-separated URLs/paths)
+  - `sitemap` (`<loc>` entries from sitemap XML)
+  - `scopeFromBuildUpdated` (`--fast` defaults this behavior on) when a preceding `build` step updated HTML files.
+- Auth/key options:
+  - `key` (inline), `keyPath` (file), or `keyEnv` (recommended; defaults to `INDEXNOW_KEY`).
+  - `keyLocation` can be explicit, otherwise defaults to `https://<host>/<key>.txt`.
+- Endpoint options:
+  - default endpoint is `https://api.indexnow.org/indexnow`
+  - override via `endpoint`/`endpoints` (aliases: `engine`/`engines`).
+- Reliability controls:
+  - `batchSize`, `retryCount`/`retryDelayMs`, `timeoutSeconds`.
+  - `continueOnError:true` keeps the step green even when some requests fail.
+- Safety controls:
+  - `failOnEmpty:true` fails when no URLs are collected.
+  - `maxUrls` + `truncateToMaxUrls` keep submissions bounded.
+- `indexnow` steps are intentionally not cacheable (external side effects).
+
 ## Publish spec (`powerforge-web publish`)
 
 Publish specs wrap a typical build + publish flow into a single config.
