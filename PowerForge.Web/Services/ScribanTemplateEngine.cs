@@ -173,7 +173,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 0;
-        public int ParameterCount => 8;
+        public int ParameterCount => 9;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -189,6 +189,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 5 => new ScriptParameterInfo(typeof(bool), "show_image", true),
                 6 => new ScriptParameterInfo(typeof(string), "image_aspect", "16/9"),
                 7 => new ScriptParameterInfo(typeof(string), "fallback_image", string.Empty),
+                8 => new ScriptParameterInfo(typeof(string), "variant", "default"),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -203,7 +204,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var showImage = arguments.Count > 5 ? ScribanThemeHelpers.ParseBool(arguments[5], true) : true;
             var imageAspect = arguments.Count > 6 ? arguments[6]?.ToString() : "16/9";
             var fallbackImage = arguments.Count > 7 ? arguments[7]?.ToString() : string.Empty;
-            return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage);
+            var variant = arguments.Count > 8 ? arguments[8]?.ToString() : "default";
+            return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage, variant);
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)

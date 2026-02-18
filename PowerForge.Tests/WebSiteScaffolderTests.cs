@@ -87,6 +87,10 @@ public class WebSiteScaffolderTests
             var listTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "list.html"));
             Assert.Contains("pf.editorial_cards", listTemplate, StringComparison.Ordinal);
             Assert.Contains("pf.editorial_pager", listTemplate, StringComparison.Ordinal);
+            Assert.Contains("\"hero\"", listTemplate, StringComparison.Ordinal);
+
+            var termTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "term.html"));
+            Assert.Contains("\"compact\"", termTemplate, StringComparison.Ordinal);
         }
         finally
         {

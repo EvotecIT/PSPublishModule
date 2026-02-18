@@ -139,7 +139,7 @@ public static partial class WebSiteScaffolder
         </header>
         {{ content }}
         {{ if items && items.size > 0 }}
-          {{ pf.editorial_cards 0 160 true true true true ""16/9"" }}
+          {{ pf.editorial_cards 0 160 true true true true ""16/9"" """" ""hero"" }}
           {{ pf.editorial_pager ""Newer posts"" ""Older posts"" }}
         {{ else }}
           <p>No entries yet.</p>
@@ -237,7 +237,7 @@ public static partial class WebSiteScaffolder
         </header>
         {{ content }}
         {{ if items && items.size > 0 }}
-          {{ pf.editorial_cards 0 160 false true false true ""16/9"" }}
+          {{ pf.editorial_cards 0 160 false true false true ""16/9"" """" ""compact"" }}
           {{ pf.editorial_pager ""Newer posts"" ""Older posts"" }}
         {{ else }}
           <p>No entries for this term yet.</p>

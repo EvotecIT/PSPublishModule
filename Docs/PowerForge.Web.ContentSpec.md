@@ -487,7 +487,8 @@ Best practice (theme rendering):
     - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
     - `image_aspect` (default `"16/9"`, accepts `/` or `:` like `"4:3"`)
     - `fallback_image` (default empty; if omitted, helper falls back to `site.social.image` when set)
-    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" }}`
+    - `variant` (default `"default"`, options: `"default"`, `"compact"`, `"hero"`, `"featured"`; controls helper-emitted CSS classes)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" }}`
   - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
     - `newer_label` (default `"Newer posts"`)
     - `older_label` (default `"Older posts"`)

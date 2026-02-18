@@ -150,7 +150,8 @@ internal sealed class ScribanThemeHelpers
         bool showTags = true,
         bool showImage = true,
         string? imageAspect = "16/9",
-        string? fallbackImage = null)
+        string? fallbackImage = null,
+        string? variant = "default")
     {
         var items = _context.Items ?? Array.Empty<ContentItem>();
         if (items.Count == 0)
@@ -159,6 +160,7 @@ internal sealed class ScribanThemeHelpers
         var take = maxItems > 0 ? maxItems : int.MaxValue;
         var maxExcerptLength = Math.Clamp(excerptLength, 40, 600);
         var normalizedAspect = NormalizeAspectRatio(imageAspect);
+        var normalizedVariant = NormalizeEditorialVariant(variant);
         var defaultFallbackImage = string.IsNullOrWhiteSpace(fallbackImage)
             ? (_context.Site?.Social?.Image ?? string.Empty)
             : fallbackImage.Trim();
@@ -171,14 +173,15 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var sb = new StringBuilder();
-        sb.Append("<div class=\"pf-editorial-grid\">");
-        foreach (var item in selected)
+        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant))).Append("\">");
+        for (var index = 0; index < selected.Length; index++)
         {
+            var item = selected[index];
             var title = string.IsNullOrWhiteSpace(item.Title) ? item.OutputPath : item.Title;
             var summary = ResolveSummary(item, maxExcerptLength);
             var image = showImage ? ResolveCardImage(item.Meta, defaultFallbackImage) : string.Empty;
 
-            sb.Append("<a class=\"pf-editorial-card\" href=\"").Append(Html(item.OutputPath)).Append("\">");
+            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
             if (!string.IsNullOrWhiteSpace(image))
             {
                 sb.Append("<span class=\"pf-editorial-card-media\"");
@@ -516,6 +519,43 @@ internal sealed class ScribanThemeHelpers
             return "16 / 9";
 
         return $"{w.ToString("0.####", CultureInfo.InvariantCulture)} / {h.ToString("0.####", CultureInfo.InvariantCulture)}";
+    }
+
+    private static string NormalizeEditorialVariant(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "default";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "compact" => "compact",
+            "hero" => "hero",
+            "featured" => "featured",
+            _ => "default"
+        };
+    }
+
+    private static string BuildEditorialGridClass(string variant)
+    {
+        return variant switch
+        {
+            "compact" => "pf-editorial-grid pf-editorial-grid--compact",
+            "hero" => "pf-editorial-grid pf-editorial-grid--hero",
+            "featured" => "pf-editorial-grid pf-editorial-grid--featured",
+            _ => "pf-editorial-grid"
+        };
+    }
+
+    private static string BuildEditorialCardClass(string variant, int index)
+    {
+        if (variant == "compact")
+            return "pf-editorial-card pf-editorial-card--compact";
+        if (variant == "featured")
+            return "pf-editorial-card pf-editorial-card--featured";
+        if (variant == "hero" && index == 0)
+            return "pf-editorial-card pf-editorial-card--hero";
+        return "pf-editorial-card";
     }
 
     private static string BuildClass(NavigationItem item, string? baseClass)
