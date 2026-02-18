@@ -1,6 +1,6 @@
 # Cloudflare Cache Purge (Optional)
 
-Last updated: 2026-02-09
+Last updated: 2026-02-18
 
 If your site is behind Cloudflare and you cache HTML aggressively, deploys can appear "stale"
 until Cloudflare revalidates or you hard refresh. The best long-term pattern is:
@@ -8,7 +8,7 @@ until Cloudflare revalidates or you hard refresh. The best long-term pattern is:
 - hash/version static assets (CSS/JS/images) so they can be cached for a long time
 - keep HTML caching conservative, or purge HTML after deploy
 
-PowerForge.Web includes a small Cloudflare purge command to make this repeatable in CI.
+PowerForge.Web includes small Cloudflare purge + verify commands to make this repeatable in CI.
 
 ## CLI
 
@@ -88,7 +88,8 @@ Pseudo-snippet:
   env:
     CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   run: |
-    powerforge-web cloudflare purge --zone-id ${{ secrets.CLOUDFLARE_ZONE_ID }} --token-env CLOUDFLARE_API_TOKEN --base-url https://example.com --path /,/docs/,/api/
+    powerforge-web cloudflare purge --zone-id ${{ secrets.CLOUDFLARE_ZONE_ID }} --token-env CLOUDFLARE_API_TOKEN --site-config ./site.json
+    powerforge-web cloudflare verify --site-config ./site.json --warmup 1
 ```
 
 ## Cloudflare Rules (Free Plan Friendly)
@@ -154,7 +155,14 @@ These expressions only use `eq`/`wildcard` (no `matches`), so they work on Free 
 For all 3 rules use:
 - `Cache eligibility`: `Eligible for cache`
 - `Edge TTL`: `Use cache-control header if present, cache request with Cloudflare's default TTL for the response status if not`
-- Leave `Browser TTL`, `Cache key`, and other optional fields at default unless you have a specific reason.
+- `Respect strong ETags`: enable
+- Keep query handling default unless noted below.
+
+Query-string guidance:
+- `Static assets` rule:
+  - `Ignore query string`: enable (improves hit rate for cache-busted/static URLs)
+- `Data files` and `HTML / Docs / API` rules:
+  - keep default query behavior (do not force ignore globally)
 
 Route precedence for CLI:
 - When `--url`/`--path` are provided, those explicit values are used.
