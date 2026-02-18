@@ -257,6 +257,59 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_UsesFirstMarkdownImage_ForBlogSocialPreview_WhenNoExplicitSocialImage()
+    {
+        var root = CreateTempRoot("pf-web-social-blog-first-image-");
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "multilang.md"),
+                """
+                ---
+                title: Multilanguage Support in Action
+                description: Speak in any language you want.
+                slug: multilanguage-support-in-action
+                ---
+
+                Intro text.
+
+                ![Primary screenshot](/assets/screenshots/multilang-01.png)
+
+                More text.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                Image = "/assets/social/default.png",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated"
+            };
+            spec.Collections = new[]
+            {
+                new CollectionSpec
+                {
+                    Name = "blog",
+                    Input = "content/blog",
+                    Output = "/blog"
+                }
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("blog", "multilanguage-support-in-action", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("name=\"twitter:image\" content=\"https://example.test/assets/screenshots/multilang-01.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("/assets/social/generated/", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_EmitsStructuredDataByDefault_WhenEnabled()
     {
         var root = CreateTempRoot("pf-web-structured-default-");

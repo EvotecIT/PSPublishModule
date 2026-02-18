@@ -247,7 +247,7 @@ public static partial class WebSiteBuilder
         var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
         var url = ResolveAbsoluteUrl(spec.BaseUrl, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
-        var imageOverride = GetMetaString(item.Meta, "social_image");
+        var imageOverride = ResolveSocialImageOverride(item);
         var imagePath = ResolveSocialImagePath(spec, item, outputRoot, title, description, siteName, imageOverride);
         var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
         var (imageWidth, imageHeight) = ResolveSocialImageDimensions(spec, item, imagePath);

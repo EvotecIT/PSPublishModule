@@ -753,6 +753,8 @@ page title/description and uses them for `og:image`/`twitter:image` (unless a pa
 By default this applies to share-priority pages (`home`, section pages, `pages` collection, `blog` collection).
 Per-page override:
 `meta.social_card: true` to force generation, `meta.social_card: false` to skip.
+If `meta.social_image` is not set, blog posts also try to use the first markdown image in the post body
+before falling back to generated/default site image.
 Pages can opt out using front matter:
 ```
 meta.social: false
@@ -770,6 +772,7 @@ meta.social_image_height: 630
 meta.social_twitter_site: "@productx"
 meta.social_twitter_creator: "@author"
 ```
+Image aliases also accepted as explicit social overrides: `meta.image`, `meta.cover_image`, `meta.thumbnail`, `meta.og_image`, `meta.twitter_image`.
 
 ## Head links + meta (site.json)
 Use structured head tags so themes don’t repeat favicons or preconnects.

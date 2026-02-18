@@ -1,9 +1,44 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    private static readonly TimeSpan SocialRegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex MarkdownFenceRegex = new(
+        "```[\\s\\S]*?```",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+    private static readonly Regex MarkdownImageRegex = new(
+        "!\\[[^\\]]*\\]\\((?<target>[^)]+)\\)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+    private static readonly Regex HtmlImageRegex = new(
+        "<img\\b[^>]*\\bsrc\\s*=\\s*['\"](?<src>[^'\"]+)['\"][^>]*>",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+
+    private static string ResolveSocialImageOverride(ContentItem item)
+    {
+        var explicitMetaImage =
+            GetMetaString(item.Meta, "social_image") ??
+            GetMetaString(item.Meta, "social.image") ??
+            GetMetaString(item.Meta, "og_image") ??
+            GetMetaString(item.Meta, "twitter_image") ??
+            GetMetaString(item.Meta, "cover_image") ??
+            GetMetaString(item.Meta, "thumbnail") ??
+            GetMetaString(item.Meta, "image");
+
+        if (!string.IsNullOrWhiteSpace(explicitMetaImage))
+            return explicitMetaImage!;
+
+        if (!string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        return TryExtractFirstBodyImage(item.SourcePath);
+    }
+
     private static string ResolveSocialImagePath(
         SiteSpec spec,
         ContentItem item,
@@ -154,5 +189,73 @@ public static partial class WebSiteBuilder
             return true;
 
         return false;
+    }
+
+    private static string TryExtractFirstBodyImage(string? sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            return string.Empty;
+
+        try
+        {
+            var markdown = File.ReadAllText(sourcePath);
+            var (_, body) = FrontMatterParser.Parse(markdown);
+            var scrubbed = MarkdownFenceRegex.Replace(body ?? string.Empty, string.Empty);
+
+            var markdownMatch = MarkdownImageRegex.Match(scrubbed);
+            if (markdownMatch.Success)
+            {
+                var target = ExtractMarkdownImageTarget(markdownMatch.Groups["target"].Value);
+                var normalized = NormalizeSocialImageCandidate(target);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                    return normalized;
+            }
+
+            var htmlMatch = HtmlImageRegex.Match(scrubbed);
+            if (htmlMatch.Success)
+            {
+                var normalized = NormalizeSocialImageCandidate(htmlMatch.Groups["src"].Value);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                    return normalized;
+            }
+        }
+        catch
+        {
+            // Ignore extraction errors and fall back to generated/default image.
+        }
+
+        return string.Empty;
+    }
+
+    private static string ExtractMarkdownImageTarget(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        var value = raw.Trim();
+        if (value.StartsWith("<", StringComparison.Ordinal) && value.EndsWith(">", StringComparison.Ordinal) && value.Length > 2)
+            value = value[1..^1].Trim();
+
+        var titleDelimiter = value.IndexOf(" \"", StringComparison.Ordinal);
+        if (titleDelimiter > 0)
+            value = value[..titleDelimiter].Trim();
+
+        return value;
+    }
+
+    private static string NormalizeSocialImageCandidate(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return string.Empty;
+
+        var trimmed = candidate.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal))
+            return trimmed;
+
+        return string.Empty;
     }
 }
