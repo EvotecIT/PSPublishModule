@@ -113,6 +113,12 @@ public sealed class WebAuditOptions
     public bool RenderedCheckConsoleWarnings { get; set; } = true;
     /// <summary>When true, flag failed network requests during rendered checks.</summary>
     public bool RenderedCheckFailedRequests { get; set; } = true;
+    /// <summary>When true, evaluate rendered pages for low-contrast text using computed styles.</summary>
+    public bool RenderedCheckContrast { get; set; }
+    /// <summary>Minimum required contrast ratio for normal text in rendered contrast checks.</summary>
+    public double RenderedContrastMinRatio { get; set; } = 4.5d;
+    /// <summary>Maximum contrast findings captured per rendered page.</summary>
+    public int RenderedContrastMaxFindings { get; set; } = 10;
     /// <summary>Optional path to write audit summary JSON (relative to site root if not rooted).</summary>
     public string? SummaryPath { get; set; }
     /// <summary>When true, write the summary file only when audit fails.</summary>

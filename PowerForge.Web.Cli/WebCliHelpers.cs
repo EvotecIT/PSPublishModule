@@ -28,6 +28,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--rendered] [--rendered-contrast] [--rendered-contrast-min <ratio>] [--rendered-contrast-max-findings <n>]");
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
         Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
@@ -41,6 +42,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
         Console.WriteLine("                     [--rendered-no-install]");
         Console.WriteLine("                     [--rendered-no-console-errors] [--rendered-no-console-warnings] [--rendered-no-failures]");
+        Console.WriteLine("                     [--rendered-contrast] [--rendered-no-contrast] [--rendered-contrast-min <ratio>] [--rendered-contrast-max-findings <n>]");
         Console.WriteLine("                     [--rendered-include <glob>] [--rendered-exclude <glob>]");
         Console.WriteLine("                     [--ignore-nav <glob>] [--no-default-ignore-nav] [--nav-ignore-prefix <path>]");
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
@@ -304,6 +306,24 @@ internal static class WebCliHelpers
         var maxTotalFilesText = TryGetOptionValue(argv, "--max-total-files") ?? TryGetOptionValue(argv, "--max-files-total");
         var suppressIssues = ReadOptionList(argv, "--suppress-issue", "--suppress-issues");
         var failIssueCodes = ReadOptionList(argv, "--fail-issue", "--fail-issues", "--fail-issue-code", "--fail-issue-codes");
+        var rendered = HasOption(argv, "--rendered");
+        var renderedHeadless = !HasOption(argv, "--rendered-headful");
+        var renderedEngine = TryGetOptionValue(argv, "--rendered-engine");
+        var renderedEnsureInstalled = !HasOption(argv, "--rendered-no-install");
+        var renderedMaxText = TryGetOptionValue(argv, "--rendered-max");
+        var renderedTimeoutText = TryGetOptionValue(argv, "--rendered-timeout");
+        var renderedBaseUrl = TryGetOptionValue(argv, "--rendered-base-url");
+        var renderedHost = TryGetOptionValue(argv, "--rendered-host");
+        var renderedPortText = TryGetOptionValue(argv, "--rendered-port");
+        var renderedNoServe = HasOption(argv, "--rendered-no-serve");
+        var renderedNoConsoleErrors = HasOption(argv, "--rendered-no-console-errors");
+        var renderedNoConsoleWarnings = HasOption(argv, "--rendered-no-console-warnings");
+        var renderedNoFailures = HasOption(argv, "--rendered-no-failures");
+        var renderedContrast = HasOption(argv, "--rendered-contrast") && !HasOption(argv, "--rendered-no-contrast");
+        var renderedContrastMinText = TryGetOptionValue(argv, "--rendered-contrast-min");
+        var renderedContrastMaxFindingsText = TryGetOptionValue(argv, "--rendered-contrast-max-findings");
+        var renderedInclude = ReadOptionList(argv, "--rendered-include");
+        var renderedExclude = ReadOptionList(argv, "--rendered-exclude");
 
         if (requiredRoutes.Count == 0)
             requiredRoutes.Add("/404.html");
@@ -316,6 +336,11 @@ internal static class WebCliHelpers
         var minNavCoveragePercent = ParseIntOption(minNavCoverageText, 0);
         var maxHeadBlockingResources = ParseIntOption(maxHeadBlockingText, new WebAuditOptions().MaxHeadBlockingResources);
         var maxTotalFiles = ParseIntOption(maxTotalFilesText, 0);
+        var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
+        var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
+        var renderedPort = ParseIntOption(renderedPortText, 0);
+        var renderedContrastMinRatio = ParseDoubleOption(renderedContrastMinText, 4.5d);
+        var renderedContrastMaxFindings = ParseIntOption(renderedContrastMaxFindingsText, 10);
         var resolvedSummaryPath = ResolveSummaryPath(summaryEnabled, summaryPath);
         var resolvedSarifPath = ResolveSarifPath(sarifEnabled, sarifPath);
         var navProfiles = LoadAuditNavProfiles(navProfilesPath);
@@ -360,7 +385,25 @@ internal static class WebCliHelpers
             CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
             CheckRenderBlockingResources = checkRenderBlocking,
-            MaxHeadBlockingResources = maxHeadBlockingResources
+            MaxHeadBlockingResources = maxHeadBlockingResources,
+            CheckRendered = rendered,
+            RenderedHeadless = renderedHeadless,
+            RenderedEngine = renderedEngine ?? "Chromium",
+            RenderedEnsureInstalled = renderedEnsureInstalled,
+            RenderedBaseUrl = renderedBaseUrl,
+            RenderedServe = !renderedNoServe,
+            RenderedServeHost = string.IsNullOrWhiteSpace(renderedHost) ? "localhost" : renderedHost,
+            RenderedServePort = renderedPort,
+            RenderedMaxPages = renderedMaxPages,
+            RenderedTimeoutMs = renderedTimeoutMs,
+            RenderedCheckConsoleErrors = !renderedNoConsoleErrors,
+            RenderedCheckConsoleWarnings = !renderedNoConsoleWarnings,
+            RenderedCheckFailedRequests = !renderedNoFailures,
+            RenderedCheckContrast = renderedContrast,
+            RenderedContrastMinRatio = renderedContrastMinRatio,
+            RenderedContrastMaxFindings = Math.Clamp(renderedContrastMaxFindings, 1, 200),
+            RenderedInclude = renderedInclude.ToArray(),
+            RenderedExclude = renderedExclude.ToArray()
         });
     }
 
@@ -410,6 +453,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Add `preconnect`/`dns-prefetch` hints for external origins (for example Google Fonts) to reduce critical path latency.");
             if (ContainsCategory(audit, "render-blocking"))
                 recommendations.Add("Reduce render-blocking head resources: defer non-critical scripts and consolidate CSS.");
+            if (ContainsCategory(audit, "rendered-contrast"))
+                recommendations.Add("Improve color contrast on rendered pages (especially accent links/tabs in light mode) to meet WCAG AA.");
             if (ContainsCategory(audit, "heading-order"))
                 recommendations.Add("Fix heading hierarchy so content does not skip levels (for example h2 -> h4) to improve accessibility.");
             if (ContainsCategory(audit, "link-purpose"))

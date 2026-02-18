@@ -189,6 +189,9 @@ internal static partial class WebPipelineRunner
             var renderedCheckErrors = GetBool(step, "renderedCheckConsoleErrors") ?? true;
             var renderedCheckWarnings = GetBool(step, "renderedCheckConsoleWarnings") ?? true;
             var renderedCheckFailures = GetBool(step, "renderedCheckFailedRequests") ?? true;
+            var renderedCheckContrast = GetBool(step, "renderedCheckContrast") ?? false;
+            var renderedContrastMinRatio = GetDouble(step, "renderedContrastMinRatio") ?? 4.5d;
+            var renderedContrastMaxFindings = GetInt(step, "renderedContrastMaxFindings") ?? 10;
             var renderedInclude = GetString(step, "renderedInclude");
             var renderedExclude = GetString(step, "renderedExclude");
 
@@ -290,6 +293,9 @@ internal static partial class WebPipelineRunner
                 RenderedCheckConsoleErrors = renderedCheckErrors,
                 RenderedCheckConsoleWarnings = renderedCheckWarnings,
                 RenderedCheckFailedRequests = renderedCheckFailures,
+                RenderedCheckContrast = renderedCheckContrast,
+                RenderedContrastMinRatio = renderedContrastMinRatio,
+                RenderedContrastMaxFindings = Math.Clamp(renderedContrastMaxFindings, 1, 200),
                 RenderedInclude = CliPatternHelper.SplitPatterns(renderedInclude),
                 RenderedExclude = CliPatternHelper.SplitPatterns(renderedExclude)
             });

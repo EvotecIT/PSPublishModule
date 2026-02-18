@@ -449,6 +449,9 @@ internal static partial class WebCliCommandHandlers
         var renderedNoConsoleErrors = HasOption(subArgs, "--rendered-no-console-errors");
         var renderedNoConsoleWarnings = HasOption(subArgs, "--rendered-no-console-warnings");
         var renderedNoFailures = HasOption(subArgs, "--rendered-no-failures");
+        var renderedContrast = HasOption(subArgs, "--rendered-contrast") && !HasOption(subArgs, "--rendered-no-contrast");
+        var renderedContrastMinText = TryGetOptionValue(subArgs, "--rendered-contrast-min");
+        var renderedContrastMaxFindingsText = TryGetOptionValue(subArgs, "--rendered-contrast-max-findings");
         var renderedInclude = ReadOptionList(subArgs, "--rendered-include");
         var renderedExclude = ReadOptionList(subArgs, "--rendered-exclude");
         var summaryEnabled = HasOption(subArgs, "--summary");
@@ -487,6 +490,8 @@ internal static partial class WebCliCommandHandlers
         var renderedMaxPages = ParseIntOption(renderedMaxText, 20);
         var renderedTimeoutMs = ParseIntOption(renderedTimeoutText, 30000);
         var renderedPort = ParseIntOption(renderedPortText, 0);
+        var renderedContrastMinRatio = ParseDoubleOption(renderedContrastMinText, 4.5d);
+        var renderedContrastMaxFindings = ParseIntOption(renderedContrastMaxFindingsText, 10);
         var summaryMax = ParseIntOption(summaryMaxText, 10);
         var maxErrors = ParseIntOption(maxErrorsText, -1);
         var maxWarnings = ParseIntOption(maxWarningsText, -1);
@@ -544,6 +549,9 @@ internal static partial class WebCliCommandHandlers
             RenderedCheckConsoleErrors = !renderedNoConsoleErrors,
             RenderedCheckConsoleWarnings = !renderedNoConsoleWarnings,
             RenderedCheckFailedRequests = !renderedNoFailures,
+            RenderedCheckContrast = renderedContrast,
+            RenderedContrastMinRatio = renderedContrastMinRatio,
+            RenderedContrastMaxFindings = Math.Clamp(renderedContrastMaxFindings, 1, 200),
             RenderedInclude = renderedInclude.ToArray(),
             RenderedExclude = renderedExclude.ToArray(),
             SummaryPath = resolvedSummaryPath,
@@ -641,6 +649,8 @@ internal static partial class WebCliCommandHandlers
                 logger.Info($"Rendered console warnings: {result.RenderedConsoleWarningCount}");
             if (result.RenderedFailedRequestCount > 0)
                 logger.Info($"Rendered failed requests: {result.RenderedFailedRequestCount}");
+            if (result.RenderedContrastIssueCount > 0)
+                logger.Info($"Rendered contrast findings: {result.RenderedContrastIssueCount}");
         }
 
         if (!string.IsNullOrWhiteSpace(result.BaselinePath))
