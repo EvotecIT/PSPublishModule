@@ -328,8 +328,8 @@ a { color: inherit; text-decoration: none; }
 .pf-web-content { padding: 32px 0 60px; }
 .pf-content { background: var(--pf-panel, rgba(15, 23, 42, 0.85)); border: 1px solid var(--pf-border, rgba(148, 163, 184, 0.2)); border-radius: var(--pf-radius, 18px); padding: 24px 28px; }
 .pf-editorial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 18px; }
-.pf-editorial-card { display: block; background: rgba(15, 23, 42, 0.72); border: 1px solid var(--pf-border, rgba(148, 163, 184, 0.2)); border-radius: var(--pf-radius-sm, 12px); padding: 16px; color: inherit; }
-.pf-editorial-card:hover { border-color: var(--pf-accent, #38bdf8); transform: translateY(-1px); transition: border-color .15s ease, transform .15s ease; }
+.pf-editorial-card { display: block; background: rgba(15, 23, 42, 0.72); border: 1px solid var(--pf-border, rgba(148, 163, 184, 0.2)); border-radius: var(--pf-radius-sm, 12px); padding: 16px; color: inherit; transition: border-color .15s ease, transform .15s ease; }
+.pf-editorial-card:hover { border-color: var(--pf-accent, #38bdf8); transform: translateY(-1px); }
 .pf-editorial-card-media { display: block; width: 100%; border-radius: 10px; overflow: hidden; margin-bottom: 12px; background: rgba(15, 23, 42, 0.5); }
 .pf-editorial-card-image { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pf-editorial-meta { display: flex; gap: 10px; align-items: center; color: var(--pf-muted, #94a3b8); font-size: .85rem; margin-bottom: 10px; }

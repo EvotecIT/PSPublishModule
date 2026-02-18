@@ -207,10 +207,8 @@ public static partial class WebSiteBuilder
             return string.Empty;
 
         var trimmed = value.Trim();
-        if (trimmed.Equals("api", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals("apiDocs", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals("apidocs", StringComparison.OrdinalIgnoreCase))
-            return "apidocs";
+        if (NavSurfaceAliases.TryGetValue(trimmed, out var canonical) && !string.IsNullOrWhiteSpace(canonical))
+            return canonical.Trim().ToLowerInvariant();
 
         return trimmed.ToLowerInvariant();
     }

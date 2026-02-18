@@ -6,6 +6,9 @@ using Xunit;
 
 public class WebCliNavExportTests
 {
+    // outputSchemaVersion controls CLI JSON envelope schema, not site-nav.json contract schema.
+    private const int CliEnvelopeSchemaVersion = 1;
+
     [Fact]
     public void HandleSubCommand_NavExport_WritesDefaultOutput()
     {
@@ -21,7 +24,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
 
@@ -58,7 +61,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
 
@@ -95,7 +98,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(1, exitCode);
             Assert.Equal(original, File.ReadAllText(outPath));
@@ -124,7 +127,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
@@ -155,7 +158,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath, "--overwrite" },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
@@ -187,7 +190,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath, "--out", outside, "--overwrite" },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(1, exitCode);
             Assert.False(File.Exists(outside));

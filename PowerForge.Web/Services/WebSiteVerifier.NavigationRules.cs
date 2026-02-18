@@ -750,7 +750,11 @@ public static partial class WebSiteVerifier
                 primary.ValueKind != JsonValueKind.Array)
                 return;
 
-            ValidateSiteNavContractShape(doc.RootElement, warnings);
+            var isGeneratedNav = doc.RootElement.TryGetProperty("generated", out var generatedProp) &&
+                                 generatedProp.ValueKind == JsonValueKind.True;
+            var hasStableContract = ValidateSiteNavContractShape(doc.RootElement, warnings, isGeneratedNav);
+            if (!hasStableContract && isGeneratedNav)
+                return;
 
             if (!doc.RootElement.TryGetProperty("menuModels", out var menuModels) ||
                 menuModels.ValueKind != JsonValueKind.Array)
@@ -903,17 +907,25 @@ public static partial class WebSiteVerifier
         }
     }
 
-    private static void ValidateSiteNavContractShape(JsonElement root, List<string> warnings)
+    private static bool ValidateSiteNavContractShape(JsonElement root, List<string> warnings, bool isGenerated)
     {
         if (warnings is null || root.ValueKind != JsonValueKind.Object)
-            return;
+            return false;
+
+        var valid = true;
 
         if (!root.TryGetProperty("schemaVersion", out var schemaVersionProp) ||
             schemaVersionProp.ValueKind != JsonValueKind.Number ||
             !schemaVersionProp.TryGetInt32(out var schemaVersion) ||
             schemaVersion < 2)
         {
-            warnings.Add("Navigation lint: site-nav.json should set schemaVersion >= 2 (stable nav export contract). Regenerate nav export.");
+            if (isGenerated)
+                warnings.Add("Navigation lint: generated site-nav.json uses a legacy contract (schemaVersion < 2). Regenerate nav export.");
+            else
+                warnings.Add("Navigation lint: site-nav.json should set schemaVersion >= 2 (stable nav export contract). Regenerate nav export.");
+            if (isGenerated)
+                return false;
+            valid = false;
         }
 
         if (!root.TryGetProperty("format", out var formatProp) ||
@@ -921,6 +933,7 @@ public static partial class WebSiteVerifier
             !string.Equals(formatProp.GetString(), "powerforge.site-nav", StringComparison.OrdinalIgnoreCase))
         {
             warnings.Add("Navigation lint: site-nav.json should set format='powerforge.site-nav' so downstream tools can detect the stable nav contract.");
+            valid = false;
         }
 
         if (!root.TryGetProperty("surfaceAliases", out var aliasesProp) ||
@@ -929,7 +942,10 @@ public static partial class WebSiteVerifier
             !string.Equals(apiAlias, "apidocs", StringComparison.OrdinalIgnoreCase))
         {
             warnings.Add("Navigation lint: site-nav.json should define surfaceAliases.api='apidocs' for canonical API surface resolution.");
+            valid = false;
         }
+
+        return valid;
     }
 
     private static bool TryGetAliasCanonical(JsonElement aliases, string alias, out string value)

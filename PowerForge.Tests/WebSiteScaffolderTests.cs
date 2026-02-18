@@ -72,7 +72,13 @@ public class WebSiteScaffolderTests
             var result = WebSiteScaffolder.Scaffold(root, "Starter", "https://example.test", "scriban");
             Assert.True(Directory.Exists(result.OutputPath));
 
-            var layoutsRoot = Path.Combine(root, "themes", "nova", "layouts");
+            using var siteDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
+            var defaultTheme = siteDoc.RootElement.TryGetProperty("defaultTheme", out var themeProp)
+                ? (themeProp.GetString() ?? string.Empty)
+                : string.Empty;
+            Assert.False(string.IsNullOrWhiteSpace(defaultTheme));
+
+            var layoutsRoot = Path.Combine(root, "themes", defaultTheme, "layouts");
             Assert.True(File.Exists(Path.Combine(layoutsRoot, "list.html")));
             Assert.True(File.Exists(Path.Combine(layoutsRoot, "post.html")));
             Assert.True(File.Exists(Path.Combine(layoutsRoot, "taxonomy.html")));

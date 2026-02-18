@@ -13,6 +13,7 @@ internal sealed class ScribanThemeHelpers
     private readonly ThemeRenderContext _context;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex AspectRatioRegex = new("^\\s*(?<w>\\d+(?:\\.\\d+)?)\\s*(?:/|:)\\s*(?<h>\\d+(?:\\.\\d+)?)\\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 
     public ScribanThemeHelpers(ThemeRenderContext context)
@@ -62,7 +63,7 @@ internal sealed class ScribanThemeHelpers
             return l != 0;
 
         if (value is double d)
-            return Math.Abs(d) > 0.0001d;
+            return d != 0d;
 
         if (value is string s)
         {
@@ -417,7 +418,7 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var plain = HtmlTagRegex.Replace(item.HtmlContent, " ");
-        plain = Regex.Replace(plain, "\\s+", " ", RegexOptions.CultureInvariant, RegexTimeout).Trim();
+        plain = WhitespaceRegex.Replace(plain, " ").Trim();
         return Truncate(plain, maxLength);
     }
 
