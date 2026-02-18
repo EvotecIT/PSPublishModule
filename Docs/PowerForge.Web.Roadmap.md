@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-02-14
+Last updated: 2026-02-18
 
 This document is the single source of truth for:
 
@@ -11,6 +11,8 @@ This document is the single source of truth for:
 
 Companion execution plan for C# libraries + PowerShell modules:
 - `Docs/PowerForge.Web.LibraryEcosystemPlan.md`
+Companion SEO parity plan (Yoast-informed capability mapping):
+- `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ## How This Roadmap Is Verified (Avoid "We Think")
 
@@ -70,6 +72,15 @@ Legend:
 - **Have**: Search index generation at `/search/index.json` with optional per-language shards (`/search/<lang>/index.json`) for localized sites.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs` (`WriteSearchIndex`)
 - **Partial**: Search UI/UX is theme responsibility; no canonical “search surface” renderer contract yet.
+
+### SEO + Discovery
+
+- **Have**: Canonical, OG/Twitter metadata, baseline structured data (`WebSite`, `Organization`, `Article`, `BreadcrumbList`), social card generation, and sitemap noindex-safe defaults.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
+- **Partial**: SEO checks are mostly technical (`audit` metadata checks, sitemap hygiene) but we do not yet provide an editorial SEO advisor workflow.
+  - Docs: `Docs/PowerForge.Web.Pipeline.md` (`checkSeoMeta`)
+- **Missing**: Yoast-style SEO doctor analysis, search appearance token templates/preview, expanded schema profiles (`FAQ/HowTo/Product/SoftwareApplication/NewsArticle`), dedicated news/image/video sitemaps, and IndexNow submission support.
+  - Plan: `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ### Themes + Contracts
 
@@ -192,6 +203,14 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 ### M2: Blog UX Defaults (Next)
 
 - Standardize blog list/term layouts in scaffold themes, so blog becomes turnkey.
+
+### M2.5: SEO Parity Foundation (Next)
+
+- Implement `seo-doctor` pipeline step with deterministic content + technical checks and baseline/fail-on-new support.
+- Add SEO title/description template token resolution and preview artifacts.
+- Expand structured data profiles for docs/product/news use cases.
+- Add specialized sitemap family (news/images/videos) and sitemap index output support.
+- Add IndexNow step and crawl-policy model for explicit discovery controls.
 
 ### M3: DocFX-class Docs Conveniences (Later)
 
