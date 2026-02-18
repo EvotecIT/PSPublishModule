@@ -103,6 +103,8 @@ public static partial class WebSiteBuilder
         WriteSiteNavData(spec, outDir, menuSpecs);
         WriteSearchIndex(spec, outDir, items);
         WriteLinkCheckReport(spec, items, metaDir);
+        WriteSeoPreviewReport(spec, items, metaDir);
+        WriteCrawlPolicyReport(spec, items, metaDir);
 
         var redirectsPayload = new
         {

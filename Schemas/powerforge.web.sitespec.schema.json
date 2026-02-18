@@ -45,6 +45,8 @@
       "items": { "$ref": "#/$defs/StaticAssetSpec" }
     },
     "Head": { "$ref": "#/$defs/HeadSpec" },
+    "Seo": { "$ref": "#/$defs/SeoSpec" },
+    "seo": { "$ref": "#/$defs/SeoSpec" },
     "Social": { "$ref": "#/$defs/SocialSpec" },
     "StructuredData": { "$ref": "#/$defs/StructuredDataSpec" },
     "Collections": {
@@ -115,6 +117,8 @@
         "SortBy": { "type": "string" },
         "SortOrder": { "type": "string", "enum": ["asc", "desc"] },
         "Outputs": { "type": "array", "items": { "type": "string" } },
+        "Seo": { "$ref": "#/$defs/SeoSpec" },
+        "seo": { "$ref": "#/$defs/SeoSpec" },
         "PageSize": { "type": "integer", "minimum": 1 }
       },
       "required": ["Name", "Input", "Output"]
@@ -341,6 +345,71 @@
         "Meta": { "type": "array", "items": { "$ref": "#/$defs/HeadMetaSpec" } }
       }
     },
+    "SeoSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "Templates": { "$ref": "#/$defs/SeoTemplatesSpec" },
+        "CrawlPolicy": { "$ref": "#/$defs/CrawlPolicySpec" },
+        "crawlPolicy": { "$ref": "#/$defs/CrawlPolicySpec" }
+      }
+    },
+    "SeoTemplatesSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Title": { "type": "string" },
+        "Description": { "type": "string" }
+      }
+    },
+    "CrawlPolicySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "DefaultRobots": { "type": "string" },
+        "defaultRobots": { "type": "string" },
+        "Bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } },
+        "bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } },
+        "Rules": { "type": "array", "items": { "$ref": "#/$defs/CrawlRuleSpec" } },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/CrawlRuleSpec" } }
+      }
+    },
+    "CrawlRuleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Match": { "type": "string" },
+        "match": { "type": "string" },
+        "MatchType": { "type": "string", "enum": ["exact", "prefix", "wildcard"] },
+        "matchType": { "type": "string", "enum": ["exact", "prefix", "wildcard"] },
+        "Robots": { "type": "string" },
+        "robots": { "type": "string" },
+        "Bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } },
+        "bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } }
+      },
+      "anyOf": [
+        { "required": ["Match"] },
+        { "required": ["match"] }
+      ]
+    },
+    "CrawlBotDirectiveSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Directives": { "type": "string" },
+        "directives": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["Name", "Directives"] },
+        { "required": ["name", "directives"] }
+      ]
+    },
     "HeadLinkSpec": {
       "type": "object",
       "additionalProperties": false,
@@ -389,7 +458,12 @@
         "Breadcrumbs": { "type": "boolean" },
         "Website": { "type": "boolean" },
         "Organization": { "type": "boolean" },
-        "Article": { "type": "boolean" }
+        "Article": { "type": "boolean" },
+        "FaqPage": { "type": "boolean" },
+        "HowTo": { "type": "boolean" },
+        "SoftwareApplication": { "type": "boolean" },
+        "Product": { "type": "boolean" },
+        "NewsArticle": { "type": "boolean" }
       }
     },
     "A11ySpec": {

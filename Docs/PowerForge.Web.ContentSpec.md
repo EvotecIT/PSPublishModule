@@ -743,7 +743,12 @@ themes/nova/assets/app.css
     "Breadcrumbs": true,
     "Website": true,
     "Organization": true,
-    "Article": true
+    "Article": true,
+    "FaqPage": true,
+    "HowTo": true,
+    "SoftwareApplication": true,
+    "Product": true,
+    "NewsArticle": true
   }
 }
 ```
@@ -761,6 +766,48 @@ meta.social: false
 meta.structured_data: false
 ```
 
+Structured-data profile metadata (per-page front matter):
+```
+# FAQPage: list items as "Question|Answer"
+meta.faq.questions:
+  - "What does this tool do?|It automates release validation."
+  - "Can I run offline?|Yes, for local workflows."
+
+# HowTo: list steps as "Step Name|Step text"
+meta.howto.name: Publish Module
+meta.howto.description: End-to-end release flow.
+meta.howto.total_time: PT20M
+meta.howto.tools:
+  - PowerShell 7
+meta.howto.supplies:
+  - Repository access
+meta.howto.steps:
+  - "Build|Run dotnet build."
+  - "Test|Run dotnet test."
+
+# Product
+meta.product.name: IntelligenceX Pro
+meta.product.brand: Evotec
+meta.product.sku: IX-PRO-01
+meta.product.price: 49.99
+meta.product.price_currency: USD
+meta.product.rating_value: 4.8
+meta.product.rating_count: 137
+
+# SoftwareApplication
+meta.software.name: IntelligenceX CLI
+meta.software.application_category: DeveloperApplication
+meta.software.operating_system: Windows, Linux, macOS
+meta.software.version: 1.4.0
+meta.software.download_url: /downloads/ix-cli
+meta.software.price: 0
+meta.software.price_currency: USD
+```
+
+News article profile behavior:
+- if `StructuredData.NewsArticle` is `true`, collection `news` pages emit `NewsArticle` JSON-LD.
+- if both `Article` and `NewsArticle` are enabled, `NewsArticle` is preferred for news pages, while non-news article-like pages still emit `Article`.
+
 Optional per-page social overrides:
 ```
 meta.social_title: "Custom share title"
@@ -773,6 +820,92 @@ meta.social_twitter_site: "@productx"
 meta.social_twitter_creator: "@author"
 ```
 Image aliases also accepted as explicit social overrides: `meta.image`, `meta.cover_image`, `meta.thumbnail`, `meta.og_image`, `meta.twitter_image`.
+
+## SEO templates (site + collection)
+Define snippet-style templates in `site.json`:
+```json
+{
+  "Seo": {
+    "Enabled": true,
+    "Templates": {
+      "Title": "{title} | {site}",
+      "Description": "{title}: {description}"
+    }
+  }
+}
+```
+
+Collection-level override:
+```json
+{
+  "Collections": [
+    {
+      "Name": "blog",
+      "Input": "content/blog",
+      "Output": "/blog",
+      "Seo": {
+        "Templates": {
+          "Title": "{title} ({date}) | {site}",
+          "Description": "{collection} update: {title}"
+        }
+      }
+    }
+  ]
+}
+```
+
+Supported tokens:
+- `{title}`
+- `{site}`
+- `{collection}`
+- `{date}` (`yyyy-MM-dd`)
+- `{project}`
+- `{lang}`
+
+Optional per-page overrides in front matter:
+```yaml
+meta.seo_title: "Custom SEO title"
+meta.seo_description: "Custom SEO description"
+```
+
+Each build emits resolved SEO metadata at `_powerforge/seo-preview.json`.
+
+### Crawl policy (robots directives)
+Use route-scoped crawl directives with optional bot-specific overrides:
+```json
+{
+  "Seo": {
+    "CrawlPolicy": {
+      "Enabled": true,
+      "DefaultRobots": "index,follow",
+      "Bots": [
+        { "Name": "googlebot", "Directives": "index,follow,max-image-preview:large" }
+      ],
+      "Rules": [
+        {
+          "Name": "search-noindex",
+          "Match": "/search/*",
+          "MatchType": "wildcard",
+          "Robots": "noindex,follow",
+          "Bots": [
+            { "Name": "googlebot", "Directives": "noindex,follow" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+Rule behavior:
+- first matching rule wins
+- match types: `exact`, `prefix`, `wildcard`
+- page-level overrides win over policy:
+  - `meta.robots`
+  - `meta.googlebot` / `meta.bingbot` (or `meta.robots.googlebot`)
+
+Build output diagnostics:
+- `_powerforge/crawl-policy.json` (resolved directives per generated page)
 
 ## Head links + meta (site.json)
 Use structured head tags so themes don’t repeat favicons or preconnects.

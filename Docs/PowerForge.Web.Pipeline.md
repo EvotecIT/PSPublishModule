@@ -564,6 +564,7 @@ Notes:
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 - Set `includeNoIndexHtml: true` to include noindex pages anyway.
 - Set `noDefaultExclude: true` to include utility pages (or pass `excludePatterns` for custom exclusions).
+- `includeNoIndexPages` defaults to `false`; enable it to include explicit noindex entries from sitemap metadata payloads.
 - `includeLanguageAlternates` (default `true`) emits `xhtml:link` alternates (`hreflang` and `x-default`) when `_powerforge/site-spec.json` contains an enabled `Localization` config.
 - When `htmlCss` is omitted, PowerForge tries to auto-detect site/theme CSS so the HTML sitemap inherits theme styling.
 
@@ -702,6 +703,45 @@ Reference this file from your pipeline step:
 
 Sample file in this repo:
 - `Samples/PowerForge.Web.CodeGlyphX.Sample/config/media-profiles.json`
+
+#### seo-doctor
+Runs editorial + technical SEO heuristics over generated HTML.
+```json
+{
+  "task": "seo-doctor",
+  "siteRoot": "./_site",
+  "checkTitleLength": true,
+  "checkDescriptionLength": true,
+  "checkH1": true,
+  "checkImageAlt": true,
+  "checkDuplicateTitles": true,
+  "checkOrphanPages": true,
+  "checkFocusKeyphrase": false,
+  "baseline": "./.powerforge/seo-baseline.json",
+  "baselineGenerate": true,
+  "reportPath": "./_reports/seo-doctor.json",
+  "summaryPath": "./_reports/seo-doctor.md"
+}
+```
+Notes:
+- SEO doctor checks include:
+  - title/meta-description length heuristics
+  - missing/multiple visible `h1`
+  - images missing `alt` attribute
+  - duplicate title intent across pages
+  - orphan page candidates (zero inbound links from scanned pages)
+  - optional focus-keyphrase checks via page meta tags
+  - canonical checks (duplicate/absolute URL + optional required canonical)
+  - hreflang checks (duplicate/invalid/absolute URL + optional required `x-default`)
+  - JSON-LD checks (invalid payload shape/JSON + missing `@context` or `@type`)
+- `includeNoIndexPages` defaults to `false`, so `robots noindex` pages are skipped by default.
+- Requirement flags are opt-in (default `false`): `requireCanonical`, `requireHreflang`, `requireHreflangXDefault`, `requireStructuredData`.
+- Baselines follow the same CI pattern as audit:
+  - `baselineGenerate` / `baselineUpdate`
+  - `failOnNewIssues` (alias `failOnNew`)
+  - `failOnWarnings`, `maxErrors`, `maxWarnings`
+- `reportPath` writes full JSON; `summaryPath` writes markdown summary.
+- `scopeFromBuildUpdated` supports incremental runs in `--fast` mode when a preceding build step updated HTML files.
 
 #### dotnet-build
 Runs `dotnet build`.
@@ -1090,6 +1130,57 @@ Notes:
 - `removeUnselected` defaults to `true`.
 - `strict: true` fails if selected target artifacts are missing.
 - `site-root` is supported as an alias for `siteRoot`.
+
+#### indexnow
+Submits changed or selected canonical URLs to IndexNow-compatible endpoints.
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://intelligencex.dev",
+  "siteRoot": "./_site",
+  "scopeFromBuildUpdated": true,
+  "keyEnv": "INDEXNOW_KEY",
+  "keyLocation": "https://intelligencex.dev/your-indexnow-key.txt",
+  "batchSize": 500,
+  "retryCount": 2,
+  "retryDelayMs": 750,
+  "reportPath": "./_reports/indexnow.json",
+  "summaryPath": "./_reports/indexnow.md"
+}
+```
+
+Explicit URL/path mode:
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://codeglyphx.com",
+  "keyEnv": "INDEXNOW_KEY",
+  "paths": "/,/docs/,/api/,/blog/",
+  "sitemap": "./_site/sitemap.xml",
+  "dryRun": true
+}
+```
+
+Notes:
+- URL sources can be combined:
+  - `urls` / `url` (absolute URLs)
+  - `paths` / `path` (combined with `baseUrl`)
+  - `urlFile` (newline-separated URLs/paths)
+  - `sitemap` (`<loc>` entries from sitemap XML)
+  - `scopeFromBuildUpdated` (`--fast` defaults this behavior on) when a preceding `build` step updated HTML files.
+- Auth/key options:
+  - `key` (inline), `keyPath` (file), or `keyEnv` (recommended; defaults to `INDEXNOW_KEY`).
+  - `keyLocation` can be explicit, otherwise defaults to `https://<host>/<key>.txt`.
+- Endpoint options:
+  - default endpoint is `https://api.indexnow.org/indexnow`
+  - override via `endpoint`/`endpoints` (aliases: `engine`/`engines`).
+- Reliability controls:
+  - `batchSize`, `retryCount`/`retryDelayMs`, `timeoutSeconds`.
+  - `continueOnError:true` keeps the step green even when some requests fail.
+- Safety controls:
+  - `failOnEmpty:true` fails when no URLs are collected.
+  - `maxUrls` + `truncateToMaxUrls` keep submissions bounded.
+- `indexnow` steps are intentionally not cacheable (external side effects).
 
 ## Publish spec (`powerforge-web publish`)
 

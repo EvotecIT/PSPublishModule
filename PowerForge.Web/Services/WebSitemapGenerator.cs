@@ -34,6 +34,8 @@ public sealed class WebSitemapOptions
     public string[]? ExcludePatterns { get; set; }
     /// <summary>When true, include text files (robots/llms).</summary>
     public bool IncludeTextFiles { get; set; } = true;
+    /// <summary>When true, include HTML pages that declare robots noindex metadata.</summary>
+    public bool IncludeNoIndexPages { get; set; }
     /// <summary>When true, emit localized alternate URLs (hreflang/x-default) when localization is configured.</summary>
     public bool IncludeLanguageAlternates { get; set; } = true;
     /// <summary>When true, generate an HTML sitemap.</summary>
@@ -73,6 +75,8 @@ public sealed class WebSitemapEntry
     public string? LastModified { get; set; }
     /// <summary>Optional localized alternate URLs for this path.</summary>
     public WebSitemapAlternate[] Alternates { get; set; } = Array.Empty<WebSitemapAlternate>();
+    /// <summary>When true, page declares robots noindex metadata.</summary>
+    public bool NoIndex { get; set; }
 }
 
 /// <summary>Localized alternate URL mapping for sitemap entries.</summary>
@@ -155,7 +159,10 @@ public static partial class WebSitemapGenerator
                 if (!options.IncludeNoIndexHtml && HtmlDeclaresNoIndex(file)) continue;
                 var route = NormalizeRoute(relative);
                 if (string.IsNullOrWhiteSpace(route)) continue;
-                AddOrUpdate(entries, route, BuildEntryFromHtmlFile(file, route));
+                var entry = BuildEntryFromHtmlFile(file, route);
+                if (entry.NoIndex && !options.IncludeNoIndexHtml && !options.IncludeNoIndexPages)
+                    continue;
+                AddOrUpdate(entries, route, entry);
                 htmlRoutes.Add(route);
             }
         }

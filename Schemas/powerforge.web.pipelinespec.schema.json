@@ -37,11 +37,13 @@
         { "$ref": "#/$defs/SitemapStep" },
         { "$ref": "#/$defs/OptimizeStep" },
         { "$ref": "#/$defs/AuditStep" },
+        { "$ref": "#/$defs/SeoDoctorStep" },
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
         { "$ref": "#/$defs/OverlayStep" },
         { "$ref": "#/$defs/HostingStep" },
         { "$ref": "#/$defs/CloudflareStep" },
+        { "$ref": "#/$defs/IndexNowStep" },
         { "$ref": "#/$defs/HookStep" },
         { "$ref": "#/$defs/HtmlTransformStep" },
         { "$ref": "#/$defs/DataTransformStep" },
@@ -312,6 +314,90 @@
         { "required": ["zoneId"] },
         { "required": ["zone-id"] }
       ]
+    },
+    "IndexNowStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "indexnow" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "baseUrl": { "type": "string", "description": "Base URL used when converting relative paths to absolute URLs." },
+        "base-url": { "type": "string", "description": "Alias for baseUrl." },
+        "siteRoot": { "type": "string", "description": "Site output root used with scopeFromBuildUpdated." },
+        "site-root": { "type": "string", "description": "Alias for siteRoot." },
+        "scopeFromBuildUpdated": { "type": "boolean", "description": "When true (or in --fast mode by default), include HTML files updated by the previous build step." },
+        "scope-from-build-updated": { "type": "boolean", "description": "Alias for scopeFromBuildUpdated." },
+
+        "urls": { "type": "string", "description": "Comma-separated absolute URLs to submit." },
+        "url": { "type": "string", "description": "Alias for urls." },
+        "paths": { "type": "string", "description": "Comma-separated relative paths combined with baseUrl." },
+        "path": { "type": "string", "description": "Alias for paths." },
+        "urlFile": { "type": "string", "description": "Text file with URLs/paths (one per line)." },
+        "url-file": { "type": "string", "description": "Alias for urlFile." },
+        "sitemap": { "type": "string", "description": "Optional sitemap.xml path; <loc> entries are submitted." },
+        "sitemapPath": { "type": "string", "description": "Alias for sitemap." },
+        "sitemap-path": { "type": "string", "description": "Alias for sitemap." },
+        "maxUrls": { "type": "integer", "minimum": 0, "description": "Maximum URLs submitted in this step (0 disables limit)." },
+        "max-urls": { "type": "integer", "minimum": 0, "description": "Alias for maxUrls." },
+        "truncateToMaxUrls": { "type": "boolean", "description": "When true, trim URL list to maxUrls instead of failing." },
+        "truncate-to-max-urls": { "type": "boolean", "description": "Alias for truncateToMaxUrls." },
+
+        "endpoint": { "type": "string", "description": "Single IndexNow endpoint URL." },
+        "apiEndpoint": { "type": "string", "description": "Alias for endpoint." },
+        "endpoints": {
+          "oneOf": [
+            { "type": "string", "description": "Comma-separated endpoint URLs." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "engine": { "type": "string", "description": "Alias for endpoint." },
+        "engines": {
+          "oneOf": [
+            { "type": "string", "description": "Alias for endpoints." },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "host": { "type": "string", "description": "Optional host override for IndexNow payload grouping." },
+        "key": { "type": "string", "description": "IndexNow key value." },
+        "keyPath": { "type": "string", "description": "Path to file containing key value." },
+        "key-path": { "type": "string", "description": "Alias for keyPath." },
+        "keyEnv": { "type": "string", "description": "Env var name used when key is not provided. Defaults to INDEXNOW_KEY." },
+        "key-env": { "type": "string", "description": "Alias for keyEnv." },
+        "keyLocation": { "type": "string", "description": "Absolute/relative key file URL. Defaults to https://<host>/<key>.txt." },
+        "key-location": { "type": "string", "description": "Alias for keyLocation." },
+
+        "batchSize": { "type": "integer", "minimum": 1, "description": "URLs per request batch (max 10000)." },
+        "batch-size": { "type": "integer", "minimum": 1, "description": "Alias for batchSize." },
+        "retry": { "type": "integer", "minimum": 0 },
+        "retries": { "type": "integer", "minimum": 0 },
+        "retryCount": { "type": "integer", "minimum": 0 },
+        "retry-count": { "type": "integer", "minimum": 0 },
+        "retryDelayMs": { "type": "integer", "minimum": 0 },
+        "retry-delay-ms": { "type": "integer", "minimum": 0 },
+        "retryDelay": { "type": "integer", "minimum": 0 },
+        "retry-delay": { "type": "integer", "minimum": 0 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "timeout-seconds": { "type": "integer", "minimum": 1, "description": "Alias for timeoutSeconds." },
+
+        "dryRun": { "type": "boolean" },
+        "dry-run": { "type": "boolean", "description": "Alias for dryRun." },
+        "continueOnError": { "type": "boolean", "description": "When true, request failures are warnings and step stays green." },
+        "failOnRequestError": { "type": "boolean", "description": "Overrides continueOnError behavior." },
+        "failOnEmpty": { "type": "boolean", "description": "When true, fail if no URLs are collected." },
+        "reportPath": { "type": "string" },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string" },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
+      },
+      "required": ["task"]
     },
     "HookStep": {
       "type": "object",
@@ -1736,6 +1822,8 @@
         "includeNoIndexHtml": { "type": "boolean" },
         "include-noindex-html": { "type": "boolean" },
         "includeTextFiles": { "type": "boolean" },
+        "includeNoIndexPages": { "type": "boolean" },
+        "include-no-index-pages": { "type": "boolean" },
         "includeLanguageAlternates": { "type": "boolean" },
         "noDefaultExclude": { "type": "boolean" },
         "no-default-exclude": { "type": "boolean" },
@@ -1977,6 +2065,94 @@
         "baselineUpdate": { "type": "boolean" }
       },
       "required": ["task", "siteRoot"]
+    },
+    "SeoDoctorStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "seo-doctor" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "siteRoot": { "type": "string" },
+        "site-root": { "type": "string" },
+        "include": { "type": "string" },
+        "exclude": { "type": "string" },
+        "scopeFromBuildUpdated": {
+          "type": "boolean",
+          "description": "When true, if include is not set, scope SEO doctor checks to HTML files updated by the most recent build step (when siteRoot matches build out). In --fast mode this behavior is enabled by default; set this to false to disable."
+        },
+        "scope-from-build-updated": { "type": "boolean" },
+        "noDefaultExclude": { "type": "boolean" },
+        "maxHtmlFiles": { "type": "integer", "minimum": 0 },
+        "max-html-files": { "type": "integer", "minimum": 0 },
+        "includeNoIndexPages": { "type": "boolean" },
+        "checkTitleLength": { "type": "boolean" },
+        "checkDescriptionLength": { "type": "boolean" },
+        "checkH1": { "type": "boolean" },
+        "checkHeading": { "type": "boolean", "description": "Alias for checkH1." },
+        "checkImageAlt": { "type": "boolean" },
+        "checkDuplicateTitles": { "type": "boolean" },
+        "checkOrphanPages": { "type": "boolean" },
+        "checkFocusKeyphrase": { "type": "boolean" },
+        "checkCanonical": { "type": "boolean" },
+        "check-canonical": { "type": "boolean", "description": "Alias for checkCanonical." },
+        "checkHreflang": { "type": "boolean" },
+        "check-hreflang": { "type": "boolean", "description": "Alias for checkHreflang." },
+        "checkStructuredData": { "type": "boolean" },
+        "check-structured-data": { "type": "boolean", "description": "Alias for checkStructuredData." },
+        "requireCanonical": { "type": "boolean" },
+        "require-canonical": { "type": "boolean", "description": "Alias for requireCanonical." },
+        "requireHreflang": { "type": "boolean" },
+        "require-hreflang": { "type": "boolean", "description": "Alias for requireHreflang." },
+        "requireHreflangXDefault": { "type": "boolean" },
+        "require-hreflang-x-default": { "type": "boolean", "description": "Alias for requireHreflangXDefault." },
+        "requireStructuredData": { "type": "boolean" },
+        "require-structured-data": { "type": "boolean", "description": "Alias for requireStructuredData." },
+        "focusKeyphraseMetaName": { "type": "string" },
+        "focus-keyphrase-meta-name": { "type": "string", "description": "Alias for focusKeyphraseMetaName." },
+        "focusKeyphraseMetaNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "focus-keyphrase-meta-names": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Alias for focusKeyphraseMetaNames."
+        },
+        "minTitleLength": { "type": "integer", "minimum": 0 },
+        "maxTitleLength": { "type": "integer", "minimum": 0 },
+        "minDescriptionLength": { "type": "integer", "minimum": 0 },
+        "maxDescriptionLength": { "type": "integer", "minimum": 0 },
+        "minFocusKeyphraseMentions": { "type": "integer", "minimum": 0 },
+        "baselinePath": { "type": "string" },
+        "baseline": { "type": "string" },
+        "baselineGenerate": { "type": "boolean" },
+        "baselineUpdate": { "type": "boolean" },
+        "failOnWarnings": { "type": "boolean" },
+        "failOnNewIssues": { "type": "boolean" },
+        "failOnNew": { "type": "boolean" },
+        "maxErrors": { "type": "integer" },
+        "maxWarnings": { "type": "integer" },
+        "reportPath": { "type": "string" },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string" },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        }
+      ]
     },
     "DotNetBuildStep": {
       "type": "object",

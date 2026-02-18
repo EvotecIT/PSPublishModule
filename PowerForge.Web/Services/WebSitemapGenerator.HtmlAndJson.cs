@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Scriban;
 using Scriban.Runtime;
 
@@ -9,42 +10,94 @@ namespace PowerForge.Web;
 public static partial class WebSitemapGenerator
 {
     private const long MaxEntriesJsonBytes = 8 * 1024 * 1024;
+    private static readonly TimeSpan HtmlRegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex MetaTagRegex = new("<meta\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex HtmlAttributeRegex = new("(?<name>[a-zA-Z_:][\\w:.-]*)\\s*=\\s*(?<q>['\"])(?<value>.*?)\\k<q>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
 
     private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
     {
+        var content = TryReadHtmlContent(filePath);
         var section = ResolveSectionFromRoute(route);
-        var title = TryReadHtmlTitle(filePath);
+        var title = string.IsNullOrWhiteSpace(content) ? null : TryReadHtmlTitleFromContent(content!);
         if (string.IsNullOrWhiteSpace(title))
             title = BuildTitleFromRoute(route);
         return new WebSitemapEntry
         {
             Path = route,
             Title = title,
-            Section = section
+            Section = section,
+            NoIndex = !string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!)
         };
     }
 
-    private static string? TryReadHtmlTitle(string filePath)
+    private static string? TryReadHtmlContent(string filePath)
     {
         try
         {
-            var text = File.ReadAllText(filePath);
-            var startTag = text.IndexOf("<title", StringComparison.OrdinalIgnoreCase);
-            if (startTag < 0) return null;
-            var startValue = text.IndexOf('>', startTag);
-            if (startValue < 0) return null;
-            var endTag = text.IndexOf("</title>", startValue + 1, StringComparison.OrdinalIgnoreCase);
-            if (endTag <= startValue) return null;
-            var raw = text.Substring(startValue + 1, endTag - startValue - 1).Trim();
-            return string.IsNullOrWhiteSpace(raw)
-                ? null
-                : System.Net.WebUtility.HtmlDecode(raw);
+            return File.ReadAllText(filePath);
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning($"Failed to read sitemap HTML title from '{filePath}': {ex.GetType().Name}: {ex.Message}");
+            Trace.TraceWarning($"Failed to read sitemap HTML content from '{filePath}': {ex.GetType().Name}: {ex.Message}");
             return null;
         }
+    }
+
+    private static string? TryReadHtmlTitleFromContent(string text)
+    {
+        var startTag = text.IndexOf("<title", StringComparison.OrdinalIgnoreCase);
+        if (startTag < 0) return null;
+        var startValue = text.IndexOf('>', startTag);
+        if (startValue < 0) return null;
+        var endTag = text.IndexOf("</title>", startValue + 1, StringComparison.OrdinalIgnoreCase);
+        if (endTag <= startValue) return null;
+        var raw = text.Substring(startValue + 1, endTag - startValue - 1).Trim();
+        return string.IsNullOrWhiteSpace(raw)
+            ? null
+            : System.Net.WebUtility.HtmlDecode(raw);
+    }
+
+    private static bool HasNoIndexRobots(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return false;
+
+        foreach (Match tagMatch in MetaTagRegex.Matches(html))
+        {
+            var tag = tagMatch.Value;
+            var name = ReadHtmlAttribute(tag, "name");
+            if (string.IsNullOrWhiteSpace(name) ||
+                !NoIndexMetaNames.Any(known => known.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var content = ReadHtmlAttribute(tag, "content");
+            if (!string.IsNullOrWhiteSpace(content) &&
+                content.IndexOf("noindex", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string? ReadHtmlAttribute(string tag, string attrName)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || string.IsNullOrWhiteSpace(attrName))
+            return null;
+
+        foreach (Match attrMatch in HtmlAttributeRegex.Matches(tag))
+        {
+            var name = attrMatch.Groups["name"].Value;
+            if (!name.Equals(attrName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return System.Net.WebUtility.HtmlDecode(attrMatch.Groups["value"].Value).Trim();
+        }
+
+        return null;
     }
 
     private static string BuildTitleFromRoute(string route)

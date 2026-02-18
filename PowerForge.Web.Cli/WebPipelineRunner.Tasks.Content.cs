@@ -1106,6 +1106,7 @@ internal static partial class WebPipelineRunner
         var includeHtml = GetBool(step, "includeHtmlFiles");
         var includeNoIndexHtml = GetBool(step, "includeNoIndexHtml") ?? GetBool(step, "include-noindex-html");
         var includeText = GetBool(step, "includeTextFiles");
+        var includeNoIndexPages = GetBool(step, "includeNoIndexPages") ?? GetBool(step, "include-no-index-pages");
         var noDefaultExclude = GetBool(step, "noDefaultExclude") ?? GetBool(step, "no-default-exclude");
         var excludePatterns = GetArrayOfStrings(step, "excludePatterns") ?? GetArrayOfStrings(step, "exclude-patterns");
         var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
@@ -1148,6 +1149,7 @@ internal static partial class WebPipelineRunner
             UseDefaultExcludePatterns = !(noDefaultExclude ?? false),
             ExcludePatterns = excludePatterns,
             IncludeTextFiles = includeText ?? true,
+            IncludeNoIndexPages = includeNoIndexPages ?? false,
             IncludeLanguageAlternates = includeLanguageAlternates ?? true,
             GenerateHtml = htmlEnabled,
             GenerateJson = jsonEnabled,

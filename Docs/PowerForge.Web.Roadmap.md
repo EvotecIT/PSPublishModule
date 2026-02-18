@@ -1,6 +1,6 @@
 # PowerForge.Web Roadmap (Inventory + Milestones)
 
-Last updated: 2026-02-14
+Last updated: 2026-02-18
 
 This document is the single source of truth for:
 
@@ -11,6 +11,8 @@ This document is the single source of truth for:
 
 Companion execution plan for C# libraries + PowerShell modules:
 - `Docs/PowerForge.Web.LibraryEcosystemPlan.md`
+Companion SEO parity plan (Yoast-informed capability mapping):
+- `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ## How This Roadmap Is Verified (Avoid "We Think")
 
@@ -70,6 +72,19 @@ Legend:
 - **Have**: Search index generation at `/search/index.json` with optional per-language shards (`/search/<lang>/index.json`) for localized sites.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.DataAndDiagnostics.cs` (`WriteSearchIndex`)
 - **Partial**: Search UI/UX is theme responsibility; no canonical “search surface” renderer contract yet.
+
+### SEO + Discovery
+
+- **Have**: Canonical, OG/Twitter metadata, baseline structured data (`WebSite`, `Organization`, `Article`, `BreadcrumbList`), social card generation, and sitemap noindex-safe defaults.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
+- **Partial**: `seo-doctor` pipeline step provides deterministic editorial+technical checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase, canonical/hreflang validation, JSON-LD validation + baseline profile checks); richer sitemap families and advanced schema scoring are still pending.
+  - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
+- **Have**: IndexNow submission pipeline step (`indexnow`) for canonical URL push (batch/retry/dry-run/report + changed-file scoping).
+  - Code: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.IndexNow.cs`, `PowerForge.Web.Cli/IndexNowSubmitter.cs`
+- **Have**: SEO search templates + preview artifact and expanded JSON-LD profile emitters (`FAQPage`, `HowTo`, `Product`, `SoftwareApplication`, `NewsArticle`).
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
+- **Missing**: dedicated news/image/video sitemaps.
+  - Plan: `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ### Themes + Contracts
 
@@ -192,6 +207,14 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 ### M2: Blog UX Defaults (Next)
 
 - Standardize blog list/term layouts in scaffold themes, so blog becomes turnkey.
+
+### M2.5: SEO Parity Foundation (Next)
+
+- Expand `seo-doctor` with richer fix hints and snippet-style scoring ergonomics.
+- Add SEO title/description template token resolution and preview artifacts. (completed)
+- Expand structured data profiles for docs/product/news use cases.
+- Add specialized sitemap family (news/images/videos) and sitemap index output support.
+- Add crawl-policy model for explicit discovery controls. (completed)
 
 ### M3: DocFX-class Docs Conveniences (Later)
 

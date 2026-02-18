@@ -71,10 +71,12 @@ public static partial class WebSiteBuilder
 
         var cssHtml = RenderCssLinks(cssLinks, assetRegistry);
         var jsHtml = string.Join(Environment.NewLine, jsLinks.Select(j => $"<script src=\"{j}\" defer></script>"));
+        var pageTitle = ResolveSeoTitle(spec, item);
         var pageDescription = ResolveMetaDescription(spec, item);
         var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)
             ? string.Empty
             : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(pageDescription)}\" />";
+        var crawlMeta = BuildCrawlMetaHtml(spec, item);
         projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
         var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
         var fullListItems = ResolveListItems(item, allItems);
@@ -148,8 +150,9 @@ public static partial class WebSiteBuilder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{System.Web.HttpUtility.HtmlEncode(item.Title)}</title>
+  <title>{System.Web.HttpUtility.HtmlEncode(pageTitle)}</title>
   {descriptionMeta}
+  {crawlMeta}
   {canonical}
   {preloads}
   {criticalCss}
@@ -605,7 +608,7 @@ public static partial class WebSiteBuilder
         return orderedItems;
     }
 
-    private static string ResolveMetaDescription(SiteSpec spec, ContentItem item)
+    private static string ResolveMetaDescriptionDefault(SiteSpec spec, ContentItem item)
     {
         if (!string.IsNullOrWhiteSpace(item.Description))
             return item.Description.Trim();
