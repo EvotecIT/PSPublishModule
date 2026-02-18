@@ -98,7 +98,7 @@ public class WebSitemapGeneratorCanonicalizationTests
             File.WriteAllText(Path.Combine(root, "api-fragments", "header.html"), "<header>fragment</header>");
             File.WriteAllText(
                 Path.Combine(root, "search", "index.html"),
-                "<!doctype html><head><meta name=\"robots\" content=\"noindex\" /><title>Search</title></head><body>search</body>");
+                "<!doctype html><head><meta name=robots content=noindex /><title>Search</title></head><body>search</body>");
 
             var result = WebSitemapGenerator.Generate(new WebSitemapOptions
             {

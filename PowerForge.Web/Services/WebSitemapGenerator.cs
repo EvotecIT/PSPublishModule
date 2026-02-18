@@ -800,8 +800,11 @@ public static partial class WebSitemapGenerator
             return false;
 
         var needle = name.Trim();
-        return tag.IndexOf($"name=\"{needle}\"", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               tag.IndexOf($"name='{needle}'", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (needle.Length == 0)
+            return false;
+
+        var pattern = $@"\bname\s*=\s*(?:""{Regex.Escape(needle)}""|'{Regex.Escape(needle)}'|{Regex.Escape(needle)})(?=\s|/|>)";
+        return Regex.IsMatch(tag, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private static bool GlobMatch(string pattern, string value)
