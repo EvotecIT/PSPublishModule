@@ -387,49 +387,40 @@ public static partial class WebSiteBuilder
             scripts.Add(BuildJsonLdScript(organizationModel));
         }
 
-        if (spec.StructuredData.Article && IsArticleLikePage(item))
+        var articleType = ResolveStructuredArticleType(spec.StructuredData, item);
+        if (!string.IsNullOrWhiteSpace(articleType))
         {
-            var articleModel = new Dictionary<string, object?>
-            {
-                ["@context"] = "https://schema.org",
-                ["@type"] = "Article",
-                ["headline"] = item.Title,
-                ["mainEntityOfPage"] = new Dictionary<string, object?>
-                {
-                    ["@type"] = "WebPage",
-                    ["@id"] = pageUrl
-                },
-                ["author"] = new Dictionary<string, object?>
-                {
-                    ["@type"] = "Organization",
-                    ["name"] = spec.Name
-                },
-                ["publisher"] = new Dictionary<string, object?>
-                {
-                    ["@type"] = "Organization",
-                    ["name"] = spec.Name
-                }
-            };
+            var articleScript = BuildArticleStructuredDataScript(spec, item, pageUrl, articleType);
+            if (!string.IsNullOrWhiteSpace(articleScript))
+                scripts.Add(articleScript);
+        }
 
-            var articleDescription = string.IsNullOrWhiteSpace(item.Description)
-                ? BuildSnippet(item.HtmlContent, 200)
-                : item.Description;
-            if (!string.IsNullOrWhiteSpace(articleDescription))
-                articleModel["description"] = articleDescription;
+        if (spec.StructuredData.FaqPage)
+        {
+            var faqScript = BuildFaqStructuredDataScript(item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(faqScript))
+                scripts.Add(faqScript);
+        }
 
-            if (item.Date.HasValue)
-            {
-                var iso = item.Date.Value.ToUniversalTime().ToString("O");
-                articleModel["datePublished"] = iso;
-                articleModel["dateModified"] = iso;
-            }
+        if (spec.StructuredData.HowTo)
+        {
+            var howToScript = BuildHowToStructuredDataScript(item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(howToScript))
+                scripts.Add(howToScript);
+        }
 
-            var imagePath = ResolveSocialImagePath(spec, item, string.Empty, item.Title, articleDescription, spec.Name, string.Empty);
-            var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
-            if (!string.IsNullOrWhiteSpace(image))
-                articleModel["image"] = image;
+        if (spec.StructuredData.SoftwareApplication)
+        {
+            var softwareScript = BuildSoftwareApplicationStructuredDataScript(spec, item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(softwareScript))
+                scripts.Add(softwareScript);
+        }
 
-            scripts.Add(BuildJsonLdScript(articleModel));
+        if (spec.StructuredData.Product)
+        {
+            var productScript = BuildProductStructuredDataScript(spec, item, pageUrl);
+            if (!string.IsNullOrWhiteSpace(productScript))
+                scripts.Add(productScript);
         }
 
         return scripts.Count == 0

@@ -743,7 +743,12 @@ themes/nova/assets/app.css
     "Breadcrumbs": true,
     "Website": true,
     "Organization": true,
-    "Article": true
+    "Article": true,
+    "FaqPage": true,
+    "HowTo": true,
+    "SoftwareApplication": true,
+    "Product": true,
+    "NewsArticle": true
   }
 }
 ```
@@ -758,6 +763,48 @@ Pages can opt out using front matter:
 meta.social: false
 meta.structured_data: false
 ```
+
+Structured-data profile metadata (per-page front matter):
+```
+# FAQPage: list items as "Question|Answer"
+meta.faq.questions:
+  - "What does this tool do?|It automates release validation."
+  - "Can I run offline?|Yes, for local workflows."
+
+# HowTo: list steps as "Step Name|Step text"
+meta.howto.name: Publish Module
+meta.howto.description: End-to-end release flow.
+meta.howto.total_time: PT20M
+meta.howto.tools:
+  - PowerShell 7
+meta.howto.supplies:
+  - Repository access
+meta.howto.steps:
+  - "Build|Run dotnet build."
+  - "Test|Run dotnet test."
+
+# Product
+meta.product.name: IntelligenceX Pro
+meta.product.brand: Evotec
+meta.product.sku: IX-PRO-01
+meta.product.price: 49.99
+meta.product.price_currency: USD
+meta.product.rating_value: 4.8
+meta.product.rating_count: 137
+
+# SoftwareApplication
+meta.software.name: IntelligenceX CLI
+meta.software.application_category: DeveloperApplication
+meta.software.operating_system: Windows, Linux, macOS
+meta.software.version: 1.4.0
+meta.software.download_url: /downloads/ix-cli
+meta.software.price: 0
+meta.software.price_currency: USD
+```
+
+News article profile behavior:
+- if `StructuredData.NewsArticle` is `true`, collection `news` pages emit `NewsArticle` JSON-LD.
+- if both `Article` and `NewsArticle` are enabled, `NewsArticle` is preferred for news pages, while non-news article-like pages still emit `Article`.
 
 Optional per-page social overrides:
 ```

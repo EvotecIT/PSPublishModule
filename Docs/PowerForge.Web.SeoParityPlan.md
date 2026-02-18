@@ -65,10 +65,10 @@ Deliverables:
 Why:
 - Aligns with Yoast snippet workflow while staying static-site friendly.
 
-### M3: Structured Data Kit
+### M3: Structured Data Kit (In Progress)
 
 Deliverables:
-- Expand `StructuredDataSpec` with opt-in profiles:
+- Expand `StructuredDataSpec` with opt-in profiles (implemented):
   - `FaqPage`, `HowTo`, `SoftwareApplication`, `Product`, `NewsArticle`
 - Per-page override metadata for profile payload inputs
 - Verification rules:
@@ -149,7 +149,7 @@ Pipeline spec (new steps):
 
 1. Ship `seo-doctor` with deterministic editorial + technical checks (done; continue expanding fix hints/scoring).
 2. Add template/token resolution and preview artifact.
-3. Expand structured data profiles with strict validation.
+3. Expand structured data profiles with strict validation. (profile emitters implemented; validation rules pending)
 4. Add specialized sitemap outputs + index.
 5. Add crawl policy model. (completed)
 6. Add redirect assistant for migration-heavy sites.

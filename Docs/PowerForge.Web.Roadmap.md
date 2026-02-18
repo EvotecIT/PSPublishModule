@@ -77,11 +77,13 @@ Legend:
 
 - **Have**: Canonical, OG/Twitter metadata, baseline structured data (`WebSite`, `Organization`, `Article`, `BreadcrumbList`), social card generation, and sitemap noindex-safe defaults.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
-- **Partial**: `seo-doctor` pipeline step provides deterministic editorial+technical checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase, canonical/hreflang validation, JSON-LD validation), but search-appearance templating and richer schema/sitemap families are still pending.
+- **Partial**: `seo-doctor` pipeline step provides deterministic editorial+technical checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase, canonical/hreflang validation, JSON-LD validation); richer sitemap families and profile-specific schema validation are still pending.
   - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
 - **Have**: IndexNow submission pipeline step (`indexnow`) for canonical URL push (batch/retry/dry-run/report + changed-file scoping).
   - Code: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.IndexNow.cs`, `PowerForge.Web.Cli/IndexNowSubmitter.cs`
-- **Missing**: search appearance token templates/preview, expanded schema profiles (`FAQ/HowTo/Product/SoftwareApplication/NewsArticle`), and dedicated news/image/video sitemaps.
+- **Have**: SEO search templates + preview artifact and expanded JSON-LD profile emitters (`FAQPage`, `HowTo`, `Product`, `SoftwareApplication`, `NewsArticle`).
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
+- **Missing**: dedicated news/image/video sitemaps.
   - Plan: `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ### Themes + Contracts

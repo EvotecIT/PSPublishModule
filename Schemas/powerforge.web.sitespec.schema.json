@@ -458,7 +458,12 @@
         "Breadcrumbs": { "type": "boolean" },
         "Website": { "type": "boolean" },
         "Organization": { "type": "boolean" },
-        "Article": { "type": "boolean" }
+        "Article": { "type": "boolean" },
+        "FaqPage": { "type": "boolean" },
+        "HowTo": { "type": "boolean" },
+        "SoftwareApplication": { "type": "boolean" },
+        "Product": { "type": "boolean" },
+        "NewsArticle": { "type": "boolean" }
       }
     },
     "A11ySpec": {
