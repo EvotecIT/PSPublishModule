@@ -316,6 +316,9 @@ public partial class WebSiteAuditOptimizeBuildTests
             var siteNav = File.ReadAllText(siteNavPath);
             using var doc = System.Text.Json.JsonDocument.Parse(siteNav);
             var rootElement = doc.RootElement;
+            Assert.Equal(2, rootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("powerforge.site-nav", rootElement.GetProperty("format").GetString());
+            Assert.Equal("apidocs", rootElement.GetProperty("surfaceAliases").GetProperty("api").GetString());
             Assert.True(rootElement.TryGetProperty("regions", out var regions));
             Assert.True(rootElement.TryGetProperty("footerModel", out var footerModel));
             Assert.True(rootElement.TryGetProperty("profiles", out var profiles));

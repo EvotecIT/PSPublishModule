@@ -904,6 +904,123 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenCustomSiteNavUsesApiAliasSurfaceKey()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-site-nav-api-alias-key-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            var docsPath = Path.Combine(root, "content", "docs");
+            Directory.CreateDirectory(pagesPath);
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+            File.WriteAllText(Path.Combine(docsPath, "index.md"),
+                """
+                ---
+                title: Docs
+                slug: index
+                ---
+
+                Docs
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "data"));
+            File.WriteAllText(Path.Combine(root, "data", "site-nav.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "format": "powerforge.site-nav",
+                  "surfaceAliases": {
+                    "api": "apidocs"
+                  },
+                  "primary": [
+                    { "href": "/", "text": "Home" },
+                    { "href": "/docs/", "text": "Docs" },
+                    { "href": "/api/", "text": "API" }
+                  ],
+                  "menuModels": [],
+                  "profiles": [],
+                  "surfaces": {
+                    "main": {},
+                    "docs": {},
+                    "api": {}
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier site-nav alias surface key test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DataRoot = "data",
+                Features = new[] { "docs", "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    },
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Docs", Url = "/docs/" },
+                                new MenuItemSpec { Title = "API", Url = "/api/" }
+                            }
+                        }
+                    },
+                    Surfaces = new[]
+                    {
+                        new NavigationSurfaceSpec { Name = "main", Path = "/", PrimaryMenu = "main" },
+                        new NavigationSurfaceSpec { Name = "docs", Path = "/docs/", Collection = "docs", Layout = "docs", PrimaryMenu = "main" },
+                        new NavigationSurfaceSpec { Name = "apidocs", Path = "/api/", Layout = "apiDocs", PrimaryMenu = "main" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("surface key 'api' should use canonical key 'apidocs'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsOnMarkdownRawHtmlHygiene()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-" + Guid.NewGuid().ToString("N"));

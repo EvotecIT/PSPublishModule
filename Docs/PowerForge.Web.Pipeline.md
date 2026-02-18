@@ -121,6 +121,10 @@ Exports a deterministic `site-nav.json` payload (including `surfaces` + `profile
 ```
 Notes:
 - If `out` is omitted, the default output is `static/<dataRoot>/site-nav.json` under the site root (absolute `dataRoot` values fall back to `static/data/site-nav.json`).
+- Export contract is versioned and stable for downstream tools:
+  - `schemaVersion: 2`
+  - `format: "powerforge.site-nav"`
+  - canonical surface keys (`main`, `docs`, `apidocs`, `products`) plus `surfaceAliases` (for example `api -> apidocs`)
 - Safe overwrite behavior:
   - By default, `nav-export` will only overwrite an existing file when it is marked `"generated": true`.
   - Set `overwrite: true` to force overwrite of a user-managed file.

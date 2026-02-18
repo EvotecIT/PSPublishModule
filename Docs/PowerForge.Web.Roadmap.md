@@ -198,9 +198,9 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Completed (engine-side building blocks):
   - Surfaces runtime projection: `Navigation.Surfaces` -> `navigation.surfaces`
   - Scriban `pf.*` reference renderer helpers
+  - Engine-owned nav export contract (`site-nav.json`) now emits stable metadata + canonical surface aliases for non-Scriban consumers.
 - Remaining:
   - Standardize surface names (canonical: `main`, `docs`, `apidocs`, `products`; treat `api` as alias for `apidocs`) in starter docs.
-  - Generate an engine-owned JSON payload suitable as a stable reference renderer input for non-Scriban consumers.
   - Verify:
     - warn in dev, fail in CI when `features` require a surface but site/theme doesn’t provide it.
 

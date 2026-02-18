@@ -66,6 +66,8 @@ public class WebPipelineRunnerNavExportTests
             Assert.True(File.Exists(outPath));
 
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
+            Assert.Equal(2, doc.RootElement.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("powerforge.site-nav", doc.RootElement.GetProperty("format").GetString());
             Assert.True(doc.RootElement.GetProperty("generated").GetBoolean());
         }
         finally
