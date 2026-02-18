@@ -114,6 +114,60 @@ public class WebPipelineRunnerSeoDoctorTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_SeoDoctor_RequireCanonical_WithFailOnWarnings_Fails()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-seo-doctor-require-canonical-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "_site");
+            Directory.CreateDirectory(siteRoot);
+            File.WriteAllText(Path.Combine(siteRoot, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>SEO Doctor Require Canonical</title>
+                  <meta name="description" content="A page without canonical to verify requireCanonical behavior in pipeline tests." />
+                </head>
+                <body>
+                  <h1>Home</h1>
+                </body>
+                </html>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "seo-doctor",
+                      "siteRoot": "./_site",
+                      "checkCanonical": true,
+                      "requireCanonical": true,
+                      "checkHreflang": false,
+                      "checkStructuredData": false,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("warnings", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

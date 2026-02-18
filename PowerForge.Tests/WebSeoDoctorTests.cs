@@ -136,6 +136,113 @@ public class WebSeoDoctorTests
         }
     }
 
+    [Fact]
+    public void Analyze_CanonicalHreflangAndStructuredData_FlagsExpectedIssues()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-technical-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Technical SEO test page</title>
+                  <link rel="canonical" href="/docs/" />
+                  <link rel="canonical" href="https://example.com/docs/" />
+                  <link rel="alternate" hreflang="en" href="/en/" />
+                  <link rel="alternate" hreflang="en" href="https://example.com/en/" />
+                  <link rel="alternate" hreflang="bad_value" href="https://example.com/bad/" />
+                  <link rel="alternate" hreflang="x-default" href="https://example.com/" />
+                  <script type="application/ld+json">{ invalid }</script>
+                  <script type="application/ld+json">{"@context":"https://schema.org"}</script>
+                  <script type="application/ld+json">{"@type":"Article"}</script>
+                </head>
+                <body>
+                  <h1>Docs</h1>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = true,
+                CheckHreflang = true,
+                CheckStructuredData = true
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "canonical-duplicate" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "canonical-absolute" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-duplicate" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-absolute" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-invalid" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-json-invalid" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-missing-context" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-missing-type" && issue.Path == "index.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_RequireFlags_FlagsMissingCanonicalHreflangAndStructuredData()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-required-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Required checks</title>
+                </head>
+                <body>
+                  <h1>Required checks</h1>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckCanonical = true,
+                CheckHreflang = true,
+                CheckStructuredData = true,
+                RequireCanonical = true,
+                RequireHreflang = true,
+                RequireStructuredData = true
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "canonical-missing" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "hreflang-missing" && issue.Path == "index.html");
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-missing" && issue.Path == "index.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
@@ -149,4 +256,3 @@ public class WebSeoDoctorTests
         }
     }
 }
-

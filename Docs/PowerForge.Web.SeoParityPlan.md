@@ -147,7 +147,7 @@ Pipeline spec (new steps):
 
 ## Suggested Execution Order
 
-1. Ship `seo-doctor` with minimal, deterministic checks.
+1. Ship `seo-doctor` with deterministic editorial + technical checks (done; continue expanding fix hints/scoring).
 2. Add template/token resolution and preview artifact.
 3. Expand structured data profiles with strict validation.
 4. Add specialized sitemap outputs + index.

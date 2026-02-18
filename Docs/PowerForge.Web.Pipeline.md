@@ -728,7 +728,11 @@ Notes:
   - duplicate title intent across pages
   - orphan page candidates (zero inbound links from scanned pages)
   - optional focus-keyphrase checks via page meta tags
+  - canonical checks (duplicate/absolute URL + optional required canonical)
+  - hreflang checks (duplicate/invalid/absolute URL + optional required `x-default`)
+  - JSON-LD checks (invalid payload shape/JSON + missing `@context` or `@type`)
 - `includeNoIndexPages` defaults to `false`, so `robots noindex` pages are skipped by default.
+- Requirement flags are opt-in (default `false`): `requireCanonical`, `requireHreflang`, `requireHreflangXDefault`, `requireStructuredData`.
 - Baselines follow the same CI pattern as audit:
   - `baselineGenerate` / `baselineUpdate`
   - `failOnNewIssues` (alias `failOnNew`)

@@ -77,7 +77,7 @@ Legend:
 
 - **Have**: Canonical, OG/Twitter metadata, baseline structured data (`WebSite`, `Organization`, `Article`, `BreadcrumbList`), social card generation, and sitemap noindex-safe defaults.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
-- **Partial**: `seo-doctor` pipeline step provides deterministic editorial checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase), but search-appearance templating and richer schema/sitemap families are still pending.
+- **Partial**: `seo-doctor` pipeline step provides deterministic editorial+technical checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase, canonical/hreflang validation, JSON-LD validation), but search-appearance templating and richer schema/sitemap families are still pending.
   - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
 - **Have**: IndexNow submission pipeline step (`indexnow`) for canonical URL push (batch/retry/dry-run/report + changed-file scoping).
   - Code: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.IndexNow.cs`, `PowerForge.Web.Cli/IndexNowSubmitter.cs`
@@ -208,7 +208,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 
 ### M2.5: SEO Parity Foundation (Next)
 
-- Expand `seo-doctor` with canonical/hreflang/schema-oriented checks and richer fix hints.
+- Expand `seo-doctor` with richer fix hints and snippet-style scoring ergonomics.
 - Add SEO title/description template token resolution and preview artifacts.
 - Expand structured data profiles for docs/product/news use cases.
 - Add specialized sitemap family (news/images/videos) and sitemap index output support.

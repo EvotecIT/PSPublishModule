@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlTinkerX;
 
@@ -19,6 +20,9 @@ public static class WebSeoDoctor
     private static readonly string[] DefaultHtmlExtensions = { ".html", ".htm" };
     private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
     private static readonly string[] IgnoreLinkPrefixes = { "#", "mailto:", "tel:", "javascript:", "data:", "blob:" };
+    private static readonly Regex HreflangTokenPattern = new(
+        "^(x-default|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -239,6 +243,34 @@ public static class WebSeoDoctor
                 }
             }
 
+            if (options.CheckCanonical)
+            {
+                ValidateCanonical(
+                    doc,
+                    relativePath,
+                    options.RequireCanonical,
+                    AddIssue);
+            }
+
+            if (options.CheckHreflang)
+            {
+                ValidateHreflang(
+                    doc,
+                    relativePath,
+                    options.RequireHreflang,
+                    options.RequireHreflangXDefault,
+                    AddIssue);
+            }
+
+            if (options.CheckStructuredData)
+            {
+                ValidateStructuredData(
+                    doc,
+                    relativePath,
+                    options.RequireStructuredData,
+                    AddIssue);
+            }
+
             var baseDir = ResolveBaseDirectory(siteRoot, file, doc);
             foreach (var href in doc.QuerySelectorAll("a[href]")
                          .Select(link => link.GetAttribute("href"))
@@ -437,6 +469,258 @@ public static class WebSeoDoctor
         }
 
         return false;
+    }
+
+    private static void ValidateCanonical(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        bool requireCanonical,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (doc.Head is null)
+            return;
+
+        var canonicalLinks = doc.Head.QuerySelectorAll("link[rel][href]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "canonical"))
+            .Select(link => NormalizeWhitespace(link.GetAttribute("href")))
+            .Where(href => !string.IsNullOrWhiteSpace(href))
+            .ToArray();
+
+        if (canonicalLinks.Length == 0)
+        {
+            if (requireCanonical)
+                addIssue("warning", "canonical", relativePath, "missing canonical link.", "canonical-missing", null);
+            return;
+        }
+
+        if (canonicalLinks.Length > 1)
+        {
+            addIssue("warning", "canonical", relativePath,
+                $"duplicate canonical links detected ({canonicalLinks.Length}).",
+                "canonical-duplicate",
+                canonicalLinks[0]);
+        }
+
+        foreach (var href in canonicalLinks.Where(href => !IsAbsoluteHttpUrl(href)))
+        {
+            addIssue("warning", "canonical", relativePath,
+                $"canonical link should be an absolute http(s) URL but was '{href}'.",
+                "canonical-absolute",
+                href);
+        }
+    }
+
+    private static void ValidateHreflang(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        bool requireHreflang,
+        bool requireXDefault,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        if (doc.Head is null)
+            return;
+
+        var alternates = doc.Head.QuerySelectorAll("link[rel][hreflang][href]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "alternate"))
+            .Select(link => new
+            {
+                HrefLang = NormalizeWhitespace(link.GetAttribute("hreflang")).ToLowerInvariant(),
+                Href = NormalizeWhitespace(link.GetAttribute("href"))
+            })
+            .Where(value => !string.IsNullOrWhiteSpace(value.HrefLang) && !string.IsNullOrWhiteSpace(value.Href))
+            .ToArray();
+
+        if (alternates.Length == 0)
+        {
+            if (requireHreflang)
+                addIssue("warning", "hreflang", relativePath, "missing hreflang alternates.", "hreflang-missing", null);
+            return;
+        }
+
+        var duplicateLanguageGroups = alternates
+            .GroupBy(value => value.HrefLang, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        foreach (var group in duplicateLanguageGroups)
+        {
+            addIssue("warning", "hreflang", relativePath,
+                $"duplicate hreflang '{group.Key}' entries detected ({group.Count()}).",
+                "hreflang-duplicate",
+                group.Key);
+        }
+
+        foreach (var alternate in alternates)
+        {
+            if (!HreflangTokenPattern.IsMatch(alternate.HrefLang))
+            {
+                addIssue("warning", "hreflang", relativePath,
+                    $"invalid hreflang value '{alternate.HrefLang}'.",
+                    "hreflang-invalid",
+                    alternate.HrefLang);
+            }
+
+            if (!IsAbsoluteHttpUrl(alternate.Href))
+            {
+                addIssue("warning", "hreflang", relativePath,
+                    $"hreflang '{alternate.HrefLang}' should use an absolute http(s) URL but was '{alternate.Href}'.",
+                    "hreflang-absolute",
+                    $"{alternate.HrefLang}|{alternate.Href}");
+            }
+        }
+
+        if (requireXDefault &&
+            alternates.All(value => !value.HrefLang.Equals("x-default", StringComparison.OrdinalIgnoreCase)))
+        {
+            addIssue("warning", "hreflang", relativePath,
+                "hreflang alternates are present but x-default is missing.",
+                "hreflang-x-default-missing",
+                null);
+        }
+    }
+
+    private static void ValidateStructuredData(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        bool requireStructuredData,
+        Action<string, string, string?, string, string?, string?> addIssue)
+    {
+        var scripts = doc.QuerySelectorAll("script[type='application/ld+json']")
+            .Select(script => NormalizeWhitespace(script.TextContent))
+            .Where(content => !string.IsNullOrWhiteSpace(content))
+            .ToArray();
+
+        if (scripts.Length == 0)
+        {
+            if (requireStructuredData)
+                addIssue("warning", "structured-data", relativePath, "missing JSON-LD structured data block.", "structured-data-missing", null);
+            return;
+        }
+
+        for (var i = 0; i < scripts.Length; i++)
+        {
+            var content = scripts[i];
+            var itemLabel = $"item-{i + 1}";
+            JsonDocument parsed;
+            try
+            {
+                parsed = JsonDocument.Parse(content);
+            }
+            catch (Exception ex)
+            {
+                addIssue("warning", "structured-data", relativePath,
+                    $"invalid JSON-LD payload ({itemLabel}): {ex.Message}.",
+                    "structured-data-json-invalid",
+                    itemLabel);
+                continue;
+            }
+
+            using (parsed)
+            {
+                if (!TryValidateJsonLdElement(parsed.RootElement, out var hasContext, out var hasType))
+                {
+                    addIssue("warning", "structured-data", relativePath,
+                        $"JSON-LD payload ({itemLabel}) should be an object or array of objects.",
+                        "structured-data-shape",
+                        itemLabel);
+                    continue;
+                }
+
+                if (!hasContext)
+                {
+                    addIssue("warning", "structured-data", relativePath,
+                        $"JSON-LD payload ({itemLabel}) is missing @context.",
+                        "structured-data-missing-context",
+                        itemLabel);
+                }
+
+                if (!hasType)
+                {
+                    addIssue("warning", "structured-data", relativePath,
+                        $"JSON-LD payload ({itemLabel}) is missing @type.",
+                        "structured-data-missing-type",
+                        itemLabel);
+                }
+            }
+        }
+    }
+
+    private static bool TryValidateJsonLdElement(JsonElement root, out bool hasContext, out bool hasType)
+    {
+        hasContext = false;
+        hasType = false;
+
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            hasContext = JsonLdObjectHasNonEmptyValue(root, "@context");
+            hasType = JsonLdObjectHasNonEmptyValue(root, "@type");
+            return true;
+        }
+
+        if (root.ValueKind != JsonValueKind.Array)
+            return false;
+
+        var anyObject = false;
+        foreach (var item in root.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+            anyObject = true;
+            if (JsonLdObjectHasNonEmptyValue(item, "@context"))
+                hasContext = true;
+            if (JsonLdObjectHasNonEmptyValue(item, "@type"))
+                hasType = true;
+        }
+
+        return anyObject;
+    }
+
+    private static bool JsonLdObjectHasNonEmptyValue(JsonElement obj, string propertyName)
+    {
+        if (!obj.TryGetProperty(propertyName, out var value))
+            return false;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => !string.IsNullOrWhiteSpace(value.GetString()),
+            JsonValueKind.Array => value.EnumerateArray().Any(item => item.ValueKind switch
+            {
+                JsonValueKind.String => !string.IsNullOrWhiteSpace(item.GetString()),
+                JsonValueKind.Object => true,
+                _ => false
+            }),
+            JsonValueKind.Object => value.EnumerateObject().Any(),
+            JsonValueKind.Number => true,
+            JsonValueKind.True => true,
+            JsonValueKind.False => true,
+            _ => false
+        };
+    }
+
+    private static bool ContainsRelToken(string? relValue, string token)
+    {
+        if (string.IsNullOrWhiteSpace(relValue) || string.IsNullOrWhiteSpace(token))
+            return false;
+
+        foreach (var part in relValue.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (part.Equals(token, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsAbsoluteHttpUrl(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+               uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetMetaNameValue(AngleSharp.Dom.IDocument doc, string metaName)
@@ -667,4 +951,3 @@ public static class WebSeoDoctor
         return $"{NormalizeIssueToken(severity)}|{NormalizeIssueToken(category)}|{pathToken}|{NormalizeIssueToken(hintToken)}";
     }
 }
-

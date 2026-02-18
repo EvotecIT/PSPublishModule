@@ -30,6 +30,20 @@ public sealed class WebSeoDoctorOptions
     public bool CheckOrphanPages { get; set; } = true;
     /// <summary>When true, evaluate focus keyphrase hints from page metadata.</summary>
     public bool CheckFocusKeyphrase { get; set; }
+    /// <summary>When true, validate canonical link tags.</summary>
+    public bool CheckCanonical { get; set; } = true;
+    /// <summary>When true, validate hreflang alternate link tags.</summary>
+    public bool CheckHreflang { get; set; } = true;
+    /// <summary>When true, validate JSON-LD structured data blocks.</summary>
+    public bool CheckStructuredData { get; set; } = true;
+    /// <summary>When true, emit warning when canonical is missing.</summary>
+    public bool RequireCanonical { get; set; }
+    /// <summary>When true, emit warning when hreflang alternates are missing.</summary>
+    public bool RequireHreflang { get; set; }
+    /// <summary>When true and hreflang alternates exist, require x-default alternate.</summary>
+    public bool RequireHreflangXDefault { get; set; }
+    /// <summary>When true, emit warning when no JSON-LD structured data blocks are present.</summary>
+    public bool RequireStructuredData { get; set; }
 
     /// <summary>Minimum recommended title length.</summary>
     public int MinTitleLength { get; set; } = 30;
@@ -44,4 +58,3 @@ public sealed class WebSeoDoctorOptions
     /// <summary>Meta names used to resolve focus keyphrase values.</summary>
     public string[] FocusKeyphraseMetaNames { get; set; } = new[] { "pf:focus-keyphrase", "focus-keyphrase", "seo-focus-keyphrase" };
 }
-
