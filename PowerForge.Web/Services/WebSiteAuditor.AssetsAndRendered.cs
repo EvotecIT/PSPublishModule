@@ -758,7 +758,8 @@ public static partial class WebSiteAuditor
     if (!value) return null;
     const match = value.trim().match(/^rgba?\(([^)]+)\)$/i);
     if (!match) return null;
-    const parts = match[1].split(',').map(p => p.trim());
+    const normalized = match[1].replace(/\//g, ' ');
+    const parts = normalized.split(/[,\s]+/).map(p => p.trim()).filter(Boolean);
     if (parts.length < 3) return null;
     const r = Number.parseFloat(parts[0]);
     const g = Number.parseFloat(parts[1]);
