@@ -168,6 +168,81 @@ public class WebPipelineRunnerIndexNowTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_IndexNow_DryRun_FiltersLocalAndPrivateTargetUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-filter-private-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "key": "abc123",
+                      "dryRun": true,
+                      "urls": "https://example.com/docs/,http://127.0.0.1/internal,https://192.168.1.10/internal",
+                      "reportPath": "./_reports/indexnow.json"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+
+            var reportPath = Path.Combine(root, "_reports", "indexnow.json");
+            Assert.True(File.Exists(reportPath));
+            using var reportDoc = JsonDocument.Parse(File.ReadAllText(reportPath));
+            Assert.Equal(1, reportDoc.RootElement.GetProperty("urlCount").GetInt32());
+            Assert.True(reportDoc.RootElement.GetProperty("warnings").GetArrayLength() >= 2);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_IndexNow_FailsForUnsafeKeyCharacters()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-unsafe-key-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "key": "abc/123",
+                      "dryRun": true,
+                      "urls": "https://example.com/docs/"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.False(result.Success);
+            Assert.Contains("unsupported characters", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static int GetFreePort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);

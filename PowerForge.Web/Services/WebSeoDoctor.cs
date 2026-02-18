@@ -23,6 +23,8 @@ public static class WebSeoDoctor
     private static readonly Regex HreflangTokenPattern = new(
         "^(x-default|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly TimeSpan GlobMatchRegexTimeout = TimeSpan.FromMilliseconds(100);
+    private const int MaxJsonLdPayloadLength = 1_000_000;
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
@@ -443,7 +445,14 @@ public static class WebSeoDoctor
             .Replace("\\*\\*", ".*")
             .Replace("\\*", "[^/]*")
             .Replace("\\?", ".") + "$";
-        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        try
+        {
+            return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, GlobMatchRegexTimeout);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
     }
 
     private static bool HasNoIndexRobots(AngleSharp.Dom.IDocument doc)
@@ -601,6 +610,15 @@ public static class WebSeoDoctor
         {
             var content = scripts[i];
             var itemLabel = $"item-{i + 1}";
+            if (content.Length > MaxJsonLdPayloadLength)
+            {
+                addIssue("warning", "structured-data", relativePath,
+                    $"JSON-LD payload ({itemLabel}) exceeds {MaxJsonLdPayloadLength} characters and was skipped.",
+                    "structured-data-payload-too-large",
+                    itemLabel);
+                continue;
+            }
+
             JsonDocument parsed;
             try
             {

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -82,6 +84,8 @@ internal static class IndexNowSubmitter
         var normalizedKey = (options.Key ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(normalizedKey))
             errors.Add("indexnow: missing key.");
+        else if (HasUnsafeKeyCharacters(normalizedKey))
+            errors.Add("indexnow: key contains unsupported characters (path/query delimiters).");
 
         if (urls.Count == 0)
             warnings.Add("indexnow: no URLs to submit.");
@@ -212,7 +216,14 @@ internal static class IndexNowSubmitter
             {
                 Fragment = string.Empty
             };
-            urls.Add(builder.Uri);
+            var normalized = builder.Uri;
+            if (IsNonPublicSubmissionUrl(normalized, out var reason))
+            {
+                warnings.Add($"indexnow: URL ignored ({reason}): {trimmed}");
+                continue;
+            }
+
+            urls.Add(normalized);
         }
 
         return urls
@@ -266,6 +277,105 @@ internal static class IndexNowSubmitter
         return $"{scheme}://{host}/{Uri.EscapeDataString(keyFileName)}";
     }
 
+    private static bool HasUnsafeKeyCharacters(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return true;
+
+        foreach (var ch in key)
+        {
+            if (ch is '/' or '\\' or '?' or '#' or '&')
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsNonPublicSubmissionUrl(Uri uri, out string reason)
+    {
+        reason = string.Empty;
+        if (uri is null)
+        {
+            reason = "invalid URI";
+            return true;
+        }
+
+        if (uri.IsLoopback)
+        {
+            reason = "loopback host";
+            return true;
+        }
+
+        var host = uri.DnsSafeHost;
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            reason = "missing host";
+            return true;
+        }
+
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = "local host";
+            return true;
+        }
+
+        if (IPAddress.TryParse(host, out var ip) && IsNonPublicIp(ip))
+        {
+            reason = "private/link-local IP";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsNonPublicIp(IPAddress ip)
+    {
+        if (IPAddress.IsLoopback(ip))
+            return true;
+
+        if (ip.IsIPv4MappedToIPv6)
+            ip = ip.MapToIPv4();
+
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            if (ip.IsIPv6LinkLocal || ip.IsIPv6Multicast || ip.IsIPv6SiteLocal)
+                return true;
+
+            var bytesV6 = ip.GetAddressBytes();
+            // fc00::/7 unique-local addresses.
+            if ((bytesV6[0] & 0xFE) == 0xFC)
+                return true;
+
+            return false;
+        }
+
+        if (ip.AddressFamily != AddressFamily.InterNetwork)
+            return true;
+
+        var bytes = ip.GetAddressBytes();
+        var first = bytes[0];
+        var second = bytes[1];
+
+        // 10.0.0.0/8
+        if (first == 10) return true;
+        // 127.0.0.0/8
+        if (first == 127) return true;
+        // 0.0.0.0/8
+        if (first == 0) return true;
+        // 169.254.0.0/16 (link-local)
+        if (first == 169 && second == 254) return true;
+        // 172.16.0.0/12
+        if (first == 172 && second >= 16 && second <= 31) return true;
+        // 192.168.0.0/16
+        if (first == 192 && second == 168) return true;
+        // 100.64.0.0/10 (carrier-grade NAT)
+        if (first == 100 && second >= 64 && second <= 127) return true;
+
+        return false;
+    }
+
     private static IEnumerable<string[]> Batch(IReadOnlyList<string> values, int size)
     {
         if (values.Count == 0)
@@ -298,7 +408,8 @@ internal static class IndexNowSubmitter
 
         var attempts = 0;
         Exception? lastException = null;
-        HttpResponseMessage? lastResponse = null;
+        int? lastStatusCode = null;
+        string? lastReasonPhrase = null;
         string? lastBody = null;
         var maxAttempts = Math.Max(1, retryCount + 1);
 
@@ -306,7 +417,8 @@ internal static class IndexNowSubmitter
         {
             attempts = attempt;
             lastException = null;
-            lastResponse = null;
+            lastStatusCode = null;
+            lastReasonPhrase = null;
             lastBody = null;
 
             try
@@ -321,26 +433,30 @@ internal static class IndexNowSubmitter
                 };
                 var json = JsonSerializer.Serialize(payload, PayloadJsonOptions);
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-                lastResponse = http.Send(request);
-                lastBody = lastResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                using var response = http.Send(request);
+                lastStatusCode = (int)response.StatusCode;
+                lastReasonPhrase = response.ReasonPhrase;
+                lastBody = response.Content is null
+                    ? null
+                    : response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return new IndexNowRequestResult
+                    {
+                        Endpoint = endpoint.ToString(),
+                        Host = host,
+                        UrlCount = urls.Length,
+                        Success = true,
+                        AttemptCount = attempts,
+                        StatusCode = lastStatusCode,
+                        ResponsePreview = TruncateResponse(lastBody)
+                    };
+                }
             }
             catch (Exception ex)
             {
                 lastException = ex;
-            }
-
-            if (lastException is null && lastResponse is not null && (int)lastResponse.StatusCode >= 200 && (int)lastResponse.StatusCode <= 299)
-            {
-                return new IndexNowRequestResult
-                {
-                    Endpoint = endpoint.ToString(),
-                    Host = host,
-                    UrlCount = urls.Length,
-                    Success = true,
-                    AttemptCount = attempts,
-                    StatusCode = (int)lastResponse.StatusCode,
-                    ResponsePreview = TruncateResponse(lastBody)
-                };
             }
 
             if (attempt < maxAttempts && retryDelayMs > 0)
@@ -348,10 +464,10 @@ internal static class IndexNowSubmitter
         }
 
         var errorText = lastException?.Message;
-        if (string.IsNullOrWhiteSpace(errorText) && lastResponse is not null)
+        if (string.IsNullOrWhiteSpace(errorText) && lastStatusCode.HasValue)
         {
             errorText = string.IsNullOrWhiteSpace(lastBody)
-                ? lastResponse.ReasonPhrase
+                ? lastReasonPhrase
                 : lastBody;
         }
 
@@ -362,7 +478,7 @@ internal static class IndexNowSubmitter
             UrlCount = urls.Length,
             Success = false,
             AttemptCount = attempts,
-            StatusCode = lastResponse is null ? null : (int)lastResponse.StatusCode,
+            StatusCode = lastStatusCode,
             Error = string.IsNullOrWhiteSpace(errorText) ? "request failed" : TruncateResponse(errorText),
             ResponsePreview = TruncateResponse(lastBody)
         };

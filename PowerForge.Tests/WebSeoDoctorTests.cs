@@ -246,6 +246,49 @@ public class WebSeoDoctorTests
     }
 
     [Fact]
+    public void Analyze_StructuredData_FlagsOversizedJsonLdPayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-jsonld-large-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var oversizedPayload = new string('x', 1_000_100);
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                $$"""
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Large JSON-LD</title>
+                  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"{{oversizedPayload}}"}</script>
+                </head>
+                <body>
+                  <h1>Large JSON-LD</h1>
+                </body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                CheckStructuredData = true
+            });
+
+            Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-payload-too-large" && issue.Path == "index.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void Analyze_RequireFlags_FlagsMissingCanonicalHreflangAndStructuredData()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-required-" + Guid.NewGuid().ToString("N"));
