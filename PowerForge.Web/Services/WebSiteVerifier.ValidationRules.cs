@@ -373,6 +373,7 @@ public static partial class WebSiteVerifier
     {
         public string Code { get; init; } = string.Empty;
         public string Prefix { get; init; } = string.Empty;
+        public string? BaseUrl { get; init; }
         public bool IsDefault { get; set; }
     }
 

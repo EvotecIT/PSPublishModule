@@ -20,12 +20,16 @@ public static partial class WebSiteBuilder
         var languages = new List<LocalizationLanguageRuntime>();
         foreach (var language in localization.Languages)
         {
-            var url = ResolveLocalizedPageUrl(spec, localization, page, allItems, language.Code, currentCode);
+            var route = ResolveLocalizedPageUrl(spec, localization, page, allItems, language.Code, currentCode);
+            var url = string.IsNullOrWhiteSpace(language.BaseUrl)
+                ? route
+                : ResolveAbsoluteUrl(language.BaseUrl, route);
             languages.Add(new LocalizationLanguageRuntime
             {
                 Code = language.Code,
                 Label = language.Label,
                 Prefix = language.Prefix,
+                BaseUrl = language.BaseUrl,
                 IsDefault = language.IsDefault,
                 IsCurrent = language.Code.Equals(currentCode, StringComparison.OrdinalIgnoreCase),
                 Url = string.IsNullOrWhiteSpace(url) ? currentPath : url
@@ -39,6 +43,7 @@ public static partial class WebSiteBuilder
                 Code = currentCode,
                 Label = currentCode,
                 Prefix = currentCode,
+                BaseUrl = NormalizeAbsoluteBaseUrl(spec.BaseUrl),
                 IsDefault = true,
                 IsCurrent = true,
                 Url = currentPath
@@ -250,11 +255,14 @@ public static partial class WebSiteBuilder
                 if (string.IsNullOrWhiteSpace(prefix))
                     prefix = code;
 
+                var languageBaseUrl = NormalizeAbsoluteBaseUrl(language.BaseUrl);
+
                 entries.Add(new ResolvedLocalizationLanguage
                 {
                     Code = code,
                     Label = string.IsNullOrWhiteSpace(language.Label) ? code : language.Label.Trim(),
                     Prefix = prefix,
+                    BaseUrl = languageBaseUrl,
                     IsDefault = language.Default
                 });
             }
@@ -342,6 +350,33 @@ public static partial class WebSiteBuilder
         return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
     }
 
+    private static string? NormalizeAbsoluteBaseUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return null;
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return null;
+        return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath.TrimEnd('/')}";
+    }
+
+    private static string ResolveLanguageBaseUrl(SiteSpec spec, ResolvedLocalizationConfig localization, string? languageCode)
+    {
+        var normalizedSiteBase = NormalizeAbsoluteBaseUrl(spec.BaseUrl);
+        if (!localization.Enabled)
+            return normalizedSiteBase ?? spec.BaseUrl;
+
+        var effectiveLanguage = ResolveEffectiveLanguageCode(localization, languageCode);
+        if (localization.ByCode.TryGetValue(effectiveLanguage, out var language) && !string.IsNullOrWhiteSpace(language.BaseUrl))
+            return language.BaseUrl!;
+
+        return normalizedSiteBase ?? spec.BaseUrl;
+    }
+
     private sealed class ResolvedLocalizationConfig
     {
         public bool Enabled { get; init; }
@@ -358,6 +393,7 @@ public static partial class WebSiteBuilder
         public string Code { get; init; } = string.Empty;
         public string Label { get; init; } = string.Empty;
         public string Prefix { get; init; } = string.Empty;
+        public string? BaseUrl { get; init; }
         public bool IsDefault { get; set; }
     }
 

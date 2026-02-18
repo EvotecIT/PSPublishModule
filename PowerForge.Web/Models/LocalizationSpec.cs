@@ -31,6 +31,9 @@ public sealed class LanguageSpec
     /// <summary>Optional URL prefix override (defaults to code).</summary>
     public string? Prefix { get; set; }
 
+    /// <summary>Optional absolute base URL override for this language (for example https://evotec.pl).</summary>
+    public string? BaseUrl { get; set; }
+
     /// <summary>Marks language as default.</summary>
     public bool Default { get; set; }
 

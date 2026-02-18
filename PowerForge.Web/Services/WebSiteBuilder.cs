@@ -90,6 +90,7 @@ public static partial class WebSiteBuilder
         var items = BuildContentItems(spec, plan, redirects, data, projectMap, projectContentMap, cacheRoot);
         items.AddRange(BuildTaxonomyItems(spec, items));
         items = BuildPaginatedItems(spec, items);
+        AddLegacyAmpRedirects(spec, redirects, items);
         ResolveXrefs(spec, plan.RootPath, metaDir, items);
         var menuSpecs = BuildMenuSpecs(spec, items, plan.RootPath);
         foreach (var item in items)

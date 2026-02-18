@@ -128,13 +128,16 @@ public static partial class WebSitemapGenerator
                     if (alt.ValueKind != JsonValueKind.Object)
                         continue;
                     var hrefLang = GetString(alt, "hrefLang") ?? GetString(alt, "hreflang");
-                    var altPath = GetString(alt, "path") ?? GetString(alt, "route") ?? GetString(alt, "url") ?? GetString(alt, "href");
-                    if (string.IsNullOrWhiteSpace(hrefLang) || string.IsNullOrWhiteSpace(altPath))
+                    var altPath = GetString(alt, "path") ?? GetString(alt, "route");
+                    var altUrl = GetString(alt, "url") ?? GetString(alt, "href");
+                    if (string.IsNullOrWhiteSpace(hrefLang) ||
+                        (string.IsNullOrWhiteSpace(altPath) && string.IsNullOrWhiteSpace(altUrl)))
                         continue;
                     alternates.Add(new WebSitemapAlternate
                     {
                         HrefLang = hrefLang,
-                        Path = altPath
+                        Path = string.IsNullOrWhiteSpace(altPath) ? "/" : altPath,
+                        Url = altUrl
                     });
                 }
             }
@@ -187,7 +190,8 @@ public static partial class WebSitemapGenerator
                 ["alternates"] = entry.Alternates.Select(static alt => new Dictionary<string, object?>
                 {
                     ["hrefLang"] = alt.HrefLang,
-                    ["path"] = alt.Path
+                    ["path"] = alt.Path,
+                    ["url"] = alt.Url
                 }).ToArray()
             }).ToArray()
         };

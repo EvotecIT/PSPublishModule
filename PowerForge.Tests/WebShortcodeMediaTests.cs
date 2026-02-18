@@ -94,6 +94,21 @@ public class WebShortcodeMediaTests
     }
 
     [Fact]
+    public void Build_RendersMapShortcode_WithQueryEmbed()
+    {
+        var html = BuildSinglePageSite(
+            """
+            {{< map query="Evotec Services, Mikolow" title="Office map" caption="Find us here" size="lg" >}}
+            """);
+
+        Assert.Contains("class=\"pf-media pf-media-map", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("https://www.google.com/maps?q=Evotec%20Services%2C%20Mikolow", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("output=embed", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("title=\"Office map\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<figcaption", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_RendersYouTubeLiteScript_OnlyOnce_PerPage()
     {
         var html = BuildSinglePageSite(
