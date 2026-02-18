@@ -53,6 +53,8 @@ public sealed class SiteSpec
 
     /// <summary>Head configuration applied to all pages.</summary>
     public HeadSpec? Head { get; set; }
+    /// <summary>SEO configuration (templates and page metadata defaults).</summary>
+    public SeoSpec? Seo { get; set; }
     /// <summary>OpenGraph/Twitter card configuration.</summary>
     public SocialSpec? Social { get; set; }
     /// <summary>Structured data configuration.</summary>

@@ -14,6 +14,7 @@ Short, high-signal list to keep parity and stability work visible.
 - Normalize Markdown code blocks to add `.code-block` on `<pre>` for consistent styling.
 - Verify: warn when custom `site-nav.json` drifts from Navigation menus.
 - Pipeline: `indexnow` step for canonical URL submission (batch/retry/dry-run/report support).
+- SEO templates: site/collection title+description tokens with `_powerforge/seo-preview.json` output.
 
 ## Engine parity & quality
 - CodeGlyphX 1:1 coverage checklist (home, docs, benchmarks, pricing, showcase, playground, API docs).
@@ -33,7 +34,6 @@ Short, high-signal list to keep parity and stability work visible.
 - Sidebar options: allow left/right placement (theme-level switch), without forking templates. (done for API docs via `sidebar`)
 
 ## SEO parity track (Yoast-informed)
-- Add SEO template tokens + resolved preview artifact (`_powerforge/seo-preview.json`).
 - Expand schema profiles beyond baseline (`FAQ`, `HowTo`, `SoftwareApplication`, `Product`, `NewsArticle`).
 - Add specialized sitemap outputs (news/image/video) and sitemap index generation.
 - Add redirect-assistant workflow (route diff -> suggested 301 map).

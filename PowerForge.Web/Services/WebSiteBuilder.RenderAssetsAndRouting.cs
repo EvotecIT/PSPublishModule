@@ -236,14 +236,12 @@ public static partial class WebSiteBuilder
 
         var title = GetMetaString(item.Meta, "social_title");
         if (string.IsNullOrWhiteSpace(title))
-            title = item.Title;
+            title = ResolveSeoTitle(spec, item);
         if (string.IsNullOrWhiteSpace(title))
             title = spec.Name;
         var description = GetMetaString(item.Meta, "social_description");
         if (string.IsNullOrWhiteSpace(description))
-            description = item.Description;
-        if (string.IsNullOrWhiteSpace(description))
-            description = BuildSnippet(item.HtmlContent, 200);
+            description = ResolveMetaDescription(spec, item);
         var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
         var url = ResolveAbsoluteUrl(spec.BaseUrl, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;

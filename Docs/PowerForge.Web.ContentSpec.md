@@ -771,6 +771,55 @@ meta.social_twitter_site: "@productx"
 meta.social_twitter_creator: "@author"
 ```
 
+## SEO templates (site + collection)
+Define snippet-style templates in `site.json`:
+```json
+{
+  "Seo": {
+    "Enabled": true,
+    "Templates": {
+      "Title": "{title} | {site}",
+      "Description": "{title}: {description}"
+    }
+  }
+}
+```
+
+Collection-level override:
+```json
+{
+  "Collections": [
+    {
+      "Name": "blog",
+      "Input": "content/blog",
+      "Output": "/blog",
+      "Seo": {
+        "Templates": {
+          "Title": "{title} ({date}) | {site}",
+          "Description": "{collection} update: {title}"
+        }
+      }
+    }
+  ]
+}
+```
+
+Supported tokens:
+- `{title}`
+- `{site}`
+- `{collection}`
+- `{date}` (`yyyy-MM-dd`)
+- `{project}`
+- `{lang}`
+
+Optional per-page overrides in front matter:
+```yaml
+meta.seo_title: "Custom SEO title"
+meta.seo_description: "Custom SEO description"
+```
+
+Each build emits resolved SEO metadata at `_powerforge/seo-preview.json`.
+
 ## Head links + meta (site.json)
 Use structured head tags so themes don’t repeat favicons or preconnects.
 ```

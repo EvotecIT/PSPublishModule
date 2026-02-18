@@ -25,7 +25,7 @@ Legend:
 | Social cards/meta | OG/Twitter metadata + defaults | Have | Social metadata + generated social cards already available. |
 | Schema baseline | WebSite/Organization/Article/Breadcrumb | Have | Structured data baseline exists. |
 | Redirect management | Easy redirects + migration safety | Partial | Strong redirect emitters exist; no smart suggestion workflow yet. |
-| Search appearance templates | SEO title/meta templates with variables | Partial | Metadata exists, but no first-class template/token engine + preview surface. |
+| Search appearance templates | SEO title/meta templates with variables | Have | `Seo.Templates` supports tokenized title/description with collection overrides and `_powerforge/seo-preview.json`. |
 | Content SEO analysis | Focus keyphrase, snippet checks, content hygiene | Missing | No built-in author-facing SEO scoring/checklist. |
 | Internal linking suggestions | Link recommendations + orphan detection | Missing | We lint nav/docs structure but no content link-graph advisor. |
 | Schema breadth | FAQ/HowTo/Product/Software/News schemas | Missing | Baseline schema only; no richer schema profiles yet. |
@@ -52,7 +52,7 @@ Why first:
 - Highest impact for editorial quality and organic discoverability.
 - Enables CI gating similar to current `verify`/`audit`.
 
-### M2: Search Appearance Templates + Preview Model
+### M2: Search Appearance Templates + Preview Model (Completed)
 
 Deliverables:
 - Site-level and collection-level SEO template fields in `site.json`:

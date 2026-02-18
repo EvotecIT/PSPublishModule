@@ -45,6 +45,8 @@
       "items": { "$ref": "#/$defs/StaticAssetSpec" }
     },
     "Head": { "$ref": "#/$defs/HeadSpec" },
+    "Seo": { "$ref": "#/$defs/SeoSpec" },
+    "seo": { "$ref": "#/$defs/SeoSpec" },
     "Social": { "$ref": "#/$defs/SocialSpec" },
     "StructuredData": { "$ref": "#/$defs/StructuredDataSpec" },
     "Collections": {
@@ -115,6 +117,8 @@
         "SortBy": { "type": "string" },
         "SortOrder": { "type": "string", "enum": ["asc", "desc"] },
         "Outputs": { "type": "array", "items": { "type": "string" } },
+        "Seo": { "$ref": "#/$defs/SeoSpec" },
+        "seo": { "$ref": "#/$defs/SeoSpec" },
         "PageSize": { "type": "integer", "minimum": 1 }
       },
       "required": ["Name", "Input", "Output"]
@@ -339,6 +343,22 @@
         "BodyClass": { "type": "string" },
         "Links": { "type": "array", "items": { "$ref": "#/$defs/HeadLinkSpec" } },
         "Meta": { "type": "array", "items": { "$ref": "#/$defs/HeadMetaSpec" } }
+      }
+    },
+    "SeoSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "Templates": { "$ref": "#/$defs/SeoTemplatesSpec" }
+      }
+    },
+    "SeoTemplatesSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Title": { "type": "string" },
+        "Description": { "type": "string" }
       }
     },
     "HeadLinkSpec": {
