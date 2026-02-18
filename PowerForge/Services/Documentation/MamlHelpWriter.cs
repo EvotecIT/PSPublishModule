@@ -139,8 +139,12 @@ internal sealed class MamlHelpWriter
         IEnumerable<DocumentationParameterHelp>? parameters)
     {
         writer.WriteStartElement("command", "syntaxItem", CommandNs);
-        if (!string.IsNullOrWhiteSpace(setName))
-            writer.WriteAttributeString("parameterSetName", setName.Trim());
+        if (setName is not null)
+        {
+            var normalizedSetName = setName.Trim();
+            if (normalizedSetName.Length > 0)
+                writer.WriteAttributeString("parameterSetName", normalizedSetName);
+        }
         writer.WriteElementString("maml", "name", MamlNs, commandName);
 
         foreach (var p in (parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
