@@ -209,8 +209,9 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Completed (starter baseline):
   - Scaffold now seeds editorial defaults for both `blog` and `news` collections (sample content + menu entries).
   - Scriban scaffold now emits dedicated `list`/`post`/`taxonomy`/`term` layouts with card-style listings and pagination links.
+- Completed (cross-theme helper baseline):
+  - Scriban `pf.editorial_cards` helper renders reusable editorial card markup (collection/date/summary/tags/image) from list contexts so non-scaffold themes can adopt the same listing behavior quickly.
 - Remaining:
-  - Promote reusable editorial partials/helpers for non-scaffold themes to reduce custom layout duplication.
   - Add optional list-card media/hero conventions (image fallback contract + aspect ratio hints).
 
 ### M2.5: SEO Parity Foundation (Next)

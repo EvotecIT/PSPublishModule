@@ -481,6 +481,11 @@ Best practice (theme rendering):
   - `{{ pf.nav_links "main" }}` renders the main menu as a flat list of `<a>` elements (supports `is-active` / `is-ancestor` classes).
   - `{{ pf.nav_actions }}` renders `Navigation.Actions` as links/buttons.
   - `{{ pf.menu_tree "docs" 4 }}` renders a nested `<ul>` tree for sidebar menus.
+  - `{{ pf.editorial_cards }}` renders reusable card markup from current list context (`items`) with optional arguments:
+    - `max_items` (default `0` = all)
+    - `excerpt_length` (default `160`)
+    - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true }}`
 
 ### Navigation surfaces (stable projections)
 The runtime `navigation` object exposes `navigation.surfaces` as named projections.
