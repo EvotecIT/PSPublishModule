@@ -10,8 +10,6 @@ internal static partial class WebCliCommandHandlers
 {
     private static int HandleCloudflare(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
-        // Future-friendly shape: powerforge-web cloudflare purge ...
-        // If the user omits the verb, default to purge.
         var verb = "purge";
         if (subArgs.Length > 0 && !subArgs[0].StartsWith("-", StringComparison.Ordinal))
         {
@@ -19,9 +17,17 @@ internal static partial class WebCliCommandHandlers
             subArgs = subArgs.Skip(1).ToArray();
         }
 
-        if (!verb.Equals("purge", StringComparison.OrdinalIgnoreCase))
-            return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge.", outputJson, logger, "web.cloudflare");
+        if (verb.Equals("purge", StringComparison.OrdinalIgnoreCase))
+            return HandleCloudflarePurge(subArgs, outputJson, logger, outputSchemaVersion);
 
+        if (verb.Equals("verify", StringComparison.OrdinalIgnoreCase))
+            return HandleCloudflareVerify(subArgs, outputJson, logger, outputSchemaVersion);
+
+        return Fail($"Unknown cloudflare verb '{verb}'. Supported: purge, verify.", outputJson, logger, "web.cloudflare");
+    }
+
+    private static int HandleCloudflarePurge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
         var zoneId = TryGetOptionValue(subArgs, "--zone-id") ??
                      TryGetOptionValue(subArgs, "--zone") ??
                      TryGetOptionValue(subArgs, "--zoneId");
@@ -81,6 +87,78 @@ internal static partial class WebCliCommandHandlers
             {
                 SchemaVersion = outputSchemaVersion,
                 Command = "web.cloudflare.purge",
+                Success = ok,
+                ExitCode = ok ? 0 : 1,
+                Result = element
+            });
+            return ok ? 0 : 1;
+        }
+
+        if (ok) logger.Success(message);
+        else logger.Error(message);
+        return ok ? 0 : 1;
+    }
+
+    private static int HandleCloudflareVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
+    {
+        var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
+                      TryGetOptionValue(subArgs, "--baseUrl") ??
+                      Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
+
+        var urls = ReadOptionList(subArgs, "--url", "--urls");
+        var paths = ReadOptionList(subArgs, "--path", "--paths");
+        if (urls.Count == 0 && paths.Count > 0)
+        {
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                return Fail("Missing --base-url (required when using --path/--paths).", outputJson, logger, "web.cloudflare.verify");
+
+            urls.AddRange(paths.Select(p => CombineUrl(baseUrl, p)));
+        }
+
+        if (urls.Count == 0)
+            return Fail("Missing target URLs. Provide --url/--urls or --path/--paths.", outputJson, logger, "web.cloudflare.verify");
+
+        var warmupRequests = ParseIntOption(
+            TryGetOptionValue(subArgs, "--warmup") ??
+            TryGetOptionValue(subArgs, "--warmup-requests") ??
+            TryGetOptionValue(subArgs, "--warmupRequests"),
+            1);
+        warmupRequests = Math.Clamp(warmupRequests, 0, 10);
+
+        var timeoutMs = ParseIntOption(
+            TryGetOptionValue(subArgs, "--timeout-ms") ??
+            TryGetOptionValue(subArgs, "--timeoutMs") ??
+            TryGetOptionValue(subArgs, "--timeout"),
+            15000);
+        timeoutMs = Math.Clamp(timeoutMs, 1000, 120000);
+
+        var allowedStatuses = ReadOptionList(subArgs, "--allow-status", "--allow-statuses", "--allow");
+        if (allowedStatuses.Count == 0)
+            allowedStatuses.AddRange(CloudflareCacheVerifier.DefaultAllowedStatuses);
+
+        var (ok, message, entries) = CloudflareCacheVerifier.Verify(
+            urls: urls,
+            warmupRequests: warmupRequests,
+            allowedStatuses: allowedStatuses,
+            timeoutMs: timeoutMs,
+            logger: logger);
+
+        if (outputJson)
+        {
+            var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["urlCount"] = urls.Count,
+                ["warmupRequests"] = warmupRequests,
+                ["timeoutMs"] = timeoutMs,
+                ["allowedStatuses"] = allowedStatuses,
+                ["results"] = entries,
+                ["message"] = message
+            }, WebCliJson.Options);
+
+            WebCliJsonWriter.Write(new WebCliJsonEnvelope
+            {
+                SchemaVersion = outputSchemaVersion,
+                Command = "web.cloudflare.verify",
                 Success = ok,
                 ExitCode = ok ? 0 : 1,
                 Result = element

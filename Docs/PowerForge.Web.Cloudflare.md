@@ -30,6 +30,12 @@ Dry-run:
 powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --base-url https://example.com --path /,/docs/ --dry-run
 ```
 
+Verify cache status on key URLs (warm once, then assert expected statuses):
+
+```bash
+powerforge-web cloudflare verify --base-url https://example.com --path /,/docs/,/api/ --warmup 1
+```
+
 ## Pipeline Step (When It Makes Sense)
 
 You can add a `cloudflare` task to `pipeline.json`, typically as a CI-only step.
@@ -66,4 +72,3 @@ Pseudo-snippet:
   run: |
     powerforge-web cloudflare purge --zone-id ${{ secrets.CLOUDFLARE_ZONE_ID }} --token-env CLOUDFLARE_API_TOKEN --base-url https://example.com --path /,/docs/,/api/
 ```
-
