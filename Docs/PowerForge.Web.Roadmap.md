@@ -77,13 +77,13 @@ Legend:
 
 - **Have**: Canonical, OG/Twitter metadata, baseline structured data (`WebSite`, `Organization`, `Article`, `BreadcrumbList`), social card generation, and sitemap noindex-safe defaults.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
-- **Partial**: `seo-doctor` pipeline step provides deterministic editorial+technical checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase, canonical/hreflang validation, JSON-LD validation + baseline profile checks); advanced schema scoring and image/video sitemap families are still pending.
+- **Partial**: `seo-doctor` pipeline step provides deterministic editorial+technical checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase, canonical/hreflang validation, JSON-LD validation + baseline profile checks); advanced schema scoring is still pending.
   - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
 - **Have**: IndexNow submission pipeline step (`indexnow`) for canonical URL push (batch/retry/dry-run/report + changed-file scoping).
   - Code: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.IndexNow.cs`, `PowerForge.Web.Cli/IndexNowSubmitter.cs`
 - **Have**: SEO search templates + preview artifact and expanded JSON-LD profile emitters (`FAQPage`, `HowTo`, `Product`, `SoftwareApplication`, `NewsArticle`).
   - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
-- **Partial**: specialized sitemap family currently includes news sitemap + sitemap index; image/video sitemap variants are still pending.
+- **Have**: specialized sitemap family includes news/image/video sitemap outputs + sitemap index.
   - Code: `PowerForge.Web/Services/WebSitemapGenerator.cs`, `PowerForge.Web/Services/WebSitemapGenerator.Specialized.cs`
 
 ### Themes + Contracts
@@ -213,7 +213,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Expand `seo-doctor` with richer fix hints and snippet-style scoring ergonomics.
 - Add SEO title/description template token resolution and preview artifacts. (completed)
 - Expand structured data profiles for docs/product/news use cases.
-- Add specialized sitemap family (news/images/videos) and sitemap index output support. (news + index completed)
+- Add specialized sitemap family (news/images/videos) and sitemap index output support. (completed baseline)
 - Add crawl-policy model for explicit discovery controls. (completed)
 
 ### M3: DocFX-class Docs Conveniences (Later)

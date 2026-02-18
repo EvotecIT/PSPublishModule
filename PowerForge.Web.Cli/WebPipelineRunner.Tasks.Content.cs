@@ -1129,6 +1129,22 @@ internal static partial class WebPipelineRunner
         var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
                           (newsPaths?.Length ?? 0) > 0 ||
                           newsMetadata is not null;
+        var imageOutput = ResolvePath(baseDir,
+            GetString(step, "imageOutput") ??
+            GetString(step, "imageOut") ??
+            GetString(step, "image-output") ??
+            GetString(step, "image-out"));
+        var imagePaths = GetArrayOfStrings(step, "imagePaths") ?? GetArrayOfStrings(step, "image-paths");
+        var imageEnabled = !string.IsNullOrWhiteSpace(imageOutput) ||
+                           (imagePaths?.Length ?? 0) > 0;
+        var videoOutput = ResolvePath(baseDir,
+            GetString(step, "videoOutput") ??
+            GetString(step, "videoOut") ??
+            GetString(step, "video-output") ??
+            GetString(step, "video-out"));
+        var videoPaths = GetArrayOfStrings(step, "videoPaths") ?? GetArrayOfStrings(step, "video-paths");
+        var videoEnabled = !string.IsNullOrWhiteSpace(videoOutput) ||
+                           (videoPaths?.Length ?? 0) > 0;
         var jsonEnabled = GetBool(step, "json") ?? false;
         var jsonOutput = ResolvePath(baseDir,
             GetString(step, "jsonOutput") ??
@@ -1186,6 +1202,20 @@ internal static partial class WebPipelineRunner
                     Genres = newsMetadata?.Genres,
                     Access = newsMetadata?.Access,
                     Keywords = newsMetadata?.Keywords
+                },
+            ImageSitemap = !imageEnabled
+                ? null
+                : new WebSitemapImageOptions
+                {
+                    OutputPath = imageOutput,
+                    PathPatterns = imagePaths
+                },
+            VideoSitemap = !videoEnabled
+                ? null
+                : new WebSitemapVideoOptions
+                {
+                    OutputPath = videoOutput,
+                    PathPatterns = videoPaths
                 }
         });
 
@@ -1193,6 +1223,10 @@ internal static partial class WebPipelineRunner
         var details = new List<string> { $"{res.UrlCount} urls" };
         if (!string.IsNullOrWhiteSpace(res.NewsOutputPath))
             details.Add("news");
+        if (!string.IsNullOrWhiteSpace(res.ImageOutputPath))
+            details.Add("images");
+        if (!string.IsNullOrWhiteSpace(res.VideoOutputPath))
+            details.Add("videos");
         if (!string.IsNullOrWhiteSpace(res.IndexOutputPath))
             details.Add("index");
         stepResult.Message = $"Sitemap {string.Join(", ", details)}";

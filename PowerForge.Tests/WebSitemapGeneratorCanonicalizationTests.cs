@@ -325,4 +325,130 @@ public class WebSitemapGeneratorCanonicalizationTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Generate_CanEmitImageAndVideoSitemaps_FromHtmlDiscovery()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-media-html-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "showcase", "clip"));
+            File.WriteAllText(Path.Combine(root, "showcase", "clip", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Clip</title></head>
+                <body>
+                  <img src="/assets/hero.png" />
+                  <video src="/media/demo.mp4"></video>
+                </body>
+                </html>
+                """);
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                ImageSitemap = new WebSitemapImageOptions
+                {
+                    PathPatterns = new[] { "/showcase/**" }
+                },
+                VideoSitemap = new WebSitemapVideoOptions
+                {
+                    PathPatterns = new[] { "/showcase/**" }
+                }
+            });
+
+            Assert.True(File.Exists(result.ImageOutputPath));
+            Assert.True(File.Exists(result.VideoOutputPath));
+
+            var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var imageNs = XNamespace.Get("http://www.google.com/schemas/sitemap-image/1.1");
+            var videoNs = XNamespace.Get("http://www.google.com/schemas/sitemap-video/1.1");
+
+            var imageDoc = XDocument.Load(result.ImageOutputPath!);
+            Assert.Contains(
+                "https://example.test/assets/hero.png",
+                imageDoc.Descendants(imageNs + "loc").Select(node => node.Value),
+                StringComparer.OrdinalIgnoreCase);
+
+            var videoDoc = XDocument.Load(result.VideoOutputPath!);
+            Assert.Contains(
+                "https://example.test/media/demo.mp4",
+                videoDoc.Descendants(videoNs + "content_loc").Select(node => node.Value),
+                StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(
+                "https://example.test/showcase/clip/",
+                videoDoc.Descendants(sitemapNs + "loc").Select(node => node.Value),
+                StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_SitemapIndex_CanReferenceNewsImageAndVideoMaps()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-index-specialized-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false,
+                Entries = new[]
+                {
+                    new WebSitemapEntry
+                    {
+                        Path = "/news/release/",
+                        Title = "Release",
+                        ImageUrls = new[] { "/assets/release.png" },
+                        VideoUrls = new[] { "/media/release.mp4" }
+                    }
+                },
+                NewsSitemap = new WebSitemapNewsOptions
+                {
+                    PathPatterns = new[] { "/news/**" }
+                },
+                ImageSitemap = new WebSitemapImageOptions
+                {
+                    PathPatterns = new[] { "/news/**" }
+                },
+                VideoSitemap = new WebSitemapVideoOptions
+                {
+                    PathPatterns = new[] { "/news/**" }
+                },
+                SitemapIndexPath = string.Empty
+            });
+
+            Assert.True(File.Exists(result.IndexOutputPath));
+            var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var indexDoc = XDocument.Load(result.IndexOutputPath!);
+            var indexedLocs = indexDoc
+                .Descendants(sitemapNs + "sitemap")
+                .Select(node => node.Element(sitemapNs + "loc")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+
+            Assert.Contains("https://example.test/sitemap.xml", indexedLocs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/sitemap-news.xml", indexedLocs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/sitemap-images.xml", indexedLocs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/sitemap-videos.xml", indexedLocs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }

@@ -550,6 +550,10 @@ Generates `sitemap.xml` and (optionally) JSON/HTML outputs, `sitemap-news.xml`, 
     "publicationName": "Example Product",
     "publicationLanguage": "en"
   },
+  "imageOut": "./Artifacts/site/sitemap-images.xml",
+  "imagePaths": ["/blog/**", "/news/**", "/docs/**"],
+  "videoOut": "./Artifacts/site/sitemap-videos.xml",
+  "videoPaths": ["/showcase/**", "/news/**"],
   "sitemapIndex": "./Artifacts/site/sitemap-index.xml",
   "extraPaths": ["/robots.txt"],
   "json": true,
@@ -569,7 +573,10 @@ Notes:
 - `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
 - `newsOut` / `newsPaths` generate a Google News sitemap from matching routes. If omitted, defaults target `**/news/**`.
 - `newsMetadata` sets publication metadata for the news sitemap (`publicationName`, `publicationLanguage`, `genres`, `access`, `keywords`).
+- `imageOut` / `imagePaths` generate an image sitemap from matching routes that contain discovered image URLs.
+- `videoOut` / `videoPaths` generate a video sitemap from matching routes that contain discovered video URLs.
 - `sitemapIndex` emits a sitemap index file that references generated XML sitemap outputs.
+- image/video URL discovery is automatic for rendered HTML (`<img src>`, `<video src>`, `<source src>`, `<iframe src>`), and can also be provided via `entries[].images` / `entries[].videos`.
 - `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 - Set `includeNoIndexHtml: true` to include noindex pages anyway.

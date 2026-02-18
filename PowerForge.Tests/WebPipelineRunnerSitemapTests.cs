@@ -140,6 +140,66 @@ public class WebPipelineRunnerSitemapTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_Sitemap_CanGenerateImageAndVideoOutputs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-sitemap-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var siteRoot = Path.Combine(root, "site");
+            Directory.CreateDirectory(siteRoot);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "sitemap",
+                      "siteRoot": "./site",
+                      "baseUrl": "https://example.test",
+                      "includeHtmlFiles": false,
+                      "includeTextFiles": false,
+                      "entries": [
+                        {
+                          "path": "/showcase/reel/",
+                          "title": "Reel",
+                          "images": ["/assets/reel.png"],
+                          "videos": ["/media/reel.mp4"]
+                        }
+                      ],
+                      "imageOut": "./site/sitemap-images.xml",
+                      "imagePaths": ["/showcase/**"],
+                      "videoOut": "./site/sitemap-videos.xml",
+                      "videoPaths": ["/showcase/**"],
+                      "indexOut": "./site/sitemap-index.xml"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+            Assert.Contains("images", result.Steps[0].Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("videos", result.Steps[0].Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("index", result.Steps[0].Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+            var imagePath = Path.Combine(siteRoot, "sitemap-images.xml");
+            var videoPath = Path.Combine(siteRoot, "sitemap-videos.xml");
+            var indexPath = Path.Combine(siteRoot, "sitemap-index.xml");
+            Assert.True(File.Exists(imagePath));
+            Assert.True(File.Exists(videoPath));
+            Assert.True(File.Exists(indexPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try
