@@ -214,7 +214,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
   - Scriban `pf.editorial_pager` helper standardizes previous/next links for paginated editorial streams.
   - Verify now warns when Scriban editorial list layouts don't render list context (`items`/`pf.editorial_cards`) or omit pagination rendering for paginated collections.
 - Remaining:
-  - Add optional list-card media/hero conventions (image fallback contract + aspect ratio hints).
+  - Add optional editorial card variants (hero/compact/featured) and expose them as helper switches without breaking existing templates.
 
 ### M2.5: SEO Parity Foundation (Next)
 
