@@ -121,6 +121,15 @@ If your site is behind Cloudflare and caches HTML, consider purging key HTML URL
 
 - `Docs/PowerForge.Web.Cloudflare.md`
 
+Recommended deploy pattern:
+- purge:
+  - `powerforge-web cloudflare purge --zone-id <ZONE_ID> --token-env CLOUDFLARE_API_TOKEN --site-config ./site.json`
+- verify:
+  - `powerforge-web cloudflare verify --site-config ./site.json --warmup 1`
+
+Prefer `--site-config` over hardcoded route lists so route coverage stays aligned with
+`Features` and `Navigation` as the site evolves.
+
 ## Theme Inheritance (extends)
 
 If a theme declares `extends`, the base theme must be present on disk (vendored into the repo).
