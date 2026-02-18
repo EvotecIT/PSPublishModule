@@ -9,6 +9,9 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
+    private const int CloudflareVerifyDefaultWarmupRequests = 1;
+    private const int CloudflareVerifyMaxWarmupRequests = 10;
+
     private static int HandleCloudflare(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         var verb = "purge";
@@ -29,26 +32,8 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleCloudflarePurge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
-        var siteConfigPath = TryGetOptionValue(subArgs, "--site-config") ??
-                             TryGetOptionValue(subArgs, "--siteConfig") ??
-                             TryGetOptionValue(subArgs, "--config");
-        CloudflareSiteRouteProfile? siteProfile = null;
-        if (!string.IsNullOrWhiteSpace(siteConfigPath))
-        {
-            var resolvedSiteConfig = Path.GetFullPath(siteConfigPath);
-            try
-            {
-                siteProfile = CloudflareRouteProfileResolver.Load(resolvedSiteConfig);
-            }
-            catch (Exception ex)
-            {
-                return Fail(
-                    $"Failed to load --site-config '{resolvedSiteConfig}': {ex.Message}",
-                    outputJson,
-                    logger,
-                    "web.cloudflare.purge");
-            }
-        }
+        if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, "web.cloudflare.purge", out var siteProfile, out var loadError))
+            return loadError;
 
         var zoneId = TryGetOptionValue(subArgs, "--zone-id") ??
                      TryGetOptionValue(subArgs, "--zone") ??
@@ -129,26 +114,8 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleCloudflareVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
-        var siteConfigPath = TryGetOptionValue(subArgs, "--site-config") ??
-                             TryGetOptionValue(subArgs, "--siteConfig") ??
-                             TryGetOptionValue(subArgs, "--config");
-        CloudflareSiteRouteProfile? siteProfile = null;
-        if (!string.IsNullOrWhiteSpace(siteConfigPath))
-        {
-            var resolvedSiteConfig = Path.GetFullPath(siteConfigPath);
-            try
-            {
-                siteProfile = CloudflareRouteProfileResolver.Load(resolvedSiteConfig);
-            }
-            catch (Exception ex)
-            {
-                return Fail(
-                    $"Failed to load --site-config '{resolvedSiteConfig}': {ex.Message}",
-                    outputJson,
-                    logger,
-                    "web.cloudflare.verify");
-            }
-        }
+        if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, "web.cloudflare.verify", out var siteProfile, out var loadError))
+            return loadError;
 
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
                       TryGetOptionValue(subArgs, "--baseUrl") ??
@@ -175,8 +142,8 @@ internal static partial class WebCliCommandHandlers
             TryGetOptionValue(subArgs, "--warmup") ??
             TryGetOptionValue(subArgs, "--warmup-requests") ??
             TryGetOptionValue(subArgs, "--warmupRequests"),
-            1);
-        warmupRequests = Math.Clamp(warmupRequests, 0, 10);
+            CloudflareVerifyDefaultWarmupRequests);
+        warmupRequests = Math.Clamp(warmupRequests, 0, CloudflareVerifyMaxWarmupRequests);
 
         var timeoutMs = ParseIntOption(
             TryGetOptionValue(subArgs, "--timeout-ms") ??
@@ -224,6 +191,40 @@ internal static partial class WebCliCommandHandlers
         if (ok) logger.Success(message);
         else logger.Error(message);
         return ok ? 0 : 1;
+    }
+
+    private static bool TryLoadCloudflareSiteProfile(
+        string[] subArgs,
+        bool outputJson,
+        WebConsoleLogger logger,
+        string command,
+        out CloudflareSiteRouteProfile? siteProfile,
+        out int errorCode)
+    {
+        siteProfile = null;
+        errorCode = 0;
+
+        var siteConfigPath = TryGetOptionValue(subArgs, "--site-config") ??
+                             TryGetOptionValue(subArgs, "--siteConfig") ??
+                             TryGetOptionValue(subArgs, "--config");
+        if (string.IsNullOrWhiteSpace(siteConfigPath))
+            return true;
+
+        var resolvedSiteConfig = Path.GetFullPath(siteConfigPath);
+        try
+        {
+            siteProfile = CloudflareRouteProfileResolver.Load(resolvedSiteConfig);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            errorCode = Fail(
+                $"Failed to load --site-config '{resolvedSiteConfig}': {ex.Message}",
+                outputJson,
+                logger,
+                command);
+            return false;
+        }
     }
 
     private static string CombineUrl(string baseUrl, string path)

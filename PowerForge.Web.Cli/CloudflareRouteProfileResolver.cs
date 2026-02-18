@@ -16,10 +16,11 @@ internal sealed class CloudflareSiteRouteProfile
 
 internal static class CloudflareRouteProfileResolver
 {
+    private const int MaxMenuDepth = 32;
+
     private static readonly string[] PurgeOnlyPaths =
     {
         "/404.html",
-        "/sitemap.xml",
         "/llms.txt",
         "/llms-full.txt",
         "/llms.json"
@@ -81,6 +82,7 @@ internal static class CloudflareRouteProfileResolver
         AddMenuItems(spec.Navigation?.Actions ?? Array.Empty<MenuItemSpec>(), ordered, seen);
         AddPath("/sitemap.xml", ordered, seen);
 
+        // `/404/` is valid for purge warmups but should not be part of cache-hit verification.
         ordered.RemoveAll(path => path.Equals("/404/", StringComparison.OrdinalIgnoreCase));
         return ordered.ToArray();
     }
@@ -99,18 +101,21 @@ internal static class CloudflareRouteProfileResolver
         return ordered.ToArray();
     }
 
-    private static void AddMenuItems(IEnumerable<MenuItemSpec> items, List<string> ordered, HashSet<string> seen)
+    private static void AddMenuItems(IEnumerable<MenuItemSpec> items, List<string> ordered, HashSet<string> seen, int depth = 0)
     {
+        if (depth > MaxMenuDepth)
+            return;
+
         foreach (var item in items ?? Array.Empty<MenuItemSpec>())
         {
             AddFromUrl(item.Url, ordered, seen);
-            AddMenuItems(item.Items, ordered, seen);
+            AddMenuItems(item.Items, ordered, seen, depth + 1);
 
             foreach (var section in item.Sections ?? Array.Empty<MenuSectionSpec>())
             {
-                AddMenuItems(section.Items, ordered, seen);
+                AddMenuItems(section.Items, ordered, seen, depth + 1);
                 foreach (var column in section.Columns ?? Array.Empty<MenuColumnSpec>())
-                    AddMenuItems(column.Items, ordered, seen);
+                    AddMenuItems(column.Items, ordered, seen, depth + 1);
             }
         }
     }
@@ -162,6 +167,9 @@ internal static class CloudflareRouteProfileResolver
         while (value.Contains("//", StringComparison.Ordinal))
             value = value.Replace("//", "/", StringComparison.Ordinal);
 
+        if (value.Contains("..", StringComparison.Ordinal))
+            return false;
+
         if (value.Contains('*', StringComparison.Ordinal) ||
             value.Contains('{', StringComparison.Ordinal) ||
             value.Contains('}', StringComparison.Ordinal))
@@ -173,11 +181,10 @@ internal static class CloudflareRouteProfileResolver
             return true;
         }
 
-        var lower = value.ToLowerInvariant();
-        if (lower.EndsWith(".xml", StringComparison.Ordinal) ||
-            lower.EndsWith(".txt", StringComparison.Ordinal) ||
-            lower.EndsWith(".json", StringComparison.Ordinal) ||
-            lower.EndsWith(".html", StringComparison.Ordinal))
+        if (value.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) ||
+            value.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ||
+            value.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+            value.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
         {
             normalized = value;
             return true;

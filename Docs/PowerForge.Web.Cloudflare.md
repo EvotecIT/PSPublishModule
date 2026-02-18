@@ -155,3 +155,7 @@ For all 3 rules use:
 - `Cache eligibility`: `Eligible for cache`
 - `Edge TTL`: `Use cache-control header if present, cache request with Cloudflare's default TTL for the response status if not`
 - Leave `Browser TTL`, `Cache key`, and other optional fields at default unless you have a specific reason.
+
+Route precedence for CLI:
+- When `--url`/`--path` are provided, those explicit values are used.
+- `--site-config` route inference is used only when explicit `--url`/`--path` are not provided.
