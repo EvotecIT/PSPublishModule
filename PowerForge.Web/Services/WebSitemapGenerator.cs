@@ -126,6 +126,17 @@ public static partial class WebSitemapGenerator
         var generateJson = options.GenerateJson || options.GenerateHtml;
         string? htmlOutputPath = null;
         string? jsonOutputPath = null;
+        string? generatedHtmlRelativePath = null;
+
+        if (options.GenerateHtml)
+        {
+            htmlOutputPath = string.IsNullOrWhiteSpace(options.HtmlOutputPath)
+                ? Path.Combine(siteRoot, "sitemap", "index.html")
+                : Path.GetFullPath(options.HtmlOutputPath);
+
+            if (IsUnderRoot(siteRoot, htmlOutputPath))
+                generatedHtmlRelativePath = Path.GetRelativePath(siteRoot, htmlOutputPath).Replace('\\', '/');
+        }
 
         if (options.IncludeHtmlFiles)
         {
@@ -133,6 +144,12 @@ public static partial class WebSitemapGenerator
             foreach (var file in Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
+                if (!options.IncludeGeneratedHtmlRouteInXml &&
+                    !string.IsNullOrWhiteSpace(generatedHtmlRelativePath) &&
+                    string.Equals(relative, generatedHtmlRelativePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 if (relative.EndsWith("404.html", StringComparison.OrdinalIgnoreCase)) continue;
                 if (IsExcludedHtml(relative, excludePatterns)) continue;
                 if (!options.IncludeNoIndexHtml && HtmlDeclaresNoIndex(file)) continue;
@@ -182,14 +199,10 @@ public static partial class WebSitemapGenerator
 
         if (options.GenerateHtml)
         {
-            htmlOutputPath = string.IsNullOrWhiteSpace(options.HtmlOutputPath)
-                ? Path.Combine(siteRoot, "sitemap", "index.html")
-                : Path.GetFullPath(options.HtmlOutputPath);
-
-            if (options.IncludeGeneratedHtmlRouteInXml && IsUnderRoot(siteRoot, htmlOutputPath))
+            if (options.IncludeGeneratedHtmlRouteInXml &&
+                !string.IsNullOrWhiteSpace(generatedHtmlRelativePath))
             {
-                var relative = Path.GetRelativePath(siteRoot, htmlOutputPath).Replace('\\', '/');
-                AddOrUpdate(entries, NormalizeRoute(relative), null);
+                AddOrUpdate(entries, NormalizeRoute(generatedHtmlRelativePath), null);
             }
         }
         if (generateJson)
