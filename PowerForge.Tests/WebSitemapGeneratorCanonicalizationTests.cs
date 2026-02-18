@@ -83,17 +83,22 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
-    public void Generate_SkipsNoIndexPages_ByDefault()
+    public void Generate_ExcludesUtilityAndNoIndexHtml_ByDefault()
     {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-noindex-skip-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-exclude-defaults-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
 
         try
         {
-            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>Home</title>");
+            Directory.CreateDirectory(Path.Combine(root, "api-fragments"));
+            Directory.CreateDirectory(Path.Combine(root, "search"));
+
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(Path.Combine(root, "faq.scripts.html"), "<!doctype html><title>scripts</title>");
+            File.WriteAllText(Path.Combine(root, "api-fragments", "header.html"), "<header>fragment</header>");
             File.WriteAllText(
-                Path.Combine(root, "hidden.html"),
-                "<!doctype html><head><meta name=\"robots\" content=\"noindex,nofollow\" /><title>Hidden</title></head>");
+                Path.Combine(root, "search", "index.html"),
+                "<!doctype html><head><meta name=robots content=noindex /><title>Search</title></head><body>search</body>");
 
             var result = WebSitemapGenerator.Generate(new WebSitemapOptions
             {
@@ -111,7 +116,9 @@ public class WebSitemapGeneratorCanonicalizationTests
                 .ToArray();
 
             Assert.Contains("https://example.test/", locs, StringComparer.OrdinalIgnoreCase);
-            Assert.DoesNotContain("https://example.test/hidden.html", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/faq.scripts.html", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/api-fragments/header.html", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/search/", locs, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -121,24 +128,24 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
-    public void Generate_IncludeNoIndexPages_WhenEnabled()
+    public void Generate_DoesNotIncludeGeneratedHtmlRoute_WhenXmlInclusionDisabled()
     {
-        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-noindex-include-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-html-skip-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
 
         try
         {
-            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>Home</title>");
-            File.WriteAllText(
-                Path.Combine(root, "hidden.html"),
-                "<!doctype html><head><meta name=\"googlebot\" content=\"noindex\" /><title>Hidden</title></head>");
+            Directory.CreateDirectory(Path.Combine(root, "sitemap"));
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(Path.Combine(root, "sitemap", "index.html"), "<!doctype html><title>existing sitemap</title>");
 
             var result = WebSitemapGenerator.Generate(new WebSitemapOptions
             {
                 SiteRoot = root,
                 BaseUrl = "https://example.test",
                 IncludeTextFiles = false,
-                IncludeNoIndexPages = true
+                GenerateHtml = true,
+                IncludeGeneratedHtmlRouteInXml = false
             });
 
             var doc = XDocument.Load(result.OutputPath);
@@ -149,7 +156,54 @@ public class WebSitemapGeneratorCanonicalizationTests
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .ToArray();
 
-            Assert.Contains("https://example.test/hidden.html", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/sitemap/", locs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_CanIncludeNoIndexAndDisableDefaultExcludes_WhenRequested()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-exclude-override-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "api-fragments"));
+            Directory.CreateDirectory(Path.Combine(root, "search"));
+
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>home</title>");
+            File.WriteAllText(Path.Combine(root, "faq.scripts.html"), "<!doctype html><title>scripts</title>");
+            File.WriteAllText(Path.Combine(root, "api-fragments", "header.html"), "<header>fragment</header>");
+            File.WriteAllText(
+                Path.Combine(root, "search", "index.html"),
+                "<!doctype html><head><meta name=\"robots\" content=\"noindex\" /><title>Search</title></head><body>search</body>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                IncludeNoIndexHtml = true,
+                UseDefaultExcludePatterns = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var locs = doc
+                .Descendants(ns + "url")
+                .Select(url => url.Element(ns + "loc")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+
+            Assert.Contains("https://example.test/faq.scripts.html", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/api-fragments/header.html", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("https://example.test/search/", locs, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

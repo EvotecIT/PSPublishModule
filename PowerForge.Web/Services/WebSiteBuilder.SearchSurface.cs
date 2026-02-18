@@ -62,7 +62,7 @@ public static partial class WebSiteBuilder
 
         if (string.Equals(collection, "docs", StringComparison.OrdinalIgnoreCase))
             weight += 0.4;
-        else if (string.Equals(collection, "blog", StringComparison.OrdinalIgnoreCase))
+        else if (IsEditorialCollection(collection))
             weight += 0.2;
 
         return weight;
@@ -176,7 +176,7 @@ public static partial class WebSiteBuilder
         sb.AppendLine("<body>");
         sb.AppendLine("  <main class=\"pf-search-wrap\">");
         sb.AppendLine("    <h1>Search</h1>");
-        sb.AppendLine("    <input id=\"pf-search-query\" class=\"pf-search-box\" type=\"search\" autocomplete=\"off\" placeholder=\"Search docs, blogs, pages...\" />");
+        sb.AppendLine("    <input id=\"pf-search-query\" class=\"pf-search-box\" type=\"search\" autocomplete=\"off\" placeholder=\"Search docs, blogs, news, pages...\" />");
         sb.AppendLine("    <div id=\"pf-search-meta\" class=\"pf-search-meta\">Loading search index...</div>");
         sb.AppendLine("    <div id=\"pf-search-results\" class=\"pf-search-results\"></div>");
         sb.AppendLine("  </main>");

@@ -279,6 +279,8 @@ public static partial class WebSiteVerifier
             return "/api/";
         if (string.Equals(feature, "blog", StringComparison.OrdinalIgnoreCase))
             return "/blog/";
+        if (string.Equals(feature, "news", StringComparison.OrdinalIgnoreCase))
+            return "/news/";
         if (string.Equals(feature, "search", StringComparison.OrdinalIgnoreCase))
             return "/search/";
         if (string.Equals(feature, "notfound", StringComparison.OrdinalIgnoreCase))
@@ -477,6 +479,10 @@ public static partial class WebSiteVerifier
                     set.Add("blog");
                 if (!string.IsNullOrWhiteSpace(c.Output) && c.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase))
                     set.Add("blog");
+                if (!string.IsNullOrWhiteSpace(c.Name) && c.Name.Equals("news", StringComparison.OrdinalIgnoreCase))
+                    set.Add("news");
+                if (!string.IsNullOrWhiteSpace(c.Output) && c.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase))
+                    set.Add("news");
             }
         }
 

@@ -87,14 +87,14 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["docs", "apiDocs", "blog", "search", "notFound"]
+        "enum": ["docs", "apiDocs", "blog", "news", "search", "notFound"]
       }
     },
     "features": {
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["docs", "apiDocs", "blog", "search", "notFound"]
+        "enum": ["docs", "apiDocs", "blog", "news", "search", "notFound"]
       }
     },
     "Cache": { "$ref": "#/$defs/BuildCacheSpec" }

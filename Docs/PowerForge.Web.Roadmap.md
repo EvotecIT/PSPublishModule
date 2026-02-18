@@ -230,7 +230,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 ## Site Adoption Checklist (Best Practice)
 
 - `site.json`:
-  - Set `Features` explicitly (`docs`, `apiDocs`, `blog`, `search`, `notFound`).
+  - Set `Features` explicitly (`docs`, `apiDocs`, `blog`, `news`, `search`, `notFound`).
   - For collections that don’t use DocFX-style TOC, set `UseToc:false`.
 - Theme:
   - Use `theme.manifest.json` (schemaVersion 2).

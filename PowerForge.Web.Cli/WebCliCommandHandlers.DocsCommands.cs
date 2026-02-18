@@ -415,9 +415,13 @@ internal static partial class WebCliCommandHandlers
         var htmlTemplate = TryGetOptionValue(subArgs, "--html-template");
         var htmlCss = TryGetOptionValue(subArgs, "--html-css");
         var htmlTitle = TryGetOptionValue(subArgs, "--html-title");
+        var excludePatterns = ReadOptionList(subArgs, "--exclude", "--exclude-pattern", "--exclude-patterns");
         var includeHtmlFiles = !HasOption(subArgs, "--no-html-files");
+        var includeNoIndexHtml = HasOption(subArgs, "--include-noindex-html");
         var includeTextFiles = !HasOption(subArgs, "--no-text-files");
         var includeLanguageAlternates = !HasOption(subArgs, "--no-language-alternates");
+        var useDefaultExcludes = !HasOption(subArgs, "--no-default-excludes");
+        var includeHtmlSitemapRoute = HasOption(subArgs, "--include-html-sitemap-route");
         var generateHtml = HasOption(subArgs, "--html") ||
                            !string.IsNullOrWhiteSpace(htmlOutput) ||
                            !string.IsNullOrWhiteSpace(htmlTemplate) ||
@@ -438,6 +442,9 @@ internal static partial class WebCliCommandHandlers
             Entries = LoadSitemapEntries(entriesPath),
             EntriesJsonPath = entriesJsonPath,
             IncludeHtmlFiles = includeHtmlFiles,
+            IncludeNoIndexHtml = includeNoIndexHtml,
+            UseDefaultExcludePatterns = useDefaultExcludes,
+            ExcludePatterns = excludePatterns.Count == 0 ? null : excludePatterns.ToArray(),
             IncludeTextFiles = includeTextFiles,
             IncludeLanguageAlternates = includeLanguageAlternates,
             GenerateHtml = generateHtml,
@@ -446,7 +453,8 @@ internal static partial class WebCliCommandHandlers
             HtmlOutputPath = htmlOutput,
             HtmlTemplatePath = htmlTemplate,
             HtmlCssHref = htmlCss,
-            HtmlTitle = htmlTitle
+            HtmlTitle = htmlTitle,
+            IncludeGeneratedHtmlRouteInXml = includeHtmlSitemapRoute
         });
 
         if (outputJson)

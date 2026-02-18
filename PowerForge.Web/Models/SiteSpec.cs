@@ -87,7 +87,7 @@ public sealed class SiteSpec
     public LocalizationSpec? Localization { get; set; }
 
     /// <summary>
-    /// Explicit feature flags for engine and theme contract verification (for example: docs, apiDocs, blog, search).
+    /// Explicit feature flags for engine and theme contract verification (for example: docs, apiDocs, blog, news, search).
     /// Prefer declaring these to avoid implicit inference and cross-site regressions.
     /// </summary>
     public string[] Features { get; set; } = Array.Empty<string>();

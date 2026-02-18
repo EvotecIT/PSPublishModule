@@ -216,7 +216,7 @@ public static partial class WebSiteBuilder
             return Array.Empty<string>();
 
         if (item.Kind == PageKind.Section &&
-            string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
+            IsEditorialCollection(item.Collection))
         {
             return BuildImplicitFeedFormats(spec.Feed);
         }
@@ -229,6 +229,15 @@ public static partial class WebSiteBuilder
         }
 
         return Array.Empty<string>();
+    }
+
+    private static bool IsEditorialCollection(string? collection)
+    {
+        if (string.IsNullOrWhiteSpace(collection))
+            return false;
+
+        return collection.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
+               collection.Equals("news", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string[] BuildImplicitFeedFormats(FeedSpec? feed)

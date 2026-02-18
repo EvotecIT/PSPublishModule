@@ -61,7 +61,7 @@ Schema: `Schemas/powerforge.web.themespec.schema.json`.
   "version": "1.0.0",
   "author": "Evotec",
   "engine": "scriban",
-  "features": ["docs", "apiDocs", "blog", "search"],
+  "features": ["docs", "apiDocs", "blog", "news", "search"],
   "extends": "base",
   "defaultLayout": "page",
   "layouts": {
@@ -132,7 +132,7 @@ Notes:
 - `requiredSurfaces` requires the site to define `Navigation.Surfaces` explicitly; verify emits a theme-contract warning when surfaces are required but missing.
 - `requiredCssSelectors` is validated by scanning local CSS files:
   - if `cssHrefs` is provided, those hrefs are scanned
-  - otherwise, the engine infers CSS from route bundles for representative routes (`/docs/`, `/api/`, `/blog/`)
+  - otherwise, the engine infers CSS from route bundles for representative routes (`/docs/`, `/api/`, `/blog/`, `/news/`)
   - remote CSS (`http/https`) is skipped (best-effort)
 
 ### Manifest rules
