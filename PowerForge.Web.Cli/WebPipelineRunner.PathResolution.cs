@@ -295,7 +295,9 @@ internal static partial class WebPipelineRunner
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
                 Priority = GetString(item, "priority"),
                 LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified"),
-                Alternates = alternates.ToArray()
+                Alternates = alternates.ToArray(),
+                ImageUrls = GetArrayOfStrings(item, "images") ?? Array.Empty<string>(),
+                VideoUrls = GetArrayOfStrings(item, "videos") ?? Array.Empty<string>()
             });
         }
         return list.ToArray();

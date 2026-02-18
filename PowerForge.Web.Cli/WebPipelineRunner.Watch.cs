@@ -54,7 +54,8 @@ internal static partial class WebPipelineRunner
         string[]? skipTasks,
         Action<WebPipelineResult>? onRunCompleted = null)
     {
-        var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
+        var normalizedPipelinePath = Path.GetFullPath(pipelinePath.Trim().Trim('"'));
+        var baseDir = Path.GetDirectoryName(normalizedPipelinePath) ?? ".";
         var ignoreRoots = CollectWatchIgnoreRoots(pipelinePath, baseDir);
         var ignoreRootStrings = ignoreRoots.Select(p => p.Replace('\\', '/')).ToArray();
 
@@ -251,8 +252,7 @@ internal static partial class WebPipelineRunner
         // Output roots inferred from pipeline steps (best-effort).
         try
         {
-            var json = File.ReadAllText(pipelinePath);
-            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+            using var doc = LoadPipelineDocumentWithExtends(pipelinePath);
             var root = doc.RootElement;
             if (root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
             {

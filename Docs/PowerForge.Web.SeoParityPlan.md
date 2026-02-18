@@ -29,7 +29,7 @@ Legend:
 | Content SEO analysis | Focus keyphrase, snippet checks, content hygiene | Missing | No built-in author-facing SEO scoring/checklist. |
 | Internal linking suggestions | Link recommendations + orphan detection | Missing | We lint nav/docs structure but no content link-graph advisor. |
 | Schema breadth | FAQ/HowTo/Product/Software/News schemas | Missing | Baseline schema only; no richer schema profiles yet. |
-| Vertical sitemaps | News/Image/Video sitemap modes | Missing | Only generic sitemap today. |
+| Vertical sitemaps | News/Image/Video sitemap modes | Have (baseline) | `sitemap` supports `newsOut`, `imageOut`, `videoOut`, and `sitemapIndex` outputs with route filters. |
 | Fast indexing ping | IndexNow support | Have | `indexnow` pipeline step supports batching/retry/dry-run/reporting and changed-file scoping. |
 | Crawl controls UX | Fine-grained crawl/index directives | Have | `Seo.CrawlPolicy` supports route-scoped robots directives, bot directives, and `_powerforge/crawl-policy.json` diagnostics. |
 
@@ -78,15 +78,16 @@ Deliverables:
 Why:
 - Rich results coverage for docs/products/news pages.
 
-### M4: Extended Sitemap Family
+### M4: Extended Sitemap Family (Completed baseline)
 
 Deliverables:
-- Optional tasks or modes:
-  - `sitemap-news`
-  - `sitemap-images`
-  - `sitemap-videos`
-- Sitemap index file generation when multiple maps are present.
-- Collection-aware inclusion rules (`blog`, `news`, docs, media-heavy pages).
+- Implemented:
+  - `sitemap` step can emit `newsOut`, `imageOut`, `videoOut`, and `sitemapIndex`.
+  - route-filtering via `newsPaths`, `imagePaths`, and `videoPaths`.
+  - optional publication metadata via `newsMetadata`.
+  - media URL discovery from rendered HTML (`img`/`video`/`source`/`iframe`) or explicit `entries[].images/videos`.
+- Remaining:
+  - richer collection-aware defaults and stronger media metadata validation.
 
 Why:
 - Better crawl targeting for large multi-surface sites.
@@ -150,7 +151,7 @@ Pipeline spec (new steps):
 1. Ship `seo-doctor` with deterministic editorial + technical checks (done; continue expanding fix hints/scoring).
 2. Add template/token resolution and preview artifact.
 3. Expand structured data profiles with validation checks. (completed; continue tightening rules over time)
-4. Add specialized sitemap outputs + index.
+4. Add specialized sitemap outputs + index. (completed baseline)
 5. Add crawl policy model. (completed)
 6. Add redirect assistant for migration-heavy sites.
 

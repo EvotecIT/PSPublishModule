@@ -25,6 +25,38 @@ Minimal pipeline:
 }
 ```
 
+### Pipeline inheritance (`extends`)
+
+Pipeline configs can inherit from one or more base files:
+
+- `extends` (or `Extends`) accepts a string or array of strings.
+- Base configs are loaded in order.
+- Object values merge recursively.
+- `steps` arrays are appended (`base` steps first, then child steps).
+
+Example:
+```json
+{
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
+  "extends": "./config/presets/pipeline.web-quality.json"
+}
+```
+
+With local additions:
+```json
+{
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
+  "extends": "./config/presets/pipeline.web-quality.json",
+  "steps": [
+    { "task": "indexnow", "modes": ["ci"], "baseUrl": "https://example.com", "keyEnv": "INDEXNOW_KEY", "sitemap": "./_site/sitemap.xml" }
+  ]
+}
+```
+
+Notes:
+- Inheritance loops are detected and fail fast.
+- Relative paths inside merged steps resolve from the root pipeline file you execute.
+
 ### CLI flags
 
 `powerforge-web pipeline` supports a few command-line flags to speed up local iteration:
@@ -536,7 +568,7 @@ Notes:
 - Use `includeDependencies:false` to omit dependency columns from generated outputs.
 
 #### sitemap
-Generates `sitemap.xml` and (optionally) `sitemap/index.json` + `sitemap.html`.
+Generates `sitemap.xml` and (optionally) JSON/HTML outputs, `sitemap-news.xml`, and a sitemap index.
 ```json
 {
   "task": "sitemap",
@@ -544,6 +576,17 @@ Generates `sitemap.xml` and (optionally) `sitemap/index.json` + `sitemap.html`.
   "baseUrl": "https://example.com",
   "includeLanguageAlternates": true,
   "entriesJson": "./data/sitemap.entries.json",
+  "newsOut": "./Artifacts/site/sitemap-news.xml",
+  "newsPaths": ["/news/**", "/blog/**"],
+  "newsMetadata": {
+    "publicationName": "Example Product",
+    "publicationLanguage": "en"
+  },
+  "imageOut": "./Artifacts/site/sitemap-images.xml",
+  "imagePaths": ["/blog/**", "/news/**", "/docs/**"],
+  "videoOut": "./Artifacts/site/sitemap-videos.xml",
+  "videoPaths": ["/showcase/**", "/news/**"],
+  "sitemapIndex": "./Artifacts/site/sitemap-index.xml",
   "extraPaths": ["/robots.txt"],
   "json": true,
   "jsonOut": "./Artifacts/site/sitemap/index.json",
@@ -560,6 +603,12 @@ Notes:
 - By default, HTML discovery excludes utility pages (`*.scripts.html`, `*.head.html`, `api-fragments/**`) and pages with robots `noindex`.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
 - `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
+- `newsOut` / `newsPaths` generate a Google News sitemap from matching routes. If omitted, defaults target `**/news/**`.
+- `newsMetadata` sets publication metadata for the news sitemap (`publicationName`, `publicationLanguage`, `genres`, `access`, `keywords`).
+- `imageOut` / `imagePaths` generate an image sitemap from matching routes that contain discovered image URLs.
+- `videoOut` / `videoPaths` generate a video sitemap from matching routes that contain discovered video URLs.
+- `sitemapIndex` emits a sitemap index file that references generated XML sitemap outputs.
+- image/video URL discovery is automatic for rendered HTML (`<img src>`, `<video src>`, `<source src>`, `<iframe src>`), and can also be provided via `entries[].images` / `entries[].videos`.
 - `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 - Set `includeNoIndexHtml: true` to include noindex pages anyway.

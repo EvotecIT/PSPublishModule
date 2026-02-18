@@ -54,6 +54,51 @@ public sealed class WebSitemapOptions
     public string? HtmlCssHref { get; set; }
     /// <summary>When true, include the generated HTML sitemap route in sitemap.xml.</summary>
     public bool IncludeGeneratedHtmlRouteInXml { get; set; }
+    /// <summary>Optional news sitemap generation options.</summary>
+    public WebSitemapNewsOptions? NewsSitemap { get; set; }
+    /// <summary>Optional image sitemap generation options.</summary>
+    public WebSitemapImageOptions? ImageSitemap { get; set; }
+    /// <summary>Optional video sitemap generation options.</summary>
+    public WebSitemapVideoOptions? VideoSitemap { get; set; }
+    /// <summary>Optional sitemap index output path.</summary>
+    public string? SitemapIndexPath { get; set; }
+}
+
+/// <summary>Options for specialized news sitemap output.</summary>
+public sealed class WebSitemapNewsOptions
+{
+    /// <summary>Optional output path override for the news sitemap XML.</summary>
+    public string? OutputPath { get; set; }
+    /// <summary>Optional path patterns used to select entries for news sitemap output.</summary>
+    public string[]? PathPatterns { get; set; }
+    /// <summary>Optional publication name for news metadata.</summary>
+    public string? PublicationName { get; set; }
+    /// <summary>Optional publication language code for news metadata (for example: en).</summary>
+    public string? PublicationLanguage { get; set; }
+    /// <summary>Optional news genres metadata.</summary>
+    public string? Genres { get; set; }
+    /// <summary>Optional news access metadata.</summary>
+    public string? Access { get; set; }
+    /// <summary>Optional news keywords metadata.</summary>
+    public string? Keywords { get; set; }
+}
+
+/// <summary>Options for specialized image sitemap output.</summary>
+public sealed class WebSitemapImageOptions
+{
+    /// <summary>Optional output path override for the image sitemap XML.</summary>
+    public string? OutputPath { get; set; }
+    /// <summary>Optional path patterns used to select entries for image sitemap output.</summary>
+    public string[]? PathPatterns { get; set; }
+}
+
+/// <summary>Options for specialized video sitemap output.</summary>
+public sealed class WebSitemapVideoOptions
+{
+    /// <summary>Optional output path override for the video sitemap XML.</summary>
+    public string? OutputPath { get; set; }
+    /// <summary>Optional path patterns used to select entries for video sitemap output.</summary>
+    public string[]? PathPatterns { get; set; }
 }
 
 /// <summary>Explicit sitemap entry metadata.</summary>
@@ -75,6 +120,10 @@ public sealed class WebSitemapEntry
     public string? LastModified { get; set; }
     /// <summary>Optional localized alternate URLs for this path.</summary>
     public WebSitemapAlternate[] Alternates { get; set; } = Array.Empty<WebSitemapAlternate>();
+    /// <summary>Optional page-associated image URLs (absolute or site-relative).</summary>
+    public string[] ImageUrls { get; set; } = Array.Empty<string>();
+    /// <summary>Optional page-associated video URLs (absolute or site-relative).</summary>
+    public string[] VideoUrls { get; set; } = Array.Empty<string>();
     /// <summary>When true, page declares robots noindex metadata.</summary>
     public bool NoIndex { get; set; }
 }
@@ -130,7 +179,40 @@ public static partial class WebSitemapGenerator
         var generateJson = options.GenerateJson || options.GenerateHtml;
         string? htmlOutputPath = null;
         string? jsonOutputPath = null;
+        string? newsOutputPath = null;
+        string? imageOutputPath = null;
+        string? videoOutputPath = null;
+        string? indexOutputPath = null;
         string? generatedHtmlRelativePath = null;
+        var generateNewsSitemap = options.NewsSitemap is not null;
+        var generateImageSitemap = options.ImageSitemap is not null;
+        var generateVideoSitemap = options.VideoSitemap is not null;
+        var generateSitemapIndex = options.SitemapIndexPath is not null;
+
+        if (generateNewsSitemap)
+        {
+            newsOutputPath = string.IsNullOrWhiteSpace(options.NewsSitemap!.OutputPath)
+                ? Path.Combine(siteRoot, "sitemap-news.xml")
+                : Path.GetFullPath(options.NewsSitemap.OutputPath!);
+        }
+        if (generateSitemapIndex)
+        {
+            indexOutputPath = string.IsNullOrWhiteSpace(options.SitemapIndexPath)
+                ? Path.Combine(siteRoot, "sitemap-index.xml")
+                : Path.GetFullPath(options.SitemapIndexPath!);
+        }
+        if (generateImageSitemap)
+        {
+            imageOutputPath = string.IsNullOrWhiteSpace(options.ImageSitemap!.OutputPath)
+                ? Path.Combine(siteRoot, "sitemap-images.xml")
+                : Path.GetFullPath(options.ImageSitemap.OutputPath!);
+        }
+        if (generateVideoSitemap)
+        {
+            videoOutputPath = string.IsNullOrWhiteSpace(options.VideoSitemap!.OutputPath)
+                ? Path.Combine(siteRoot, "sitemap-videos.xml")
+                : Path.GetFullPath(options.VideoSitemap.OutputPath!);
+        }
 
         if (options.GenerateHtml)
         {
@@ -246,6 +328,49 @@ public static partial class WebSitemapGenerator
         {
             doc.Save(stream);
         }
+
+        if (generateNewsSitemap && !string.IsNullOrWhiteSpace(newsOutputPath))
+        {
+            WriteNewsSitemap(
+                siteRoot,
+                baseUrl,
+                options.NewsSitemap!,
+                orderedEntries,
+                today,
+                newsOutputPath);
+        }
+        if (generateImageSitemap && !string.IsNullOrWhiteSpace(imageOutputPath))
+        {
+            WriteImageSitemap(
+                siteRoot,
+                baseUrl,
+                options.ImageSitemap!,
+                orderedEntries,
+                imageOutputPath);
+        }
+        if (generateVideoSitemap && !string.IsNullOrWhiteSpace(videoOutputPath))
+        {
+            WriteVideoSitemap(
+                siteRoot,
+                baseUrl,
+                options.VideoSitemap!,
+                orderedEntries,
+                videoOutputPath);
+        }
+
+        if (generateSitemapIndex && !string.IsNullOrWhiteSpace(indexOutputPath))
+        {
+            WriteSitemapIndex(
+                siteRoot,
+                baseUrl,
+                indexOutputPath,
+                today,
+                outputPath,
+                newsOutputPath,
+                imageOutputPath,
+                videoOutputPath);
+        }
+
         if (generateJson && !string.IsNullOrWhiteSpace(jsonOutputPath))
             WriteSitemapJson(baseUrl, orderedEntries, jsonOutputPath);
 
@@ -259,6 +384,10 @@ public static partial class WebSitemapGenerator
         return new WebSitemapResult
         {
             OutputPath = outputPath,
+            NewsOutputPath = newsOutputPath,
+            ImageOutputPath = imageOutputPath,
+            VideoOutputPath = videoOutputPath,
+            IndexOutputPath = indexOutputPath,
             JsonOutputPath = jsonOutputPath,
             HtmlOutputPath = htmlOutputPath,
             UrlCount = entriesXml.Length
@@ -631,6 +760,10 @@ public static partial class WebSitemapGenerator
                 existing.LastModified = update.LastModified;
             if (update.Alternates is { Length: > 0 })
                 existing.Alternates = update.Alternates;
+            if (update.ImageUrls is { Length: > 0 })
+                existing.ImageUrls = update.ImageUrls;
+            if (update.VideoUrls is { Length: > 0 })
+                existing.VideoUrls = update.VideoUrls;
             return;
         }
 
@@ -649,7 +782,9 @@ public static partial class WebSitemapGenerator
             ChangeFrequency = update.ChangeFrequency,
             Priority = update.Priority,
             LastModified = update.LastModified,
-            Alternates = update.Alternates
+            Alternates = update.Alternates,
+            ImageUrls = update.ImageUrls,
+            VideoUrls = update.VideoUrls
         };
     }
 
@@ -715,6 +850,16 @@ public static partial class WebSitemapGenerator
             source.Alternates is { Length: > 0 })
         {
             destination.Alternates = source.Alternates;
+        }
+        if ((destination.ImageUrls is null || destination.ImageUrls.Length == 0) &&
+            source.ImageUrls is { Length: > 0 })
+        {
+            destination.ImageUrls = source.ImageUrls;
+        }
+        if ((destination.VideoUrls is null || destination.VideoUrls.Length == 0) &&
+            source.VideoUrls is { Length: > 0 })
+        {
+            destination.VideoUrls = source.VideoUrls;
         }
     }
 

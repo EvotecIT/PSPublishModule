@@ -1114,6 +1114,37 @@ internal static partial class WebPipelineRunner
             GetBool(step, "includeGeneratedHtmlRouteInXml") ??
             GetBool(step, "include-generated-html-route-in-xml") ??
             false;
+        var sitemapIndex = ResolvePath(baseDir,
+            GetString(step, "sitemapIndex") ??
+            GetString(step, "sitemap-index") ??
+            GetString(step, "indexOut") ??
+            GetString(step, "index-out"));
+        var newsOutput = ResolvePath(baseDir,
+            GetString(step, "newsOutput") ??
+            GetString(step, "newsOut") ??
+            GetString(step, "news-output") ??
+            GetString(step, "news-out"));
+        var newsPaths = GetArrayOfStrings(step, "newsPaths") ?? GetArrayOfStrings(step, "news-paths");
+        var newsMetadata = GetSitemapNewsMetadata(step);
+        var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
+                          (newsPaths?.Length ?? 0) > 0 ||
+                          newsMetadata is not null;
+        var imageOutput = ResolvePath(baseDir,
+            GetString(step, "imageOutput") ??
+            GetString(step, "imageOut") ??
+            GetString(step, "image-output") ??
+            GetString(step, "image-out"));
+        var imagePaths = GetArrayOfStrings(step, "imagePaths") ?? GetArrayOfStrings(step, "image-paths");
+        var imageEnabled = !string.IsNullOrWhiteSpace(imageOutput) ||
+                           (imagePaths?.Length ?? 0) > 0;
+        var videoOutput = ResolvePath(baseDir,
+            GetString(step, "videoOutput") ??
+            GetString(step, "videoOut") ??
+            GetString(step, "video-output") ??
+            GetString(step, "video-out"));
+        var videoPaths = GetArrayOfStrings(step, "videoPaths") ?? GetArrayOfStrings(step, "video-paths");
+        var videoEnabled = !string.IsNullOrWhiteSpace(videoOutput) ||
+                           (videoPaths?.Length ?? 0) > 0;
         var jsonEnabled = GetBool(step, "json") ?? false;
         var jsonOutput = ResolvePath(baseDir,
             GetString(step, "jsonOutput") ??
@@ -1158,11 +1189,83 @@ internal static partial class WebPipelineRunner
             HtmlTemplatePath = htmlTemplate,
             HtmlCssHref = htmlCss,
             HtmlTitle = htmlTitle,
-            IncludeGeneratedHtmlRouteInXml = includeGeneratedHtmlRouteInXml
+            IncludeGeneratedHtmlRouteInXml = includeGeneratedHtmlRouteInXml,
+            SitemapIndexPath = sitemapIndex,
+            NewsSitemap = !newsEnabled
+                ? null
+                : new WebSitemapNewsOptions
+                {
+                    OutputPath = newsOutput,
+                    PathPatterns = newsPaths,
+                    PublicationName = newsMetadata?.PublicationName,
+                    PublicationLanguage = newsMetadata?.PublicationLanguage,
+                    Genres = newsMetadata?.Genres,
+                    Access = newsMetadata?.Access,
+                    Keywords = newsMetadata?.Keywords
+                },
+            ImageSitemap = !imageEnabled
+                ? null
+                : new WebSitemapImageOptions
+                {
+                    OutputPath = imageOutput,
+                    PathPatterns = imagePaths
+                },
+            VideoSitemap = !videoEnabled
+                ? null
+                : new WebSitemapVideoOptions
+                {
+                    OutputPath = videoOutput,
+                    PathPatterns = videoPaths
+                }
         });
 
         stepResult.Success = true;
-        stepResult.Message = $"Sitemap {res.UrlCount} urls";
+        var details = new List<string> { $"{res.UrlCount} urls" };
+        if (!string.IsNullOrWhiteSpace(res.NewsOutputPath))
+            details.Add("news");
+        if (!string.IsNullOrWhiteSpace(res.ImageOutputPath))
+            details.Add("images");
+        if (!string.IsNullOrWhiteSpace(res.VideoOutputPath))
+            details.Add("videos");
+        if (!string.IsNullOrWhiteSpace(res.IndexOutputPath))
+            details.Add("index");
+        stepResult.Message = $"Sitemap {string.Join(", ", details)}";
+    }
+
+    private static WebSitemapNewsOptions? GetSitemapNewsMetadata(JsonElement step)
+    {
+        if (!TryGetObject(step, "newsMetadata", out var metadata) &&
+            !TryGetObject(step, "news-metadata", out metadata))
+        {
+            return null;
+        }
+
+        return new WebSitemapNewsOptions
+        {
+            PublicationName = GetString(metadata, "publicationName") ??
+                              GetString(metadata, "publication-name") ??
+                              GetString(metadata, "name"),
+            PublicationLanguage = GetString(metadata, "publicationLanguage") ??
+                                  GetString(metadata, "publication-language") ??
+                                  GetString(metadata, "language"),
+            Genres = GetString(metadata, "genres"),
+            Access = GetString(metadata, "access"),
+            Keywords = GetString(metadata, "keywords")
+        };
+    }
+
+    private static bool TryGetObject(JsonElement source, string name, out JsonElement result)
+    {
+        if (source.ValueKind == JsonValueKind.Object &&
+            source.TryGetProperty(name, out var value) &&
+            value.ValueKind == JsonValueKind.Object)
+        {
+            result = value;
+            return true;
+        }
+
+        result = default;
+        return false;
     }
 
     private static void ExecuteXrefMerge(

@@ -407,18 +407,34 @@ a { color: inherit; text-decoration: none; }
         siteJson = InsertSchema(siteJson, DefaultSchemaBaseUrl + "powerforge.web.sitespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "site.json"), siteJson);
 
-        // Provide a ready-to-run pipeline with dev/ci modes and baseline paths under .powerforge.
+        var configPresetsRoot = Path.Combine(fullOutput, "config", "presets");
+        Directory.CreateDirectory(configPresetsRoot);
+
+        // Keep the starter pipeline tiny and reusable by inheriting a preset.
+        var pipelinePresetJson = InsertSchema(
+            """
+            {
+              "cache": true,
+              "cachePath": "./.powerforge/pipeline-cache.json",
+              "profile": true,
+              "profilePath": "./_reports/pipeline-profile.json",
+              "steps": [
+                { "task": "build", "id": "build-site", "config": "./site.json", "out": "./_site", "clean": true },
+
+                { "task": "verify", "id": "verify-dev", "dependsOn": "build-site", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
+                { "task": "verify", "id": "verify-ci", "dependsOn": "build-site", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
+
+                { "task": "audit", "id": "audit-ci", "dependsOn": "build-site", "siteRoot": "./_site", "modes": ["ci"], "summary": true, "sarif": true, "baseline": "./.powerforge/audit-baseline.json", "failOnNewIssues": true }
+              ]
+            }
+            """,
+            DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
+        created += WriteFile(Path.Combine(configPresetsRoot, "pipeline.web-quality.json"), pipelinePresetJson);
+
         var pipelineJson = InsertSchema(
             """
             {
-              "steps": [
-                { "task": "build", "config": "./site.json", "out": "./_site", "clean": true },
-
-                { "task": "verify", "id": "verify-dev", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
-                { "task": "verify", "id": "verify-ci", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
-
-                { "task": "audit", "id": "audit-ci", "siteRoot": "./_site", "modes": ["ci"], "summary": true, "sarif": true, "baseline": "./.powerforge/audit-baseline.json", "failOnNewIssues": true }
-              ]
+              "extends": "./config/presets/pipeline.web-quality.json"
             }
             """,
             DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
@@ -445,6 +461,10 @@ CI mode (strict, but stable via baselines):
 ```powershell
 powerforge-web pipeline --config .\pipeline.json --mode ci
 ```
+
+Starter preset file:
+- `config/presets/pipeline.web-quality.json`
+- Edit this preset to tune shared verify/audit/cache/profile behavior for the whole site.
 
 ## Baselines (recommended workflow)
 

@@ -15,6 +15,7 @@ public class WebSiteScaffolderTests
 
             Assert.True(File.Exists(Path.Combine(root, "content", "blog", "_index.md")));
             Assert.True(File.Exists(Path.Combine(root, "content", "blog", "hello-world.md")));
+            Assert.True(File.Exists(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
 
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
             var spec = specDoc.RootElement;
@@ -43,6 +44,11 @@ public class WebSiteScaffolderTests
                 .Select(element => element.GetProperty("title").GetString() ?? string.Empty)
                 .ToArray();
             Assert.Contains("Blog", navigationItems, StringComparer.OrdinalIgnoreCase);
+
+            using var pipelineDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "pipeline.json")));
+            var pipeline = pipelineDoc.RootElement;
+            Assert.Equal("./config/presets/pipeline.web-quality.json", pipeline.GetProperty("extends").GetString());
+            Assert.False(pipeline.TryGetProperty("steps", out _));
         }
         finally
         {

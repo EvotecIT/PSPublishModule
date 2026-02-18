@@ -84,18 +84,14 @@ internal static partial class WebPipelineRunner
         string[]? onlyTasks = null,
         string[]? skipTasks = null)
     {
-        var json = File.ReadAllText(pipelinePath);
-        using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
-        {
-            AllowTrailingCommas = true,
-            CommentHandling = JsonCommentHandling.Skip
-        });
+        using var doc = LoadPipelineDocumentWithExtends(pipelinePath);
 
         var root = doc.RootElement;
         if (!root.TryGetProperty("steps", out var stepsElement) || stepsElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("Pipeline config must include a steps array.");
 
-        var baseDir = Path.GetDirectoryName(pipelinePath) ?? ".";
+        var normalizedPipelinePath = Path.GetFullPath(pipelinePath.Trim().Trim('"'));
+        var baseDir = Path.GetDirectoryName(normalizedPipelinePath) ?? ".";
         var normalizedMode = string.IsNullOrWhiteSpace(mode) ? null : mode.Trim();
         var effectiveMode = string.IsNullOrWhiteSpace(normalizedMode) ? "default" : normalizedMode;
         var onlyTaskSet = onlyTasks is { Length: > 0 }

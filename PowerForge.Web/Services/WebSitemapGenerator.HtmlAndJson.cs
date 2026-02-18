@@ -13,6 +13,10 @@ public static partial class WebSitemapGenerator
     private static readonly TimeSpan HtmlRegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex MetaTagRegex = new("<meta\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly Regex HtmlAttributeRegex = new("(?<name>[a-zA-Z_:][\\w:.-]*)\\s*=\\s*(?<q>['\"])(?<value>.*?)\\k<q>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex ImageTagRegex = new("<img\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex VideoTagRegex = new("<video\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex SourceTagRegex = new("<source\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
+    private static readonly Regex IframeTagRegex = new("<iframe\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
 
     private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
@@ -27,7 +31,9 @@ public static partial class WebSitemapGenerator
             Path = route,
             Title = title,
             Section = section,
-            NoIndex = !string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!)
+            NoIndex = !string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!),
+            ImageUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractImageUrls(content!),
+            VideoUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractVideoUrls(content!)
         };
     }
 
@@ -204,7 +210,9 @@ public static partial class WebSitemapGenerator
                 Priority = GetString(item, "priority"),
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
                 LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified"),
-                Alternates = alternates.ToArray()
+                Alternates = alternates.ToArray(),
+                ImageUrls = GetArrayStrings(item, "images") ?? Array.Empty<string>(),
+                VideoUrls = GetArrayStrings(item, "videos") ?? Array.Empty<string>()
             });
         }
     }
@@ -224,6 +232,39 @@ public static partial class WebSitemapGenerator
         return null;
     }
 
+    private static string[]? GetArrayStrings(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+            return null;
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var list = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var text = item.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    list.Add(text.Trim());
+                continue;
+            }
+
+            if (item.ValueKind == JsonValueKind.Number ||
+                item.ValueKind == JsonValueKind.True ||
+                item.ValueKind == JsonValueKind.False)
+            {
+                list.Add(item.ToString());
+            }
+        }
+
+        return list.Count == 0
+            ? null
+            : list
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+    }
+
     private static void WriteSitemapJson(string baseUrl, IReadOnlyList<WebSitemapEntry> entries, string outputPath)
     {
         var payload = new Dictionary<string, object?>
@@ -240,6 +281,8 @@ public static partial class WebSitemapGenerator
                 ["lastModified"] = entry.LastModified,
                 ["changeFrequency"] = entry.ChangeFrequency,
                 ["priority"] = entry.Priority,
+                ["images"] = entry.ImageUrls,
+                ["videos"] = entry.VideoUrls,
                 ["alternates"] = entry.Alternates.Select(static alt => new Dictionary<string, object?>
                 {
                     ["hrefLang"] = alt.HrefLang,
@@ -258,6 +301,74 @@ public static partial class WebSitemapGenerator
                 return;
         }
         File.WriteAllText(outputPath, serialized, Encoding.UTF8);
+    }
+
+    private static string[] ExtractImageUrls(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return Array.Empty<string>();
+
+        var urls = new List<string>();
+        foreach (Match tagMatch in ImageTagRegex.Matches(html))
+        {
+            var src = ReadHtmlAttribute(tagMatch.Value, "src") ?? ReadHtmlAttribute(tagMatch.Value, "data-src");
+            var normalized = NormalizeEmbeddedAssetUrl(src);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                urls.Add(normalized);
+        }
+
+        return urls
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string[] ExtractVideoUrls(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return Array.Empty<string>();
+
+        var urls = new List<string>();
+        foreach (Match tagMatch in VideoTagRegex.Matches(html))
+        {
+            var src = ReadHtmlAttribute(tagMatch.Value, "src");
+            var normalized = NormalizeEmbeddedAssetUrl(src);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                urls.Add(normalized);
+        }
+        foreach (Match tagMatch in SourceTagRegex.Matches(html))
+        {
+            var src = ReadHtmlAttribute(tagMatch.Value, "src");
+            var normalized = NormalizeEmbeddedAssetUrl(src);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                urls.Add(normalized);
+        }
+        foreach (Match tagMatch in IframeTagRegex.Matches(html))
+        {
+            var src = ReadHtmlAttribute(tagMatch.Value, "src");
+            var normalized = NormalizeEmbeddedAssetUrl(src);
+            if (!string.IsNullOrWhiteSpace(normalized))
+                urls.Add(normalized);
+        }
+
+        return urls
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? NormalizeEmbeddedAssetUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+
+        var trimmed = url.Trim();
+        if (trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith('#'))
+        {
+            return null;
+        }
+
+        return trimmed;
     }
 
     private static string? TryResolveSitemapCssHref(string siteRoot)

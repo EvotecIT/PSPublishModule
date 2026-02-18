@@ -24,6 +24,14 @@ public sealed class WebSitemapResult
 {
     /// <summary>Path to the sitemap output.</summary>
     public string OutputPath { get; set; } = string.Empty;
+    /// <summary>Optional path to the generated news sitemap output.</summary>
+    public string? NewsOutputPath { get; set; }
+    /// <summary>Optional path to the generated image sitemap output.</summary>
+    public string? ImageOutputPath { get; set; }
+    /// <summary>Optional path to the generated video sitemap output.</summary>
+    public string? VideoOutputPath { get; set; }
+    /// <summary>Optional path to the generated sitemap index output.</summary>
+    public string? IndexOutputPath { get; set; }
     /// <summary>Optional path to sitemap JSON output.</summary>
     public string? JsonOutputPath { get; set; }
     /// <summary>Optional path to the HTML sitemap output.</summary>
