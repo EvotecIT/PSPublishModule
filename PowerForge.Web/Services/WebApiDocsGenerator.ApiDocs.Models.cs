@@ -608,7 +608,11 @@ public static partial class WebApiDocsGenerator
         public string SiteName { get; set; } = "Site";
         public string SiteBaseUrl { get; set; } = string.Empty;
         public string SocialImage { get; set; } = string.Empty;
+        public int? SocialImageWidth { get; set; }
+        public int? SocialImageHeight { get; set; }
         public string SocialTwitterCard { get; set; } = "summary";
+        public string SocialTwitterSite { get; set; } = string.Empty;
+        public string SocialTwitterCreator { get; set; } = string.Empty;
         public string BrandUrl { get; set; } = "/";
         public string BrandIcon { get; set; } = "/codeglyphx-qr-icon.png";
         public List<NavItem> Primary { get; set; } = new();
@@ -618,7 +622,15 @@ public static partial class WebApiDocsGenerator
         public List<NavItem> FooterCompany { get; set; } = new();
     }
 
-    private readonly record struct ApiSocialProfile(string SiteName, string SiteBaseUrl, string Image, string TwitterCard);
+    private readonly record struct ApiSocialProfile(
+        string SiteName,
+        string SiteBaseUrl,
+        string Image,
+        int? ImageWidth,
+        int? ImageHeight,
+        string TwitterCard,
+        string TwitterSite,
+        string TwitterCreator);
 
     private sealed class NavAction
     {

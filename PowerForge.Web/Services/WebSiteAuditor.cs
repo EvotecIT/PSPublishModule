@@ -348,6 +348,9 @@ public static partial class WebSiteAuditor
             if (options.CheckHeadingOrder)
                 ValidateHeadingOrder(doc, relativePath, AddIssue);
 
+            if (options.CheckSeoMeta)
+                ValidateSeoMetadata(doc, relativePath, AddIssue);
+
             if (options.CheckLinkPurposeConsistency)
                 ValidateLinkPurposeConsistency(doc, relativePath, AddIssue);
 

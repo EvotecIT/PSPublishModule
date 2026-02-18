@@ -9,8 +9,16 @@ public sealed class SocialSpec
     public string? SiteName { get; set; }
     /// <summary>Default preview image URL.</summary>
     public string? Image { get; set; }
+    /// <summary>Optional default preview image width in pixels.</summary>
+    public int? ImageWidth { get; set; }
+    /// <summary>Optional default preview image height in pixels.</summary>
+    public int? ImageHeight { get; set; }
     /// <summary>Twitter card type (summary, summary_large_image, etc.).</summary>
     public string? TwitterCard { get; set; } = "summary";
+    /// <summary>Optional Twitter site handle (for example: @myproject).</summary>
+    public string? TwitterSite { get; set; }
+    /// <summary>Optional Twitter creator handle (for example: @author).</summary>
+    public string? TwitterCreator { get; set; }
     /// <summary>When true, generate per-page social card PNG files from page content.</summary>
     public bool AutoGenerateCards { get; set; }
     /// <summary>Output URL prefix for generated social card files.</summary>

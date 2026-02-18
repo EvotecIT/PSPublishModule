@@ -150,7 +150,7 @@ Notes:
   - `verifyBaseline`: path to a verify baseline file
   - `verifyBaselineGenerate` / `verifyBaselineUpdate`
   - `verifyFailOnNewWarnings`: fail only when verify emits new warnings vs baseline
-- Supports audit controls (`requiredRoutes`, `navRequiredLinks`, `checkHeadingOrder`, `checkLinkPurpose`, etc.).
+- Supports audit controls (`requiredRoutes`, `navRequiredLinks`, `checkHeadingOrder`, `checkSeoMeta`, `checkLinkPurpose`, etc.).
 
 #### apidocs
 Generates API reference output from XML docs (optionally enriched by assembly).
@@ -193,6 +193,8 @@ Notes:
   - `bodyClass` sets the `<body>` class on API docs pages (default `pf-api-docs`)
   - social preview controls:
     - `socialImage` / `socialTwitterCard` set default OG/Twitter image and card type
+    - `socialImageWidth` / `socialImageHeight` set OG image dimensions for static social images
+    - `socialTwitterSite` / `socialTwitterCreator` set Twitter account handles for cards
     - `socialAutoGenerate: true` enables per-page API social card PNG generation
     - `socialCardPath` sets output URL prefix (default `/assets/social/generated/api`)
     - `socialCardWidth` / `socialCardHeight` control generated card dimensions (default `1200x630`)
@@ -635,6 +637,11 @@ Notes:
 - `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:
   - iframe checks: `loading="lazy"`, `title`, external `referrerpolicy`, YouTube nocookie host hint
   - image checks: loading/decoding hints, intrinsic size/aspect-ratio hints, `srcset` + `sizes` pairing
+- `checkSeoMeta` validates canonical/OpenGraph/Twitter metadata consistency:
+  - duplicate canonical, OG, and Twitter tags
+  - absolute URL checks for canonical, `og:url`, `og:image`, `twitter:url`, `twitter:image`
+  - missing `og:image` detection
+  - skipped for pages marked with robots `noindex`
 - Use `noDefaultExclude` to include partial HTML files like `*.scripts.html`.
 - `renderedBaseUrl` lets you run rendered checks against a running server (otherwise a local server is started).
 - `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.

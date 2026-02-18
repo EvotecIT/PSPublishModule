@@ -351,6 +351,157 @@ public static partial class WebSiteAuditor
         }
     }
 
+    private static void ValidateSeoMetadata(
+        AngleSharp.Dom.IDocument doc,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        if (doc.Head is null)
+            return;
+
+        if (HasNoIndexRobots(doc))
+            return;
+
+        var canonicalLinks = doc.Head.QuerySelectorAll("link[rel='canonical'][href]")
+            .Select(link => (link.GetAttribute("href") ?? string.Empty).Trim())
+            .Where(href => !string.IsNullOrWhiteSpace(href))
+            .ToArray();
+        if (canonicalLinks.Length > 1)
+        {
+            addIssue("warning", "seo", relativePath,
+                $"duplicate canonical links detected ({canonicalLinks.Length}).",
+                "seo-duplicate-canonical");
+        }
+        else if (canonicalLinks.Length == 1 && !IsAbsoluteHttpUrl(canonicalLinks[0]))
+        {
+            addIssue("warning", "seo", relativePath,
+                "canonical link should be an absolute http(s) URL.",
+                "seo-canonical-absolute");
+        }
+
+        var ogTitle = GetMetaPropertyValues(doc, "og:title");
+        if (ogTitle.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate og:title tags detected ({ogTitle.Length}).", "seo-duplicate-og-title");
+
+        var ogDescription = GetMetaPropertyValues(doc, "og:description");
+        if (ogDescription.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate og:description tags detected ({ogDescription.Length}).", "seo-duplicate-og-description");
+
+        var ogUrl = GetMetaPropertyValues(doc, "og:url");
+        if (ogUrl.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate og:url tags detected ({ogUrl.Length}).", "seo-duplicate-og-url");
+        foreach (var value in ogUrl.Where(value => !IsAbsoluteHttpUrl(value)))
+        {
+            addIssue("warning", "seo", relativePath,
+                $"og:url should be absolute http(s) but was '{value}'.",
+                "seo-og-url-absolute");
+        }
+
+        var ogImage = GetMetaPropertyValues(doc, "og:image");
+        if (ogImage.Length == 0)
+        {
+            addIssue("warning", "seo", relativePath, "missing og:image meta tag.", "seo-missing-og-image");
+        }
+        else
+        {
+            if (ogImage.Length > 1)
+                addIssue("warning", "seo", relativePath, $"duplicate og:image tags detected ({ogImage.Length}).", "seo-duplicate-og-image");
+            foreach (var value in ogImage.Where(value => !IsAbsoluteHttpUrl(value)))
+            {
+                addIssue("warning", "seo", relativePath,
+                    $"og:image should be absolute http(s) but was '{value}'.",
+                    "seo-og-image-absolute");
+            }
+        }
+
+        var twitterCard = GetMetaNameValues(doc, "twitter:card");
+        if (twitterCard.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate twitter:card tags detected ({twitterCard.Length}).", "seo-duplicate-twitter-card");
+
+        var twitterTitle = GetMetaNameValues(doc, "twitter:title");
+        if (twitterTitle.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate twitter:title tags detected ({twitterTitle.Length}).", "seo-duplicate-twitter-title");
+
+        var twitterDescription = GetMetaNameValues(doc, "twitter:description");
+        if (twitterDescription.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate twitter:description tags detected ({twitterDescription.Length}).", "seo-duplicate-twitter-description");
+
+        var twitterUrl = GetMetaNameValues(doc, "twitter:url");
+        if (twitterUrl.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate twitter:url tags detected ({twitterUrl.Length}).", "seo-duplicate-twitter-url");
+        foreach (var value in twitterUrl.Where(value => !IsAbsoluteHttpUrl(value)))
+        {
+            addIssue("warning", "seo", relativePath,
+                $"twitter:url should be absolute http(s) but was '{value}'.",
+                "seo-twitter-url-absolute");
+        }
+
+        var twitterImage = GetMetaNameValues(doc, "twitter:image");
+        if (twitterImage.Length > 1)
+            addIssue("warning", "seo", relativePath, $"duplicate twitter:image tags detected ({twitterImage.Length}).", "seo-duplicate-twitter-image");
+        foreach (var value in twitterImage.Where(value => !IsAbsoluteHttpUrl(value)))
+        {
+            addIssue("warning", "seo", relativePath,
+                $"twitter:image should be absolute http(s) but was '{value}'.",
+                "seo-twitter-image-absolute");
+        }
+    }
+
+    private static string[] GetMetaPropertyValues(AngleSharp.Dom.IDocument doc, string propertyName)
+    {
+        return doc.Head?
+            .QuerySelectorAll("meta[property]")
+            .Where(meta => string.Equals(meta.GetAttribute("property"), propertyName, StringComparison.OrdinalIgnoreCase))
+            .Select(meta => (meta.GetAttribute("content") ?? string.Empty).Trim())
+            .Where(content => !string.IsNullOrWhiteSpace(content))
+            .ToArray()
+            ?? Array.Empty<string>();
+    }
+
+    private static string[] GetMetaNameValues(AngleSharp.Dom.IDocument doc, string name)
+    {
+        return doc.Head?
+            .QuerySelectorAll("meta[name]")
+            .Where(meta => string.Equals(meta.GetAttribute("name"), name, StringComparison.OrdinalIgnoreCase))
+            .Select(meta => (meta.GetAttribute("content") ?? string.Empty).Trim())
+            .Where(content => !string.IsNullOrWhiteSpace(content))
+            .ToArray()
+            ?? Array.Empty<string>();
+    }
+
+    private static bool HasNoIndexRobots(AngleSharp.Dom.IDocument doc)
+    {
+        if (doc.Head is null)
+            return false;
+
+        foreach (var meta in doc.Head.QuerySelectorAll("meta[name]"))
+        {
+            var name = meta.GetAttribute("name");
+            if (!string.Equals(name, "robots", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(name, "googlebot", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(name, "bingbot", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var content = meta.GetAttribute("content");
+            if (!string.IsNullOrWhiteSpace(content) &&
+                content.IndexOf("noindex", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsAbsoluteHttpUrl(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
+    }
+
     private static IEnumerable<AngleSharp.Dom.IElement> EnumerateHeadingCandidates(AngleSharp.Dom.IDocument doc)
     {
         if (doc.Body is null)

@@ -249,7 +249,14 @@ public static partial class WebSiteBuilder
         var imageOverride = GetMetaString(item.Meta, "social_image");
         var imagePath = ResolveSocialImagePath(spec, item, outputRoot, title, description, siteName, imageOverride);
         var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
+        var (imageWidth, imageHeight) = ResolveSocialImageDimensions(spec, item, imagePath);
         var twitterCard = string.IsNullOrWhiteSpace(spec.Social.TwitterCard) ? "summary" : spec.Social.TwitterCard;
+        var twitterSite = NormalizeTwitterHandle(GetMetaString(item.Meta, "social_twitter_site"));
+        if (string.IsNullOrWhiteSpace(twitterSite))
+            twitterSite = NormalizeTwitterHandle(spec.Social.TwitterSite);
+        var twitterCreator = NormalizeTwitterHandle(GetMetaString(item.Meta, "social_twitter_creator"));
+        if (string.IsNullOrWhiteSpace(twitterCreator))
+            twitterCreator = NormalizeTwitterHandle(spec.Social.TwitterCreator);
         var imageAlt = GetMetaString(item.Meta, "social_image_alt");
         if (string.IsNullOrWhiteSpace(imageAlt))
             imageAlt = title;
@@ -268,6 +275,10 @@ public static partial class WebSiteBuilder
             sb.AppendLine($@"<meta property=""og:image"" content=""{System.Web.HttpUtility.HtmlEncode(image)}"" />");
         if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
             sb.AppendLine($@"<meta property=""og:image:alt"" content=""{System.Web.HttpUtility.HtmlEncode(imageAlt)}"" />");
+        if (imageWidth > 0)
+            sb.AppendLine($@"<meta property=""og:image:width"" content=""{imageWidth}"" />");
+        if (imageHeight > 0)
+            sb.AppendLine($@"<meta property=""og:image:height"" content=""{imageHeight}"" />");
         if (!string.IsNullOrWhiteSpace(siteName))
             sb.AppendLine($@"<meta property=""og:site_name"" content=""{System.Web.HttpUtility.HtmlEncode(siteName)}"" />");
         if (isArticle && !string.IsNullOrWhiteSpace(publishedTime))
@@ -282,6 +293,10 @@ public static partial class WebSiteBuilder
         sb.AppendLine("<!-- Twitter Card -->");
         sb.AppendLine($@"<meta name=""twitter:card"" content=""{System.Web.HttpUtility.HtmlEncode(twitterCard)}"" />");
         sb.AppendLine($@"<meta name=""twitter:title"" content=""{System.Web.HttpUtility.HtmlEncode(title)}"" />");
+        if (!string.IsNullOrWhiteSpace(twitterSite))
+            sb.AppendLine($@"<meta name=""twitter:site"" content=""{System.Web.HttpUtility.HtmlEncode(twitterSite)}"" />");
+        if (!string.IsNullOrWhiteSpace(twitterCreator))
+            sb.AppendLine($@"<meta name=""twitter:creator"" content=""{System.Web.HttpUtility.HtmlEncode(twitterCreator)}"" />");
         if (!string.IsNullOrWhiteSpace(url))
             sb.AppendLine($@"<meta name=""twitter:url"" content=""{System.Web.HttpUtility.HtmlEncode(url)}"" />");
         if (!string.IsNullOrWhiteSpace(description))
@@ -304,34 +319,174 @@ public static partial class WebSiteBuilder
         if (TryGetMetaBool(item.Meta, "structured_data", out var enabled) && !enabled)
             return string.Empty;
 
-        if (!spec.StructuredData.Breadcrumbs || breadcrumbs.Length == 0)
-            return string.Empty;
-
         var baseUrl = spec.BaseUrl?.TrimEnd('/') ?? string.Empty;
-        var lines = new List<string>
-        {
-            "<script type=\"application/ld+json\">",
-            "  {",
-            "      \"@context\": \"https://schema.org\",",
-            "      \"@type\": \"BreadcrumbList\",",
-            "      \"itemListElement\": ["
-        };
+        var scripts = new List<string>();
 
-        for (var i = 0; i < breadcrumbs.Length; i++)
+        if (spec.StructuredData.Breadcrumbs && breadcrumbs.Length > 0)
         {
-            var crumb = breadcrumbs[i];
-            var url = ResolveAbsoluteUrl(baseUrl, crumb.Url);
-            var name = System.Text.Json.JsonSerializer.Serialize(crumb.Title ?? string.Empty);
-            var itemUrl = System.Text.Json.JsonSerializer.Serialize(url ?? string.Empty);
-            var suffix = i == breadcrumbs.Length - 1 ? string.Empty : ",";
-            lines.Add($"          {{ \"@type\": \"ListItem\", \"position\": {i + 1}, \"name\": {name}, \"item\": {itemUrl} }}{suffix}");
+            var items = breadcrumbs
+                .Select((crumb, index) => new Dictionary<string, object?>
+                {
+                    ["@type"] = "ListItem",
+                    ["position"] = index + 1,
+                    ["name"] = crumb.Title ?? string.Empty,
+                    ["item"] = ResolveAbsoluteUrl(baseUrl, crumb.Url)
+                })
+                .ToArray();
+
+            scripts.Add(BuildJsonLdScript(new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "BreadcrumbList",
+                ["itemListElement"] = items
+            }));
         }
 
-        lines.Add("      ]");
-        lines.Add("  }");
-        lines.Add("  </script>");
+        var pageUrl = ResolveAbsoluteUrl(spec.BaseUrl, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
+        if (spec.StructuredData.Website && item.Kind == PageKind.Home)
+        {
+            var webSiteModel = new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "WebSite",
+                ["name"] = spec.Name,
+                ["url"] = string.IsNullOrWhiteSpace(baseUrl) ? pageUrl : baseUrl
+            };
 
-        return string.Join(Environment.NewLine, lines);
+            if (spec.Features?.Any(feature => feature.Equals("search", StringComparison.OrdinalIgnoreCase)) == true)
+            {
+                var searchUrl = ResolveAbsoluteUrl(spec.BaseUrl, "/search/?q={search_term_string}");
+                if (!string.IsNullOrWhiteSpace(searchUrl))
+                {
+                    webSiteModel["potentialAction"] = new Dictionary<string, object?>
+                    {
+                        ["@type"] = "SearchAction",
+                        ["target"] = searchUrl,
+                        ["query-input"] = "required name=search_term_string"
+                    };
+                }
+            }
+
+            scripts.Add(BuildJsonLdScript(webSiteModel));
+        }
+
+        if (spec.StructuredData.Organization && item.Kind == PageKind.Home)
+        {
+            var organizationModel = new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "Organization",
+                ["name"] = spec.Name
+            };
+            if (!string.IsNullOrWhiteSpace(baseUrl))
+                organizationModel["url"] = baseUrl;
+
+            var logo = ResolveAbsoluteUrl(spec.BaseUrl, spec.Social?.Image);
+            if (!string.IsNullOrWhiteSpace(logo))
+                organizationModel["logo"] = logo;
+
+            scripts.Add(BuildJsonLdScript(organizationModel));
+        }
+
+        if (spec.StructuredData.Article && IsArticleLikePage(item))
+        {
+            var articleModel = new Dictionary<string, object?>
+            {
+                ["@context"] = "https://schema.org",
+                ["@type"] = "Article",
+                ["headline"] = item.Title,
+                ["mainEntityOfPage"] = new Dictionary<string, object?>
+                {
+                    ["@type"] = "WebPage",
+                    ["@id"] = pageUrl
+                },
+                ["author"] = new Dictionary<string, object?>
+                {
+                    ["@type"] = "Organization",
+                    ["name"] = spec.Name
+                },
+                ["publisher"] = new Dictionary<string, object?>
+                {
+                    ["@type"] = "Organization",
+                    ["name"] = spec.Name
+                }
+            };
+
+            var articleDescription = string.IsNullOrWhiteSpace(item.Description)
+                ? BuildSnippet(item.HtmlContent, 200)
+                : item.Description;
+            if (!string.IsNullOrWhiteSpace(articleDescription))
+                articleModel["description"] = articleDescription;
+
+            if (item.Date.HasValue)
+            {
+                var iso = item.Date.Value.ToUniversalTime().ToString("O");
+                articleModel["datePublished"] = iso;
+                articleModel["dateModified"] = iso;
+            }
+
+            var imagePath = ResolveSocialImagePath(spec, item, string.Empty, item.Title, articleDescription, spec.Name, string.Empty);
+            var image = ResolveAbsoluteUrl(spec.BaseUrl, imagePath);
+            if (!string.IsNullOrWhiteSpace(image))
+                articleModel["image"] = image;
+
+            scripts.Add(BuildJsonLdScript(articleModel));
+        }
+
+        return scripts.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, scripts.Where(static script => !string.IsNullOrWhiteSpace(script)));
+    }
+
+    private static string BuildJsonLdScript(object payload)
+    {
+        var json = JsonSerializer.Serialize(payload);
+        return $"<script type=\"application/ld+json\">{json}</script>";
+    }
+
+    private static (int Width, int Height) ResolveSocialImageDimensions(SiteSpec spec, ContentItem item, string imagePath)
+    {
+        var width = GetMetaInt(item.Meta, "social_image_width") ?? GetMetaInt(item.Meta, "social.image.width");
+        var height = GetMetaInt(item.Meta, "social_image_height") ?? GetMetaInt(item.Meta, "social.image.height");
+        if (width is > 0 || height is > 0)
+            return (Math.Max(0, width ?? 0), Math.Max(0, height ?? 0));
+
+        if (spec.Social?.AutoGenerateCards == true)
+        {
+            var generatedPrefix = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath) + "/";
+            var normalizedImagePath = NormalizeImagePath(imagePath);
+            if (!string.IsNullOrWhiteSpace(normalizedImagePath) &&
+                normalizedImagePath.StartsWith(generatedPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return (Math.Max(0, spec.Social.GeneratedCardWidth), Math.Max(0, spec.Social.GeneratedCardHeight));
+            }
+        }
+
+        return (Math.Max(0, spec.Social?.ImageWidth ?? 0), Math.Max(0, spec.Social?.ImageHeight ?? 0));
+    }
+
+    private static string NormalizeImagePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
+            trimmed = absolute.AbsolutePath;
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed.TrimStart('/');
+        return trimmed;
+    }
+
+    private static string NormalizeTwitterHandle(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle))
+            return string.Empty;
+
+        var trimmed = handle.Trim();
+        if (!trimmed.StartsWith("@", StringComparison.Ordinal))
+            trimmed = "@" + trimmed.TrimStart('@');
+        return trimmed;
     }
 
     private static bool IsArticleLikePage(ContentItem item)

@@ -300,10 +300,13 @@ public static partial class WebApiDocsGenerator
         var url = ResolveApiAbsoluteUrl(social.SiteBaseUrl, route);
         var imagePath = ResolveApiSocialImagePath(options, social, title, desc, route);
         var image = ResolveApiAbsoluteUrl(social.SiteBaseUrl, imagePath);
+        var (imageWidth, imageHeight) = ResolveApiSocialImageDimensions(options, social, imagePath);
         var imageAlt = title;
         var twitterCard = string.IsNullOrWhiteSpace(social.TwitterCard)
             ? (string.IsNullOrWhiteSpace(image) ? "summary" : "summary_large_image")
             : social.TwitterCard;
+        var twitterSite = NormalizeTwitterHandle(social.TwitterSite);
+        var twitterCreator = NormalizeTwitterHandle(social.TwitterCreator);
 
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(url))
@@ -319,6 +322,10 @@ public static partial class WebApiDocsGenerator
             sb.AppendLine($"<meta property=\"og:image\" content=\"{System.Web.HttpUtility.HtmlEncode(image)}\" />");
         if (!string.IsNullOrWhiteSpace(image) && !string.IsNullOrWhiteSpace(imageAlt))
             sb.AppendLine($"<meta property=\"og:image:alt\" content=\"{System.Web.HttpUtility.HtmlEncode(imageAlt)}\" />");
+        if (imageWidth > 0)
+            sb.AppendLine($"<meta property=\"og:image:width\" content=\"{imageWidth}\" />");
+        if (imageHeight > 0)
+            sb.AppendLine($"<meta property=\"og:image:height\" content=\"{imageHeight}\" />");
         if (!string.IsNullOrWhiteSpace(siteName))
             sb.AppendLine($"<meta property=\"og:site_name\" content=\"{System.Web.HttpUtility.HtmlEncode(siteName)}\" />");
 
@@ -326,6 +333,10 @@ public static partial class WebApiDocsGenerator
         sb.AppendLine("<!-- Twitter Card -->");
         sb.AppendLine($"<meta name=\"twitter:card\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCard)}\" />");
         sb.AppendLine($"<meta name=\"twitter:title\" content=\"{System.Web.HttpUtility.HtmlEncode(title)}\" />");
+        if (!string.IsNullOrWhiteSpace(twitterSite))
+            sb.AppendLine($"<meta name=\"twitter:site\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterSite)}\" />");
+        if (!string.IsNullOrWhiteSpace(twitterCreator))
+            sb.AppendLine($"<meta name=\"twitter:creator\" content=\"{System.Web.HttpUtility.HtmlEncode(twitterCreator)}\" />");
         if (!string.IsNullOrWhiteSpace(desc))
             sb.AppendLine($"<meta name=\"twitter:description\" content=\"{System.Web.HttpUtility.HtmlEncode(desc)}\" />");
         if (!string.IsNullOrWhiteSpace(url))
@@ -344,13 +355,61 @@ public static partial class WebApiDocsGenerator
         var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, options.Title);
         var siteBaseUrl = FirstNonEmpty(nav?.SiteBaseUrl);
         var image = FirstNonEmpty(options.SocialImage, nav?.SocialImage, nav?.BrandIcon);
+        var imageWidth = options.SocialImageWidth ?? nav?.SocialImageWidth;
+        var imageHeight = options.SocialImageHeight ?? nav?.SocialImageHeight;
         var twitterCard = FirstNonEmpty(options.SocialTwitterCard, nav?.SocialTwitterCard, "summary");
+        var twitterSite = FirstNonEmpty(options.SocialTwitterSite, nav?.SocialTwitterSite);
+        var twitterCreator = FirstNonEmpty(options.SocialTwitterCreator, nav?.SocialTwitterCreator);
 
         return new ApiSocialProfile(
             siteName ?? string.Empty,
             siteBaseUrl ?? string.Empty,
             image ?? string.Empty,
-            twitterCard ?? "summary");
+            imageWidth,
+            imageHeight,
+            twitterCard ?? "summary",
+            twitterSite ?? string.Empty,
+            twitterCreator ?? string.Empty);
+    }
+
+    private static (int Width, int Height) ResolveApiSocialImageDimensions(
+        WebApiDocsOptions options,
+        ApiSocialProfile social,
+        string imagePath)
+    {
+        var generatedPrefix = NormalizeApiSocialCardPath(options.SocialCardPath) + "/";
+        var normalizedImagePath = NormalizeApiImagePath(imagePath);
+        if (!string.IsNullOrWhiteSpace(normalizedImagePath) &&
+            normalizedImagePath.StartsWith(generatedPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return (Math.Max(0, options.SocialCardWidth), Math.Max(0, options.SocialCardHeight));
+        }
+
+        return (Math.Max(0, social.ImageWidth ?? 0), Math.Max(0, social.ImageHeight ?? 0));
+    }
+
+    private static string NormalizeApiImagePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
+            trimmed = absolute.AbsolutePath;
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed.TrimStart('/');
+        return trimmed;
+    }
+
+    private static string NormalizeTwitterHandle(string? handle)
+    {
+        if (string.IsNullOrWhiteSpace(handle))
+            return string.Empty;
+
+        var trimmed = handle.Trim();
+        if (!trimmed.StartsWith("@", StringComparison.Ordinal))
+            trimmed = "@" + trimmed.TrimStart('@');
+        return trimmed;
     }
 
     private static string NormalizeApiRoute(string? route)

@@ -96,15 +96,31 @@ public static partial class WebApiDocsGenerator
         {
             if (TryGetProperty(socialProp, "Image", out var imageProp) && imageProp.ValueKind == JsonValueKind.String)
                 nav.SocialImage = imageProp.GetString() ?? nav.SocialImage;
+            if (TryGetProperty(socialProp, "ImageWidth", out var imageWidthProp) && TryReadInt32(imageWidthProp, out var imageWidth))
+                nav.SocialImageWidth = imageWidth;
+            if (TryGetProperty(socialProp, "ImageHeight", out var imageHeightProp) && TryReadInt32(imageHeightProp, out var imageHeight))
+                nav.SocialImageHeight = imageHeight;
             if (TryGetProperty(socialProp, "TwitterCard", out var twitterCardProp) && twitterCardProp.ValueKind == JsonValueKind.String)
                 nav.SocialTwitterCard = twitterCardProp.GetString() ?? nav.SocialTwitterCard;
+            if (TryGetProperty(socialProp, "TwitterSite", out var twitterSiteProp) && twitterSiteProp.ValueKind == JsonValueKind.String)
+                nav.SocialTwitterSite = twitterSiteProp.GetString() ?? nav.SocialTwitterSite;
+            if (TryGetProperty(socialProp, "TwitterCreator", out var twitterCreatorProp) && twitterCreatorProp.ValueKind == JsonValueKind.String)
+                nav.SocialTwitterCreator = twitterCreatorProp.GetString() ?? nav.SocialTwitterCreator;
         }
         if (TryGetProperty(root, "social", out var lowerSocialProp) && lowerSocialProp.ValueKind == JsonValueKind.Object)
         {
             if (TryGetProperty(lowerSocialProp, "image", out var lowerImageProp) && lowerImageProp.ValueKind == JsonValueKind.String)
                 nav.SocialImage = lowerImageProp.GetString() ?? nav.SocialImage;
+            if (TryGetProperty(lowerSocialProp, "imageWidth", out var lowerImageWidthProp) && TryReadInt32(lowerImageWidthProp, out var lowerImageWidth))
+                nav.SocialImageWidth = lowerImageWidth;
+            if (TryGetProperty(lowerSocialProp, "imageHeight", out var lowerImageHeightProp) && TryReadInt32(lowerImageHeightProp, out var lowerImageHeight))
+                nav.SocialImageHeight = lowerImageHeight;
             if (TryGetProperty(lowerSocialProp, "twitterCard", out var lowerTwitterCardProp) && lowerTwitterCardProp.ValueKind == JsonValueKind.String)
                 nav.SocialTwitterCard = lowerTwitterCardProp.GetString() ?? nav.SocialTwitterCard;
+            if (TryGetProperty(lowerSocialProp, "twitterSite", out var lowerTwitterSiteProp) && lowerTwitterSiteProp.ValueKind == JsonValueKind.String)
+                nav.SocialTwitterSite = lowerTwitterSiteProp.GetString() ?? nav.SocialTwitterSite;
+            if (TryGetProperty(lowerSocialProp, "twitterCreator", out var lowerTwitterCreatorProp) && lowerTwitterCreatorProp.ValueKind == JsonValueKind.String)
+                nav.SocialTwitterCreator = lowerTwitterCreatorProp.GetString() ?? nav.SocialTwitterCreator;
         }
 
         if (TryGetProperty(root, "Head", out var headProp) && headProp.ValueKind == JsonValueKind.Object)
@@ -171,6 +187,25 @@ public static partial class WebApiDocsGenerator
             nav.Actions = ParseSiteNavActions(actionsProp);
 
         return nav;
+    }
+
+    private static bool TryReadInt32(JsonElement element, out int value)
+    {
+        value = 0;
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var parsed))
+        {
+            value = parsed;
+            return true;
+        }
+
+        if (element.ValueKind == JsonValueKind.String &&
+            int.TryParse(element.GetString(), out parsed))
+        {
+            value = parsed;
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryApplySiteNavSurfaces(JsonElement root, WebApiDocsOptions options, NavConfig nav)
