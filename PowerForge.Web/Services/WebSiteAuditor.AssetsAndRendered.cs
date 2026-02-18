@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using HtmlTinkerX;
 
 namespace PowerForge.Web;
@@ -8,6 +9,14 @@ namespace PowerForge.Web;
 /// <summary>Audits generated HTML output using static checks.</summary>
 public static partial class WebSiteAuditor
 {
+    private sealed class RenderedContrastFinding
+    {
+        public string Selector { get; init; } = string.Empty;
+        public string Text { get; init; } = string.Empty;
+        public double Ratio { get; init; }
+        public double Required { get; init; }
+    }
+
     private static IEnumerable<string> GetAssetHrefs(AngleSharp.Dom.IDocument doc)
     {
         foreach (var link in doc.QuerySelectorAll("link[href]"))
@@ -624,6 +633,279 @@ public static partial class WebSiteAuditor
         return value?.ToString();
     }
 
+    private static RenderedContrastFinding[] FindRenderedContrastIssues(
+        string url,
+        HtmlBrowserEngine engine,
+        bool headless,
+        int timeoutMs,
+        double minRatio,
+        int maxFindings)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return Array.Empty<RenderedContrastFinding>();
+
+        var safeMaxFindings = Math.Clamp(maxFindings, 1, 200);
+        var safeMinRatio = double.IsFinite(minRatio) && minRatio > 0 ? minRatio : 4.5d;
+        var script = BuildRenderedContrastScript(safeMinRatio, safeMaxFindings);
+
+        HtmlBrowserSession? session = null;
+        try
+        {
+            session = HtmlBrowser.OpenSessionAsync(
+                    url,
+                    browser: engine,
+                    headless: headless,
+                    timeout: timeoutMs)
+                .GetAwaiter()
+                .GetResult();
+
+            var json = HtmlBrowser.EvaluateAsync<string>(session, script)
+                .GetAwaiter()
+                .GetResult();
+            return ParseRenderedContrastFindings(json, safeMaxFindings);
+        }
+        finally
+        {
+            if (session is not null)
+            {
+                try
+                {
+                    HtmlBrowser.CloseSessionAsync(session).GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // best effort cleanup
+                }
+            }
+        }
+    }
+
+    private static string BuildRenderedContrastSummary(RenderedContrastFinding[] findings, int max)
+    {
+        if (findings.Length == 0 || max <= 0)
+            return string.Empty;
+
+        var items = findings
+            .Take(max)
+            .Select(finding =>
+            {
+                var selector = string.IsNullOrWhiteSpace(finding.Selector) ? "<unknown>" : finding.Selector;
+                var text = string.IsNullOrWhiteSpace(finding.Text) ? "<text>" : finding.Text;
+                text = Regex.Replace(text, "\\s+", " ").Trim();
+                if (text.Length > 80)
+                    text = text.Substring(0, 80) + "...";
+                return $"{selector} \"{text}\" {finding.Ratio:0.00}<{finding.Required:0.00}";
+            })
+            .ToArray();
+        return items.Length == 0 ? string.Empty : string.Join(" | ", items);
+    }
+
+    private static RenderedContrastFinding[] ParseRenderedContrastFindings(string? json, int maxFindings)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return Array.Empty<RenderedContrastFinding>();
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return Array.Empty<RenderedContrastFinding>();
+
+            var list = new List<RenderedContrastFinding>();
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                var selector = TryGetString(item, "selector") ?? string.Empty;
+                var text = TryGetString(item, "text") ?? string.Empty;
+                var ratio = TryGetDouble(item, "ratio");
+                var required = TryGetDouble(item, "required");
+                if (!ratio.HasValue || !required.HasValue)
+                    continue;
+
+                list.Add(new RenderedContrastFinding
+                {
+                    Selector = selector,
+                    Text = text,
+                    Ratio = ratio.Value,
+                    Required = required.Value
+                });
+
+                if (list.Count >= maxFindings)
+                    break;
+            }
+
+            return list.ToArray();
+        }
+        catch
+        {
+            return Array.Empty<RenderedContrastFinding>();
+        }
+    }
+
+    private static string BuildRenderedContrastScript(double minRatio, int maxFindings)
+    {
+        var minRatioLiteral = minRatio.ToString("0.###", CultureInfo.InvariantCulture);
+        var maxFindingsLiteral = maxFindings.ToString(CultureInfo.InvariantCulture);
+        return $$"""
+(() => {
+  const minRatio = {{minRatioLiteral}};
+  const maxFindings = {{maxFindingsLiteral}};
+  const white = { r: 255, g: 255, b: 255, a: 1 };
+
+  function parseRgba(value) {
+    if (!value) return null;
+    const match = value.trim().match(/^rgba?\(([^)]+)\)$/i);
+    if (!match) return null;
+    const parts = match[1].split(',').map(p => p.trim());
+    if (parts.length < 3) return null;
+    const r = Number.parseFloat(parts[0]);
+    const g = Number.parseFloat(parts[1]);
+    const b = Number.parseFloat(parts[2]);
+    const a = parts.length >= 4 ? Number.parseFloat(parts[3]) : 1;
+    if ([r, g, b, a].some(Number.isNaN)) return null;
+    return { r, g, b, a: Math.max(0, Math.min(1, a)) };
+  }
+
+  function composite(fg, bg) {
+    const a = fg.a + bg.a * (1 - fg.a);
+    if (a <= 0) return { r: 0, g: 0, b: 0, a: 0 };
+    return {
+      r: ((fg.r * fg.a) + (bg.r * bg.a * (1 - fg.a))) / a,
+      g: ((fg.g * fg.a) + (bg.g * bg.a * (1 - fg.a))) / a,
+      b: ((fg.b * fg.a) + (bg.b * bg.a * (1 - fg.a))) / a,
+      a
+    };
+  }
+
+  function luminance(color) {
+    function channel(v) {
+      const n = v / 255;
+      return n <= 0.03928 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+    }
+    return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+  }
+
+  function contrastRatio(fg, bg) {
+    const l1 = luminance(fg);
+    const l2 = luminance(bg);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function isVisible(el, style) {
+    if (!el || !style) return false;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (Number.parseFloat(style.opacity || '1') <= 0) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function effectiveBackground(el) {
+    const layers = [];
+    let current = el;
+    while (current) {
+      const style = getComputedStyle(current);
+      const bg = parseRgba(style.backgroundColor);
+      if (bg && bg.a > 0) layers.push(bg);
+      current = current.parentElement;
+    }
+
+    let merged = white;
+    for (let i = layers.length - 1; i >= 0; i--) {
+      merged = composite(layers[i], merged);
+      if (merged.a >= 0.999) break;
+    }
+
+    return merged;
+  }
+
+  function buildSelector(el) {
+    if (!el) return '';
+    if (el.id) return `${el.tagName.toLowerCase()}#${el.id}`;
+    const parts = [];
+    let current = el;
+    let depth = 0;
+    while (current && depth < 4) {
+      let part = current.tagName.toLowerCase();
+      const classes = (current.className || '').toString().trim().split(/\s+/).filter(Boolean);
+      if (classes.length > 0) part += '.' + classes[0];
+      parts.unshift(part);
+      current = current.parentElement;
+      depth++;
+    }
+    return parts.join(' > ');
+  }
+
+  const results = [];
+  const seen = new Set();
+  const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+  let textNode = null;
+  while ((textNode = walker.nextNode()) && results.length < maxFindings) {
+    const text = (textNode.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    const el = textNode.parentElement;
+    if (!el) continue;
+    const tagName = (el.tagName || '').toLowerCase();
+    if (tagName === 'script' || tagName === 'style' || tagName === 'noscript') continue;
+    if (el.closest('[aria-hidden=\"true\"]')) continue;
+
+    const style = getComputedStyle(el);
+    if (!isVisible(el, style)) continue;
+    const fgBase = parseRgba(style.color);
+    if (!fgBase) continue;
+
+    const bg = effectiveBackground(el);
+    const fg = fgBase.a < 0.999 ? composite(fgBase, bg) : fgBase;
+    const ratio = contrastRatio(fg, bg);
+    const fontSize = Number.parseFloat(style.fontSize || '16');
+    const fontWeight = Number.parseInt(style.fontWeight || '400', 10) || 400;
+    const isLarge = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700);
+    const required = isLarge ? 3 : minRatio;
+
+    if (ratio + 0.0001 >= required) continue;
+
+    const selector = buildSelector(el);
+    const key = `${selector}|${text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    results.push({
+      selector,
+      text: text.slice(0, 120),
+      ratio: Number(ratio.toFixed(2)),
+      required: Number(required.toFixed(2))
+    });
+  }
+
+  return JSON.stringify(results);
+})()
+""";
+    }
+
+    private static string? TryGetString(JsonElement element, string propertyName)
+    {
+        if (!TryGetPropertyIgnoreCase(element, propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+            return null;
+        return value.GetString();
+    }
+
+    private static double? TryGetDouble(JsonElement element, string propertyName)
+    {
+        if (!TryGetPropertyIgnoreCase(element, propertyName, out var value))
+            return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var direct))
+            return direct;
+        if (value.ValueKind == JsonValueKind.String &&
+            double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
 
     private static bool IsPlaywrightMissing(IEnumerable<object>? entries, out string? message)
     {

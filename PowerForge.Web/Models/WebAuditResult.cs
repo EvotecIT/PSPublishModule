@@ -45,6 +45,8 @@ public sealed class WebAuditResult
     public int RenderedConsoleWarningCount { get; set; }
     /// <summary>Total failed network requests during rendered checks.</summary>
     public int RenderedFailedRequestCount { get; set; }
+    /// <summary>Total low-contrast findings detected during rendered checks.</summary>
+    public int RenderedContrastIssueCount { get; set; }
     /// <summary>Total errors emitted by audit.</summary>
     public int ErrorCount { get; set; }
     /// <summary>Total warnings emitted by audit.</summary>

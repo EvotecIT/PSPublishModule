@@ -126,6 +126,7 @@ public static partial class WebSiteAuditor
         var renderedConsoleErrorCount = 0;
         var renderedConsoleWarningCount = 0;
         var renderedFailedRequestCount = 0;
+        var renderedContrastIssueCount = 0;
         var requiredNavLinks = options.NavRequiredLinks
             .Where(link => !string.IsNullOrWhiteSpace(link))
             .Select(NormalizeNavHref)
@@ -525,6 +526,9 @@ public static partial class WebSiteAuditor
                 var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
                 try
                 {
+                    var renderedTarget = string.IsNullOrWhiteSpace(baseUrl)
+                        ? new Uri(Path.GetFullPath(file)).AbsoluteUri
+                        : CombineUrl(baseUrl, ToRoutePath(relativePath));
                     var renderedResult = string.IsNullOrWhiteSpace(baseUrl)
                         ? HtmlBrowserTester.TestFileAsync(
                             file,
@@ -532,7 +536,7 @@ public static partial class WebSiteAuditor
                             options.RenderedHeadless,
                             options.RenderedTimeoutMs).GetAwaiter().GetResult()
                         : HtmlBrowserTester.TestUrlAsync(
-                            CombineUrl(baseUrl, ToRoutePath(relativePath)),
+                            renderedTarget,
                             engine,
                             options.RenderedHeadless,
                             options.RenderedTimeoutMs).GetAwaiter().GetResult();
@@ -576,6 +580,45 @@ public static partial class WebSiteAuditor
                             ? $"failed network requests ({renderedResult.FailedRequestCount})."
                             : $"failed network requests ({renderedResult.FailedRequestCount}) -> {detail}",
                             "rendered-failed-requests");
+                    }
+
+                    if (options.RenderedCheckContrast)
+                    {
+                        try
+                        {
+                            var contrastFindings = FindRenderedContrastIssues(
+                                renderedTarget,
+                                engine,
+                                options.RenderedHeadless,
+                                options.RenderedTimeoutMs,
+                                options.RenderedContrastMinRatio,
+                                options.RenderedContrastMaxFindings);
+                            if (contrastFindings.Length > 0)
+                            {
+                                renderedContrastIssueCount += contrastFindings.Length;
+                                var detail = BuildRenderedContrastSummary(contrastFindings, RenderedDetailLimit);
+                                AddIssue("warning", "rendered-contrast", relativePath, string.IsNullOrWhiteSpace(detail)
+                                    ? $"low-contrast text detected ({contrastFindings.Length})."
+                                    : $"low-contrast text detected ({contrastFindings.Length}) -> {detail}",
+                                    "rendered-contrast-low");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            var message = ex.Message?.Trim() ?? string.Empty;
+                            if (message.IndexOf("executable doesn't exist", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                message.IndexOf("playwright", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                AddIssue("warning", "rendered-contrast", relativePath,
+                                    "Rendered contrast audit skipped: Playwright browsers not installed.",
+                                    "rendered-contrast-playwright");
+                                break;
+                            }
+
+                            AddIssue("warning", "rendered-contrast", relativePath,
+                                $"Rendered contrast audit failed ({message}).",
+                                "rendered-contrast-failed");
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -714,6 +757,7 @@ public static partial class WebSiteAuditor
             RenderedConsoleErrorCount = renderedConsoleErrorCount,
             RenderedConsoleWarningCount = renderedConsoleWarningCount,
             RenderedFailedRequestCount = renderedFailedRequestCount,
+            RenderedContrastIssueCount = renderedContrastIssueCount,
             ErrorCount = errorCount,
             WarningCount = warningCount,
             NewIssueCount = newIssueCount,
@@ -751,6 +795,7 @@ public static partial class WebSiteAuditor
                 RenderedConsoleErrorCount = result.RenderedConsoleErrorCount,
                 RenderedConsoleWarningCount = result.RenderedConsoleWarningCount,
                 RenderedFailedRequestCount = result.RenderedFailedRequestCount,
+                RenderedContrastIssueCount = result.RenderedContrastIssueCount,
                 ErrorCount = result.ErrorCount,
                 WarningCount = result.WarningCount,
                 NewIssueCount = result.NewIssueCount,
