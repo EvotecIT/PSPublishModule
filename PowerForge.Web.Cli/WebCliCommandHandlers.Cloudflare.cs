@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using static PowerForge.Web.Cli.WebCliHelpers;
@@ -8,6 +9,9 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
+    private const int CloudflareVerifyDefaultWarmupRequests = 1;
+    private const int CloudflareVerifyMaxWarmupRequests = 10;
+
     private static int HandleCloudflare(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
         var verb = "purge";
@@ -28,6 +32,9 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleCloudflarePurge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
+        if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, "web.cloudflare.purge", out var siteProfile, out var loadError))
+            return loadError;
+
         var zoneId = TryGetOptionValue(subArgs, "--zone-id") ??
                      TryGetOptionValue(subArgs, "--zone") ??
                      TryGetOptionValue(subArgs, "--zoneId");
@@ -52,10 +59,14 @@ internal static partial class WebCliCommandHandlers
 
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
                       TryGetOptionValue(subArgs, "--baseUrl") ??
+                      siteProfile?.BaseUrl ??
                       Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
 
         var urls = ReadOptionList(subArgs, "--url", "--urls");
         var paths = ReadOptionList(subArgs, "--path", "--paths");
+        if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
+            paths.AddRange(siteProfile.PurgePaths);
+
         if (urls.Count == 0 && paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
@@ -76,7 +87,9 @@ internal static partial class WebCliCommandHandlers
         {
             var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
+                ["siteConfig"] = siteProfile?.SiteConfigPath,
                 ["zoneId"] = zoneId,
+                ["baseUrl"] = baseUrl,
                 ["purgeEverything"] = purgeEverything,
                 ["urlCount"] = urls.Count,
                 ["dryRun"] = dryRun,
@@ -101,12 +114,19 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleCloudflareVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
+        if (!TryLoadCloudflareSiteProfile(subArgs, outputJson, logger, "web.cloudflare.verify", out var siteProfile, out var loadError))
+            return loadError;
+
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
                       TryGetOptionValue(subArgs, "--baseUrl") ??
+                      siteProfile?.BaseUrl ??
                       Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
 
         var urls = ReadOptionList(subArgs, "--url", "--urls");
         var paths = ReadOptionList(subArgs, "--path", "--paths");
+        if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
+            paths.AddRange(siteProfile.VerifyPaths);
+
         if (urls.Count == 0 && paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
@@ -122,8 +142,8 @@ internal static partial class WebCliCommandHandlers
             TryGetOptionValue(subArgs, "--warmup") ??
             TryGetOptionValue(subArgs, "--warmup-requests") ??
             TryGetOptionValue(subArgs, "--warmupRequests"),
-            1);
-        warmupRequests = Math.Clamp(warmupRequests, 0, 10);
+            CloudflareVerifyDefaultWarmupRequests);
+        warmupRequests = Math.Clamp(warmupRequests, 0, CloudflareVerifyMaxWarmupRequests);
 
         var timeoutMs = ParseIntOption(
             TryGetOptionValue(subArgs, "--timeout-ms") ??
@@ -147,6 +167,8 @@ internal static partial class WebCliCommandHandlers
         {
             var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
+                ["siteConfig"] = siteProfile?.SiteConfigPath,
+                ["baseUrl"] = baseUrl,
                 ["urlCount"] = urls.Count,
                 ["warmupRequests"] = warmupRequests,
                 ["timeoutMs"] = timeoutMs,
@@ -169,6 +191,40 @@ internal static partial class WebCliCommandHandlers
         if (ok) logger.Success(message);
         else logger.Error(message);
         return ok ? 0 : 1;
+    }
+
+    private static bool TryLoadCloudflareSiteProfile(
+        string[] subArgs,
+        bool outputJson,
+        WebConsoleLogger logger,
+        string command,
+        out CloudflareSiteRouteProfile? siteProfile,
+        out int errorCode)
+    {
+        siteProfile = null;
+        errorCode = 0;
+
+        var siteConfigPath = TryGetOptionValue(subArgs, "--site-config") ??
+                             TryGetOptionValue(subArgs, "--siteConfig") ??
+                             TryGetOptionValue(subArgs, "--config");
+        if (string.IsNullOrWhiteSpace(siteConfigPath))
+            return true;
+
+        var resolvedSiteConfig = Path.GetFullPath(siteConfigPath);
+        try
+        {
+            siteProfile = CloudflareRouteProfileResolver.Load(resolvedSiteConfig);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            errorCode = Fail(
+                $"Failed to load --site-config '{resolvedSiteConfig}': {ex.Message}",
+                outputJson,
+                logger,
+                command);
+            return false;
+        }
     }
 
     private static string CombineUrl(string baseUrl, string path)
