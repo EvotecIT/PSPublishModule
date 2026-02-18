@@ -29,7 +29,7 @@ Legend:
 | Content SEO analysis | Focus keyphrase, snippet checks, content hygiene | Missing | No built-in author-facing SEO scoring/checklist. |
 | Internal linking suggestions | Link recommendations + orphan detection | Missing | We lint nav/docs structure but no content link-graph advisor. |
 | Schema breadth | FAQ/HowTo/Product/Software/News schemas | Missing | Baseline schema only; no richer schema profiles yet. |
-| Vertical sitemaps | News/Image/Video sitemap modes | Missing | Only generic sitemap today. |
+| Vertical sitemaps | News/Image/Video sitemap modes | Partial | `sitemap` supports news sitemap + sitemap index; image/video variants are still pending. |
 | Fast indexing ping | IndexNow support | Have | `indexnow` pipeline step supports batching/retry/dry-run/reporting and changed-file scoping. |
 | Crawl controls UX | Fine-grained crawl/index directives | Have | `Seo.CrawlPolicy` supports route-scoped robots directives, bot directives, and `_powerforge/crawl-policy.json` diagnostics. |
 
@@ -78,15 +78,16 @@ Deliverables:
 Why:
 - Rich results coverage for docs/products/news pages.
 
-### M4: Extended Sitemap Family
+### M4: Extended Sitemap Family (Partial)
 
 Deliverables:
-- Optional tasks or modes:
-  - `sitemap-news`
-  - `sitemap-images`
-  - `sitemap-videos`
-- Sitemap index file generation when multiple maps are present.
-- Collection-aware inclusion rules (`blog`, `news`, docs, media-heavy pages).
+- Implemented:
+  - `sitemap` step can emit `newsOut` (Google News sitemap) and `sitemapIndex`.
+  - route-filtering for news entries via `newsPaths`.
+  - optional publication metadata via `newsMetadata`.
+- Remaining:
+  - image/video sitemap variants.
+  - richer collection-aware defaults for media-heavy routes.
 
 Why:
 - Better crawl targeting for large multi-surface sites.
@@ -150,7 +151,7 @@ Pipeline spec (new steps):
 1. Ship `seo-doctor` with deterministic editorial + technical checks (done; continue expanding fix hints/scoring).
 2. Add template/token resolution and preview artifact.
 3. Expand structured data profiles with validation checks. (completed; continue tightening rules over time)
-4. Add specialized sitemap outputs + index.
+4. Add specialized sitemap outputs + index. (news + index completed; image/video pending)
 5. Add crawl policy model. (completed)
 6. Add redirect assistant for migration-heavy sites.
 

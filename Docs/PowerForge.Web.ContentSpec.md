@@ -693,11 +693,15 @@ Defaults:
 - If localization config exists in `_powerforge/site-spec.json`, sitemap entries include localized alternates (`xhtml:link`, `hreflang`, `x-default`).
 - When localization languages define `BaseUrl`, sitemap alternates use those per-language domains.
 - Optional JSON output (`json: true`) writes a resolved machine-readable sitemap (`sitemap/index.json`) including URL/title/section metadata.
+- Optional news sitemap output (`newsOut`) emits a Google News-compatible sitemap from selected routes.
+- Optional sitemap index output (`sitemapIndex`) emits a `sitemapindex` file referencing generated XML sitemap files.
 
 Explicit entries:
 - `entries` in the sitemap task override auto‑generated metadata for the same path.
 - `entriesJson` can load entries from a JSON file (`[{...}]` or `{ "entries":[...] }`).
 - If a path is not present in auto output, it is still added to the sitemap.
+- `newsPaths` controls which routes are included in `newsOut`; defaults target `**/news/**`.
+- `newsMetadata` can set publication name/language and optional genres/access/keywords.
 
 Example task:
 ```json

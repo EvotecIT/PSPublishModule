@@ -47,7 +47,6 @@ public static partial class WebSiteBuilder
 
         var payload = new
         {
-            generatedAtUtc = DateTime.UtcNow,
             site = spec.Name,
             templates = new
             {

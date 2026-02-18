@@ -54,6 +54,29 @@ public sealed class WebSitemapOptions
     public string? HtmlCssHref { get; set; }
     /// <summary>When true, include the generated HTML sitemap route in sitemap.xml.</summary>
     public bool IncludeGeneratedHtmlRouteInXml { get; set; }
+    /// <summary>Optional news sitemap generation options.</summary>
+    public WebSitemapNewsOptions? NewsSitemap { get; set; }
+    /// <summary>Optional sitemap index output path.</summary>
+    public string? SitemapIndexPath { get; set; }
+}
+
+/// <summary>Options for specialized news sitemap output.</summary>
+public sealed class WebSitemapNewsOptions
+{
+    /// <summary>Optional output path override for the news sitemap XML.</summary>
+    public string? OutputPath { get; set; }
+    /// <summary>Optional path patterns used to select entries for news sitemap output.</summary>
+    public string[]? PathPatterns { get; set; }
+    /// <summary>Optional publication name for news metadata.</summary>
+    public string? PublicationName { get; set; }
+    /// <summary>Optional publication language code for news metadata (for example: en).</summary>
+    public string? PublicationLanguage { get; set; }
+    /// <summary>Optional news genres metadata.</summary>
+    public string? Genres { get; set; }
+    /// <summary>Optional news access metadata.</summary>
+    public string? Access { get; set; }
+    /// <summary>Optional news keywords metadata.</summary>
+    public string? Keywords { get; set; }
 }
 
 /// <summary>Explicit sitemap entry metadata.</summary>
@@ -130,7 +153,24 @@ public static partial class WebSitemapGenerator
         var generateJson = options.GenerateJson || options.GenerateHtml;
         string? htmlOutputPath = null;
         string? jsonOutputPath = null;
+        string? newsOutputPath = null;
+        string? indexOutputPath = null;
         string? generatedHtmlRelativePath = null;
+        var generateNewsSitemap = options.NewsSitemap is not null;
+        var generateSitemapIndex = options.SitemapIndexPath is not null;
+
+        if (generateNewsSitemap)
+        {
+            newsOutputPath = string.IsNullOrWhiteSpace(options.NewsSitemap!.OutputPath)
+                ? Path.Combine(siteRoot, "sitemap-news.xml")
+                : Path.GetFullPath(options.NewsSitemap.OutputPath!);
+        }
+        if (generateSitemapIndex)
+        {
+            indexOutputPath = string.IsNullOrWhiteSpace(options.SitemapIndexPath)
+                ? Path.Combine(siteRoot, "sitemap-index.xml")
+                : Path.GetFullPath(options.SitemapIndexPath!);
+        }
 
         if (options.GenerateHtml)
         {
@@ -246,6 +286,29 @@ public static partial class WebSitemapGenerator
         {
             doc.Save(stream);
         }
+
+        if (generateNewsSitemap && !string.IsNullOrWhiteSpace(newsOutputPath))
+        {
+            WriteNewsSitemap(
+                siteRoot,
+                baseUrl,
+                options.NewsSitemap!,
+                orderedEntries,
+                today,
+                newsOutputPath);
+        }
+
+        if (generateSitemapIndex && !string.IsNullOrWhiteSpace(indexOutputPath))
+        {
+            WriteSitemapIndex(
+                siteRoot,
+                baseUrl,
+                indexOutputPath,
+                today,
+                outputPath,
+                newsOutputPath);
+        }
+
         if (generateJson && !string.IsNullOrWhiteSpace(jsonOutputPath))
             WriteSitemapJson(baseUrl, orderedEntries, jsonOutputPath);
 
@@ -259,6 +322,8 @@ public static partial class WebSitemapGenerator
         return new WebSitemapResult
         {
             OutputPath = outputPath,
+            NewsOutputPath = newsOutputPath,
+            IndexOutputPath = indexOutputPath,
             JsonOutputPath = jsonOutputPath,
             HtmlOutputPath = htmlOutputPath,
             UrlCount = entriesXml.Length

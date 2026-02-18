@@ -1818,6 +1818,18 @@
         "entriesFile": { "type": "string" },
         "entries-json": { "type": "string" },
         "entries-file": { "type": "string" },
+        "newsOutput": { "type": "string" },
+        "newsOut": { "type": "string" },
+        "news-output": { "type": "string" },
+        "news-out": { "type": "string" },
+        "newsPaths": { "type": "array", "items": { "type": "string" } },
+        "news-paths": { "type": "array", "items": { "type": "string" } },
+        "newsMetadata": { "$ref": "#/$defs/SitemapNewsMetadata" },
+        "news-metadata": { "$ref": "#/$defs/SitemapNewsMetadata" },
+        "sitemapIndex": { "type": "string" },
+        "sitemap-index": { "type": "string" },
+        "indexOut": { "type": "string" },
+        "index-out": { "type": "string" },
         "includeHtmlFiles": { "type": "boolean" },
         "includeNoIndexHtml": { "type": "boolean" },
         "include-noindex-html": { "type": "boolean" },
@@ -2333,6 +2345,21 @@
             }
           }
         }
+      }
+    },
+    "SitemapNewsMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "publicationName": { "type": "string" },
+        "publication-name": { "type": "string" },
+        "name": { "type": "string" },
+        "publicationLanguage": { "type": "string" },
+        "publication-language": { "type": "string" },
+        "language": { "type": "string" },
+        "genres": { "type": "string" },
+        "access": { "type": "string" },
+        "keywords": { "type": "string" }
       }
     }
   }

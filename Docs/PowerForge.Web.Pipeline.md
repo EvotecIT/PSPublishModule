@@ -536,7 +536,7 @@ Notes:
 - Use `includeDependencies:false` to omit dependency columns from generated outputs.
 
 #### sitemap
-Generates `sitemap.xml` and (optionally) `sitemap/index.json` + `sitemap.html`.
+Generates `sitemap.xml` and (optionally) JSON/HTML outputs, `sitemap-news.xml`, and a sitemap index.
 ```json
 {
   "task": "sitemap",
@@ -544,6 +544,13 @@ Generates `sitemap.xml` and (optionally) `sitemap/index.json` + `sitemap.html`.
   "baseUrl": "https://example.com",
   "includeLanguageAlternates": true,
   "entriesJson": "./data/sitemap.entries.json",
+  "newsOut": "./Artifacts/site/sitemap-news.xml",
+  "newsPaths": ["/news/**", "/blog/**"],
+  "newsMetadata": {
+    "publicationName": "Example Product",
+    "publicationLanguage": "en"
+  },
+  "sitemapIndex": "./Artifacts/site/sitemap-index.xml",
   "extraPaths": ["/robots.txt"],
   "json": true,
   "jsonOut": "./Artifacts/site/sitemap/index.json",
@@ -560,6 +567,9 @@ Notes:
 - By default, HTML discovery excludes utility pages (`*.scripts.html`, `*.head.html`, `api-fragments/**`) and pages with robots `noindex`.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
 - `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
+- `newsOut` / `newsPaths` generate a Google News sitemap from matching routes. If omitted, defaults target `**/news/**`.
+- `newsMetadata` sets publication metadata for the news sitemap (`publicationName`, `publicationLanguage`, `genres`, `access`, `keywords`).
+- `sitemapIndex` emits a sitemap index file that references generated XML sitemap outputs.
 - `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
 - Set `includeNoIndexHtml: true` to include noindex pages anyway.
