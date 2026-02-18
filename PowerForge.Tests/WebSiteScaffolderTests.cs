@@ -15,6 +15,8 @@ public class WebSiteScaffolderTests
 
             Assert.True(File.Exists(Path.Combine(root, "content", "blog", "_index.md")));
             Assert.True(File.Exists(Path.Combine(root, "content", "blog", "hello-world.md")));
+            Assert.True(File.Exists(Path.Combine(root, "content", "news", "_index.md")));
+            Assert.True(File.Exists(Path.Combine(root, "content", "news", "release-1-0.md")));
             Assert.True(File.Exists(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
 
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
@@ -25,11 +27,13 @@ public class WebSiteScaffolderTests
             var featureList = features.EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToArray();
             Assert.Contains("docs", featureList, StringComparer.OrdinalIgnoreCase);
             Assert.Contains("blog", featureList, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("news", featureList, StringComparer.OrdinalIgnoreCase);
 
             var collections = spec.GetProperty("collections").EnumerateArray()
                 .Select(element => element.GetProperty("name").GetString() ?? string.Empty)
                 .ToArray();
             Assert.Contains("blog", collections, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("news", collections, StringComparer.OrdinalIgnoreCase);
 
             var taxonomies = spec.GetProperty("taxonomies").EnumerateArray()
                 .Select(element => element.GetProperty("name").GetString() ?? string.Empty)
@@ -44,11 +48,39 @@ public class WebSiteScaffolderTests
                 .Select(element => element.GetProperty("title").GetString() ?? string.Empty)
                 .ToArray();
             Assert.Contains("Blog", navigationItems, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("News", navigationItems, StringComparer.OrdinalIgnoreCase);
 
             using var pipelineDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "pipeline.json")));
             var pipeline = pipelineDoc.RootElement;
             Assert.Equal("./config/presets/pipeline.web-quality.json", pipeline.GetProperty("extends").GetString());
             Assert.False(pipeline.TryGetProperty("steps", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Scaffold_Scriban_AddsEditorialLayouts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-scaffold-scriban-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var result = WebSiteScaffolder.Scaffold(root, "Starter", "https://example.test", "scriban");
+            Assert.True(Directory.Exists(result.OutputPath));
+
+            var layoutsRoot = Path.Combine(root, "themes", "nova", "layouts");
+            Assert.True(File.Exists(Path.Combine(layoutsRoot, "list.html")));
+            Assert.True(File.Exists(Path.Combine(layoutsRoot, "post.html")));
+            Assert.True(File.Exists(Path.Combine(layoutsRoot, "taxonomy.html")));
+            Assert.True(File.Exists(Path.Combine(layoutsRoot, "term.html")));
+
+            var listTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "list.html"));
+            Assert.Contains("pf-editorial-grid", listTemplate, StringComparison.Ordinal);
+            Assert.Contains("pagination.has_next", listTemplate, StringComparison.Ordinal);
         }
         finally
         {

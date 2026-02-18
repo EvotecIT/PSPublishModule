@@ -33,7 +33,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
    - set `DefaultTheme`
-   - set `Features` explicitly (for example `["docs","apiDocs","search"]`)
+  - set `Features` explicitly (for example `["docs","blog","news","apiDocs","search"]`)
    - define navigation menus + actions
    - define `Navigation.Surfaces` explicitly (canonical: `main`, `docs`, `apidocs`, optional `products`; `api` is treated as an alias of `apidocs`) to keep docs/API navigation deterministic
    - configure quality gates:
