@@ -104,6 +104,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
         Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
         Console.WriteLine("                     [--purge-everything] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
+        Console.WriteLine("  powerforge-web cloudflare verify [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");
+        Console.WriteLine("                     [--warmup <n>] [--allow-status <HIT,REVALIDATED,EXPIRED,STALE>] [--timeout-ms <n>]");
     }
 
     internal static int Fail(string message, bool outputJson, WebConsoleLogger logger, string command)
