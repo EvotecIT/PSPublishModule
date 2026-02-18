@@ -497,7 +497,7 @@ public static partial class WebSiteBuilder
         if (item.Kind != PageKind.Page)
             return false;
         if (!string.IsNullOrWhiteSpace(item.Collection) &&
-            item.Collection.Equals("blog", StringComparison.OrdinalIgnoreCase))
+            IsEditorialCollection(item.Collection))
             return true;
         return item.Date.HasValue;
     }

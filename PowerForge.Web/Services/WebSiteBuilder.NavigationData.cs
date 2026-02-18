@@ -340,6 +340,8 @@ public static partial class WebSiteBuilder
             return "docs";
         if (name.Equals("blog", StringComparison.OrdinalIgnoreCase))
             return "blog";
+        if (name.Equals("news", StringComparison.OrdinalIgnoreCase))
+            return "news";
         return null;
     }
 

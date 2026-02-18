@@ -185,7 +185,7 @@ public static partial class WebSiteBuilder
         if (string.Equals(item.Collection, "pages", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        if (string.Equals(item.Collection, "blog", StringComparison.OrdinalIgnoreCase))
+        if (IsEditorialCollection(item.Collection))
             return true;
 
         return false;

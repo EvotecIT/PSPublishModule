@@ -242,9 +242,11 @@ public static partial class WebSiteVerifier
             if (collection is null || string.IsNullOrWhiteSpace(collection.Name))
                 continue;
 
-            var isBlogCollection = collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
-                                   collection.Output.Contains("blog", StringComparison.OrdinalIgnoreCase);
-            if (!isBlogCollection)
+            var isEditorialCollection = collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
+                                        collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase) ||
+                                        collection.Output.Contains("blog", StringComparison.OrdinalIgnoreCase) ||
+                                        collection.Output.Contains("news", StringComparison.OrdinalIgnoreCase);
+            if (!isEditorialCollection)
                 continue;
 
             if (!collectionRoutes.TryGetValue(collection.Name, out var routes) || routes.Count == 0)
@@ -269,7 +271,7 @@ public static partial class WebSiteVerifier
                     .Any(route => string.Equals(route, expectedRoute, StringComparison.OrdinalIgnoreCase));
                 if (!hasLanding)
                 {
-                    warnings.Add($"Collection '{collection.Name}' looks like a blog but has no landing page at '{expectedRoute}' for language '{language}'. Add '_index.md' or a page with slug 'index'.");
+                    warnings.Add($"Collection '{collection.Name}' looks like an editorial stream (blog/news) but has no landing page at '{expectedRoute}' for language '{language}'. Add '_index.md' or a page with slug 'index'.");
                 }
             }
         }
