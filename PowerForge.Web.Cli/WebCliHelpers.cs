@@ -103,8 +103,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");
         Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>]");
-        Console.WriteLine("                     [--purge-everything] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
-        Console.WriteLine("  powerforge-web cloudflare verify [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");
+        Console.WriteLine("                     [--purge-everything] [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>] [--dry-run]");
+        Console.WriteLine("  powerforge-web cloudflare verify [--site-config <site.json>] [--base-url <url>] [--path <p[,p...]>] [--url <u[,u...]>]");
         Console.WriteLine("                     [--warmup <n>] [--allow-status <HIT,REVALIDATED,EXPIRED,STALE>] [--timeout-ms <n>]");
     }
 

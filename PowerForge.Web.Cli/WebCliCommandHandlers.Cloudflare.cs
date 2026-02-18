@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using static PowerForge.Web.Cli.WebCliHelpers;
@@ -28,6 +29,27 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleCloudflarePurge(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
+        var siteConfigPath = TryGetOptionValue(subArgs, "--site-config") ??
+                             TryGetOptionValue(subArgs, "--siteConfig") ??
+                             TryGetOptionValue(subArgs, "--config");
+        CloudflareSiteRouteProfile? siteProfile = null;
+        if (!string.IsNullOrWhiteSpace(siteConfigPath))
+        {
+            var resolvedSiteConfig = Path.GetFullPath(siteConfigPath);
+            try
+            {
+                siteProfile = CloudflareRouteProfileResolver.Load(resolvedSiteConfig);
+            }
+            catch (Exception ex)
+            {
+                return Fail(
+                    $"Failed to load --site-config '{resolvedSiteConfig}': {ex.Message}",
+                    outputJson,
+                    logger,
+                    "web.cloudflare.purge");
+            }
+        }
+
         var zoneId = TryGetOptionValue(subArgs, "--zone-id") ??
                      TryGetOptionValue(subArgs, "--zone") ??
                      TryGetOptionValue(subArgs, "--zoneId");
@@ -52,10 +74,14 @@ internal static partial class WebCliCommandHandlers
 
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
                       TryGetOptionValue(subArgs, "--baseUrl") ??
+                      siteProfile?.BaseUrl ??
                       Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
 
         var urls = ReadOptionList(subArgs, "--url", "--urls");
         var paths = ReadOptionList(subArgs, "--path", "--paths");
+        if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
+            paths.AddRange(siteProfile.PurgePaths);
+
         if (urls.Count == 0 && paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
@@ -76,7 +102,9 @@ internal static partial class WebCliCommandHandlers
         {
             var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
+                ["siteConfig"] = siteProfile?.SiteConfigPath,
                 ["zoneId"] = zoneId,
+                ["baseUrl"] = baseUrl,
                 ["purgeEverything"] = purgeEverything,
                 ["urlCount"] = urls.Count,
                 ["dryRun"] = dryRun,
@@ -101,12 +129,37 @@ internal static partial class WebCliCommandHandlers
 
     private static int HandleCloudflareVerify(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
+        var siteConfigPath = TryGetOptionValue(subArgs, "--site-config") ??
+                             TryGetOptionValue(subArgs, "--siteConfig") ??
+                             TryGetOptionValue(subArgs, "--config");
+        CloudflareSiteRouteProfile? siteProfile = null;
+        if (!string.IsNullOrWhiteSpace(siteConfigPath))
+        {
+            var resolvedSiteConfig = Path.GetFullPath(siteConfigPath);
+            try
+            {
+                siteProfile = CloudflareRouteProfileResolver.Load(resolvedSiteConfig);
+            }
+            catch (Exception ex)
+            {
+                return Fail(
+                    $"Failed to load --site-config '{resolvedSiteConfig}': {ex.Message}",
+                    outputJson,
+                    logger,
+                    "web.cloudflare.verify");
+            }
+        }
+
         var baseUrl = TryGetOptionValue(subArgs, "--base-url") ??
                       TryGetOptionValue(subArgs, "--baseUrl") ??
+                      siteProfile?.BaseUrl ??
                       Environment.GetEnvironmentVariable("POWERFORGE_BASE_URL");
 
         var urls = ReadOptionList(subArgs, "--url", "--urls");
         var paths = ReadOptionList(subArgs, "--path", "--paths");
+        if (urls.Count == 0 && paths.Count == 0 && siteProfile is not null)
+            paths.AddRange(siteProfile.VerifyPaths);
+
         if (urls.Count == 0 && paths.Count > 0)
         {
             if (string.IsNullOrWhiteSpace(baseUrl))
@@ -147,6 +200,8 @@ internal static partial class WebCliCommandHandlers
         {
             var element = JsonSerializer.SerializeToElement(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
             {
+                ["siteConfig"] = siteProfile?.SiteConfigPath,
+                ["baseUrl"] = baseUrl,
                 ["urlCount"] = urls.Count,
                 ["warmupRequests"] = warmupRequests,
                 ["timeoutMs"] = timeoutMs,
