@@ -750,7 +750,7 @@ themes/nova/assets/app.css
 When enabled in `site.json`, social tags and structured data are emitted by default for pages.
 When `Social.AutoGenerateCards` is `true`, PowerForge.Web generates PNG social cards from
 page title/description and uses them for `og:image`/`twitter:image` (unless a page sets `meta.social_image`).
-By default this applies to share-priority pages (`home`, section pages, `pages` collection, `blog` collection).
+By default this applies to share-priority pages (`home`, section pages, `pages` collection, editorial collections like `blog`/`news`).
 Per-page override:
 `meta.social_card: true` to force generation, `meta.social_card: false` to skip.
 Pages can opt out using front matter:
@@ -820,7 +820,7 @@ Enable multiple outputs (HTML/JSON/RSS/Atom/JSON Feed) per page kind:
 ```
 
 Implicit defaults (when no explicit output rule/override exists):
-- `blog` section pages: `html` + `rss`
+- editorial section pages (`blog`, `news`): `html` + `rss`
 - `tags`/`categories` taxonomy and term pages: `html` + `rss`
 
 Optional implicit feed formats:
@@ -832,9 +832,9 @@ Optional implicit feed formats:
   }
 }
 ```
-This adds `atom` (`index.atom.xml`) and `jsonfeed` (`index.feed.json`) to implicit blog/taxonomy outputs while keeping existing RSS defaults.
+This adds `atom` (`index.atom.xml`) and `jsonfeed` (`index.feed.json`) to implicit editorial/taxonomy outputs while keeping existing RSS defaults.
 
-This gives zero-config feeds for common blog/taxonomy layouts while keeping other page kinds HTML-only by default.
+This gives zero-config feeds for common editorial/taxonomy layouts while keeping other page kinds HTML-only by default.
 
 ## Versioning
 Versioning metadata can be stored in `site.json` and used in templates:

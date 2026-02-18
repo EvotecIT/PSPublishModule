@@ -1104,8 +1104,15 @@ internal static partial class WebPipelineRunner
             GetString(step, "entries-json") ??
             GetString(step, "entries-file"));
         var includeHtml = GetBool(step, "includeHtmlFiles");
+        var includeNoIndexHtml = GetBool(step, "includeNoIndexHtml") ?? GetBool(step, "include-noindex-html");
         var includeText = GetBool(step, "includeTextFiles");
+        var noDefaultExclude = GetBool(step, "noDefaultExclude") ?? GetBool(step, "no-default-exclude");
+        var excludePatterns = GetArrayOfStrings(step, "excludePatterns") ?? GetArrayOfStrings(step, "exclude-patterns");
         var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
+        var includeGeneratedHtmlRouteInXml =
+            GetBool(step, "includeGeneratedHtmlRouteInXml") ??
+            GetBool(step, "include-generated-html-route-in-xml") ??
+            false;
         var jsonEnabled = GetBool(step, "json") ?? false;
         var jsonOutput = ResolvePath(baseDir,
             GetString(step, "jsonOutput") ??
@@ -1137,6 +1144,9 @@ internal static partial class WebPipelineRunner
             Entries = entries.Length == 0 ? null : entries,
             EntriesJsonPath = entriesJson,
             IncludeHtmlFiles = includeHtml ?? true,
+            IncludeNoIndexHtml = includeNoIndexHtml ?? false,
+            UseDefaultExcludePatterns = !(noDefaultExclude ?? false),
+            ExcludePatterns = excludePatterns,
             IncludeTextFiles = includeText ?? true,
             IncludeLanguageAlternates = includeLanguageAlternates ?? true,
             GenerateHtml = htmlEnabled,
@@ -1145,7 +1155,8 @@ internal static partial class WebPipelineRunner
             HtmlOutputPath = htmlOutput,
             HtmlTemplatePath = htmlTemplate,
             HtmlCssHref = htmlCss,
-            HtmlTitle = htmlTitle
+            HtmlTitle = htmlTitle,
+            IncludeGeneratedHtmlRouteInXml = includeGeneratedHtmlRouteInXml
         });
 
         stepResult.Success = true;

@@ -252,7 +252,7 @@ public partial class WebSiteVerifierTests
 
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, warning =>
-                warning.Contains("looks like a blog but has no landing page", StringComparison.OrdinalIgnoreCase));
+                warning.Contains("looks like an editorial stream (blog/news) but has no landing page", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

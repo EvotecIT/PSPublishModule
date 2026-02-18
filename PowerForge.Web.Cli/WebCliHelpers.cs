@@ -98,7 +98,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--api-level none|summary|full] [--api-max-types <n>] [--api-max-members <n>]");
         Console.WriteLine("  powerforge-web sitemap --site-root <dir> --base-url <url> [--api-sitemap <path>] [--out <file>] [--entries <file>] [--entries-json <file>]");
         Console.WriteLine("                     [--sitemap-json] [--sitemap-json-out <file>] [--html] [--html-out <file>] [--html-template <file>] [--html-css <href>] [--html-title <text>]");
-        Console.WriteLine("                     [--no-html-files] [--no-text-files] [--no-language-alternates]");
+        Console.WriteLine("                     [--no-html-files] [--include-noindex-html] [--exclude <glob[,glob...]>] [--no-default-excludes]");
+        Console.WriteLine("                     [--no-text-files] [--no-language-alternates] [--include-html-sitemap-route]");
         Console.WriteLine("  powerforge-web xref-merge --out <file> --map <file|dir[,file|dir...]> [--pattern *.json] [--top-only]");
         Console.WriteLine("                     [--prefer-last] [--fail-on-duplicates] [--max-references <n>] [--max-duplicates <n>]");
         Console.WriteLine("                     [--max-reference-growth-count <n>] [--max-reference-growth-percent <n>] [--fail-on-warnings]");

@@ -557,11 +557,13 @@ Generates `sitemap.xml` and (optionally) `sitemap/index.json` + `sitemap.html`.
 }
 ```
 Notes:
-- By default, **all HTML pages** under `siteRoot` are auto‑included.
+- By default, HTML discovery excludes utility pages (`*.scripts.html`, `*.head.html`, `api-fragments/**`) and pages with robots `noindex`.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
 - `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
 - `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
+- Set `includeNoIndexHtml: true` to include noindex pages anyway.
+- Set `noDefaultExclude: true` to include utility pages (or pass `excludePatterns` for custom exclusions).
 - `includeLanguageAlternates` (default `true`) emits `xhtml:link` alternates (`hreflang` and `x-default`) when `_powerforge/site-spec.json` contains an enabled `Localization` config.
 - When `htmlCss` is omitted, PowerForge tries to auto-detect site/theme CSS so the HTML sitemap inherits theme styling.
 

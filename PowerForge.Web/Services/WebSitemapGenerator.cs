@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -25,6 +26,12 @@ public sealed class WebSitemapOptions
     public string? EntriesJsonPath { get; set; }
     /// <summary>When true, include HTML files.</summary>
     public bool IncludeHtmlFiles { get; set; } = true;
+    /// <summary>When true, include HTML files that declare robots noindex.</summary>
+    public bool IncludeNoIndexHtml { get; set; }
+    /// <summary>When true, apply default exclusion patterns for utility HTML files.</summary>
+    public bool UseDefaultExcludePatterns { get; set; } = true;
+    /// <summary>Additional exclusion patterns for HTML route discovery.</summary>
+    public string[]? ExcludePatterns { get; set; }
     /// <summary>When true, include text files (robots/llms).</summary>
     public bool IncludeTextFiles { get; set; } = true;
     /// <summary>When true, emit localized alternate URLs (hreflang/x-default) when localization is configured.</summary>
@@ -43,6 +50,8 @@ public sealed class WebSitemapOptions
     public string? HtmlTitle { get; set; }
     /// <summary>Optional CSS href to include in the HTML sitemap.</summary>
     public string? HtmlCssHref { get; set; }
+    /// <summary>When true, include the generated HTML sitemap route in sitemap.xml.</summary>
+    public bool IncludeGeneratedHtmlRouteInXml { get; set; }
 }
 
 /// <summary>Explicit sitemap entry metadata.</summary>
@@ -80,6 +89,18 @@ public sealed class WebSitemapAlternate
 /// <summary>Generates sitemap.xml for the site output.</summary>
 public static partial class WebSitemapGenerator
 {
+    private static readonly string[] DefaultExcludedHtmlPatterns =
+    {
+        "*.scripts.html",
+        "**/*.scripts.html",
+        "*.head.html",
+        "**/*.head.html",
+        "api-fragments/**",
+        "**/api-fragments/**"
+    };
+
+    private static readonly string[] RobotsNoIndexNames = { "robots", "googlebot", "bingbot", "slurp" };
+
     /// <summary>Generates a sitemap from site output.</summary>
     /// <param name="options">Generation options.</param>
     /// <returns>Result payload describing the sitemap output.</returns>
@@ -108,10 +129,13 @@ public static partial class WebSitemapGenerator
 
         if (options.IncludeHtmlFiles)
         {
+            var excludePatterns = BuildExcludePatterns(options);
             foreach (var file in Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories))
             {
                 var relative = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
                 if (relative.EndsWith("404.html", StringComparison.OrdinalIgnoreCase)) continue;
+                if (IsExcludedHtml(relative, excludePatterns)) continue;
+                if (!options.IncludeNoIndexHtml && HtmlDeclaresNoIndex(file)) continue;
                 var route = NormalizeRoute(relative);
                 if (string.IsNullOrWhiteSpace(route)) continue;
                 AddOrUpdate(entries, route, BuildEntryFromHtmlFile(file, route));
@@ -162,7 +186,7 @@ public static partial class WebSitemapGenerator
                 ? Path.Combine(siteRoot, "sitemap", "index.html")
                 : Path.GetFullPath(options.HtmlOutputPath);
 
-            if (IsUnderRoot(siteRoot, htmlOutputPath))
+            if (options.IncludeGeneratedHtmlRouteInXml && IsUnderRoot(siteRoot, htmlOutputPath))
             {
                 var relative = Path.GetRelativePath(siteRoot, htmlOutputPath).Replace('\\', '/');
                 AddOrUpdate(entries, NormalizeRoute(relative), null);
@@ -692,6 +716,107 @@ public static partial class WebSitemapGenerator
         var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var targetFull = Path.GetFullPath(fullPath);
         return targetFull.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string[] BuildExcludePatterns(WebSitemapOptions options)
+    {
+        var patterns = new List<string>();
+        if (options.UseDefaultExcludePatterns)
+            patterns.AddRange(DefaultExcludedHtmlPatterns);
+
+        if (options.ExcludePatterns is { Length: > 0 })
+            patterns.AddRange(options.ExcludePatterns.Where(static pattern => !string.IsNullOrWhiteSpace(pattern)));
+
+        return patterns
+            .Select(static pattern => pattern.Trim())
+            .Where(static pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsExcludedHtml(string relativePath, string[] patterns)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || patterns is null || patterns.Length == 0)
+            return false;
+
+        var normalized = relativePath.Replace('\\', '/').TrimStart('/');
+        foreach (var pattern in patterns)
+        {
+            if (string.IsNullOrWhiteSpace(pattern))
+                continue;
+            if (GlobMatch(pattern, normalized))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool HtmlDeclaresNoIndex(string filePath)
+    {
+        string html;
+        try
+        {
+            html = File.ReadAllText(filePath);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(html) ||
+            html.IndexOf("noindex", StringComparison.OrdinalIgnoreCase) < 0 ||
+            html.IndexOf("<meta", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return false;
+        }
+
+        var start = 0;
+        while (true)
+        {
+            var metaStart = html.IndexOf("<meta", start, StringComparison.OrdinalIgnoreCase);
+            if (metaStart < 0)
+                break;
+
+            var metaEnd = html.IndexOf('>', metaStart);
+            if (metaEnd < 0)
+                break;
+
+            var tag = html.Substring(metaStart, metaEnd - metaStart + 1);
+            if (tag.IndexOf("noindex", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                RobotsNoIndexNames.Any(name => MetaTagHasName(tag, name)))
+            {
+                return true;
+            }
+
+            start = metaEnd + 1;
+        }
+
+        return false;
+    }
+
+    private static bool MetaTagHasName(string tag, string name)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || string.IsNullOrWhiteSpace(name))
+            return false;
+
+        var needle = name.Trim();
+        return tag.IndexOf($"name=\"{needle}\"", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               tag.IndexOf($"name='{needle}'", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool GlobMatch(string pattern, string value)
+    {
+        if (string.IsNullOrWhiteSpace(pattern) || string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var normalizedPattern = pattern.Replace('\\', '/').Trim().TrimStart('/');
+        var normalizedValue = value.Replace('\\', '/').Trim().TrimStart('/');
+
+        var regexPattern = "^" + Regex.Escape(normalizedPattern)
+            .Replace("\\*\\*", ".*")
+            .Replace("\\*", "[^/]*")
+            .Replace("\\?", ".") + "$";
+        return Regex.IsMatch(normalizedValue, regexPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     }
 
     private sealed class ResolvedLocalizationConfig

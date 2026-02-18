@@ -1715,8 +1715,14 @@
         "entries-json": { "type": "string" },
         "entries-file": { "type": "string" },
         "includeHtmlFiles": { "type": "boolean" },
+        "includeNoIndexHtml": { "type": "boolean" },
+        "include-noindex-html": { "type": "boolean" },
         "includeTextFiles": { "type": "boolean" },
         "includeLanguageAlternates": { "type": "boolean" },
+        "noDefaultExclude": { "type": "boolean" },
+        "no-default-exclude": { "type": "boolean" },
+        "excludePatterns": { "type": "array", "items": { "type": "string" } },
+        "exclude-patterns": { "type": "array", "items": { "type": "string" } },
         "extraPaths": { "type": "array", "items": { "type": "string" } },
         "json": { "type": "boolean" },
         "jsonOutput": { "type": "string" },
@@ -1728,7 +1734,9 @@
         "htmlOut": { "type": "string" },
         "htmlTemplate": { "type": "string" },
         "htmlCss": { "type": "string" },
-        "htmlTitle": { "type": "string" }
+        "htmlTitle": { "type": "string" },
+        "includeGeneratedHtmlRouteInXml": { "type": "boolean" },
+        "include-generated-html-route-in-xml": { "type": "boolean" }
       },
       "required": ["task", "siteRoot", "baseUrl"]
     },
