@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace PowerForge.Web;
 
@@ -12,6 +13,7 @@ internal sealed class ScribanThemeHelpers
     private readonly ThemeRenderContext _context;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex AspectRatioRegex = new("^\\s*(?<w>\\d+(?:\\.\\d+)?)\\s*(?:/|:)\\s*(?<h>\\d+(?:\\.\\d+)?)\\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 
     public ScribanThemeHelpers(ThemeRenderContext context)
     {
@@ -139,7 +141,15 @@ internal sealed class ScribanThemeHelpers
         return sb.ToString();
     }
 
-    public string EditorialCards(int maxItems = 0, int excerptLength = 160, bool showCollection = true, bool showDate = true, bool showTags = true, bool showImage = true)
+    public string EditorialCards(
+        int maxItems = 0,
+        int excerptLength = 160,
+        bool showCollection = true,
+        bool showDate = true,
+        bool showTags = true,
+        bool showImage = true,
+        string? imageAspect = "16/9",
+        string? fallbackImage = null)
     {
         var items = _context.Items ?? Array.Empty<ContentItem>();
         if (items.Count == 0)
@@ -147,6 +157,10 @@ internal sealed class ScribanThemeHelpers
 
         var take = maxItems > 0 ? maxItems : int.MaxValue;
         var maxExcerptLength = Math.Clamp(excerptLength, 40, 600);
+        var normalizedAspect = NormalizeAspectRatio(imageAspect);
+        var defaultFallbackImage = string.IsNullOrWhiteSpace(fallbackImage)
+            ? (_context.Site?.Social?.Image ?? string.Empty)
+            : fallbackImage.Trim();
 
         var selected = items
             .Where(static item => item is not null && !item.Draft && !string.IsNullOrWhiteSpace(item.OutputPath))
@@ -161,11 +175,18 @@ internal sealed class ScribanThemeHelpers
         {
             var title = string.IsNullOrWhiteSpace(item.Title) ? item.OutputPath : item.Title;
             var summary = ResolveSummary(item, maxExcerptLength);
-            var image = showImage ? ResolveCardImage(item.Meta) : string.Empty;
+            var image = showImage ? ResolveCardImage(item.Meta, defaultFallbackImage) : string.Empty;
 
             sb.Append("<a class=\"pf-editorial-card\" href=\"").Append(Html(item.OutputPath)).Append("\">");
             if (!string.IsNullOrWhiteSpace(image))
+            {
+                sb.Append("<span class=\"pf-editorial-card-media\"");
+                if (!string.IsNullOrWhiteSpace(normalizedAspect))
+                    sb.Append(" style=\"aspect-ratio: ").Append(Html(normalizedAspect)).Append(";\"");
+                sb.Append(">");
                 sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"\" loading=\"lazy\" decoding=\"async\" />");
+                sb.Append("</span>");
+            }
 
             if (showCollection || showDate)
             {
@@ -194,6 +215,39 @@ internal sealed class ScribanThemeHelpers
             sb.Append("</a>");
         }
         sb.Append("</div>");
+        return sb.ToString();
+    }
+
+    public string EditorialPager(string newerLabel = "Newer posts", string olderLabel = "Older posts", string cssClass = "pf-pagination")
+    {
+        var pagination = _context.Pagination;
+        if (pagination is null || pagination.TotalPages <= 1)
+            return string.Empty;
+
+        var newer = string.IsNullOrWhiteSpace(newerLabel) ? "Newer posts" : newerLabel.Trim();
+        var older = string.IsNullOrWhiteSpace(olderLabel) ? "Older posts" : olderLabel.Trim();
+        var classes = string.IsNullOrWhiteSpace(cssClass) ? "pf-pagination" : cssClass.Trim();
+
+        var sb = new StringBuilder();
+        sb.Append("<nav class=\"").Append(Html(classes)).Append("\" aria-label=\"Pagination\">");
+        sb.Append("<div>");
+        if (pagination.HasPrevious && !string.IsNullOrWhiteSpace(pagination.PreviousUrl))
+        {
+            sb.Append("<a href=\"").Append(Html(pagination.PreviousUrl)).Append("\">")
+              .Append(Html(newer))
+              .Append("</a>");
+        }
+        sb.Append("</div>");
+
+        sb.Append("<div>");
+        if (pagination.HasNext && !string.IsNullOrWhiteSpace(pagination.NextUrl))
+        {
+            sb.Append("<a href=\"").Append(Html(pagination.NextUrl)).Append("\">")
+              .Append(Html(older))
+              .Append("</a>");
+        }
+        sb.Append("</div>");
+        sb.Append("</nav>");
         return sb.ToString();
     }
 
@@ -367,30 +421,30 @@ internal sealed class ScribanThemeHelpers
         return Truncate(plain, maxLength);
     }
 
-    private static string ResolveCardImage(IReadOnlyDictionary<string, object?>? meta)
+    private static string ResolveCardImage(IReadOnlyDictionary<string, object?>? meta, string? fallbackImage)
     {
-        if (meta is null || meta.Count == 0)
-            return string.Empty;
-
-        var candidates = new[]
+        if (meta is not null && meta.Count > 0)
         {
-            "social_image",
-            "social.image",
-            "image",
-            "cover",
-            "thumbnail",
-            "card_image",
-            "card.image"
-        };
+            var candidates = new[]
+            {
+                "social_image",
+                "social.image",
+                "image",
+                "cover",
+                "thumbnail",
+                "card_image",
+                "card.image"
+            };
 
-        foreach (var key in candidates)
-        {
-            var value = TryGetMetaString(meta, key);
-            if (!string.IsNullOrWhiteSpace(value))
-                return value.Trim();
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
         }
 
-        return string.Empty;
+        return string.IsNullOrWhiteSpace(fallbackImage) ? string.Empty : fallbackImage.Trim();
     }
 
     private static string? TryGetMetaString(IReadOnlyDictionary<string, object?> meta, string key)
@@ -444,6 +498,23 @@ internal sealed class ScribanThemeHelpers
 
         var safe = Math.Max(8, maxLength - 1);
         return text.Substring(0, safe).TrimEnd() + "…";
+    }
+
+    private static string NormalizeAspectRatio(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "16 / 9";
+
+        var match = AspectRatioRegex.Match(value.Trim());
+        if (!match.Success)
+            return "16 / 9";
+
+        if (!double.TryParse(match.Groups["w"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var w) || w <= 0)
+            return "16 / 9";
+        if (!double.TryParse(match.Groups["h"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var h) || h <= 0)
+            return "16 / 9";
+
+        return $"{w.ToString("0.####", CultureInfo.InvariantCulture)} / {h.ToString("0.####", CultureInfo.InvariantCulture)}";
     }
 
     private static string BuildClass(NavigationItem item, string? baseClass)

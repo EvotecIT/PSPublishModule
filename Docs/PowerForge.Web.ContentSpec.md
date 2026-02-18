@@ -485,7 +485,14 @@ Best practice (theme rendering):
     - `max_items` (default `0` = all)
     - `excerpt_length` (default `160`)
     - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
-    - Example: `{{ pf.editorial_cards 12 180 true true true true }}`
+    - `image_aspect` (default `"16/9"`, accepts `/` or `:` like `"4:3"`)
+    - `fallback_image` (default empty; if omitted, helper falls back to `site.social.image` when set)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" }}`
+  - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
+    - `newer_label` (default `"Newer posts"`)
+    - `older_label` (default `"Older posts"`)
+    - `css_class` (default `"pf-pagination"`)
+    - Example: `{{ pf.editorial_pager "Newer" "Older" }}`
 
 ### Navigation surfaces (stable projections)
 The runtime `navigation` object exposes `navigation.surfaces` as named projections.

@@ -55,6 +55,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - define `featureContracts` for drift-prone features:
      - `apiDocs`: required `api-header/api-footer` and required CSS selectors
      - `docs`: required `docs` layout and required slots/partials
+   - for Scriban editorial layouts (`blog`/`news`), prefer `{{ pf.editorial_cards ... }}` + `{{ pf.editorial_pager ... }}` in list layouts so verify can detect regressions early
 5. Layout hooks:
    - layouts must include:
      - `{{ assets.critical_css_html }}`

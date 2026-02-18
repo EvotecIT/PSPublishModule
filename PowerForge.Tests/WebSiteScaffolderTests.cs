@@ -79,8 +79,8 @@ public class WebSiteScaffolderTests
             Assert.True(File.Exists(Path.Combine(layoutsRoot, "term.html")));
 
             var listTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "list.html"));
-            Assert.Contains("pf-editorial-grid", listTemplate, StringComparison.Ordinal);
-            Assert.Contains("pagination.has_next", listTemplate, StringComparison.Ordinal);
+            Assert.Contains("pf.editorial_cards", listTemplate, StringComparison.Ordinal);
+            Assert.Contains("pf.editorial_pager", listTemplate, StringComparison.Ordinal);
         }
         finally
         {

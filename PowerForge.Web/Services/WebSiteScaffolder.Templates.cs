@@ -139,36 +139,8 @@ public static partial class WebSiteScaffolder
         </header>
         {{ content }}
         {{ if items && items.size > 0 }}
-          <div class=""pf-editorial-grid"">
-            {{ for item in items }}
-              <a class=""pf-editorial-card"" href=""{{ item.output_path }}"">
-                <p class=""pf-editorial-meta"">
-                  <span>{{ item.collection }}</span>
-                  {{ if item.date }}<time datetime=""{{ item.date }}"">{{ item.date }}</time>{{ end }}
-                </p>
-                <h3>{{ item.title }}</h3>
-                {{ if item.description != """" }}<p class=""pf-editorial-summary"">{{ item.description }}</p>{{ end }}
-                {{ if item.tags && item.tags.size > 0 }}
-                  <div class=""pf-editorial-tags"">
-                    {{ for tag in item.tags }}
-                      <span class=""pf-chip"">{{ tag }}</span>
-                    {{ end }}
-                  </div>
-                {{ end }}
-              </a>
-            {{ end }}
-          </div>
-
-          {{ if pagination && pagination.total_pages > 1 }}
-            <nav class=""pf-pagination"" aria-label=""Pagination"">
-              <div>
-                {{ if pagination.has_previous && pagination.previous_url != """" }}<a href=""{{ pagination.previous_url }}"">Newer posts</a>{{ end }}
-              </div>
-              <div>
-                {{ if pagination.has_next && pagination.next_url != """" }}<a href=""{{ pagination.next_url }}"">Older posts</a>{{ end }}
-              </div>
-            </nav>
-          {{ end }}
+          {{ pf.editorial_cards 0 160 true true true true ""16/9"" }}
+          {{ pf.editorial_pager ""Newer posts"" ""Older posts"" }}
         {{ else }}
           <p>No entries yet.</p>
         {{ end }}
@@ -265,15 +237,8 @@ public static partial class WebSiteScaffolder
         </header>
         {{ content }}
         {{ if items && items.size > 0 }}
-          <div class=""pf-editorial-grid"">
-            {{ for item in items }}
-              <a class=""pf-editorial-card"" href=""{{ item.output_path }}"">
-                <p class=""pf-editorial-meta"">{{ if item.date }}<time datetime=""{{ item.date }}"">{{ item.date }}</time>{{ end }}</p>
-                <h3>{{ item.title }}</h3>
-                {{ if item.description != """" }}<p class=""pf-editorial-summary"">{{ item.description }}</p>{{ end }}
-              </a>
-            {{ end }}
-          </div>
+          {{ pf.editorial_cards 0 160 false true false true ""16/9"" }}
+          {{ pf.editorial_pager ""Newer posts"" ""Older posts"" }}
         {{ else }}
           <p>No entries for this term yet.</p>
         {{ end }}

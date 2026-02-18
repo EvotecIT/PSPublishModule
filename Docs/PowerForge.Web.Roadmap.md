@@ -211,6 +211,8 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
   - Scriban scaffold now emits dedicated `list`/`post`/`taxonomy`/`term` layouts with card-style listings and pagination links.
 - Completed (cross-theme helper baseline):
   - Scriban `pf.editorial_cards` helper renders reusable editorial card markup (collection/date/summary/tags/image) from list contexts so non-scaffold themes can adopt the same listing behavior quickly.
+  - Scriban `pf.editorial_pager` helper standardizes previous/next links for paginated editorial streams.
+  - Verify now warns when Scriban editorial list layouts don't render list context (`items`/`pf.editorial_cards`) or omit pagination rendering for paginated collections.
 - Remaining:
   - Add optional list-card media/hero conventions (image fallback contract + aspect ratio hints).
 

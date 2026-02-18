@@ -221,7 +221,10 @@ public class ScribanPfNavigationHelpersTests
                 <head><title>{{ page.title }}</title></head>
                 <body>
                   {{ include "header" }}
-                  <main>{{ pf.editorial_cards }}</main>
+                  <main>
+                    {{ pf.editorial_cards 0 120 true true true true "4:3" "/images/fallback.png" }}
+                    {{ pf.editorial_pager "Newer" "Older" }}
+                  </main>
                   {{ include "footer" }}
                 </body>
                 </html>
@@ -257,6 +260,7 @@ public class ScribanPfNavigationHelpersTests
                         Output = "/blog",
                         DefaultLayout = "post",
                         ListLayout = "base",
+                        PageSize = 1,
                         Include = new[] { "*.md", "**/*.md" }
                     }
                 }
@@ -273,8 +277,15 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains("href=\"/blog/first-post/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-editorial-card-image", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/images/first-post.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aspect-ratio: 4 / 3;", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<time datetime=\"2026-01-03\">2026-01-03</time>", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<span class=\"pf-chip\">release</span>", blogHtml, StringComparison.OrdinalIgnoreCase);
+
+            var blogPage2Html = File.ReadAllText(Path.Combine(outDir, "blog", "page", "2", "index.html"));
+            Assert.Contains("/images/fallback.png", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(">Newer<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/blog/\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(">Older<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

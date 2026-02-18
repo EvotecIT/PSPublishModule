@@ -74,6 +74,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         pf.Add("nav_links", new PfNavLinksFunction(helpers));
         pf.Add("menu_tree", new PfMenuTreeFunction(helpers));
         pf.Add("editorial_cards", new PfEditorialCardsFunction(helpers));
+        pf.Add("editorial_pager", new PfEditorialPagerFunction(helpers));
         globals.Add("pf", pf);
 
         var templateContext = new TemplateContext
@@ -172,7 +173,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 0;
-        public int ParameterCount => 6;
+        public int ParameterCount => 8;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -186,6 +187,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 3 => new ScriptParameterInfo(typeof(bool), "show_date", true),
                 4 => new ScriptParameterInfo(typeof(bool), "show_tags", true),
                 5 => new ScriptParameterInfo(typeof(bool), "show_image", true),
+                6 => new ScriptParameterInfo(typeof(string), "image_aspect", "16/9"),
+                7 => new ScriptParameterInfo(typeof(string), "fallback_image", string.Empty),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -198,7 +201,48 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var showDate = arguments.Count > 3 ? ScribanThemeHelpers.ParseBool(arguments[3], true) : true;
             var showTags = arguments.Count > 4 ? ScribanThemeHelpers.ParseBool(arguments[4], true) : true;
             var showImage = arguments.Count > 5 ? ScribanThemeHelpers.ParseBool(arguments[5], true) : true;
-            return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage);
+            var imageAspect = arguments.Count > 6 ? arguments[6]?.ToString() : "16/9";
+            var fallbackImage = arguments.Count > 7 ? arguments[7]?.ToString() : string.Empty;
+            return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
+    }
+
+    private sealed class PfEditorialPagerFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfEditorialPagerFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 0;
+        public int ParameterCount => 3;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "newer_label", "Newer posts"),
+                1 => new ScriptParameterInfo(typeof(string), "older_label", "Older posts"),
+                2 => new ScriptParameterInfo(typeof(string), "css_class", "pf-pagination"),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var newer = arguments.Count > 0 ? arguments[0]?.ToString() : "Newer posts";
+            var older = arguments.Count > 1 ? arguments[1]?.ToString() : "Older posts";
+            var css = arguments.Count > 2 ? arguments[2]?.ToString() : "pf-pagination";
+            return _helpers.EditorialPager(newer ?? "Newer posts", older ?? "Older posts", css ?? "pf-pagination");
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)

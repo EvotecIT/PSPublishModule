@@ -129,6 +129,8 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Theme contract: site uses feature 'docs' but theme '{manifest.Name}' does not provide a 'docs' layout.");
             }
         }
+
+        ValidateEditorialLayoutConventions(spec, manifest, themeRoot, loader, enabled, warnings);
     }
 
     private static ThemeFeatureContractSpec? TryGetFeatureContract(ThemeManifest manifest, string feature)
@@ -220,6 +222,90 @@ public static partial class WebSiteVerifier
                html.IndexOf("pf.menu_tree", StringComparison.OrdinalIgnoreCase) >= 0 ||
                html.IndexOf("navigation.menus", StringComparison.OrdinalIgnoreCase) >= 0 ||
                html.IndexOf("navigation.actions", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static void ValidateEditorialLayoutConventions(
+        SiteSpec spec,
+        ThemeManifest manifest,
+        string themeRoot,
+        ThemeLoader loader,
+        HashSet<string> enabled,
+        List<string> warnings)
+    {
+        if (spec is null || manifest is null || loader is null || string.IsNullOrWhiteSpace(themeRoot) || enabled is null || warnings is null)
+            return;
+
+        var engine = spec.ThemeEngine ?? manifest.Engine ?? "simple";
+        if (!engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!enabled.Contains("blog") && !enabled.Contains("news"))
+            return;
+
+        var collections = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Where(IsEditorialCollection)
+            .ToArray();
+        if (collections.Length == 0)
+            return;
+
+        var paginationDefault = spec.Pagination?.Enabled != false && (spec.Pagination?.DefaultPageSize ?? 0) > 0;
+        foreach (var collection in collections)
+        {
+            var listLayout = string.IsNullOrWhiteSpace(collection.ListLayout)
+                ? collection.DefaultLayout
+                : collection.ListLayout;
+            if (string.IsNullOrWhiteSpace(listLayout))
+                continue;
+
+            var listLayoutPath = loader.ResolveLayoutPath(themeRoot, manifest, listLayout);
+            if (string.IsNullOrWhiteSpace(listLayoutPath) || !File.Exists(listLayoutPath))
+                continue;
+
+            string layoutContent;
+            try
+            {
+                layoutContent = File.ReadAllText(listLayoutPath);
+            }
+            catch
+            {
+                continue;
+            }
+
+            var hasEditorialCards = layoutContent.IndexOf("pf.editorial_cards", StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasListContext = layoutContent.IndexOf("for item in items", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 layoutContent.IndexOf("items.size", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (!hasEditorialCards && !hasListContext)
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' is used for editorial collection '{collection.Name}' but does not render list context (`items`) or `pf.editorial_cards`. " +
+                             "Editorial section pages may render headers without posts.");
+            }
+
+            var paginationEnabled = (collection.PageSize ?? 0) > 0 || paginationDefault;
+            if (!paginationEnabled)
+                continue;
+
+            var hasPagerHelper = layoutContent.IndexOf("pf.editorial_pager", StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasManualPager = layoutContent.IndexOf("pagination.", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!hasPagerHelper && !hasManualPager)
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' is used for paginated editorial collection '{collection.Name}' but does not render pagination (`pf.editorial_pager` or `pagination.*`).");
+            }
+        }
+    }
+
+    private static bool IsEditorialCollection(CollectionSpec? collection)
+    {
+        if (collection is null)
+            return false;
+        if (!string.IsNullOrWhiteSpace(collection.Name) &&
+            (collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
+             collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(collection.Output) &&
+               (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase) ||
+                collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase));
     }
 
 

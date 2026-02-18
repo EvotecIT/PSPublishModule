@@ -335,6 +335,97 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenEditorialListLayoutDoesNotRenderItemsOrEditorialHelper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-layout-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                description: Updates
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-warning");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body><h1>{{ page.title }}</h1></body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-warning",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"]
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial layout test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-warning",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("used for editorial collection", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("paginated editorial collection", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ThemeFeatureContracts_WarnWhenRequiredSurfacesMissingAndSiteDoesNotDefineSurfaces()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-required-surfaces-missing-" + Guid.NewGuid().ToString("N"));
