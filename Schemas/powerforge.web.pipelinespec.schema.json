@@ -1802,6 +1802,8 @@
         "entries-file": { "type": "string" },
         "includeHtmlFiles": { "type": "boolean" },
         "includeTextFiles": { "type": "boolean" },
+        "includeNoIndexPages": { "type": "boolean" },
+        "include-no-index-pages": { "type": "boolean" },
         "includeLanguageAlternates": { "type": "boolean" },
         "extraPaths": { "type": "array", "items": { "type": "string" } },
         "json": { "type": "boolean" },

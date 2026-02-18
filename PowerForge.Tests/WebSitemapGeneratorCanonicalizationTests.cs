@@ -81,4 +81,80 @@ public class WebSitemapGeneratorCanonicalizationTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Generate_SkipsNoIndexPages_ByDefault()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-noindex-skip-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>Home</title>");
+            File.WriteAllText(
+                Path.Combine(root, "hidden.html"),
+                "<!doctype html><head><meta name=\"robots\" content=\"noindex,nofollow\" /><title>Hidden</title></head>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var locs = doc
+                .Descendants(ns + "url")
+                .Select(url => url.Element(ns + "loc")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+
+            Assert.Contains("https://example.test/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/hidden.html", locs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_IncludeNoIndexPages_WhenEnabled()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-noindex-include-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"), "<!doctype html><title>Home</title>");
+            File.WriteAllText(
+                Path.Combine(root, "hidden.html"),
+                "<!doctype html><head><meta name=\"googlebot\" content=\"noindex\" /><title>Hidden</title></head>");
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeTextFiles = false,
+                IncludeNoIndexPages = true
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var locs = doc
+                .Descendants(ns + "url")
+                .Select(url => url.Element(ns + "loc")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+
+            Assert.Contains("https://example.test/hidden.html", locs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }

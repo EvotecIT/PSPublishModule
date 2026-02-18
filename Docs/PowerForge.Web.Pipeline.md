@@ -562,6 +562,7 @@ Notes:
 - `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
 - `json`/`jsonOut` emit a machine-readable sitemap payload with resolved URLs and metadata.
 - Set `includeHtmlFiles: false` for a strict/manual sitemap.
+- `includeNoIndexPages` defaults to `false`, so pages with `<meta name="robots" content*="noindex">` are excluded unless explicitly enabled.
 - `includeLanguageAlternates` (default `true`) emits `xhtml:link` alternates (`hreflang` and `x-default`) when `_powerforge/site-spec.json` contains an enabled `Localization` config.
 - When `htmlCss` is omitted, PowerForge tries to auto-detect site/theme CSS so the HTML sitemap inherits theme styling.
 

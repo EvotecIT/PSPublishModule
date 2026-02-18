@@ -1105,6 +1105,7 @@ internal static partial class WebPipelineRunner
             GetString(step, "entries-file"));
         var includeHtml = GetBool(step, "includeHtmlFiles");
         var includeText = GetBool(step, "includeTextFiles");
+        var includeNoIndexPages = GetBool(step, "includeNoIndexPages") ?? GetBool(step, "include-no-index-pages");
         var includeLanguageAlternates = GetBool(step, "includeLanguageAlternates");
         var jsonEnabled = GetBool(step, "json") ?? false;
         var jsonOutput = ResolvePath(baseDir,
@@ -1138,6 +1139,7 @@ internal static partial class WebPipelineRunner
             EntriesJsonPath = entriesJson,
             IncludeHtmlFiles = includeHtml ?? true,
             IncludeTextFiles = includeText ?? true,
+            IncludeNoIndexPages = includeNoIndexPages ?? false,
             IncludeLanguageAlternates = includeLanguageAlternates ?? true,
             GenerateHtml = htmlEnabled,
             GenerateJson = jsonEnabled,
