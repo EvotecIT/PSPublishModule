@@ -469,6 +469,31 @@ internal static partial class WebPipelineRunner
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
             }
+            case "seo-doctor":
+            {
+                var outputs = new List<string>();
+                var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
+                if (!string.IsNullOrWhiteSpace(reportPath))
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, reportPath));
+
+                var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
+                if (!string.IsNullOrWhiteSpace(summaryPath))
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, summaryPath));
+
+                var baselineGenerate = GetBool(step, "baselineGenerate") ?? false;
+                var baselineUpdate = GetBool(step, "baselineUpdate") ?? false;
+                if (baselineGenerate || baselineUpdate)
+                {
+                    var baselinePath = GetString(step, "baselinePath") ?? GetString(step, "baseline");
+                    if (string.IsNullOrWhiteSpace(baselinePath))
+                        baselinePath = ".powerforge/seo-baseline.json";
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, baselinePath));
+                }
+
+                return outputs
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
             case "doctor":
             {
                 var outputs = new List<string>();

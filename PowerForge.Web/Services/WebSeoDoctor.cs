@@ -1,0 +1,670 @@
+using System.Text.RegularExpressions;
+using HtmlTinkerX;
+
+namespace PowerForge.Web;
+
+/// <summary>Runs SEO-focused checks on generated HTML output.</summary>
+public static class WebSeoDoctor
+{
+    private static readonly string[] DefaultExcludePatterns =
+    {
+        "*.scripts.html",
+        "**/*.scripts.html",
+        "*.head.html",
+        "**/*.head.html",
+        "**/api-fragments/**",
+        "api-fragments/**"
+    };
+
+    private static readonly string[] DefaultHtmlExtensions = { ".html", ".htm" };
+    private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
+    private static readonly string[] IgnoreLinkPrefixes = { "#", "mailto:", "tel:", "javascript:", "data:", "blob:" };
+    private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+
+    /// <summary>Runs SEO doctor checks for a generated site output.</summary>
+    public static WebSeoDoctorResult Analyze(WebSeoDoctorOptions options)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(options.SiteRoot))
+            throw new ArgumentException("SiteRoot is required.", nameof(options));
+
+        var siteRoot = Path.GetFullPath(options.SiteRoot);
+        if (!Directory.Exists(siteRoot))
+            throw new DirectoryNotFoundException($"Site root not found: {siteRoot}");
+
+        var issues = new List<WebSeoDoctorIssue>();
+        var errors = new List<string>();
+        var warnings = new List<string>();
+        var pages = new List<PageScan>(capacity: 256);
+
+        var allHtmlFiles = EnumerateHtmlFiles(siteRoot, options.Include, options.Exclude, options.UseDefaultExcludes)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var htmlFiles = allHtmlFiles;
+        if (options.MaxHtmlFiles > 0 && htmlFiles.Count > options.MaxHtmlFiles)
+            htmlFiles = htmlFiles.Take(options.MaxHtmlFiles).ToList();
+
+        var titleMin = Math.Max(0, options.MinTitleLength);
+        var titleMax = Math.Max(titleMin, options.MaxTitleLength);
+        var descriptionMin = Math.Max(0, options.MinDescriptionLength);
+        var descriptionMax = Math.Max(descriptionMin, options.MaxDescriptionLength);
+        var minFocusMentions = Math.Max(0, options.MinFocusKeyphraseMentions);
+        var focusMetaNames = (options.FocusKeyphraseMetaNames ?? Array.Empty<string>())
+            .Where(static name => !string.IsNullOrWhiteSpace(name))
+            .Select(static name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (focusMetaNames.Length == 0)
+            focusMetaNames = new[] { "pf:focus-keyphrase" };
+
+        void AddIssue(string severity, string category, string? path, string message, string? hintOverride = null, string? keyHint = null)
+        {
+            var normalizedSeverity = string.IsNullOrWhiteSpace(severity)
+                ? "warning"
+                : severity.Trim().ToLowerInvariant();
+            var normalizedCategory = string.IsNullOrWhiteSpace(category)
+                ? "general"
+                : NormalizeIssueToken(category);
+            var issuePath = string.IsNullOrWhiteSpace(path) ? null : path.Replace('\\', '/');
+            var normalizedHint = NormalizeIssueToken(hintOverride ?? message);
+            var code = BuildIssueCode(normalizedCategory, normalizedHint);
+            var key = BuildIssueKey(normalizedSeverity, normalizedCategory, issuePath, normalizedHint, keyHint);
+            var line = string.IsNullOrWhiteSpace(issuePath)
+                ? $"[{code}] {message}"
+                : $"[{code}] {issuePath}: {message}";
+
+            issues.Add(new WebSeoDoctorIssue
+            {
+                Severity = normalizedSeverity,
+                Category = normalizedCategory,
+                Code = code,
+                Hint = normalizedHint,
+                Path = issuePath,
+                Message = message,
+                Key = key
+            });
+
+            if (normalizedSeverity.Equals("error", StringComparison.OrdinalIgnoreCase))
+                errors.Add(line);
+            else
+                warnings.Add(line);
+        }
+
+        foreach (var file in htmlFiles)
+        {
+            var relativePath = Path.GetRelativePath(siteRoot, file).Replace('\\', '/');
+            string html;
+            try
+            {
+                html = File.ReadAllText(file);
+            }
+            catch (Exception ex)
+            {
+                AddIssue("error", "html", relativePath, $"failed to read HTML ({ex.Message}).", "html-read", ex.GetType().Name);
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                AddIssue("warning", "html", relativePath, "empty HTML file.", "html-empty");
+                continue;
+            }
+
+            AngleSharp.Dom.IDocument doc;
+            try
+            {
+                doc = HtmlParser.ParseWithAngleSharp(html);
+            }
+            catch (Exception ex)
+            {
+                AddIssue("error", "html", relativePath, $"failed to parse HTML ({ex.Message}).", "html-parse", ex.GetType().Name);
+                continue;
+            }
+
+            if (!options.IncludeNoIndexPages && HasNoIndexRobots(doc))
+                continue;
+
+            var route = ToRoute(relativePath);
+            var title = NormalizeWhitespace(doc.Title);
+            var description = GetMetaNameValue(doc, "description");
+            var bodyText = NormalizeWhitespace(doc.Body?.TextContent);
+
+            var page = new PageScan
+            {
+                RelativePath = relativePath,
+                Route = route,
+                Title = title,
+                Description = description,
+                BodyText = bodyText
+            };
+            page.FocusKeyphrase = options.CheckFocusKeyphrase
+                ? GetFocusKeyphrase(doc, focusMetaNames)
+                : string.Empty;
+            pages.Add(page);
+
+            if (options.CheckTitleLength)
+            {
+                if (string.IsNullOrWhiteSpace(title))
+                {
+                    AddIssue("warning", "title", relativePath, "missing <title>.", "title-missing");
+                }
+                else
+                {
+                    if (title.Length < titleMin)
+                    {
+                        AddIssue("warning", "title", relativePath,
+                            $"title is short ({title.Length} chars). Recommended {titleMin}-{titleMax}.",
+                            "title-short");
+                    }
+
+                    if (title.Length > titleMax)
+                    {
+                        AddIssue("warning", "title", relativePath,
+                            $"title is long ({title.Length} chars). Recommended {titleMin}-{titleMax}.",
+                            "title-long");
+                    }
+                }
+            }
+
+            if (options.CheckDescriptionLength)
+            {
+                if (string.IsNullOrWhiteSpace(description))
+                {
+                    AddIssue("warning", "description", relativePath, "missing meta description.", "description-missing");
+                }
+                else
+                {
+                    if (description.Length < descriptionMin)
+                    {
+                        AddIssue("warning", "description", relativePath,
+                            $"meta description is short ({description.Length} chars). Recommended {descriptionMin}-{descriptionMax}.",
+                            "description-short");
+                    }
+
+                    if (description.Length > descriptionMax)
+                    {
+                        AddIssue("warning", "description", relativePath,
+                            $"meta description is long ({description.Length} chars). Recommended {descriptionMin}-{descriptionMax}.",
+                            "description-long");
+                    }
+                }
+            }
+
+            if (options.CheckH1)
+            {
+                var visibleH1Count = doc.QuerySelectorAll("h1")
+                    .Count(heading => !IsElementHidden(heading));
+                if (visibleH1Count == 0)
+                    AddIssue("warning", "heading", relativePath, "missing visible <h1>.", "h1-missing");
+                else if (visibleH1Count > 1)
+                    AddIssue("warning", "heading", relativePath, $"multiple visible <h1> elements ({visibleH1Count}).", "h1-multiple");
+            }
+
+            if (options.CheckImageAlt)
+            {
+                var missingAlt = doc.QuerySelectorAll("img[src]")
+                    .Where(image => !IsElementHidden(image))
+                    .Where(image => !image.HasAttribute("alt"))
+                    .Select(image => (image.GetAttribute("src") ?? string.Empty).Trim())
+                    .Where(src => !string.IsNullOrWhiteSpace(src))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(3)
+                    .ToArray();
+                if (missingAlt.Length > 0)
+                {
+                    AddIssue("warning", "image-alt", relativePath,
+                        $"image(s) missing alt attribute. Sample: {string.Join(", ", missingAlt)}.",
+                        "image-alt-missing");
+                }
+            }
+
+            if (options.CheckFocusKeyphrase && !string.IsNullOrWhiteSpace(page.FocusKeyphrase))
+            {
+                if (string.IsNullOrWhiteSpace(title) ||
+                    title.IndexOf(page.FocusKeyphrase, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    AddIssue("warning", "focus-keyphrase", relativePath,
+                        $"focus keyphrase '{page.FocusKeyphrase}' is not present in title.",
+                        "focus-keyphrase-title");
+                }
+
+                var mentionCount = CountCaseInsensitiveOccurrences(bodyText, page.FocusKeyphrase);
+                if (mentionCount < minFocusMentions)
+                {
+                    AddIssue("warning", "focus-keyphrase", relativePath,
+                        $"focus keyphrase '{page.FocusKeyphrase}' appears {mentionCount} time(s) in body text (min {minFocusMentions}).",
+                        "focus-keyphrase-body");
+                }
+            }
+
+            var baseDir = ResolveBaseDirectory(siteRoot, file, doc);
+            foreach (var href in doc.QuerySelectorAll("a[href]")
+                         .Select(link => link.GetAttribute("href"))
+                         .Where(static href => !string.IsNullOrWhiteSpace(href))
+                         .Select(static href => href!.Trim()))
+            {
+                if (ShouldSkipLink(href) || IsExternalLink(href))
+                    continue;
+                if (!TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath))
+                    continue;
+                if (!File.Exists(resolvedPath))
+                    continue;
+
+                var targetRelativePath = Path.GetRelativePath(siteRoot, resolvedPath).Replace('\\', '/');
+                var targetRoute = ToRoute(targetRelativePath);
+                if (!string.IsNullOrWhiteSpace(targetRoute))
+                    page.OutboundRoutes.Add(targetRoute);
+            }
+        }
+
+        if (pages.Count == 0)
+            AddIssue("warning", "general", null, "No HTML pages selected for SEO doctor checks.", "no-pages");
+
+        if (options.CheckDuplicateTitles)
+        {
+            var duplicateTitleGroups = pages
+                .Where(page => !string.IsNullOrWhiteSpace(page.Title))
+                .GroupBy(page => page.Title, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var group in duplicateTitleGroups)
+            {
+                var sampleRoutes = group
+                    .Select(page => page.Route)
+                    .Where(route => !string.IsNullOrWhiteSpace(route))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(4)
+                    .ToArray();
+                var title = group.Key;
+                AddIssue("warning", "duplicate-intent", null,
+                    $"duplicate title intent detected for '{title}' across {group.Count()} pages. Sample routes: {string.Join(", ", sampleRoutes)}.",
+                    "duplicate-title-intent",
+                    title);
+            }
+        }
+
+        var orphanPageCount = 0;
+        if (options.CheckOrphanPages && pages.Count > 0)
+        {
+            var routeSet = pages
+                .Select(page => page.Route)
+                .Where(route => !string.IsNullOrWhiteSpace(route))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var inboundRouteCounts = routeSet.ToDictionary(route => route, _ => 0, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var page in pages)
+            {
+                foreach (var route in page.OutboundRoutes)
+                {
+                    if (!routeSet.Contains(route))
+                        continue;
+                    if (route.Equals(page.Route, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    inboundRouteCounts[route]++;
+                }
+            }
+
+            var orphanRoutes = pages
+                .Where(page => IsOrphanCandidateRoute(page.Route))
+                .Where(page => inboundRouteCounts.TryGetValue(page.Route, out var inbound) && inbound == 0)
+                .Select(page => page.Route)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(route => route, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var route in orphanRoutes)
+            {
+                AddIssue("warning", "orphan", route, "orphan page candidate (no inbound links from scanned pages).", "orphan-page");
+            }
+
+            orphanPageCount = orphanRoutes.Length;
+        }
+
+        return new WebSeoDoctorResult
+        {
+            Success = errors.Count == 0,
+            HtmlFileCount = allHtmlFiles.Count,
+            HtmlSelectedFileCount = htmlFiles.Count,
+            PageCount = pages.Count,
+            OrphanPageCount = orphanPageCount,
+            IssueCount = issues.Count,
+            ErrorCount = errors.Count,
+            WarningCount = warnings.Count,
+            NewIssueCount = issues.Count(issue => issue.IsNew),
+            NewErrorCount = issues.Count(issue =>
+                issue.IsNew && issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)),
+            NewWarningCount = issues.Count(issue =>
+                issue.IsNew && issue.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase)),
+            Issues = issues.ToArray(),
+            Errors = errors.ToArray(),
+            Warnings = warnings.ToArray()
+        };
+    }
+
+    private sealed class PageScan
+    {
+        public string RelativePath { get; init; } = string.Empty;
+        public string Route { get; init; } = "/";
+        public string Title { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
+        public string BodyText { get; init; } = string.Empty;
+        public string FocusKeyphrase { get; set; } = string.Empty;
+        public HashSet<string> OutboundRoutes { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> EnumerateHtmlFiles(string root, string[] includePatterns, string[] excludePatterns, bool useDefaultExcludes)
+    {
+        var includes = NormalizePatterns(includePatterns);
+        var excludes = BuildExcludePatterns(excludePatterns, useDefaultExcludes);
+        var files = Directory.EnumerateFiles(root, "*.html", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(root, "*.htm", SearchOption.AllDirectories));
+
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            if (excludes.Length > 0 && MatchesAny(excludes, relative))
+                continue;
+            if (includes.Length > 0 && !MatchesAny(includes, relative))
+                continue;
+            yield return file;
+        }
+    }
+
+    private static string[] NormalizePatterns(string[] patterns)
+    {
+        return (patterns ?? Array.Empty<string>())
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Select(pattern => pattern.Replace('\\', '/').Trim())
+            .ToArray();
+    }
+
+    private static string[] BuildExcludePatterns(string[] patterns, bool useDefaults)
+    {
+        var list = NormalizePatterns(patterns).ToList();
+        if (useDefaults)
+            list.AddRange(DefaultExcludePatterns);
+        return list
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool MatchesAny(string[] patterns, string value)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (GlobMatch(pattern, value))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool GlobMatch(string pattern, string value)
+    {
+        if (string.IsNullOrWhiteSpace(pattern)) return false;
+        var regex = "^" + Regex.Escape(pattern)
+            .Replace("\\*\\*", ".*")
+            .Replace("\\*", "[^/]*")
+            .Replace("\\?", ".") + "$";
+        return Regex.IsMatch(value, regex, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static bool HasNoIndexRobots(AngleSharp.Dom.IDocument doc)
+    {
+        if (doc.Head is null)
+            return false;
+
+        foreach (var meta in doc.Head.QuerySelectorAll("meta[name]"))
+        {
+            var name = meta.GetAttribute("name");
+            if (string.IsNullOrWhiteSpace(name) ||
+                !NoIndexMetaNames.Any(known => known.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var content = meta.GetAttribute("content");
+            if (!string.IsNullOrWhiteSpace(content) &&
+                content.IndexOf("noindex", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string GetMetaNameValue(AngleSharp.Dom.IDocument doc, string metaName)
+    {
+        if (doc.Head is null || string.IsNullOrWhiteSpace(metaName))
+            return string.Empty;
+
+        foreach (var meta in doc.Head.QuerySelectorAll("meta[name]"))
+        {
+            var name = meta.GetAttribute("name");
+            if (!string.Equals(name, metaName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return NormalizeWhitespace(meta.GetAttribute("content"));
+        }
+
+        return string.Empty;
+    }
+
+    private static string GetFocusKeyphrase(AngleSharp.Dom.IDocument doc, string[] metaNames)
+    {
+        foreach (var metaName in metaNames)
+        {
+            var value = GetMetaNameValue(doc, metaName);
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return string.Empty;
+    }
+
+    private static int CountCaseInsensitiveOccurrences(string haystack, string needle)
+    {
+        if (string.IsNullOrWhiteSpace(haystack) || string.IsNullOrWhiteSpace(needle))
+            return 0;
+
+        var count = 0;
+        var index = 0;
+        while (true)
+        {
+            index = haystack.IndexOf(needle, index, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+                break;
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
+    }
+
+    private static string NormalizeWhitespace(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return Regex.Replace(value, "\\s+", " ").Trim();
+    }
+
+    private static bool IsElementHidden(AngleSharp.Dom.IElement element)
+    {
+        if (element is null)
+            return true;
+        if (element.HasAttribute("hidden"))
+            return true;
+        var ariaHidden = element.GetAttribute("aria-hidden");
+        return !string.IsNullOrWhiteSpace(ariaHidden) &&
+               ariaHidden.Equals("true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldSkipLink(string href)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+            return true;
+
+        foreach (var prefix in IgnoreLinkPrefixes)
+        {
+            if (href.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsExternalLink(string href)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+            return false;
+        if (href.StartsWith("//", StringComparison.Ordinal))
+            return true;
+        return href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string StripQueryAndFragment(string href)
+    {
+        var trimmed = href.Trim();
+        var queryIndex = trimmed.IndexOf('?');
+        if (queryIndex >= 0)
+            trimmed = trimmed.Substring(0, queryIndex);
+        var hashIndex = trimmed.IndexOf('#');
+        if (hashIndex >= 0)
+            trimmed = trimmed.Substring(0, hashIndex);
+        return trimmed;
+    }
+
+    private static string ResolveBaseDirectory(string siteRoot, string filePath, AngleSharp.Dom.IDocument doc)
+    {
+        var baseHref = ResolveBaseHref(doc);
+        if (string.IsNullOrWhiteSpace(baseHref))
+            return Path.GetDirectoryName(filePath) ?? siteRoot;
+
+        return Path.GetFullPath(Path.Combine(siteRoot, baseHref.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
+    }
+
+    private static string? ResolveBaseHref(AngleSharp.Dom.IDocument doc)
+    {
+        var baseElement = doc.QuerySelector("base[href]");
+        if (baseElement is null) return null;
+        var href = baseElement.GetAttribute("href");
+        if (string.IsNullOrWhiteSpace(href)) return null;
+        if (IsExternalLink(href)) return null;
+        if (!href.StartsWith("/", StringComparison.Ordinal))
+            return null;
+        return href.TrimEnd('/');
+    }
+
+    private static bool TryResolveLocalTarget(string siteRoot, string baseDir, string href, out string resolvedPath)
+    {
+        resolvedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(href)) return false;
+
+        var cleaned = StripQueryAndFragment(href);
+        if (string.IsNullOrWhiteSpace(cleaned)) return false;
+
+        var isRooted = cleaned.StartsWith("/");
+        var isExplicitDir = cleaned.EndsWith("/");
+        var relative = isRooted ? cleaned.TrimStart('/') : cleaned;
+        relative = relative.Replace('/', Path.DirectorySeparatorChar);
+
+        var candidateBase = isRooted ? siteRoot : baseDir;
+        var candidate = Path.GetFullPath(Path.Combine(candidateBase, relative));
+        if (!candidate.StartsWith(siteRoot, FileSystemPathComparison))
+            return false;
+
+        if (isExplicitDir)
+        {
+            var dir = candidate.TrimEnd(Path.DirectorySeparatorChar);
+            var indexPath = Path.Combine(dir, "index.html");
+            resolvedPath = indexPath;
+            return true;
+        }
+
+        if (Path.HasExtension(candidate))
+        {
+            resolvedPath = candidate;
+            return true;
+        }
+
+        foreach (var ext in DefaultHtmlExtensions)
+        {
+            var htmlCandidate = candidate + ext;
+            if (File.Exists(htmlCandidate))
+            {
+                resolvedPath = htmlCandidate;
+                return true;
+            }
+        }
+
+        resolvedPath = Path.Combine(candidate, "index.html");
+        return true;
+    }
+
+    private static string ToRoute(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return "/";
+
+        var normalized = relativePath.Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return "/";
+
+        if (normalized.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("index.htm", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/";
+        }
+
+        if (normalized.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase))
+            return "/" + normalized[..^"/index.html".Length] + "/";
+        if (normalized.EndsWith("/index.htm", StringComparison.OrdinalIgnoreCase))
+            return "/" + normalized[..^"/index.htm".Length] + "/";
+
+        return "/" + normalized;
+    }
+
+    private static bool IsOrphanCandidateRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return false;
+        if (route.Equals("/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (route.Equals("/404.html", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (route.Equals("/sitemap/", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return true;
+    }
+
+    private static string NormalizeIssueToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "general";
+        var token = value.Trim().ToLowerInvariant();
+        token = Regex.Replace(token, @"[^a-z0-9]+", "-");
+        token = token.Trim('-');
+        return string.IsNullOrWhiteSpace(token) ? "general" : token;
+    }
+
+    private static string BuildIssueCode(string category, string hint)
+    {
+        var categoryToken = NormalizeIssueToken(category).Replace('-', '_').ToUpperInvariant();
+        var hintToken = NormalizeIssueToken(hint).Replace('-', '_').ToUpperInvariant();
+        return $"PFSEO.{categoryToken}.{hintToken}";
+    }
+
+    private static string BuildIssueKey(string severity, string category, string? path, string hint, string? keyHint)
+    {
+        var pathToken = string.IsNullOrWhiteSpace(path) ? "-" : path.Replace('\\', '/').Trim().ToLowerInvariant();
+        var hintToken = string.IsNullOrWhiteSpace(keyHint) ? hint : keyHint.Trim();
+        return $"{NormalizeIssueToken(severity)}|{NormalizeIssueToken(category)}|{pathToken}|{NormalizeIssueToken(hintToken)}";
+    }
+}
+

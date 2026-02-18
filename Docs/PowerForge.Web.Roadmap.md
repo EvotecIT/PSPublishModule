@@ -77,9 +77,9 @@ Legend:
 
 - **Have**: Canonical, OG/Twitter metadata, baseline structured data (`WebSite`, `Organization`, `Article`, `BreadcrumbList`), social card generation, and sitemap noindex-safe defaults.
   - Code: `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSitemapGenerator.cs`
-- **Partial**: SEO checks are mostly technical (`audit` metadata checks, sitemap hygiene) but we do not yet provide an editorial SEO advisor workflow.
-  - Docs: `Docs/PowerForge.Web.Pipeline.md` (`checkSeoMeta`)
-- **Missing**: Yoast-style SEO doctor analysis, search appearance token templates/preview, expanded schema profiles (`FAQ/HowTo/Product/SoftwareApplication/NewsArticle`), dedicated news/image/video sitemaps, and IndexNow submission support.
+- **Partial**: `seo-doctor` pipeline step provides deterministic editorial checks (title/meta length, H1, image alt, duplicate title intent, orphan candidates, optional focus keyphrase), but search-appearance templating and richer schema/sitemap families are still pending.
+  - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
+- **Missing**: search appearance token templates/preview, expanded schema profiles (`FAQ/HowTo/Product/SoftwareApplication/NewsArticle`), dedicated news/image/video sitemaps, and IndexNow submission support.
   - Plan: `Docs/PowerForge.Web.SeoParityPlan.md`
 
 ### Themes + Contracts

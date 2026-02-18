@@ -37,6 +37,7 @@
         { "$ref": "#/$defs/SitemapStep" },
         { "$ref": "#/$defs/OptimizeStep" },
         { "$ref": "#/$defs/AuditStep" },
+        { "$ref": "#/$defs/SeoDoctorStep" },
         { "$ref": "#/$defs/DotNetBuildStep" },
         { "$ref": "#/$defs/DotNetPublishStep" },
         { "$ref": "#/$defs/OverlayStep" },
@@ -1948,6 +1949,80 @@
         "baselineUpdate": { "type": "boolean" }
       },
       "required": ["task", "siteRoot"]
+    },
+    "SeoDoctorStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "seo-doctor" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "siteRoot": { "type": "string" },
+        "site-root": { "type": "string" },
+        "include": { "type": "string" },
+        "exclude": { "type": "string" },
+        "scopeFromBuildUpdated": {
+          "type": "boolean",
+          "description": "When true, if include is not set, scope SEO doctor checks to HTML files updated by the most recent build step (when siteRoot matches build out). In --fast mode this behavior is enabled by default; set this to false to disable."
+        },
+        "scope-from-build-updated": { "type": "boolean" },
+        "noDefaultExclude": { "type": "boolean" },
+        "maxHtmlFiles": { "type": "integer", "minimum": 0 },
+        "max-html-files": { "type": "integer", "minimum": 0 },
+        "includeNoIndexPages": { "type": "boolean" },
+        "checkTitleLength": { "type": "boolean" },
+        "checkDescriptionLength": { "type": "boolean" },
+        "checkH1": { "type": "boolean" },
+        "checkHeading": { "type": "boolean", "description": "Alias for checkH1." },
+        "checkImageAlt": { "type": "boolean" },
+        "checkDuplicateTitles": { "type": "boolean" },
+        "checkOrphanPages": { "type": "boolean" },
+        "checkFocusKeyphrase": { "type": "boolean" },
+        "focusKeyphraseMetaName": { "type": "string" },
+        "focus-keyphrase-meta-name": { "type": "string", "description": "Alias for focusKeyphraseMetaName." },
+        "focusKeyphraseMetaNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "focus-keyphrase-meta-names": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Alias for focusKeyphraseMetaNames."
+        },
+        "minTitleLength": { "type": "integer", "minimum": 0 },
+        "maxTitleLength": { "type": "integer", "minimum": 0 },
+        "minDescriptionLength": { "type": "integer", "minimum": 0 },
+        "maxDescriptionLength": { "type": "integer", "minimum": 0 },
+        "minFocusKeyphraseMentions": { "type": "integer", "minimum": 0 },
+        "baselinePath": { "type": "string" },
+        "baseline": { "type": "string" },
+        "baselineGenerate": { "type": "boolean" },
+        "baselineUpdate": { "type": "boolean" },
+        "failOnWarnings": { "type": "boolean" },
+        "failOnNewIssues": { "type": "boolean" },
+        "failOnNew": { "type": "boolean" },
+        "maxErrors": { "type": "integer" },
+        "maxWarnings": { "type": "integer" },
+        "reportPath": { "type": "string" },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string" },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
+      },
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] }
+          ]
+        }
+      ]
     },
     "DotNetBuildStep": {
       "type": "object",

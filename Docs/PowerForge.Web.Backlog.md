@@ -32,7 +32,6 @@ Short, high-signal list to keep parity and stability work visible.
 - Sidebar options: allow left/right placement (theme-level switch), without forking templates. (done for API docs via `sidebar`)
 
 ## SEO parity track (Yoast-informed)
-- Add `seo-doctor` pipeline step (title/meta length, H1 checks, missing alt, orphan-link candidates, duplicate-intent warnings).
 - Add SEO template tokens + resolved preview artifact (`_powerforge/seo-preview.json`).
 - Expand schema profiles beyond baseline (`FAQ`, `HowTo`, `SoftwareApplication`, `Product`, `NewsArticle`).
 - Add specialized sitemap outputs (news/image/video) and sitemap index generation.

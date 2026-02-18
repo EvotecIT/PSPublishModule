@@ -701,6 +701,41 @@ Reference this file from your pipeline step:
 Sample file in this repo:
 - `Samples/PowerForge.Web.CodeGlyphX.Sample/config/media-profiles.json`
 
+#### seo-doctor
+Runs editorial + technical SEO heuristics over generated HTML.
+```json
+{
+  "task": "seo-doctor",
+  "siteRoot": "./_site",
+  "checkTitleLength": true,
+  "checkDescriptionLength": true,
+  "checkH1": true,
+  "checkImageAlt": true,
+  "checkDuplicateTitles": true,
+  "checkOrphanPages": true,
+  "checkFocusKeyphrase": false,
+  "baseline": "./.powerforge/seo-baseline.json",
+  "baselineGenerate": true,
+  "reportPath": "./_reports/seo-doctor.json",
+  "summaryPath": "./_reports/seo-doctor.md"
+}
+```
+Notes:
+- SEO doctor checks include:
+  - title/meta-description length heuristics
+  - missing/multiple visible `h1`
+  - images missing `alt` attribute
+  - duplicate title intent across pages
+  - orphan page candidates (zero inbound links from scanned pages)
+  - optional focus-keyphrase checks via page meta tags
+- `includeNoIndexPages` defaults to `false`, so `robots noindex` pages are skipped by default.
+- Baselines follow the same CI pattern as audit:
+  - `baselineGenerate` / `baselineUpdate`
+  - `failOnNewIssues` (alias `failOnNew`)
+  - `failOnWarnings`, `maxErrors`, `maxWarnings`
+- `reportPath` writes full JSON; `summaryPath` writes markdown summary.
+- `scopeFromBuildUpdated` supports incremental runs in `--fast` mode when a preceding build step updated HTML files.
+
 #### dotnet-build
 Runs `dotnet build`.
 ```json

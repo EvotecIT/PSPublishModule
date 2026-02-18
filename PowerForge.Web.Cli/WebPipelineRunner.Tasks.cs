@@ -61,6 +61,9 @@ internal static partial class WebPipelineRunner
             case "audit":
                 ExecuteAudit(step, label, baseDir, fast, logger, lastBuildOutPath, lastBuildUpdatedFiles, stepResult);
                 break;
+            case "seo-doctor":
+                ExecuteSeoDoctor(step, baseDir, fast, lastBuildOutPath, lastBuildUpdatedFiles, stepResult);
+                break;
             case "doctor":
                 ExecuteDoctor(step, baseDir, fast, effectiveMode, stepResult);
                 break;
