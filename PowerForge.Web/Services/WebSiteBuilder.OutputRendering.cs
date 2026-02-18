@@ -76,6 +76,7 @@ public static partial class WebSiteBuilder
         var descriptionMeta = string.IsNullOrWhiteSpace(pageDescription)
             ? string.Empty
             : $"<meta name=\"description\" content=\"{System.Web.HttpUtility.HtmlEncode(pageDescription)}\" />";
+        var crawlMeta = BuildCrawlMetaHtml(spec, item);
         projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
         var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
         var fullListItems = ResolveListItems(item, allItems);
@@ -151,6 +152,7 @@ public static partial class WebSiteBuilder
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
   <title>{System.Web.HttpUtility.HtmlEncode(pageTitle)}</title>
   {descriptionMeta}
+  {crawlMeta}
   {canonical}
   {preloads}
   {criticalCss}

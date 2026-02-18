@@ -31,7 +31,7 @@ Legend:
 | Schema breadth | FAQ/HowTo/Product/Software/News schemas | Missing | Baseline schema only; no richer schema profiles yet. |
 | Vertical sitemaps | News/Image/Video sitemap modes | Missing | Only generic sitemap today. |
 | Fast indexing ping | IndexNow support | Have | `indexnow` pipeline step supports batching/retry/dry-run/reporting and changed-file scoping. |
-| Crawl controls UX | Fine-grained crawl/index directives | Partial | We support robots/noindex patterns but not a consolidated crawl policy model. |
+| Crawl controls UX | Fine-grained crawl/index directives | Have | `Seo.CrawlPolicy` supports route-scoped robots directives, bot directives, and `_powerforge/crawl-policy.json` diagnostics. |
 
 ## What We Should Build Next
 
@@ -151,7 +151,7 @@ Pipeline spec (new steps):
 2. Add template/token resolution and preview artifact.
 3. Expand structured data profiles with strict validation.
 4. Add specialized sitemap outputs + index.
-5. Add crawl policy model.
+5. Add crawl policy model. (completed)
 6. Add redirect assistant for migration-heavy sites.
 
 ## References

@@ -350,7 +350,9 @@
       "additionalProperties": false,
       "properties": {
         "Enabled": { "type": "boolean", "default": true },
-        "Templates": { "$ref": "#/$defs/SeoTemplatesSpec" }
+        "Templates": { "$ref": "#/$defs/SeoTemplatesSpec" },
+        "CrawlPolicy": { "$ref": "#/$defs/CrawlPolicySpec" },
+        "crawlPolicy": { "$ref": "#/$defs/CrawlPolicySpec" }
       }
     },
     "SeoTemplatesSpec": {
@@ -360,6 +362,53 @@
         "Title": { "type": "string" },
         "Description": { "type": "string" }
       }
+    },
+    "CrawlPolicySpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean", "default": true },
+        "DefaultRobots": { "type": "string" },
+        "defaultRobots": { "type": "string" },
+        "Bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } },
+        "bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } },
+        "Rules": { "type": "array", "items": { "$ref": "#/$defs/CrawlRuleSpec" } },
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/CrawlRuleSpec" } }
+      }
+    },
+    "CrawlRuleSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Match": { "type": "string" },
+        "match": { "type": "string" },
+        "MatchType": { "type": "string", "enum": ["exact", "prefix", "wildcard"] },
+        "matchType": { "type": "string", "enum": ["exact", "prefix", "wildcard"] },
+        "Robots": { "type": "string" },
+        "robots": { "type": "string" },
+        "Bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } },
+        "bots": { "type": "array", "items": { "$ref": "#/$defs/CrawlBotDirectiveSpec" } }
+      },
+      "anyOf": [
+        { "required": ["Match"] },
+        { "required": ["match"] }
+      ]
+    },
+    "CrawlBotDirectiveSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Name": { "type": "string" },
+        "name": { "type": "string" },
+        "Directives": { "type": "string" },
+        "directives": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["Name", "Directives"] },
+        { "required": ["name", "directives"] }
+      ]
     },
     "HeadLinkSpec": {
       "type": "object",

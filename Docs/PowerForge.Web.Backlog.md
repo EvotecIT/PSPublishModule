@@ -15,6 +15,7 @@ Short, high-signal list to keep parity and stability work visible.
 - Verify: warn when custom `site-nav.json` drifts from Navigation menus.
 - Pipeline: `indexnow` step for canonical URL submission (batch/retry/dry-run/report support).
 - SEO templates: site/collection title+description tokens with `_powerforge/seo-preview.json` output.
+- Crawl policy: route-scoped robots + bot directives + `_powerforge/crawl-policy.json` diagnostics.
 
 ## Engine parity & quality
 - CodeGlyphX 1:1 coverage checklist (home, docs, benchmarks, pricing, showcase, playground, API docs).

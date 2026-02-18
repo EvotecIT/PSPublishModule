@@ -820,6 +820,43 @@ meta.seo_description: "Custom SEO description"
 
 Each build emits resolved SEO metadata at `_powerforge/seo-preview.json`.
 
+### Crawl policy (robots directives)
+Use route-scoped crawl directives with optional bot-specific overrides:
+```json
+{
+  "Seo": {
+    "CrawlPolicy": {
+      "Enabled": true,
+      "DefaultRobots": "index,follow",
+      "Bots": [
+        { "Name": "googlebot", "Directives": "index,follow,max-image-preview:large" }
+      ],
+      "Rules": [
+        {
+          "Name": "search-noindex",
+          "Match": "/search/*",
+          "MatchType": "wildcard",
+          "Robots": "noindex,follow",
+          "Bots": [
+            { "Name": "googlebot", "Directives": "noindex,follow" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+Rule behavior:
+- first matching rule wins
+- match types: `exact`, `prefix`, `wildcard`
+- page-level overrides win over policy:
+  - `meta.robots`
+  - `meta.googlebot` / `meta.bingbot` (or `meta.robots.googlebot`)
+
+Build output diagnostics:
+- `_powerforge/crawl-policy.json` (resolved directives per generated page)
+
 ## Head links + meta (site.json)
 Use structured head tags so themes don’t repeat favicons or preconnects.
 ```

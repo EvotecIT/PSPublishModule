@@ -104,6 +104,7 @@ public static partial class WebSiteBuilder
         WriteSearchIndex(spec, outDir, items);
         WriteLinkCheckReport(spec, items, metaDir);
         WriteSeoPreviewReport(spec, items, metaDir);
+        WriteCrawlPolicyReport(spec, items, metaDir);
 
         var redirectsPayload = new
         {

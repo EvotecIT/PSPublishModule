@@ -212,7 +212,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Add SEO title/description template token resolution and preview artifacts. (completed)
 - Expand structured data profiles for docs/product/news use cases.
 - Add specialized sitemap family (news/images/videos) and sitemap index output support.
-- Add crawl-policy model for explicit discovery controls.
+- Add crawl-policy model for explicit discovery controls. (completed)
 
 ### M3: DocFX-class Docs Conveniences (Later)
 
