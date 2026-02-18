@@ -235,8 +235,8 @@ Enable multi-language URLs in `site.json`:
     "PrefixDefaultLanguage": false,
     "DetectFromPath": true,
     "Languages": [
-      { "Code": "en", "Label": "English", "Default": true },
-      { "Code": "pl", "Label": "Polski" }
+      { "Code": "en", "Label": "English", "Default": true, "BaseUrl": "https://evotec.xyz" },
+      { "Code": "pl", "Label": "Polski", "BaseUrl": "https://evotec.pl" }
     ]
   }
 }
@@ -247,6 +247,10 @@ When `DetectFromPath` is enabled, a leading language folder in content paths is 
 - `content/docs/pl/index.md` → `/pl/docs/`
 
 Use `translation_key` when page paths differ per language and you still want reliable language switcher links.
+This is the recommended way to keep one logical page mapped across translated slugs.
+
+Use language-level `BaseUrl` when localized variants live on different domains.
+When set, `hreflang` head links and sitemap alternates use the language domain instead of the site `BaseUrl`.
 
 When localization is enabled and at least two languages are configured:
 - Page `<head>` output includes `rel="alternate"` language links (`hreflang`) for localized variants.
@@ -449,6 +453,7 @@ Examples:
 {{< cards data="features" >}}
 {{< metrics data="stats" >}}
 {{< showcase data="showcase" >}}
+{{< map query="Evotec Services, Mikolow" title="Office map" >}}
 {{< app src="/playground/" label="Launch Playground" title="Playground" >}}
 {{< edit-link >}}
 ```
@@ -657,6 +662,8 @@ Use `Redirects` or `RouteOverrides` in `site.json` for permanent site‑level ru
 
 Notes:
 - Aliases emit **exact** 301 redirects to the final page route.
+- Alias redirects are emitted for both slash variants (for example `/old-post` and `/old-post/`) so legacy blog links stay non-breaking.
+- Set `EnableLegacyAmpRedirects: true` in `site.json` to auto-generate compatibility redirects from `/.../amp` routes to canonical HTML pages.
 - `RouteOverrides` are applied before `Redirects` when generating redirect outputs.
 - Redirects are emitted to host-specific formats:
   - `_redirects` (Netlify)
@@ -668,6 +675,13 @@ Notes:
 - A full machine-readable list is written to:
   - `_powerforge/redirects.json`
 
+Example (`site.json`):
+```json
+{
+  "EnableLegacyAmpRedirects": true
+}
+```
+
 ## Sitemap behavior
 The `sitemap` task generates entries automatically and can be augmented by
 explicit entries in the pipeline spec.
@@ -677,6 +691,7 @@ Defaults:
 - `robots.txt`, `llms.txt`, `llms.json`, `llms-full.txt` are included when present.
 - Paths are normalized to trailing‑slash routes when they map to `index.html`.
 - If localization config exists in `_powerforge/site-spec.json`, sitemap entries include localized alternates (`xhtml:link`, `hreflang`, `x-default`).
+- When localization languages define `BaseUrl`, sitemap alternates use those per-language domains.
 - Optional JSON output (`json: true`) writes a resolved machine-readable sitemap (`sitemap/index.json`) including URL/title/section metadata.
 
 Explicit entries:

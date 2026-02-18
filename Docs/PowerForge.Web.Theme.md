@@ -321,7 +321,8 @@ Project data is available under:
 - `data.project` (current project's data when rendering that project)
 
 Media shortcodes (built-in):
-- `{{< media ... >}}` generic provider wrapper (`youtube`, `video`, `iframe`, `x`, `screenshot`, `screenshots`)
+- `{{< media ... >}}` generic provider wrapper (`youtube`, `video`, `iframe`, `map`, `x`, `screenshot`, `screenshots`)
+- `{{< map query="Evotec Services, Mikolow" title="Office map" size="xl" >}}` (aliases: `google-map`, `googlemaps`)
 - `{{< youtube id=\"...\" start=\"15\" size=\"lg\" >}}`
 - `{{< x url=\"https://x.com/<user>/status/<id>\" size=\"md\" >}}` (alias: `tweet`)
 - `{{< screenshot src=\"/img/feature.png\" caption=\"Dark mode\" size=\"md\" >}}`
@@ -336,6 +337,7 @@ Screenshot sizing notes:
 Media performance notes:
 - `youtube` defaults to **lite mode** (`lite="true"`): thumbnail + play button hydrates iframe on interaction.
 - Set `lite="false"` when immediate iframe render is required.
+- `map` supports either direct embed `src`/`url` or generated Google embed from `query`/`address` or `lat`+`lng`.
 - `x`/`tweet` embeds inject a single per-page bootstrap script and lazy-load the X widget when embeds approach viewport.
 - Media shortcodes inject a small shared CSS baseline once per page (`extra_css`), so base behavior stays consistent across themes.
 
@@ -454,9 +456,9 @@ When `site.json` defines `Localization`, templates receive:
 - `current_language` (shortcut to `localization.current`)
 
 Each language entry includes:
-- `code`, `label`, `prefix`
+- `code`, `label`, `prefix`, `base_url`
 - `is_default`, `is_current`
-- `url` (resolved URL for the current page in that language)
+- `url` (resolved URL for the current page in that language; absolute when `Localization.Languages[].BaseUrl` is set)
 
 Example:
 ```html

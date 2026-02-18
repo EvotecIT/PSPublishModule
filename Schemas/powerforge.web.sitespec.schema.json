@@ -67,6 +67,8 @@
       "type": "array",
       "items": { "$ref": "#/$defs/RedirectSpec" }
     },
+    "EnableLegacyAmpRedirects": { "type": "boolean" },
+    "enableLegacyAmpRedirects": { "type": "boolean" },
     "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
     "AssetPolicy": { "$ref": "#/$defs/AssetPolicySpec" },
     "Prism": { "$ref": "#/$defs/PrismSpec" },
@@ -529,6 +531,8 @@
         "Code": { "type": "string" },
         "Label": { "type": "string" },
         "Prefix": { "type": "string" },
+        "BaseUrl": { "type": "string" },
+        "baseUrl": { "type": "string" },
         "Default": { "type": "boolean" },
         "Disabled": { "type": "boolean" }
       },

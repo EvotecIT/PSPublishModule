@@ -44,6 +44,13 @@ public static partial class WebSiteVerifier
                 if (string.IsNullOrWhiteSpace(prefix))
                     prefix = code;
 
+                var languageBaseUrl = NormalizeAbsoluteBaseUrl(language.BaseUrl);
+                if (!string.IsNullOrWhiteSpace(language.BaseUrl) && string.IsNullOrWhiteSpace(languageBaseUrl))
+                {
+                    warnings.Add(
+                        $"Localization: language '{code}' defines invalid BaseUrl '{language.BaseUrl}'. Use an absolute http/https URL.");
+                }
+
                 if (entries.Any(e => NormalizeLanguageToken(e.Prefix).Equals(NormalizeLanguageToken(prefix), StringComparison.OrdinalIgnoreCase)))
                     duplicatePrefixes.Add(prefix);
 
@@ -51,6 +58,7 @@ public static partial class WebSiteVerifier
                 {
                     Code = code,
                     Prefix = prefix,
+                    BaseUrl = languageBaseUrl,
                     IsDefault = language.Default
                 });
                 if (language.Default)
@@ -327,6 +335,20 @@ public static partial class WebSiteVerifier
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
         return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
+    private static string? NormalizeAbsoluteBaseUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return null;
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return null;
+        return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath.TrimEnd('/')}";
     }
 
     private static string NormalizePath(string? path)

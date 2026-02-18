@@ -25,6 +25,9 @@ public sealed class LocalizationLanguageRuntime
     /// <summary>Resolved route prefix for this language.</summary>
     public string Prefix { get; set; } = string.Empty;
 
+    /// <summary>Optional absolute base URL for this language.</summary>
+    public string? BaseUrl { get; set; }
+
     /// <summary>True when this language is the default language.</summary>
     public bool IsDefault { get; set; }
 

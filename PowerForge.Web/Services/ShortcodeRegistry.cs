@@ -25,6 +25,9 @@ public static class ShortcodeRegistry
         Register("pricing", ShortcodeDefaults.RenderPricing);
         Register("edit-link", ShortcodeDefaults.RenderEditLink);
         Register("media", ShortcodeDefaults.RenderMedia);
+        Register("map", ShortcodeDefaults.RenderMap);
+        Register("google-map", ShortcodeDefaults.RenderMap);
+        Register("googlemaps", ShortcodeDefaults.RenderMap);
         Register("youtube", ShortcodeDefaults.RenderYouTube);
         Register("x", ShortcodeDefaults.RenderXPost);
         Register("tweet", ShortcodeDefaults.RenderXPost);

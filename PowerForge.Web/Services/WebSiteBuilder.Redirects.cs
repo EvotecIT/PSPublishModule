@@ -11,6 +11,66 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    private static void AddLegacyAmpRedirects(
+        SiteSpec spec,
+        List<RedirectSpec> redirects,
+        IReadOnlyList<ContentItem> items)
+    {
+        if (spec is null || redirects is null || items is null)
+            return;
+        if (!spec.EnableLegacyAmpRedirects || items.Count == 0)
+            return;
+
+        var existingSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var redirect in redirects)
+        {
+            if (redirect is null || string.IsNullOrWhiteSpace(redirect.From))
+                continue;
+            existingSources.Add(NormalizeRouteForMatch(redirect.From));
+        }
+
+        foreach (var item in items)
+        {
+            if (item is null || string.IsNullOrWhiteSpace(item.OutputPath))
+                continue;
+
+            var target = NormalizeRouteForMatch(item.OutputPath);
+            if (string.IsNullOrWhiteSpace(target))
+                continue;
+
+            foreach (var source in BuildLegacyAmpSources(target))
+                TryAddAliasRedirect(source, target, existingSources, redirects);
+        }
+    }
+
+    private static string[] BuildLegacyAmpSources(string canonicalRoute)
+    {
+        var normalized = NormalizeRouteForMatch(canonicalRoute);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return Array.Empty<string>();
+
+        var trimmed = normalized.TrimEnd('/');
+        var isRoot = string.IsNullOrWhiteSpace(trimmed);
+        if (!isRoot && trimmed.EndsWith("/amp", StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<string>();
+
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (isRoot)
+        {
+            values.Add("/amp");
+            values.Add("/amp/");
+        }
+        else
+        {
+            values.Add(trimmed + "/amp");
+            values.Add(trimmed + "/amp/");
+        }
+
+        return values
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static void AddVersioningAliasRedirects(SiteSpec spec, List<RedirectSpec> redirects)
     {
         if (spec is null || redirects is null)

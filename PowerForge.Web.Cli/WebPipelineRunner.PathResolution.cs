@@ -272,16 +272,16 @@ internal static partial class WebPipelineRunner
                     if (alternate.ValueKind != JsonValueKind.Object)
                         continue;
                     var hrefLang = GetString(alternate, "hrefLang") ?? GetString(alternate, "hreflang");
-                    var altPath = GetString(alternate, "path") ??
-                                  GetString(alternate, "route") ??
-                                  GetString(alternate, "url") ??
-                                  GetString(alternate, "href");
-                    if (string.IsNullOrWhiteSpace(hrefLang) || string.IsNullOrWhiteSpace(altPath))
+                    var altPath = GetString(alternate, "path") ?? GetString(alternate, "route");
+                    var altUrl = GetString(alternate, "url") ?? GetString(alternate, "href");
+                    if (string.IsNullOrWhiteSpace(hrefLang) ||
+                        (string.IsNullOrWhiteSpace(altPath) && string.IsNullOrWhiteSpace(altUrl)))
                         continue;
                     alternates.Add(new WebSitemapAlternate
                     {
                         HrefLang = hrefLang,
-                        Path = altPath
+                        Path = string.IsNullOrWhiteSpace(altPath) ? "/" : altPath,
+                        Url = altUrl
                     });
                 }
             }

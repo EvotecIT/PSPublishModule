@@ -170,6 +170,7 @@ internal static partial class ShortcodeDefaults
             "youtube" => RenderYouTube(context, attrs),
             "x" or "tweet" => RenderXPost(context, attrs),
             "video" => RenderVideo(context, attrs),
+            "map" or "google-map" or "googlemaps" => RenderMap(context, attrs),
             "iframe" or "embed" => RenderIFrame(context, attrs),
             "image" or "screenshot" => RenderScreenshot(context, attrs),
             "screenshots" or "gallery" => RenderScreenshots(context, attrs),
@@ -351,6 +352,69 @@ internal static partial class ShortcodeDefaults
     <iframe src=""{System.Web.HttpUtility.HtmlEncode(src)}"" title=""{System.Web.HttpUtility.HtmlEncode(title)}"" loading=""lazy"" referrerpolicy=""strict-origin-when-cross-origin"" allowfullscreen style=""position:absolute;inset:0;width:100%;height:100%;border:0;""></iframe>
   </div>
 </div>";
+    }
+
+    internal static string RenderMap(ShortcodeRenderContext context, Dictionary<string, string> attrs)
+    {
+        EnsureMediaBaseCss(context);
+        var src = ResolveMapEmbedSource(attrs);
+        if (string.IsNullOrWhiteSpace(src))
+            return string.Empty;
+
+        var title = ReadAttr(attrs, "title", "name", "label");
+        if (string.IsNullOrWhiteSpace(title))
+            title = "Map";
+
+        var ratio = NormalizeRatio(ReadAttr(attrs, "ratio", "aspect"), "16/9");
+        var loading = NormalizeLoading(ReadAttr(attrs, "loading"), "lazy");
+        var referrerPolicy = ReadAttr(attrs, "referrerpolicy", "referrerPolicy");
+        if (string.IsNullOrWhiteSpace(referrerPolicy))
+            referrerPolicy = "no-referrer-when-downgrade";
+
+        var caption = ReadAttr(attrs, "caption", "text", "description");
+        var allowFullScreen = ReadBoolAttr(attrs, defaultValue: true, "allowfullscreen", "allowFullScreen");
+        var className = JoinClassTokens("pf-media pf-media-map", ReadAttr(attrs, "class"), ResolveSizeClass(attrs, "xl"));
+        var style = BuildContainerStyle(attrs, "xl", "center");
+
+        var sb = new StringBuilder();
+        sb.AppendLine($@"<figure class=""{System.Web.HttpUtility.HtmlEncode(className)}"" style=""{System.Web.HttpUtility.HtmlEncode(style)}"">");
+        sb.AppendLine(
+            $@"  <div class=""pf-media-frame"" style=""position:relative;width:100%;aspect-ratio:{System.Web.HttpUtility.HtmlEncode(ratio)};overflow:hidden;border-radius:14px;background:#0b0b0f;"">");
+        sb.Append($@"    <iframe src=""{System.Web.HttpUtility.HtmlEncode(src)}"" title=""{System.Web.HttpUtility.HtmlEncode(title)}"" loading=""{System.Web.HttpUtility.HtmlEncode(loading)}"" referrerpolicy=""{System.Web.HttpUtility.HtmlEncode(referrerPolicy)}""");
+        if (allowFullScreen)
+            sb.Append(" allowfullscreen");
+        sb.AppendLine(@" style=""position:absolute;inset:0;width:100%;height:100%;border:0;""></iframe>");
+        sb.AppendLine("  </div>");
+        if (!string.IsNullOrWhiteSpace(caption))
+            sb.AppendLine($@"  <figcaption style=""margin-top:.5rem;font-size:.9rem;opacity:.82;"">{System.Web.HttpUtility.HtmlEncode(caption)}</figcaption>");
+        sb.Append("</figure>");
+        return sb.ToString();
+    }
+
+    private static string ResolveMapEmbedSource(Dictionary<string, string> attrs)
+    {
+        var src = ReadAttr(attrs, "src", "url", "href", "embed");
+        if (!string.IsNullOrWhiteSpace(src))
+            return src;
+
+        var query = ReadAttr(attrs, "query", "address", "location", "place");
+        if (!string.IsNullOrWhiteSpace(query))
+            return "https://www.google.com/maps?q=" + Uri.EscapeDataString(query) + "&output=embed";
+
+        var lat = ReadAttr(attrs, "lat", "latitude");
+        var lng = ReadAttr(attrs, "lng", "lon", "long", "longitude");
+        if (!string.IsNullOrWhiteSpace(lat) && !string.IsNullOrWhiteSpace(lng))
+        {
+            var zoom = ReadIntAttr(attrs, "zoom", "z");
+            var builder = new StringBuilder("https://www.google.com/maps?q=");
+            builder.Append(Uri.EscapeDataString(lat + "," + lng));
+            if (zoom is > 0)
+                builder.Append("&z=").Append(zoom.Value);
+            builder.Append("&output=embed");
+            return builder.ToString();
+        }
+
+        return string.Empty;
     }
 
     internal static string RenderScreenshot(ShortcodeRenderContext context, Dictionary<string, string> attrs)
@@ -774,6 +838,10 @@ internal static partial class ShortcodeDefaults
         if (value.Contains("x.com/", StringComparison.OrdinalIgnoreCase) ||
             value.Contains("twitter.com/", StringComparison.OrdinalIgnoreCase))
             return "x";
+        if (value.Contains("google.com/maps", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("maps.app.goo.gl", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("openstreetmap.org", StringComparison.OrdinalIgnoreCase))
+            return "map";
 
         var lower = value.ToLowerInvariant();
         if (lower.EndsWith(".mp4", StringComparison.Ordinal) ||

@@ -73,6 +73,37 @@ public class WebSiteLocalizationFeaturesTests
     }
 
     [Fact]
+    public void Build_LocalizedPages_EmitHreflangHeadLinks_WithPerLanguageBaseUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-build-domain-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-features-domain-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Domain Build Test", "localization-features-domain-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+
+            var result = BuildSite(root, spec);
+            var enHtmlPath = Path.Combine(result.OutputPath, "docs", "index.html");
+            Assert.True(File.Exists(enHtmlPath));
+
+            var enHtml = File.ReadAllText(enHtmlPath);
+            Assert.Contains("href=\"https://evotec.xyz/docs/\"", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"https://evotec.pl/pl/docs/\"", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("hreflang=\"x-default\" href=\"https://evotec.xyz/docs/\"", enHtml, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Sitemap_Generate_FromEntriesJson_ProducesJsonAndThemedHtmlMap()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-sitemap-json-" + Guid.NewGuid().ToString("N"));
@@ -189,6 +220,67 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains(alternates, alt =>
                 string.Equals(alt.HrefLang, "x-default", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(alt.Href, "https://example.test/docs/", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Sitemap_Generate_EmitsLocalizedAlternates_WithPerLanguageBaseUrls()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-sitemap-domain-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            CreateLocalizedDocsContent(root);
+            CreateSimpleTheme(root, "localization-sitemap-domain-theme", "docs");
+
+            var spec = CreateLocalizedDocsSpec("Localization Features Sitemap Domain Test", "localization-sitemap-domain-theme");
+            spec.Localization!.Languages[0].BaseUrl = "https://evotec.xyz";
+            spec.Localization.Languages[1].BaseUrl = "https://evotec.pl";
+
+            var result = BuildSite(root, spec);
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = result.OutputPath,
+                BaseUrl = spec.BaseUrl,
+                IncludeTextFiles = false
+            });
+            Assert.True(File.Exists(sitemap.OutputPath));
+
+            var doc = XDocument.Load(sitemap.OutputPath);
+            var sitemapNs = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var xhtmlNs = XNamespace.Get("http://www.w3.org/1999/xhtml");
+            var docsEntry = doc
+                .Descendants(sitemapNs + "url")
+                .FirstOrDefault(url => string.Equals(
+                    url.Element(sitemapNs + "loc")?.Value,
+                    "https://example.test/docs/",
+                    StringComparison.OrdinalIgnoreCase));
+
+            Assert.NotNull(docsEntry);
+            var alternates = docsEntry!
+                .Elements(xhtmlNs + "link")
+                .Select(element => new
+                {
+                    HrefLang = element.Attribute("hreflang")?.Value,
+                    Href = element.Attribute("href")?.Value
+                })
+                .ToArray();
+
+            Assert.Contains(alternates, alt =>
+                string.Equals(alt.HrefLang, "en", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(alt.Href, "https://evotec.xyz/docs/", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(alternates, alt =>
+                string.Equals(alt.HrefLang, "pl", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(alt.Href, "https://evotec.pl/pl/docs/", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(alternates, alt =>
+                string.Equals(alt.HrefLang, "x-default", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(alt.Href, "https://evotec.xyz/docs/", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -320,7 +412,7 @@ public class WebSiteLocalizationFeaturesTests
                     DetectFromPath = true,
                     Languages = new[]
                     {
-                        new LanguageSpec { Code = "en", Default = true },
+                        new LanguageSpec { Code = "en", Default = true, BaseUrl = "not-a-valid-url" },
                         new LanguageSpec { Code = "pl", Default = true }
                     }
                 },
@@ -346,6 +438,9 @@ public class WebSiteLocalizationFeaturesTests
             Assert.Contains(
                 verification.Warnings,
                 warning => warning.Contains("defaultLanguage 'de' does not match any active language code", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(
+                verification.Warnings,
+                warning => warning.Contains("defines invalid BaseUrl", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -73,6 +73,8 @@ public sealed class WebSitemapAlternate
     public string HrefLang { get; set; } = string.Empty;
     /// <summary>Route path relative to site root.</summary>
     public string Path { get; set; } = "/";
+    /// <summary>Optional absolute URL override for this alternate.</summary>
+    public string? Url { get; set; }
 }
 
 /// <summary>Generates sitemap.xml for the site output.</summary>
@@ -176,7 +178,7 @@ public static partial class WebSitemapGenerator
         CollapseHtmlRouteAliases(entries);
 
         if (options.IncludeLanguageAlternates && localization is not null)
-            ApplyLanguageAlternates(entries, htmlRoutes, localization);
+            ApplyLanguageAlternates(entries, htmlRoutes, localization, baseUrl);
 
         var today = DateTime.UtcNow.ToString("yyyy-MM-dd");
         var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
@@ -248,7 +250,8 @@ public static partial class WebSitemapGenerator
     private static void ApplyLanguageAlternates(
         Dictionary<string, WebSitemapEntry> entries,
         IEnumerable<string> htmlRoutes,
-        ResolvedLocalizationConfig localization)
+        ResolvedLocalizationConfig localization,
+        string fallbackBaseUrl)
     {
         if (entries is null || htmlRoutes is null || localization is null || !localization.Enabled)
             return;
@@ -283,10 +286,11 @@ public static partial class WebSitemapGenerator
                     continue;
 
                 var alternates = byLanguage
-                    .Select(static pair => new WebSitemapAlternate
+                    .Select(pair => new WebSitemapAlternate
                     {
                         HrefLang = pair.Key,
-                        Path = pair.Value
+                        Path = pair.Value,
+                        Url = ResolveLocalizedAlternateUrl(localization, pair.Key, pair.Value, fallbackBaseUrl)
                     })
                     .ToList();
 
@@ -296,7 +300,8 @@ public static partial class WebSitemapGenerator
                     alternates.Add(new WebSitemapAlternate
                     {
                         HrefLang = "x-default",
-                        Path = defaultRoute
+                        Path = defaultRoute,
+                        Url = ResolveLocalizedAlternateUrl(localization, localization.DefaultLanguage, defaultRoute, fallbackBaseUrl)
                     });
                 }
 
@@ -307,6 +312,22 @@ public static partial class WebSitemapGenerator
                     .ToArray();
             }
         }
+    }
+
+    private static string ResolveLocalizedAlternateUrl(
+        ResolvedLocalizationConfig localization,
+        string languageCode,
+        string route,
+        string fallbackBaseUrl)
+    {
+        var baseUrl = fallbackBaseUrl;
+        if (localization.LanguageBaseUrlsByCode.TryGetValue(languageCode, out var localizedBaseUrl) &&
+            !string.IsNullOrWhiteSpace(localizedBaseUrl))
+        {
+            baseUrl = localizedBaseUrl;
+        }
+
+        return ResolveAbsoluteUrl(baseUrl, route);
     }
 
     private static LocalizedRouteInfo ResolveLocalizedRouteInfo(string route, ResolvedLocalizationConfig localization)
@@ -391,6 +412,7 @@ public static partial class WebSitemapGenerator
             defaultLanguage = "en";
 
         var byPrefix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var languageBaseUrlsByCode = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (localizationSpec?.Languages is { Length: > 0 })
         {
             foreach (var language in localizationSpec.Languages)
@@ -405,6 +427,10 @@ public static partial class WebSitemapGenerator
                     continue;
                 if (!byPrefix.ContainsKey(prefix))
                     byPrefix[prefix] = code;
+
+                var languageBaseUrl = NormalizeAbsoluteBaseUrl(language.BaseUrl);
+                if (!string.IsNullOrWhiteSpace(languageBaseUrl))
+                    languageBaseUrlsByCode[code] = languageBaseUrl;
             }
         }
 
@@ -412,7 +438,8 @@ public static partial class WebSitemapGenerator
         {
             Enabled = localizationSpec?.Enabled == true && byPrefix.Count > 0,
             DefaultLanguage = defaultLanguage,
-            ByPrefix = byPrefix
+            ByPrefix = byPrefix,
+            LanguageBaseUrlsByCode = languageBaseUrlsByCode
         };
     }
 
@@ -421,6 +448,34 @@ public static partial class WebSitemapGenerator
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
         return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
+    }
+
+    private static string? NormalizeAbsoluteBaseUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim().TrimEnd('/');
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            return null;
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            return null;
+        return $"{uri.Scheme}://{uri.Authority}{uri.AbsolutePath.TrimEnd('/')}";
+    }
+
+    private static string ResolveAbsoluteUrl(string baseUrl, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return baseUrl.TrimEnd('/');
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+            return path;
+
+        var normalizedBase = (baseUrl ?? string.Empty).Trim().TrimEnd('/');
+        var normalizedPath = path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path;
+        return normalizedBase + normalizedPath;
     }
 
     private static XElement BuildEntry(string baseUrl, WebSitemapEntry entry, string defaultLastmod, XNamespace sitemapNs, XNamespace xhtmlNs)
@@ -443,10 +498,14 @@ public static partial class WebSitemapGenerator
         if (entry.Alternates is { Length: > 0 })
         {
             foreach (var alternate in entry.Alternates
-                         .Where(static value => !string.IsNullOrWhiteSpace(value.HrefLang) && !string.IsNullOrWhiteSpace(value.Path))
+                         .Where(static value =>
+                             !string.IsNullOrWhiteSpace(value.HrefLang) &&
+                             (!string.IsNullOrWhiteSpace(value.Path) || !string.IsNullOrWhiteSpace(value.Url)))
                          .OrderBy(static value => value.HrefLang, StringComparer.OrdinalIgnoreCase))
             {
-                var href = baseUrl + (alternate.Path.StartsWith("/") ? alternate.Path : "/" + alternate.Path);
+                var href = !string.IsNullOrWhiteSpace(alternate.Url)
+                    ? alternate.Url!
+                    : baseUrl + (alternate.Path.StartsWith("/") ? alternate.Path : "/" + alternate.Path);
                 urlElement.Add(
                     new XElement(
                         xhtmlNs + "link",
@@ -640,6 +699,7 @@ public static partial class WebSitemapGenerator
         public bool Enabled { get; init; }
         public string DefaultLanguage { get; init; } = "en";
         public Dictionary<string, string> ByPrefix { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> LanguageBaseUrlsByCode { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class LocalizedRouteInfo

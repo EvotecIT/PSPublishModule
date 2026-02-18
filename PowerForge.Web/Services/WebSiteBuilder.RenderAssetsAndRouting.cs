@@ -117,7 +117,8 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(route))
                 continue;
 
-            var absoluteUrl = ResolveAbsoluteUrl(spec.BaseUrl, route);
+            var baseUrl = ResolveLanguageBaseUrl(spec, localization, language.Code);
+            var absoluteUrl = ResolveAbsoluteUrl(baseUrl, route);
             if (string.IsNullOrWhiteSpace(absoluteUrl))
                 continue;
 
@@ -883,6 +884,37 @@ public static partial class WebSiteBuilder
         if (Uri.TryCreate(alias, UriKind.Absolute, out var uri))
             return uri.AbsolutePath;
         return alias;
+    }
+
+    private static string[] ExpandAliasRedirectSources(string alias)
+    {
+        var normalized = NormalizeAlias(alias)?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalized))
+            return Array.Empty<string>();
+
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized.TrimStart('/');
+
+        var values = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            normalized
+        };
+
+        if (!normalized.Contains('*', StringComparison.Ordinal) &&
+            !normalized.Contains('{', StringComparison.Ordinal) &&
+            !normalized.Equals("/", StringComparison.Ordinal))
+        {
+            var withoutTrailing = normalized.TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(withoutTrailing) && withoutTrailing.Contains('/', StringComparison.Ordinal))
+                values.Add(withoutTrailing);
+            if (!normalized.EndsWith("/", StringComparison.Ordinal))
+                values.Add(withoutTrailing + "/");
+        }
+
+        return values
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string Slugify(string input)

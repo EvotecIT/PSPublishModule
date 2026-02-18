@@ -156,17 +156,23 @@ public static partial class WebSiteBuilder
 
                 if (matter?.Aliases is { Length: > 0 })
                 {
+                    var seenAliasSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var alias in matter.Aliases)
                     {
                         if (string.IsNullOrWhiteSpace(alias)) continue;
-                        redirects.Add(new RedirectSpec
+                        foreach (var aliasSource in ExpandAliasRedirectSources(alias))
                         {
-                            From = NormalizeAlias(alias),
-                            To = route,
-                            Status = 301,
-                            MatchType = RedirectMatchType.Exact,
-                            PreserveQuery = true
-                        });
+                            if (!seenAliasSources.Add(aliasSource))
+                                continue;
+                            redirects.Add(new RedirectSpec
+                            {
+                                From = aliasSource,
+                                To = route,
+                                Status = 301,
+                                MatchType = RedirectMatchType.Exact,
+                                PreserveQuery = true
+                            });
+                        }
                     }
                 }
 
