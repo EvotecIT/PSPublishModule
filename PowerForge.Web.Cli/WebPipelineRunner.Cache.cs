@@ -411,6 +411,61 @@ internal static partial class WebPipelineRunner
                     outputs.AddRange(ResolveOutputCandidates(baseDir, jsonOutput));
                 }
 
+                var newsOutput = ResolvePath(baseDir,
+                    GetString(step, "newsOutput") ??
+                    GetString(step, "newsOut") ??
+                    GetString(step, "news-output") ??
+                    GetString(step, "news-out"));
+                var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
+                                  (GetArrayOfStrings(step, "newsPaths")?.Length ?? 0) > 0 ||
+                                  (GetArrayOfStrings(step, "news-paths")?.Length ?? 0) > 0 ||
+                                  GetString(step, "newsMetadata") is not null ||
+                                  GetString(step, "news-metadata") is not null;
+                if (newsEnabled)
+                {
+                    if (string.IsNullOrWhiteSpace(newsOutput) && !string.IsNullOrWhiteSpace(siteRoot))
+                        newsOutput = Path.Combine(siteRoot, "sitemap-news.xml");
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, newsOutput));
+                }
+
+                var imageOutput = ResolvePath(baseDir,
+                    GetString(step, "imageOutput") ??
+                    GetString(step, "imageOut") ??
+                    GetString(step, "image-output") ??
+                    GetString(step, "image-out"));
+                var imageEnabled = !string.IsNullOrWhiteSpace(imageOutput) ||
+                                   (GetArrayOfStrings(step, "imagePaths")?.Length ?? 0) > 0 ||
+                                   (GetArrayOfStrings(step, "image-paths")?.Length ?? 0) > 0;
+                if (imageEnabled)
+                {
+                    if (string.IsNullOrWhiteSpace(imageOutput) && !string.IsNullOrWhiteSpace(siteRoot))
+                        imageOutput = Path.Combine(siteRoot, "sitemap-images.xml");
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, imageOutput));
+                }
+
+                var videoOutput = ResolvePath(baseDir,
+                    GetString(step, "videoOutput") ??
+                    GetString(step, "videoOut") ??
+                    GetString(step, "video-output") ??
+                    GetString(step, "video-out"));
+                var videoEnabled = !string.IsNullOrWhiteSpace(videoOutput) ||
+                                   (GetArrayOfStrings(step, "videoPaths")?.Length ?? 0) > 0 ||
+                                   (GetArrayOfStrings(step, "video-paths")?.Length ?? 0) > 0;
+                if (videoEnabled)
+                {
+                    if (string.IsNullOrWhiteSpace(videoOutput) && !string.IsNullOrWhiteSpace(siteRoot))
+                        videoOutput = Path.Combine(siteRoot, "sitemap-videos.xml");
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, videoOutput));
+                }
+
+                var indexOutput = ResolvePath(baseDir,
+                    GetString(step, "sitemapIndex") ??
+                    GetString(step, "sitemap-index") ??
+                    GetString(step, "indexOut") ??
+                    GetString(step, "index-out"));
+                if (!string.IsNullOrWhiteSpace(indexOutput))
+                    outputs.AddRange(ResolveOutputCandidates(baseDir, indexOutput));
+
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
