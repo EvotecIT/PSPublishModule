@@ -37,14 +37,23 @@ Example (shape only):
 
 ```json
 {
-  "cache": true,
-  "profile": true,
+  "extends": "./config/presets/pipeline.web-quality.json",
   "steps": [
     { "task": "build", "id": "build-site", "config": "./site.json", "out": "./_site", "clean": true },
     { "task": "verify", "id": "verify-site", "dependsOn": "build-site", "config": "./site.json" },
-    { "task": "audit", "id": "audit-site", "dependsOn": "build-site", "config": "./site.json", "modes": ["ci"] },
-    { "task": "optimize", "id": "optimize-site", "dependsOn": "build-site", "config": "./site.json", "out": "./_site", "modes": ["ci"] }
+    { "task": "audit", "id": "audit-site", "dependsOn": "build-site", "siteRoot": "./_site", "modes": ["ci"] }
   ]
+}
+```
+
+Preset example (`config/presets/pipeline.web-quality.json`):
+
+```json
+{
+  "cache": true,
+  "cachePath": "./.powerforge/pipeline-cache.json",
+  "profile": true,
+  "profilePath": "./_reports/pipeline-profile.json"
 }
 ```
 

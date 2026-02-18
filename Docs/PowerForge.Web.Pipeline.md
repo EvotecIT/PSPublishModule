@@ -25,6 +25,38 @@ Minimal pipeline:
 }
 ```
 
+### Pipeline inheritance (`extends`)
+
+Pipeline configs can inherit from one or more base files:
+
+- `extends` (or `Extends`) accepts a string or array of strings.
+- Base configs are loaded in order.
+- Object values merge recursively.
+- `steps` arrays are appended (`base` steps first, then child steps).
+
+Example:
+```json
+{
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
+  "extends": "./config/presets/pipeline.web-quality.json"
+}
+```
+
+With local additions:
+```json
+{
+  "$schema": "./Schemas/powerforge.web.pipelinespec.schema.json",
+  "extends": "./config/presets/pipeline.web-quality.json",
+  "steps": [
+    { "task": "indexnow", "modes": ["ci"], "baseUrl": "https://example.com", "keyEnv": "INDEXNOW_KEY", "sitemap": "./_site/sitemap.xml" }
+  ]
+}
+```
+
+Notes:
+- Inheritance loops are detected and fail fast.
+- Relative paths inside merged steps resolve from the root pipeline file you execute.
+
 ### CLI flags
 
 `powerforge-web pipeline` supports a few command-line flags to speed up local iteration:

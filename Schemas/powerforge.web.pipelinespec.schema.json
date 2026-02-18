@@ -6,6 +6,20 @@
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
+    "Extends": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      ],
+      "description": "Optional base pipeline config path(s) to merge before this file. Child values override and steps arrays are appended."
+    },
+    "extends": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+      ],
+      "description": "Alias for Extends."
+    },
     "SchemaVersion": { "type": "integer", "minimum": 1 },
     "cache": { "type": "boolean" },
     "cachePath": { "type": "string" },
@@ -17,7 +31,11 @@
       "items": { "$ref": "#/$defs/PipelineStep" }
     }
   },
-  "required": ["steps"],
+  "anyOf": [
+    { "required": ["steps"] },
+    { "required": ["extends"] },
+    { "required": ["Extends"] }
+  ],
   "$defs": {
     "PipelineStep": {
       "type": "object",

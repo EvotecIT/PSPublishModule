@@ -1,0 +1,6 @@
+{
+  "cache": true,
+  "cachePath": "./.powerforge/pipeline-cache.json",
+  "profile": true,
+  "profilePath": "./_reports/pipeline-profile.json"
+}

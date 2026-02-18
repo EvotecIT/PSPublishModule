@@ -1,6 +1,6 @@
 # PowerForge.Web Website Starter (Golden Path)
 
-Last updated: 2026-02-10
+Last updated: 2026-02-18
 
 This is the canonical, short "how we build sites" document meant to prevent:
 - half-cooked themes,
@@ -28,6 +28,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 1. Create/confirm these files exist at repo root:
    - `site.json`
    - `pipeline.json`
+   - `config/presets/pipeline.web-quality.json`
    - `.powerforge/verify-baseline.json`
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
@@ -39,6 +40,8 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - verify: `baseline`, `failOnNewWarnings`
      - audit: `baseline`, `failOnNewIssues`, budgets (`maxTotalFiles`, etc.)
 3. `pipeline.json`:
+   - keep root `pipeline.json` small and inherit shared defaults via `extends`
+   - put shared build/verify/audit/cache/profile defaults in `config/presets/pipeline.web-quality.json`
    - if your site depends on content/projects sourced from other repos, declare them under `Sources` in `site.json`
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes
@@ -106,10 +109,9 @@ powerforge-web sources-sync --config ./site.json --lock-mode update --lock-path 
 Example `pipeline.json` snippet:
 ```json
 {
+  "extends": "./config/presets/pipeline.web-quality.json",
   "steps": [
-    { "task": "sources-sync", "config": "./site.json", "lockMode": "verify", "lockPath": "./.powerforge/git-sync-lock.json" },
-    { "task": "build", "config": "./site.json", "out": "./_site" },
-    { "task": "verify", "config": "./site.json" }
+    { "task": "sources-sync", "config": "./site.json", "lockMode": "verify", "lockPath": "./.powerforge/git-sync-lock.json" }
   ]
 }
 ```

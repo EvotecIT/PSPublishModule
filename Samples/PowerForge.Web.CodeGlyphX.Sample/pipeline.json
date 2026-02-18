@@ -1,5 +1,6 @@
 {
   "$schema": "../Schemas/powerforge.web.pipelinespec.schema.json",
+  "extends": "./config/presets/pipeline.shared.json",
   "steps": [
     {
       "task": "build",
