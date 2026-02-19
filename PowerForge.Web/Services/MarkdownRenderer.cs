@@ -1,9 +1,15 @@
 using OfficeIMO.Markdown;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 internal static class MarkdownRenderer
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex FenceRegex = new("^```", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex HtmlImgTagRegex = new("<img\\b[\\s\\S]*?>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+
     private static readonly MarkdownReaderOptions GitHubLikeReaderOptions = new()
     {
         // GitHub-flavored markdown does not support definition lists by default.
@@ -17,6 +23,7 @@ internal static class MarkdownRenderer
 
         try
         {
+            content = NormalizeMultilineHtmlImageTags(content);
             var doc = MarkdownReader.Parse(content, GitHubLikeReaderOptions);
             var options = new HtmlOptions
             {
@@ -34,6 +41,77 @@ internal static class MarkdownRenderer
         {
             return $"<pre class=\"markdown-error\">Error rendering markdown: {System.Web.HttpUtility.HtmlEncode(ex.Message)}</pre>";
         }
+    }
+
+    private static string NormalizeMultilineHtmlImageTags(string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+            return string.Empty;
+
+        var lines = markdown.Split('\n');
+        var inFence = false;
+        var outsideFence = new StringBuilder();
+        var insideFence = new StringBuilder();
+        var rebuilt = new StringBuilder(markdown.Length + 64);
+
+        void FlushOutside()
+        {
+            if (outsideFence.Length == 0) return;
+            var normalized = HtmlImgTagRegex.Replace(outsideFence.ToString(), match =>
+            {
+                var value = match.Value;
+                if (value.IndexOf('\n') < 0 && value.IndexOf('\r') < 0)
+                    return value;
+
+                value = value.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
+                value = Regex.Replace(value, "\\s+", " ", RegexOptions.CultureInvariant, RegexTimeout).Trim();
+                value = Regex.Replace(value, "\\s+/\\s*>", " />", RegexOptions.CultureInvariant, RegexTimeout);
+                value = Regex.Replace(value, "\\s+>", ">", RegexOptions.CultureInvariant, RegexTimeout);
+                return value;
+            });
+            rebuilt.Append(normalized);
+            outsideFence.Clear();
+        }
+
+        void FlushInside()
+        {
+            if (insideFence.Length == 0) return;
+            rebuilt.Append(insideFence);
+            insideFence.Clear();
+        }
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine;
+            var target = inFence ? insideFence : outsideFence;
+            target.Append(line);
+            target.Append('\n');
+
+            if (!FenceRegex.IsMatch(line.TrimStart()))
+                continue;
+
+            if (inFence)
+            {
+                FlushInside();
+                inFence = false;
+            }
+            else
+            {
+                FlushOutside();
+                inFence = true;
+            }
+        }
+
+        if (inFence)
+            FlushInside();
+        else
+            FlushOutside();
+
+        var updated = rebuilt.ToString();
+        if (!markdown.EndsWith('\n') && updated.EndsWith('\n'))
+            updated = updated[..^1];
+
+        return updated;
     }
 
     private static string InjectHeadingIds(string html)

@@ -72,6 +72,43 @@ public class WebMarkdownRendererGfmTests
         Assert.DoesNotContain("`eventlog`", headingText, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_MultilineHtmlImageTag_IsPreservedWithAttributes()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg"
+                 alt="Issue Ops project board view with open infra blocker issues, status, linked pull request columns, and quick filtering for maintainer triage"
+                 width="1600"
+                 height="900"
+                 loading="lazy"
+                 decoding="async" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_SingleLineHtmlImageTag_IsPreserved()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg" alt="Issue Ops board" width="1600" height="900" loading="lazy" decoding="async" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(string markdown)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));
