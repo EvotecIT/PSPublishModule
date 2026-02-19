@@ -198,15 +198,26 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
 - Completed (engine-side building blocks):
   - Surfaces runtime projection: `Navigation.Surfaces` -> `navigation.surfaces`
   - Scriban `pf.*` reference renderer helpers
+  - Engine-owned nav export contract (`site-nav.json`) now emits stable metadata + canonical surface aliases for non-Scriban consumers.
 - Remaining:
   - Standardize surface names (canonical: `main`, `docs`, `apidocs`, `products`; treat `api` as alias for `apidocs`) in starter docs.
-  - Generate an engine-owned JSON payload suitable as a stable reference renderer input for non-Scriban consumers.
   - Verify:
     - warn in dev, fail in CI when `features` require a surface but site/theme doesn’t provide it.
 
 ### M2: Blog UX Defaults (Next)
 
-- Standardize blog list/term layouts in scaffold themes, so blog becomes turnkey.
+- Completed (starter baseline):
+  - Scaffold now seeds editorial defaults for both `blog` and `news` collections (sample content + menu entries).
+  - Scriban scaffold now emits dedicated `list`/`post`/`taxonomy`/`term` layouts with card-style listings and pagination links.
+- Completed (cross-theme helper baseline):
+  - Scriban `pf.editorial_cards` helper renders reusable editorial card markup (collection/date/summary/tags/image) from list contexts so non-scaffold themes can adopt the same listing behavior quickly.
+  - Scriban `pf.editorial_pager` helper standardizes previous/next links for paginated editorial streams.
+  - `pf.editorial_cards` now supports style variants (`default`/`compact`/`hero`/`featured`) so themes can switch editorial density/emphasis without duplicating loops.
+  - `pf.editorial_cards` also supports optional `grid_class`/`card_class` overrides for per-site styling without forking helper markup.
+  - Verify now warns when Scriban editorial list layouts don't render list context (`items`/`pf.editorial_cards`) or omit pagination rendering for paginated collections.
+  - Verify now validates `pf.editorial_cards` variant/class usage against `featureContracts.blog/news.requiredCssSelectors` when editorial feature contracts are defined.
+- Remaining:
+  - Add optional render-mode contracts so themes can declare which editorial variants are officially styled.
 
 ### M2.5: SEO Parity Foundation (Next)
 

@@ -9,6 +9,13 @@ namespace PowerForge.Web;
 /// <summary>Navigation payload projection helpers.</summary>
 public static partial class WebSiteBuilder
 {
+    private static readonly string[] CanonicalNavSurfaces = { "main", "docs", "apidocs", "products" };
+    private static readonly IReadOnlyDictionary<string, string> NavSurfaceAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["api"] = "apidocs",
+        ["apiDocs"] = "apidocs"
+    };
+
     private static void WriteSiteNavData(SiteSpec spec, string outputRoot, MenuSpec[] menuSpecs)
     {
         var dataRoot = string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot;
@@ -42,7 +49,10 @@ public static partial class WebSiteBuilder
 
         var payload = new
         {
-            schemaVersion = 1,
+            schemaVersion = 2,
+            format = "powerforge.site-nav",
+            surfaceCanonicalNames = CanonicalNavSurfaces,
+            surfaceAliases = NavSurfaceAliases,
             generated = true,
             primary,
             menus,
@@ -79,6 +89,9 @@ public static partial class WebSiteBuilder
 
             var name = surface.Name.Trim();
             if (string.IsNullOrWhiteSpace(name))
+                continue;
+            var exportName = NormalizeSurfaceNameForExport(name);
+            if (result.ContainsKey(exportName))
                 continue;
 
             var contextPath = NormalizeRouteForMatch(string.IsNullOrWhiteSpace(surface.Path) ? "/" : surface.Path);
@@ -159,8 +172,10 @@ public static partial class WebSiteBuilder
                 .Where(kvp => kvp.Key.StartsWith("footer", StringComparison.OrdinalIgnoreCase))
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
 
-            result[name] = new
+            result[exportName] = new
             {
+                name = exportName,
+                declaredName = string.Equals(exportName, name, StringComparison.OrdinalIgnoreCase) ? null : name,
                 context = new
                 {
                     path = contextPath,
@@ -184,6 +199,18 @@ public static partial class WebSiteBuilder
         }
 
         return result.Count == 0 ? null : result;
+    }
+
+    private static string NormalizeSurfaceNameForExport(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if (NavSurfaceAliases.TryGetValue(trimmed, out var canonical) && !string.IsNullOrWhiteSpace(canonical))
+            return canonical.Trim().ToLowerInvariant();
+
+        return trimmed.ToLowerInvariant();
     }
 
     private static NavigationSurfaceSpec[] ResolveSurfaceSpecs(SiteSpec spec, MenuSpec[] menuSpecs)

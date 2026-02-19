@@ -320,9 +320,12 @@ the generator will **not** overwrite it.
 
 The generated `site-nav.json` also includes:
 - `schemaVersion`: export payload version (allows safe evolution for external consumers)
+- `format`: stable payload identifier (`powerforge.site-nav`)
+- `surfaceCanonicalNames`: canonical surface keys (`main`, `docs`, `apidocs`, `products`)
+- `surfaceAliases`: alias map for compatibility (`api` -> `apidocs`)
 - `profiles`: exported `Navigation.Profiles` rules (so other tools can select the same nav your theme uses)
 - `surfaces`: resolved navigation projections for stable "nav surfaces" like `main`, `docs`, `apidocs`, `products`.
-  - `api` / `apiDocs` are treated as aliases for `apidocs` when validating/normalizing surface names.
+  - surface keys are exported in canonical form (`apidocs`, not `api`/`apiDocs`).
   - Use `Navigation.Surfaces` in `site.json` to define/override; each surface captures the selected profile context and resolved menu projections (`primary`, optional `sidebar`, optional `products`).
 
 ### Markdown-friendly data fields
@@ -478,6 +481,22 @@ Best practice (theme rendering):
   - `{{ pf.nav_links "main" }}` renders the main menu as a flat list of `<a>` elements (supports `is-active` / `is-ancestor` classes).
   - `{{ pf.nav_actions }}` renders `Navigation.Actions` as links/buttons.
   - `{{ pf.menu_tree "docs" 4 }}` renders a nested `<ul>` tree for sidebar menus.
+  - `{{ pf.editorial_cards }}` renders reusable card markup from current list context (`items`) with optional arguments:
+    - `max_items` (default `0` = all)
+    - `excerpt_length` (default `160`)
+    - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
+    - `image_aspect` (default `"16/9"`, accepts `/` or `:` like `"4:3"`)
+    - `fallback_image` (default empty; if omitted, helper falls back to `site.social.image` when set)
+    - `variant` (default `"default"`, options: `"default"`, `"compact"`, `"hero"`, `"featured"`; controls helper-emitted CSS classes)
+    - `grid_class` (optional extra classes appended to the wrapper grid container)
+    - `card_class` (optional extra classes appended to each rendered card)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}`
+    - Verify integration: if the theme defines `featureContracts.blog/news`, verify checks that variant and override selectors used by `pf.editorial_cards` are declared in `requiredCssSelectors`, with copy/paste contract hints (including likely `cssHrefs` candidates when detectable) when missing.
+  - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
+    - `newer_label` (default `"Newer posts"`)
+    - `older_label` (default `"Older posts"`)
+    - `css_class` (default `"pf-pagination"`)
+    - Example: `{{ pf.editorial_pager "Newer" "Older" }}`
 
 ### Navigation surfaces (stable projections)
 The runtime `navigation` object exposes `navigation.surfaces` as named projections.

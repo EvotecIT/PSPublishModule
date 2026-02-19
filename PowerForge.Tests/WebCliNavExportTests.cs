@@ -6,6 +6,9 @@ using Xunit;
 
 public class WebCliNavExportTests
 {
+    // outputSchemaVersion controls CLI JSON envelope schema, not site-nav.json contract schema.
+    private const int CliEnvelopeSchemaVersion = 1;
+
     [Fact]
     public void HandleSubCommand_NavExport_WritesDefaultOutput()
     {
@@ -21,7 +24,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
 
@@ -30,9 +33,45 @@ public class WebCliNavExportTests
 
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
             var json = doc.RootElement;
-            Assert.Equal(1, json.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("powerforge.site-nav", json.GetProperty("format").GetString());
             Assert.True(json.GetProperty("generated").GetBoolean());
+            Assert.True(json.TryGetProperty("surfaceAliases", out var aliases));
+            Assert.Equal("apidocs", aliases.GetProperty("api").GetString());
             Assert.True(json.TryGetProperty("surfaces", out _));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void HandleSubCommand_NavExport_NormalizesApiSurfaceAliasToApidocs()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-nav-export-surface-alias-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var configPath = WriteSiteFixture(root, includeApiAliasSurface: true);
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand(
+                "nav-export",
+                new[] { "--config", configPath },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
+
+            Assert.Equal(0, exitCode);
+
+            var outPath = Path.Combine(root, "static", "data", "site-nav.json");
+            Assert.True(File.Exists(outPath));
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
+            var surfaces = doc.RootElement.GetProperty("surfaces");
+            Assert.True(surfaces.TryGetProperty("apidocs", out _));
+            Assert.False(surfaces.TryGetProperty("api", out _));
         }
         finally
         {
@@ -59,7 +98,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(1, exitCode);
             Assert.Equal(original, File.ReadAllText(outPath));
@@ -88,7 +127,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
@@ -119,7 +158,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath, "--overwrite" },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(0, exitCode);
             using var doc = JsonDocument.Parse(File.ReadAllText(outPath));
@@ -151,7 +190,7 @@ public class WebCliNavExportTests
                 new[] { "--config", configPath, "--out", outside, "--overwrite" },
                 outputJson: true,
                 logger: new WebConsoleLogger(),
-                outputSchemaVersion: 1);
+                outputSchemaVersion: CliEnvelopeSchemaVersion);
 
             Assert.Equal(1, exitCode);
             Assert.False(File.Exists(outside));
@@ -163,7 +202,7 @@ public class WebCliNavExportTests
         }
     }
 
-    private static string WriteSiteFixture(string root)
+    private static string WriteSiteFixture(string root, bool includeApiAliasSurface = false)
     {
         var contentRoot = Path.Combine(root, "content", "pages");
         Directory.CreateDirectory(contentRoot);
@@ -178,25 +217,45 @@ public class WebCliNavExportTests
             """);
 
         var configPath = Path.Combine(root, "site.json");
-        File.WriteAllText(configPath,
-            """
-            {
-              "Name": "Nav Export Test",
-              "BaseUrl": "https://example.test",
-              "ContentRoot": "content",
-              "Collections": [
-                { "Name": "pages", "Input": "content/pages", "Output": "/" }
-              ],
-              "Navigation": {
-                "Menus": [
-                  { "Name": "main", "Items": [ { "Title": "Home", "Url": "/" } ] }
+        var configJson = includeApiAliasSurface
+            ? """
+              {
+                "Name": "Nav Export Test",
+                "BaseUrl": "https://example.test",
+                "ContentRoot": "content",
+                "Collections": [
+                  { "Name": "pages", "Input": "content/pages", "Output": "/" }
                 ],
-                "Surfaces": [
-                  { "Name": "main", "Path": "/" }
-                ]
+                "Navigation": {
+                  "Menus": [
+                    { "Name": "main", "Items": [ { "Title": "Home", "Url": "/" } ] }
+                  ],
+                  "Surfaces": [
+                    { "Name": "main", "Path": "/" },
+                    { "Name": "api", "Path": "/api/", "Layout": "apiDocs", "PrimaryMenu": "main" }
+                  ]
+                }
               }
-            }
-            """);
+              """
+            : """
+              {
+                "Name": "Nav Export Test",
+                "BaseUrl": "https://example.test",
+                "ContentRoot": "content",
+                "Collections": [
+                  { "Name": "pages", "Input": "content/pages", "Output": "/" }
+                ],
+                "Navigation": {
+                  "Menus": [
+                    { "Name": "main", "Items": [ { "Title": "Home", "Url": "/" } ] }
+                  ],
+                  "Surfaces": [
+                    { "Name": "main", "Path": "/" }
+                  ]
+                }
+              }
+              """;
+        File.WriteAllText(configPath, configJson);
 
         return configPath;
     }

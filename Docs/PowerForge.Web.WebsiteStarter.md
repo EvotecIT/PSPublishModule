@@ -33,7 +33,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
    - set `DefaultTheme`
-   - set `Features` explicitly (for example `["docs","apiDocs","search"]`)
+  - set `Features` explicitly (for example `["docs","blog","news","apiDocs","search"]`)
    - define navigation menus + actions
    - define `Navigation.Surfaces` explicitly (canonical: `main`, `docs`, `apidocs`, optional `products`; `api` is treated as an alias of `apidocs`) to keep docs/API navigation deterministic
    - configure quality gates:
@@ -55,6 +55,9 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - define `featureContracts` for drift-prone features:
      - `apiDocs`: required `api-header/api-footer` and required CSS selectors
      - `docs`: required `docs` layout and required slots/partials
+   - for Scriban editorial layouts (`blog`/`news`), prefer `{{ pf.editorial_cards ... }}` + `{{ pf.editorial_pager ... }}` in list layouts so verify can detect regressions early
+   - `pf.editorial_cards` supports variants (`default`, `compact`, `hero`, `featured`) plus optional `grid_class`/`card_class` overrides so themes can evolve layout style without duplicating list rendering loops
+   - if you define `featureContracts.blog` / `featureContracts.news`, include selectors for the variants/override classes used by `pf.editorial_cards` in `requiredCssSelectors`
 5. Layout hooks:
    - layouts must include:
      - `{{ assets.critical_css_html }}`

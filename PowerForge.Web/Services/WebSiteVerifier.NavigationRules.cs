@@ -750,6 +750,12 @@ public static partial class WebSiteVerifier
                 primary.ValueKind != JsonValueKind.Array)
                 return;
 
+            var isGeneratedNav = doc.RootElement.TryGetProperty("generated", out var generatedProp) &&
+                                 generatedProp.ValueKind == JsonValueKind.True;
+            var hasStableContract = ValidateSiteNavContractShape(doc.RootElement, warnings, isGeneratedNav);
+            if (!hasStableContract && isGeneratedNav)
+                return;
+
             if (!doc.RootElement.TryGetProperty("menuModels", out var menuModels) ||
                 menuModels.ValueKind != JsonValueKind.Array)
             {
@@ -884,6 +890,12 @@ public static partial class WebSiteVerifier
             var normalized = NormalizeSurfaceName(property.Name);
             if (!string.IsNullOrWhiteSpace(normalized))
                 exported.Add(normalized);
+
+            if (property.Name.Equals("api", StringComparison.OrdinalIgnoreCase) ||
+                property.Name.Equals("apiDocs", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"Navigation lint: site-nav.json surface key '{property.Name}' should use canonical key 'apidocs'. Regenerate nav export to keep surface contracts stable.");
+            }
         }
 
         foreach (var required in expected)
@@ -893,6 +905,66 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Navigation lint: site-nav.json surfaces are missing expected '{required}' surface. Regenerate nav export so downstream consumers use the same navigation contracts.");
             }
         }
+    }
+
+    private static bool ValidateSiteNavContractShape(JsonElement root, List<string> warnings, bool isGenerated)
+    {
+        if (warnings is null || root.ValueKind != JsonValueKind.Object)
+            return false;
+
+        var valid = true;
+
+        if (!root.TryGetProperty("schemaVersion", out var schemaVersionProp) ||
+            schemaVersionProp.ValueKind != JsonValueKind.Number ||
+            !schemaVersionProp.TryGetInt32(out var schemaVersion) ||
+            schemaVersion < 2)
+        {
+            if (isGenerated)
+                warnings.Add("Navigation lint: generated site-nav.json uses a legacy contract (schemaVersion < 2). Regenerate nav export.");
+            else
+                warnings.Add("Navigation lint: site-nav.json should set schemaVersion >= 2 (stable nav export contract). Regenerate nav export.");
+            if (isGenerated)
+                return false;
+            valid = false;
+        }
+
+        if (!root.TryGetProperty("format", out var formatProp) ||
+            formatProp.ValueKind != JsonValueKind.String ||
+            !string.Equals(formatProp.GetString(), "powerforge.site-nav", StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add("Navigation lint: site-nav.json should set format='powerforge.site-nav' so downstream tools can detect the stable nav contract.");
+            valid = false;
+        }
+
+        if (!root.TryGetProperty("surfaceAliases", out var aliasesProp) ||
+            aliasesProp.ValueKind != JsonValueKind.Object ||
+            !TryGetAliasCanonical(aliasesProp, "api", out var apiAlias) ||
+            !string.Equals(apiAlias, "apidocs", StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add("Navigation lint: site-nav.json should define surfaceAliases.api='apidocs' for canonical API surface resolution.");
+            valid = false;
+        }
+
+        return valid;
+    }
+
+    private static bool TryGetAliasCanonical(JsonElement aliases, string alias, out string value)
+    {
+        value = string.Empty;
+        if (aliases.ValueKind != JsonValueKind.Object || string.IsNullOrWhiteSpace(alias))
+            return false;
+
+        foreach (var property in aliases.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, alias, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (property.Value.ValueKind != JsonValueKind.String)
+                return false;
+            value = property.Value.GetString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        return false;
     }
 
     private static void ValidateNavigationSurfaceContract(string expectedName, NavigationSurfaceSpec surface, List<string> warnings)

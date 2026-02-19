@@ -1,13 +1,18 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 /// <summary>Theme contract, layout, and token verification rules.</summary>
 public static partial class WebSiteVerifier
 {
+    private static readonly TimeSpan EditorialRegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex ScribanEditorialCardsCallRegex = new(@"pf\.editorial_cards(?<args>[^\r\n}]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, EditorialRegexTimeout);
+    private static readonly Regex ScribanArgumentRegex = new("\"[^\"]*\"|'[^']*'|\\S+", RegexOptions.Compiled | RegexOptions.CultureInvariant, EditorialRegexTimeout);
+
     private static void ValidateThemeFeatureContract(SiteSpec spec, WebSitePlan plan, List<string> warnings)
     {
         if (spec is null || plan is null || warnings is null) return;
@@ -129,6 +134,8 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Theme contract: site uses feature 'docs' but theme '{manifest.Name}' does not provide a 'docs' layout.");
             }
         }
+
+        ValidateEditorialLayoutConventions(spec, manifest, themeRoot, loader, enabled, warnings);
     }
 
     private static ThemeFeatureContractSpec? TryGetFeatureContract(ThemeManifest manifest, string feature)
@@ -220,6 +227,359 @@ public static partial class WebSiteVerifier
                html.IndexOf("pf.menu_tree", StringComparison.OrdinalIgnoreCase) >= 0 ||
                html.IndexOf("navigation.menus", StringComparison.OrdinalIgnoreCase) >= 0 ||
                html.IndexOf("navigation.actions", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static void ValidateEditorialLayoutConventions(
+        SiteSpec spec,
+        ThemeManifest manifest,
+        string themeRoot,
+        ThemeLoader loader,
+        HashSet<string> enabled,
+        List<string> warnings)
+    {
+        if (spec is null || manifest is null || loader is null || string.IsNullOrWhiteSpace(themeRoot) || enabled is null || warnings is null)
+            return;
+
+        var engine = spec.ThemeEngine ?? manifest.Engine ?? "simple";
+        if (!engine.Equals("scriban", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!enabled.Contains("blog") && !enabled.Contains("news"))
+            return;
+
+        var collections = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Where(IsEditorialCollection)
+            .ToArray();
+        if (collections.Length == 0)
+            return;
+
+        var paginationDefault = spec.Pagination?.Enabled != false && (spec.Pagination?.DefaultPageSize ?? 0) > 0;
+        foreach (var collection in collections)
+        {
+            var listLayout = string.IsNullOrWhiteSpace(collection.ListLayout)
+                ? collection.DefaultLayout
+                : collection.ListLayout;
+            if (string.IsNullOrWhiteSpace(listLayout))
+                continue;
+
+            var listLayoutPath = loader.ResolveLayoutPath(themeRoot, manifest, listLayout);
+            if (string.IsNullOrWhiteSpace(listLayoutPath) || !File.Exists(listLayoutPath))
+                continue;
+
+            string layoutContent;
+            try
+            {
+                layoutContent = File.ReadAllText(listLayoutPath);
+            }
+            catch
+            {
+                continue;
+            }
+
+            var hasEditorialCards = layoutContent.IndexOf("pf.editorial_cards", StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasListContext = layoutContent.IndexOf("for item in items", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 layoutContent.IndexOf("items.size", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (!hasEditorialCards && !hasListContext)
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' is used for editorial collection '{collection.Name}' but does not render list context (`items`) or `pf.editorial_cards`. " +
+                             "Editorial section pages may render headers without posts.");
+            }
+            else if (hasEditorialCards)
+            {
+                ValidateEditorialCardsCssContracts(spec, collection, manifest, themeRoot, loader, listLayout, layoutContent, warnings);
+            }
+
+            var paginationEnabled = (collection.PageSize ?? 0) > 0 || paginationDefault;
+            if (!paginationEnabled)
+                continue;
+
+            var hasPagerHelper = layoutContent.IndexOf("pf.editorial_pager", StringComparison.OrdinalIgnoreCase) >= 0;
+            var hasManualPager = layoutContent.IndexOf("pagination.", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!hasPagerHelper && !hasManualPager)
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' is used for paginated editorial collection '{collection.Name}' but does not render pagination (`pf.editorial_pager` or `pagination.*`).");
+            }
+        }
+    }
+
+    private static void ValidateEditorialCardsCssContracts(
+        SiteSpec spec,
+        CollectionSpec collection,
+        ThemeManifest manifest,
+        string themeRoot,
+        ThemeLoader loader,
+        string listLayout,
+        string layoutContent,
+        List<string> warnings)
+    {
+        if (spec is null || collection is null || manifest is null || loader is null || warnings is null || string.IsNullOrWhiteSpace(themeRoot) || string.IsNullOrWhiteSpace(layoutContent))
+            return;
+
+        var usages = ExtractEditorialCardsUsages(layoutContent)
+            .Where(static usage => usage.RequiresSelectorContract)
+            .ToArray();
+        if (usages.Length == 0)
+            return;
+
+        var expectedSelectors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var usage in usages)
+        {
+            foreach (var selector in usage.GetExpectedSelectors())
+            {
+                if (!string.IsNullOrWhiteSpace(selector))
+                    expectedSelectors.Add(selector);
+            }
+        }
+
+        if (expectedSelectors.Count == 0)
+            return;
+
+        var feature = ResolveEditorialFeatureName(collection);
+        if (string.IsNullOrWhiteSpace(feature))
+            return;
+
+        var suggestedCssHrefs = ResolveCssHrefsForRoute(spec, themeRoot, loader, manifest, ResolveFeatureSampleRoute(feature));
+        var suggestion = BuildEditorialSelectorContractHint(feature, expectedSelectors, suggestedCssHrefs);
+        var contract = TryGetFeatureContract(manifest, feature);
+        if (contract is null)
+        {
+            if (manifest.FeatureContracts is { Count: > 0 })
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature} is not defined. Add requiredCssSelectors for contract-driven editorial styling. Suggested contract fragment: {suggestion}");
+            }
+            return;
+        }
+
+        var requiredSelectors = (contract.RequiredCssSelectors ?? Array.Empty<string>())
+            .Where(static selector => !string.IsNullOrWhiteSpace(selector))
+            .Select(static selector => selector.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var declaredCssHrefs = (contract.CssHrefs ?? Array.Empty<string>())
+            .Where(static href => !string.IsNullOrWhiteSpace(href))
+            .Select(static href => href.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hintCssHrefs = declaredCssHrefs.Length > 0 ? declaredCssHrefs : suggestedCssHrefs;
+
+        if (requiredSelectors.Length == 0)
+        {
+            warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature}.requiredCssSelectors is empty. Suggested contract fragment: {BuildEditorialSelectorContractHint(feature, expectedSelectors, hintCssHrefs)}");
+            return;
+        }
+
+        var missing = expectedSelectors
+            .Where(expected => !ContainsContractSelector(requiredSelectors, expected))
+            .ToArray();
+
+        if (missing.Length == 0)
+            return;
+
+        var preview = string.Join(", ", missing.Take(8));
+        var more = missing.Length > 8 ? $" (+{missing.Length - 8} more)" : string.Empty;
+        var missingSuggestion = BuildEditorialSelectorContractHint(feature, missing, hintCssHrefs);
+        warnings.Add($"Theme CSS contract: feature '{feature}' layout '{listLayout}' uses pf.editorial_cards selectors that are not declared in featureContracts.{feature}.requiredCssSelectors: {preview}{more}. Suggested additions: {missingSuggestion}");
+    }
+
+    private static bool IsEditorialCollection(CollectionSpec? collection)
+    {
+        if (collection is null)
+            return false;
+        if (!string.IsNullOrWhiteSpace(collection.Name) &&
+            (collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
+             collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(collection.Output) &&
+               (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase) ||
+                collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ResolveEditorialFeatureName(CollectionSpec collection)
+    {
+        if (collection is null)
+            return string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(collection.Name))
+        {
+            var normalized = NormalizeFeatureName(collection.Name);
+            if (string.Equals(normalized, "blog", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "news", StringComparison.OrdinalIgnoreCase))
+                return normalized;
+        }
+
+        if (!string.IsNullOrWhiteSpace(collection.Output))
+        {
+            if (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase))
+                return "blog";
+            if (collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase))
+                return "news";
+        }
+
+        return string.Empty;
+    }
+
+    private static bool ContainsContractSelector(IEnumerable<string> selectors, string expectedSelector)
+    {
+        if (selectors is null || string.IsNullOrWhiteSpace(expectedSelector))
+            return false;
+
+        foreach (var selector in selectors)
+        {
+            if (string.IsNullOrWhiteSpace(selector))
+                continue;
+
+            if (selector.IndexOf(expectedSelector, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string BuildEditorialSelectorContractHint(string feature, IEnumerable<string> selectors, IEnumerable<string>? cssHrefs = null)
+    {
+        if (string.IsNullOrWhiteSpace(feature) || selectors is null)
+            return "\"featureContracts\": {}";
+
+        var normalized = selectors
+            .Where(static selector => !string.IsNullOrWhiteSpace(selector))
+            .Select(static selector => selector.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static selector => selector, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var normalizedCssHrefs = (cssHrefs ?? Array.Empty<string>())
+            .Where(static href => !string.IsNullOrWhiteSpace(href))
+            .Select(static href => href.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static href => href, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalized.Length == 0)
+        {
+            if (normalizedCssHrefs.Length == 0)
+                return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": [] }} }}";
+
+            var cssHintOnly = BuildHintArrayLiteral(normalizedCssHrefs);
+            return $"\"featureContracts\": {{ \"{feature}\": {{ \"cssHrefs\": {cssHintOnly}, \"requiredCssSelectors\": [] }} }}";
+        }
+
+        var selectorHint = BuildHintArrayLiteral(normalized);
+        if (normalizedCssHrefs.Length == 0)
+            return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": {selectorHint} }} }}";
+
+        var cssHint = BuildHintArrayLiteral(normalizedCssHrefs);
+        return $"\"featureContracts\": {{ \"{feature}\": {{ \"cssHrefs\": {cssHint}, \"requiredCssSelectors\": {selectorHint} }} }}";
+    }
+
+    private static string BuildHintArrayLiteral(string[] values)
+    {
+        if (values is null || values.Length == 0)
+            return "[]";
+
+        var take = values.Take(10).ToArray();
+        var encoded = string.Join(", ", take.Select(static value => "\"" + value + "\""));
+        var suffix = values.Length > take.Length ? ", \"...\"" : string.Empty;
+        return $"[{encoded}{suffix}]";
+    }
+
+    private static EditorialCardsUsage[] ExtractEditorialCardsUsages(string layoutContent)
+    {
+        if (string.IsNullOrWhiteSpace(layoutContent))
+            return Array.Empty<EditorialCardsUsage>();
+
+        var usages = new List<EditorialCardsUsage>();
+        foreach (Match call in ScribanEditorialCardsCallRegex.Matches(layoutContent))
+        {
+            if (!call.Success)
+                continue;
+
+            var args = call.Groups["args"].Value;
+            var tokens = ScribanArgumentRegex.Matches(args)
+                .Select(match => TrimScribanArgument(match.Value))
+                .ToArray();
+
+            var variant = tokens.Length > 8 ? NormalizeEditorialVariantArgument(tokens[8]) : "default";
+            var gridClasses = tokens.Length > 9 ? ParseCssClassTokens(tokens[9]) : Array.Empty<string>();
+            var cardClasses = tokens.Length > 10 ? ParseCssClassTokens(tokens[10]) : Array.Empty<string>();
+
+            usages.Add(new EditorialCardsUsage(variant, gridClasses, cardClasses));
+        }
+
+        return usages.ToArray();
+    }
+
+    private static string TrimScribanArgument(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if ((trimmed.StartsWith("\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal) && trimmed.Length >= 2) ||
+            (trimmed.StartsWith("'", StringComparison.Ordinal) && trimmed.EndsWith("'", StringComparison.Ordinal) && trimmed.Length >= 2))
+            return trimmed.Substring(1, trimmed.Length - 2);
+
+        return trimmed;
+    }
+
+    private static string[] ParseCssClassTokens(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        return value
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static token => token.Trim().TrimStart('.'))
+            .Where(static token => !string.IsNullOrWhiteSpace(token))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string NormalizeEditorialVariantArgument(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "default";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "compact" => "compact",
+            "hero" => "hero",
+            "featured" => "featured",
+            _ => "default"
+        };
+    }
+
+    private readonly record struct EditorialCardsUsage(string Variant, string[] GridClasses, string[] CardClasses)
+    {
+        public bool RequiresSelectorContract => !string.Equals(Variant, "default", StringComparison.OrdinalIgnoreCase) ||
+                                                GridClasses.Length > 0 ||
+                                                CardClasses.Length > 0;
+
+        public IEnumerable<string> GetExpectedSelectors()
+        {
+            if (string.Equals(Variant, "compact", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return ".pf-editorial-grid--compact";
+                yield return ".pf-editorial-card--compact";
+            }
+            else if (string.Equals(Variant, "hero", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return ".pf-editorial-grid--hero";
+                yield return ".pf-editorial-card--hero";
+            }
+            else if (string.Equals(Variant, "featured", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return ".pf-editorial-grid--featured";
+                yield return ".pf-editorial-card--featured";
+            }
+
+            foreach (var gridClass in GridClasses)
+                yield return "." + gridClass;
+
+            foreach (var cardClass in CardClasses)
+                yield return "." + cardClass;
+        }
     }
 
 

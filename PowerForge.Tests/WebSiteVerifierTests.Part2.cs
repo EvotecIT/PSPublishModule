@@ -335,6 +335,414 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenEditorialListLayoutDoesNotRenderItemsOrEditorialHelper()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-layout-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                description: Updates
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-warning");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body><h1>{{ page.title }}</h1></body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-warning",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"]
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial layout test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-warning",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("used for editorial collection", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("paginated editorial collection", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenEditorialVariantContractSelectorsAreNotDeclared()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-variant-contract-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-contract-warning");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body>{{ pf.editorial_cards 0 160 true true true true "16/9" "" "hero" "news-grid" "news-card" }}{{ pf.editorial_pager }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-contract-warning",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"],
+                  "featureContracts": {
+                    "blog": {
+                      "requiredCssSelectors": []
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial selector contract warning test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-contract-warning",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                AssetRegistry = new AssetRegistrySpec
+                {
+                    Bundles = new[]
+                    {
+                        new AssetBundleSpec
+                        {
+                            Name = "blogstyles",
+                            Css = new[] { "/css/app.css" }
+                        }
+                    },
+                    RouteBundles = new[]
+                    {
+                        new RouteBundleSpec
+                        {
+                            Match = "/blog/**",
+                            Bundles = new[] { "blogstyles" }
+                        }
+                    }
+                },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("featureContracts.blog.requiredCssSelectors is empty", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("Suggested contract fragment", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("\"featureContracts\": { \"blog\": { \"cssHrefs\": [\"/css/app.css\"]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("\"requiredCssSelectors\":", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenEditorialVariantContractEntryIsMissingAndProvidesSuggestion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-variant-contract-entry-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-contract-entry-missing");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body>{{ pf.editorial_cards 0 160 true true true true "16/9" "" "hero" "news-grid" "news-card" }}{{ pf.editorial_pager }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-contract-entry-missing",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"],
+                  "featureContracts": {
+                    "docs": {
+                      "requiredCssSelectors": [".docs-shell"]
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial selector contract entry missing test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-contract-entry-missing",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("featureContracts.blog is not defined", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("Suggested contract fragment", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("\"featureContracts\": { \"blog\": { \"requiredCssSelectors\":", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains(".pf-editorial-grid--hero", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotWarnWhenEditorialVariantContractSelectorsAreDeclared()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-variant-contract-ok-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-contract-ok");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "styles"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body>{{ pf.editorial_cards 0 160 true true true true "16/9" "" "hero" "news-grid" "news-card" }}{{ pf.editorial_pager }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "styles", "editorial.css"),
+                """
+                .pf-editorial-grid--hero {}
+                .pf-editorial-card--hero {}
+                .news-grid {}
+                .news-card {}
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-contract-ok",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"],
+                  "featureContracts": {
+                    "blog": {
+                      "cssHrefs": ["styles/editorial.css"],
+                      "requiredCssSelectors": [".pf-editorial-grid--hero", ".pf-editorial-card--hero", ".news-grid", ".news-card"]
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial selector contract ok test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-contract-ok",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("uses pf.editorial_cards selectors that are not declared", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("featureContracts.blog.requiredCssSelectors is empty", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ThemeFeatureContracts_WarnWhenRequiredSurfacesMissingAndSiteDoesNotDefineSurfaces()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-required-surfaces-missing-" + Guid.NewGuid().ToString("N"));
@@ -586,6 +994,86 @@ public partial class WebSiteVerifierTests
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, w => w.Contains("site-nav.json does not contain 'profiles'", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Warnings, w => w.Contains("site-nav.json does not contain 'surfaces'", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsGeneratedLegacySiteNavOnceWithoutProfileSurfaceNoise()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-site-nav-generated-legacy-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            Directory.CreateDirectory(pagesPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "data"));
+            File.WriteAllText(Path.Combine(root, "data", "site-nav.json"),
+                """
+                {
+                  "generated": true,
+                  "primary": [
+                    { "href": "/", "text": "Home" }
+                  ]
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier generated site-nav shape test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DataRoot = "data",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("generated site-nav.json uses a legacy contract", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, w => w.Contains("site-nav.json does not contain 'profiles'", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, w => w.Contains("site-nav.json does not contain 'surfaces'", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
@@ -895,6 +1383,123 @@ public partial class WebSiteVerifierTests
 
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, w => w.Contains("site-nav.json surfaces are missing expected 'apidocs' surface", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_WarnsWhenCustomSiteNavUsesApiAliasSurfaceKey()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-site-nav-api-alias-key-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pagesPath = Path.Combine(root, "content", "pages");
+            var docsPath = Path.Combine(root, "content", "docs");
+            Directory.CreateDirectory(pagesPath);
+            Directory.CreateDirectory(docsPath);
+            File.WriteAllText(Path.Combine(pagesPath, "index.md"),
+                """
+                ---
+                title: Home
+                slug: index
+                ---
+
+                Home
+                """);
+            File.WriteAllText(Path.Combine(docsPath, "index.md"),
+                """
+                ---
+                title: Docs
+                slug: index
+                ---
+
+                Docs
+                """);
+
+            Directory.CreateDirectory(Path.Combine(root, "data"));
+            File.WriteAllText(Path.Combine(root, "data", "site-nav.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "format": "powerforge.site-nav",
+                  "surfaceAliases": {
+                    "api": "apidocs"
+                  },
+                  "primary": [
+                    { "href": "/", "text": "Home" },
+                    { "href": "/docs/", "text": "Docs" },
+                    { "href": "/api/", "text": "API" }
+                  ],
+                  "menuModels": [],
+                  "profiles": [],
+                  "surfaces": {
+                    "main": {},
+                    "docs": {},
+                    "api": {}
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier site-nav alias surface key test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DataRoot = "data",
+                Features = new[] { "docs", "apiDocs" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "pages",
+                        Input = "content/pages",
+                        Output = "/"
+                    },
+                    new CollectionSpec
+                    {
+                        Name = "docs",
+                        Input = "content/docs",
+                        Output = "/docs"
+                    }
+                },
+                Navigation = new NavigationSpec
+                {
+                    AutoDefaults = false,
+                    Menus = new[]
+                    {
+                        new MenuSpec
+                        {
+                            Name = "main",
+                            Items = new[]
+                            {
+                                new MenuItemSpec { Title = "Home", Url = "/" },
+                                new MenuItemSpec { Title = "Docs", Url = "/docs/" },
+                                new MenuItemSpec { Title = "API", Url = "/api/" }
+                            }
+                        }
+                    },
+                    Surfaces = new[]
+                    {
+                        new NavigationSurfaceSpec { Name = "main", Path = "/", PrimaryMenu = "main" },
+                        new NavigationSurfaceSpec { Name = "docs", Path = "/docs/", Collection = "docs", Layout = "docs", PrimaryMenu = "main" },
+                        new NavigationSurfaceSpec { Name = "apidocs", Path = "/api/", Layout = "apiDocs", PrimaryMenu = "main" }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, w => w.Contains("surface key 'api' should use canonical key 'apidocs'", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
