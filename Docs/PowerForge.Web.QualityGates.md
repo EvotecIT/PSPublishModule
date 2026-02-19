@@ -73,6 +73,7 @@ Notes:
 - An empty verify baseline (0 keys) is valid and enables `failOnNewWarnings` semantics ("any warning is new").
 - Verify markdown hygiene now flags multiline HTML media tags (`img`/`iframe`/etc.) because they can render as escaped text in output; keep media tags single-line or use markdown/shortcodes.
 - `markdown-fix` now auto-normalizes multiline media opening tags (`img`, `iframe`, `video`, `audio`, `source`, `picture`) outside code fences.
+- CI pattern: add a dry-run `markdown-fix` step with `failOnChanges:true` and write `reportPath`/`summaryPath` artifacts for fast remediation.
 
 ## Creating/Updating Baselines
 

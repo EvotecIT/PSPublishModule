@@ -31,6 +31,10 @@ public class WebMarkdownHygieneFixerTests
             Assert.Equal(1, result.FileCount);
             Assert.Equal(1, result.ChangedFileCount);
             Assert.True(result.ReplacementCount >= 2);
+            Assert.True(result.SimpleHtmlReplacementCount >= 2);
+            Assert.Equal(result.ReplacementCount, result.MediaTagReplacementCount + result.SimpleHtmlReplacementCount);
+            Assert.Single(result.FileChanges);
+            Assert.Equal("doc.md", result.FileChanges[0].Path);
 
             var unchanged = File.ReadAllText(file);
             Assert.Contains("<h2>Title</h2>", unchanged, StringComparison.Ordinal);
@@ -103,6 +107,8 @@ public class WebMarkdownHygieneFixerTests
             Assert.Contains("*markdown*", updated, StringComparison.Ordinal);
             Assert.Contains("**bold**", updated, StringComparison.Ordinal);
             Assert.DoesNotContain("<h3>", updated, StringComparison.OrdinalIgnoreCase);
+            Assert.True(result.SimpleHtmlReplacementCount >= 2);
+            Assert.Equal(0, result.MediaTagReplacementCount);
         }
         finally
         {
@@ -145,6 +151,10 @@ public class WebMarkdownHygieneFixerTests
             Assert.True(result.Success);
             Assert.Equal(1, result.ChangedFileCount);
             Assert.True(result.ReplacementCount >= 1);
+            Assert.True(result.MediaTagReplacementCount >= 1);
+            Assert.Contains(result.MediaTagStats, stat => stat.Tag.Equals("iframe", StringComparison.OrdinalIgnoreCase) && stat.Count >= 1);
+            Assert.Single(result.FileChanges);
+            Assert.Contains(result.FileChanges[0].MediaTagStats, stat => stat.Tag.Equals("iframe", StringComparison.OrdinalIgnoreCase));
 
             var updated = File.ReadAllText(file);
             Assert.Contains("<iframe src=\"https://example.test/embed\" loading=\"lazy\" title=\"Demo\"></iframe>", updated, StringComparison.Ordinal);

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using PowerForge;
 using PowerForge.Web;
@@ -137,6 +138,7 @@ internal static partial class WebPipelineRunner
         var include = GetString(step, "include");
         var exclude = GetString(step, "exclude");
         var applyFixes = GetBool(step, "apply") ?? false;
+        var failOnChanges = GetBool(step, "failOnChanges") ?? GetBool(step, "fail-on-changes") ?? false;
 
         if (string.IsNullOrWhiteSpace(rootPath) && !string.IsNullOrWhiteSpace(config))
         {
@@ -158,10 +160,51 @@ internal static partial class WebPipelineRunner
             Exclude = CliPatternHelper.SplitPatterns(exclude),
             ApplyChanges = applyFixes
         });
+        var reportPath = ResolvePath(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path"));
+        if (!string.IsNullOrWhiteSpace(reportPath))
+            WriteMarkdownFixReport(reportPath, fix);
+
+        var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
+        if (!string.IsNullOrWhiteSpace(summaryPath))
+            WriteMarkdownFixSummary(summaryPath, fix);
 
         stepResult.Success = fix.Success;
-        stepResult.Message = applyFixes
-            ? $"Markdown fix updated {fix.ChangedFileCount}/{fix.FileCount} files ({fix.ReplacementCount} replacements)"
-            : $"Markdown fix dry-run {fix.ChangedFileCount}/{fix.FileCount} files ({fix.ReplacementCount} replacements)";
+        stepResult.Message = BuildMarkdownFixStepMessage(fix, applyFixes);
+
+        if (failOnChanges && !applyFixes && fix.ChangedFileCount > 0)
+        {
+            var message = $"Markdown fix detected {fix.ChangedFileCount} file(s) requiring updates (failOnChanges=true). Re-run with apply=true or fix markdown hygiene.";
+            stepResult.Success = false;
+            stepResult.Message = message;
+            throw new InvalidOperationException(message);
+        }
+    }
+
+    private static string BuildMarkdownFixStepMessage(WebMarkdownFixResult fix, bool applyFixes)
+    {
+        var mode = applyFixes ? "updated" : "dry-run";
+        return $"Markdown fix {mode} {fix.ChangedFileCount}/{fix.FileCount} files ({fix.ReplacementCount} replacements; media={fix.MediaTagReplacementCount}, html={fix.SimpleHtmlReplacementCount})";
+    }
+
+    private static void WriteMarkdownFixReport(string reportPath, WebMarkdownFixResult result)
+    {
+        var directory = Path.GetDirectoryName(reportPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(result, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        }));
+    }
+
+    private static void WriteMarkdownFixSummary(string summaryPath, WebMarkdownFixResult result)
+    {
+        var directory = Path.GetDirectoryName(summaryPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var summary = WebMarkdownHygieneFixer.BuildSummary(result);
+        File.WriteAllText(summaryPath, summary, Encoding.UTF8);
     }
 }

@@ -301,7 +301,13 @@
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
-        "apply": { "type": "boolean" }
+        "apply": { "type": "boolean" },
+        "failOnChanges": { "type": "boolean", "description": "When true, fail the step if dry-run detects files that need markdown hygiene fixes." },
+        "fail-on-changes": { "type": "boolean", "description": "Alias for failOnChanges." },
+        "reportPath": { "type": "string", "description": "Optional JSON report output path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string", "description": "Optional markdown summary output path." },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
       },
       "required": ["task"]
     },

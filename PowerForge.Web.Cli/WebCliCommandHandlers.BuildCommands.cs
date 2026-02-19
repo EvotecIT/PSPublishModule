@@ -316,11 +316,14 @@ internal static partial class WebCliCommandHandlers
         var rootPath = TryGetOptionValue(subArgs, "--root") ??
                        TryGetOptionValue(subArgs, "--path");
         var configPath = TryGetOptionValue(subArgs, "--config");
+        var reportPathText = TryGetOptionValue(subArgs, "--report-path") ?? TryGetOptionValue(subArgs, "--report");
+        var summaryPathText = TryGetOptionValue(subArgs, "--summary-path") ?? TryGetOptionValue(subArgs, "--summary");
         var include = ReadOptionList(subArgs, "--include");
         var exclude = ReadOptionList(subArgs, "--exclude");
         var apply = HasOption(subArgs, "--apply") ||
                     HasOption(subArgs, "--write") ||
                     HasOption(subArgs, "--in-place");
+        var failOnChanges = HasOption(subArgs, "--fail-on-changes");
 
         if (!string.IsNullOrWhiteSpace(configPath))
         {
@@ -346,6 +349,17 @@ internal static partial class WebCliCommandHandlers
             Exclude = exclude.ToArray(),
             ApplyChanges = apply
         });
+        var reportPath = ResolveOptionalOutputPath(reportPathText);
+        if (!string.IsNullOrWhiteSpace(reportPath))
+            WriteMarkdownFixReportFile(reportPath, result);
+        var summaryPath = ResolveOptionalOutputPath(summaryPathText);
+        if (!string.IsNullOrWhiteSpace(summaryPath))
+            WriteMarkdownFixSummaryFile(summaryPath, result);
+        var effectiveSuccess = result.Success && (!failOnChanges || apply || result.ChangedFileCount == 0);
+        var exitCode = effectiveSuccess ? 0 : 1;
+        var failOnChangesError = failOnChanges && !apply && result.ChangedFileCount > 0
+            ? $"markdown-fix detected {result.ChangedFileCount} file(s) requiring updates (fail-on-changes). Re-run with --apply."
+            : null;
 
         if (outputJson)
         {
@@ -353,11 +367,12 @@ internal static partial class WebCliCommandHandlers
             {
                 SchemaVersion = outputSchemaVersion,
                 Command = "web.markdown-fix",
-                Success = result.Success,
-                ExitCode = result.Success ? 0 : 1,
-                Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebMarkdownFixResult)
+                Success = effectiveSuccess,
+                ExitCode = exitCode,
+                Result = WebCliJson.SerializeToElement(result, WebCliJson.Context.WebMarkdownFixResult),
+                Error = failOnChangesError
             });
-            return result.Success ? 0 : 1;
+            return exitCode;
         }
 
         logger.Success(apply
@@ -365,13 +380,52 @@ internal static partial class WebCliCommandHandlers
             : $"Markdown fixer found {result.ChangedFileCount} file(s) to update (dry-run).");
         logger.Info($"Files scanned: {result.FileCount}");
         logger.Info($"Replacements: {result.ReplacementCount}");
+        logger.Info($"Media-tag replacements: {result.MediaTagReplacementCount}");
+        logger.Info($"Simple HTML replacements: {result.SimpleHtmlReplacementCount}");
+        if (!string.IsNullOrWhiteSpace(reportPath))
+            logger.Info($"Report: {reportPath}");
+        if (!string.IsNullOrWhiteSpace(summaryPath))
+            logger.Info($"Summary: {summaryPath}");
         if (result.Warnings.Length > 0)
         {
             foreach (var warning in result.Warnings)
                 logger.Warn(warning);
         }
 
-        return result.Success ? 0 : 1;
+        if (!string.IsNullOrWhiteSpace(failOnChangesError))
+            logger.Error(failOnChangesError);
+
+        return exitCode;
+    }
+
+    private static string? ResolveOptionalOutputPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        return Path.GetFullPath(path);
+    }
+
+    private static void WriteMarkdownFixReportFile(string path, WebMarkdownFixResult result)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var payload = System.Text.Json.JsonSerializer.Serialize(result, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+        File.WriteAllText(path, payload);
+    }
+
+    private static void WriteMarkdownFixSummaryFile(string path, WebMarkdownFixResult result)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllText(path, WebMarkdownHygieneFixer.BuildSummary(result));
     }
 
     private static int HandleScaffold(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)

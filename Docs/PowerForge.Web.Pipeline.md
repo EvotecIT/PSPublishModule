@@ -161,6 +161,31 @@ Notes:
   - `warningPreviewCount`: number of warnings included in the thrown failure summary
   - `errorPreviewCount`: number of errors included in the thrown failure summary
 
+#### markdown-fix
+Normalizes markdown hygiene issues in content folders (dry-run by default).
+```json
+{
+  "task": "markdown-fix",
+  "config": "./site.json",
+  "include": "blog/**/*.md",
+  "exclude": "**/archive/**",
+  "apply": false,
+  "failOnChanges": true,
+  "reportPath": "./_reports/markdown-fix.json",
+  "summaryPath": "./_reports/markdown-fix.md"
+}
+```
+Notes:
+- Fixes run against markdown files (`*.md`) under `root`/`path`/`siteRoot`, or from `config` (content root).
+- `apply: false` is a dry-run (CI-friendly); `apply: true` writes changes.
+- `failOnChanges: true` fails the step when dry-run detects files that need fixes.
+- Reports:
+  - `reportPath`: writes structured JSON output
+  - `summaryPath`: writes markdown summary with totals and per-file breakdown
+- Current normalizations include:
+  - multiline media tag normalization outside code fences (`img`, `iframe`, `video`, `audio`, `source`, `picture`)
+  - simple HTML-to-markdown replacements (`h1..h6`, `strong/b`, `em/i`, `p`, `br`)
+
 #### doctor
 Runs build/verify/audit as one health-check step.
 ```json

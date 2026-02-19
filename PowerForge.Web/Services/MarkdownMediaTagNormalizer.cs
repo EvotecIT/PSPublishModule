@@ -18,14 +18,24 @@ internal static class MarkdownMediaTagNormalizer
     };
 
     internal static string NormalizeMultilineMediaTagsOutsideFences(string markdown)
-        => NormalizeMultilineMediaTagsOutsideFences(markdown, out _);
+    {
+        var normalized = NormalizeMultilineMediaTagsOutsideFences(markdown, out MarkdownMediaNormalizationStats _);
+        return normalized;
+    }
 
     internal static string NormalizeMultilineMediaTagsOutsideFences(string markdown, out int replacementCount)
     {
-        var replacements = 0;
+        var normalized = NormalizeMultilineMediaTagsOutsideFences(markdown, out MarkdownMediaNormalizationStats stats);
+        replacementCount = stats.ReplacementCount;
+        return normalized;
+    }
+
+    internal static string NormalizeMultilineMediaTagsOutsideFences(string markdown, out MarkdownMediaNormalizationStats stats)
+    {
+        var collectedStats = new MarkdownMediaNormalizationStats();
         if (string.IsNullOrWhiteSpace(markdown))
         {
-            replacementCount = 0;
+            stats = collectedStats;
             return string.Empty;
         }
 
@@ -38,8 +48,7 @@ internal static class MarkdownMediaTagNormalizer
         void FlushOutside()
         {
             if (outsideFence.Length == 0) return;
-            var normalized = NormalizeMediaTagBlock(outsideFence.ToString(), out var blockReplacements);
-            replacements += blockReplacements;
+            var normalized = NormalizeMediaTagBlock(outsideFence.ToString(), collectedStats);
             rebuilt.Append(normalized);
             outsideFence.Clear();
         }
@@ -81,13 +90,12 @@ internal static class MarkdownMediaTagNormalizer
         if (!markdown.EndsWith('\n') && updated.EndsWith('\n'))
             updated = updated[..^1];
 
-        replacementCount = replacements;
+        stats = collectedStats;
         return updated;
     }
 
-    private static string NormalizeMediaTagBlock(string content, out int replacements)
+    private static string NormalizeMediaTagBlock(string content, MarkdownMediaNormalizationStats stats)
     {
-        replacements = 0;
         if (string.IsNullOrWhiteSpace(content))
             return content;
 
@@ -129,7 +137,7 @@ internal static class MarkdownMediaTagNormalizer
 
             var normalizedTag = NormalizeTagWhitespacePreservingQuotedValues(originalTag);
             if (!string.Equals(originalTag, normalizedTag, StringComparison.Ordinal))
-                replacements++;
+                stats.Record(tagName);
             sb.Append(normalizedTag);
             index = end + 1;
         }
@@ -259,5 +267,23 @@ internal static class MarkdownMediaTagNormalizer
         normalized = Regex.Replace(normalized, "\\s+>", ">", RegexOptions.CultureInvariant, RegexTimeout);
         normalized = Regex.Replace(normalized, "<\\s+", "<", RegexOptions.CultureInvariant, RegexTimeout);
         return normalized;
+    }
+}
+
+internal sealed class MarkdownMediaNormalizationStats
+{
+    private readonly Dictionary<string, int> _tagCounts = new(StringComparer.OrdinalIgnoreCase);
+
+    public int ReplacementCount { get; private set; }
+    public IReadOnlyDictionary<string, int> TagCounts => _tagCounts;
+
+    public void Record(string? tagName)
+    {
+        if (string.IsNullOrWhiteSpace(tagName))
+            return;
+
+        ReplacementCount++;
+        _tagCounts.TryGetValue(tagName, out var current);
+        _tagCounts[tagName] = current + 1;
     }
 }

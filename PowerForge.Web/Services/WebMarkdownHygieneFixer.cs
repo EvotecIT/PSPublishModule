@@ -28,12 +28,44 @@ public sealed class WebMarkdownFixResult
     public int ChangedFileCount { get; set; }
     /// <summary>Total replacement operations across all files.</summary>
     public int ReplacementCount { get; set; }
+    /// <summary>Total multiline media tag normalization operations.</summary>
+    public int MediaTagReplacementCount { get; set; }
+    /// <summary>Total simple HTML-to-markdown replacement operations.</summary>
+    public int SimpleHtmlReplacementCount { get; set; }
     /// <summary>True when run in dry-run mode.</summary>
     public bool DryRun { get; set; }
     /// <summary>Changed files relative to root path.</summary>
     public string[] ChangedFiles { get; set; } = Array.Empty<string>();
+    /// <summary>Per-file change breakdown.</summary>
+    public WebMarkdownFixFileChange[] FileChanges { get; set; } = Array.Empty<WebMarkdownFixFileChange>();
+    /// <summary>Aggregated media-tag replacement counts by tag name.</summary>
+    public WebMarkdownFixTagStat[] MediaTagStats { get; set; } = Array.Empty<WebMarkdownFixTagStat>();
     /// <summary>Warnings collected while running fixer.</summary>
     public string[] Warnings { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>Per-file markdown fixer change breakdown.</summary>
+public sealed class WebMarkdownFixFileChange
+{
+    /// <summary>Changed file path relative to fixer root.</summary>
+    public string Path { get; set; } = string.Empty;
+    /// <summary>Total replacements in this file.</summary>
+    public int Replacements { get; set; }
+    /// <summary>Multiline media tag normalization replacements in this file.</summary>
+    public int MediaTagReplacements { get; set; }
+    /// <summary>Simple HTML-to-markdown replacements in this file.</summary>
+    public int HtmlTagReplacements { get; set; }
+    /// <summary>Media-tag breakdown for this file.</summary>
+    public WebMarkdownFixTagStat[] MediaTagStats { get; set; } = Array.Empty<WebMarkdownFixTagStat>();
+}
+
+/// <summary>Aggregated markdown fixer count for a specific tag.</summary>
+public sealed class WebMarkdownFixTagStat
+{
+    /// <summary>Tag name.</summary>
+    public string Tag { get; set; } = string.Empty;
+    /// <summary>Replacement count for the tag.</summary>
+    public int Count { get; set; }
 }
 
 /// <summary>Converts simple raw HTML tags in markdown to markdown equivalents.</summary>
@@ -67,8 +99,12 @@ public static class WebMarkdownHygieneFixer
 
         var warnings = new List<string>();
         var changedFiles = new List<string>();
+        var fileChanges = new List<WebMarkdownFixFileChange>();
+        var mediaTagTotals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var fileList = ResolveFiles(rootPath, options.Files, options.Include, options.Exclude, warnings);
         var totalReplacements = 0;
+        var totalMediaTagReplacements = 0;
+        var totalSimpleTagReplacements = 0;
 
         foreach (var file in fileList)
         {
@@ -86,19 +122,31 @@ public static class WebMarkdownHygieneFixer
             if (string.IsNullOrWhiteSpace(original))
                 continue;
 
-            var (updated, replacements) = ConvertSimpleHtmlToMarkdown(original);
-            if (replacements <= 0 || string.Equals(original, updated, StringComparison.Ordinal))
+            var pass = ConvertSimpleHtmlToMarkdown(original);
+            if (pass.Replacements <= 0 || string.Equals(original, pass.Updated, StringComparison.Ordinal))
                 continue;
 
-            totalReplacements += replacements;
-            changedFiles.Add(ToRelative(rootPath, file));
+            totalReplacements += pass.Replacements;
+            totalMediaTagReplacements += pass.MediaTagReplacements;
+            totalSimpleTagReplacements += pass.HtmlTagReplacements;
+            var relativePath = ToRelative(rootPath, file);
+            changedFiles.Add(relativePath);
+            fileChanges.Add(new WebMarkdownFixFileChange
+            {
+                Path = relativePath,
+                Replacements = pass.Replacements,
+                MediaTagReplacements = pass.MediaTagReplacements,
+                HtmlTagReplacements = pass.HtmlTagReplacements,
+                MediaTagStats = pass.MediaTagStats
+            });
+            AddTagStats(mediaTagTotals, pass.MediaTagStats);
 
             if (!options.ApplyChanges)
                 continue;
 
             try
             {
-                File.WriteAllText(file, updated);
+                File.WriteAllText(file, pass.Updated);
             }
             catch (Exception ex)
             {
@@ -112,10 +160,72 @@ public static class WebMarkdownHygieneFixer
             FileCount = fileList.Count,
             ChangedFileCount = changedFiles.Count,
             ReplacementCount = totalReplacements,
+            MediaTagReplacementCount = totalMediaTagReplacements,
+            SimpleHtmlReplacementCount = totalSimpleTagReplacements,
             DryRun = !options.ApplyChanges,
             ChangedFiles = changedFiles.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray(),
+            FileChanges = fileChanges.OrderBy(change => change.Path, StringComparer.OrdinalIgnoreCase).ToArray(),
+            MediaTagStats = ToTagStats(mediaTagTotals),
             Warnings = warnings.ToArray()
         };
+    }
+
+    /// <summary>Builds a human-friendly markdown summary for fixer results.</summary>
+    public static string BuildSummary(WebMarkdownFixResult? result, int maxFiles = 50)
+    {
+        if (result is null)
+            return "# Markdown Fix Summary" + Environment.NewLine + Environment.NewLine + "- No result payload." + Environment.NewLine;
+
+        var safeMaxFiles = maxFiles <= 0 ? 50 : Math.Min(maxFiles, 500);
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# Markdown Fix Summary");
+        sb.AppendLine();
+        sb.AppendLine($"- Result: {(result.Success ? "pass" : "fail")}");
+        sb.AppendLine($"- Mode: {(result.DryRun ? "dry-run" : "apply")}");
+        sb.AppendLine($"- Files scanned: {result.FileCount}");
+        sb.AppendLine($"- Files changed: {result.ChangedFileCount}");
+        sb.AppendLine($"- Replacements: {result.ReplacementCount}");
+        sb.AppendLine($"- Media-tag replacements: {result.MediaTagReplacementCount}");
+        sb.AppendLine($"- Simple HTML replacements: {result.SimpleHtmlReplacementCount}");
+        sb.AppendLine();
+
+        if (result.MediaTagStats is { Length: > 0 })
+        {
+            sb.AppendLine("## Media Tags");
+            foreach (var stat in result.MediaTagStats.OrderByDescending(static x => x.Count).ThenBy(static x => x.Tag, StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($"- `{stat.Tag}`: {stat.Count}");
+            sb.AppendLine();
+        }
+
+        if (result.FileChanges is { Length: > 0 })
+        {
+            sb.AppendLine("## Changed Files");
+            sb.AppendLine("| File | Replacements | Media | HTML |");
+            sb.AppendLine("| --- | ---: | ---: | ---: |");
+            foreach (var change in result.FileChanges
+                         .OrderByDescending(static x => x.Replacements)
+                         .ThenBy(static x => x.Path, StringComparer.OrdinalIgnoreCase)
+                         .Take(safeMaxFiles))
+            {
+                var path = string.IsNullOrWhiteSpace(change.Path) ? "(unknown)" : change.Path.Replace("|", "/");
+                sb.AppendLine($"| {path} | {change.Replacements} | {change.MediaTagReplacements} | {change.HtmlTagReplacements} |");
+            }
+
+            var remaining = result.FileChanges.Length - Math.Min(result.FileChanges.Length, safeMaxFiles);
+            if (remaining > 0)
+                sb.AppendLine($"| ... | +{remaining} more file(s) |  |  |");
+            sb.AppendLine();
+        }
+
+        if (result.Warnings is { Length: > 0 })
+        {
+            sb.AppendLine("## Warnings");
+            foreach (var warning in result.Warnings)
+                sb.AppendLine($"- {warning}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString().TrimEnd() + Environment.NewLine;
     }
 
     private static List<string> ResolveFiles(
@@ -174,25 +284,26 @@ public static class WebMarkdownHygieneFixer
         return results;
     }
 
-    private static (string Updated, int Replacements) ConvertSimpleHtmlToMarkdown(string content)
+    private static MarkdownFixPassResult ConvertSimpleHtmlToMarkdown(string content)
     {
         if (string.IsNullOrWhiteSpace(content))
-            return (content, 0);
+            return new MarkdownFixPassResult(content, 0, 0, Array.Empty<WebMarkdownFixTagStat>());
 
-        content = MarkdownMediaTagNormalizer.NormalizeMultilineMediaTagsOutsideFences(content, out var mediaTagReplacements);
+        content = MarkdownMediaTagNormalizer.NormalizeMultilineMediaTagsOutsideFences(content, out MarkdownMediaNormalizationStats mediaStats);
+        var mediaTagStats = ToTagStats(mediaStats.TagCounts);
 
         var lines = content.Split('\n');
         var inFence = false;
         var outsideFence = new System.Text.StringBuilder();
         var insideFence = new System.Text.StringBuilder();
         var rebuilt = new System.Text.StringBuilder(content.Length + 64);
-        var replacements = mediaTagReplacements;
+        var simpleHtmlReplacements = 0;
 
         void FlushOutside()
         {
             if (outsideFence.Length == 0) return;
             var (updated, count) = ReplaceSimpleTags(outsideFence.ToString());
-            replacements += count;
+            simpleHtmlReplacements += count;
             rebuilt.Append(updated);
             outsideFence.Clear();
         }
@@ -235,7 +346,11 @@ public static class WebMarkdownHygieneFixer
         if (!content.EndsWith('\n') && updated.EndsWith('\n'))
             updated = updated.Substring(0, updated.Length - 1);
 
-        return (updated, replacements);
+        return new MarkdownFixPassResult(
+            updated,
+            mediaStats.ReplacementCount,
+            simpleHtmlReplacements,
+            mediaTagStats);
     }
 
     private static (string Updated, int Replacements) ReplaceSimpleTags(string input)
@@ -327,5 +442,53 @@ public static class WebMarkdownHygieneFixer
     {
         var full = Path.GetFullPath(path);
         return full.StartsWith(rootPath, PathComparison);
+    }
+
+    private static void AddTagStats(Dictionary<string, int> target, IEnumerable<WebMarkdownFixTagStat> stats)
+    {
+        if (target is null || stats is null)
+            return;
+
+        foreach (var stat in stats)
+        {
+            if (stat is null || string.IsNullOrWhiteSpace(stat.Tag) || stat.Count <= 0)
+                continue;
+            target.TryGetValue(stat.Tag, out var current);
+            target[stat.Tag] = current + stat.Count;
+        }
+    }
+
+    private static WebMarkdownFixTagStat[] ToTagStats(IReadOnlyDictionary<string, int>? source)
+    {
+        if (source is null || source.Count == 0)
+            return Array.Empty<WebMarkdownFixTagStat>();
+
+        return source
+            .Where(static pair => !string.IsNullOrWhiteSpace(pair.Key) && pair.Value > 0)
+            .Select(pair => new WebMarkdownFixTagStat
+            {
+                Tag = pair.Key,
+                Count = pair.Value
+            })
+            .OrderByDescending(static stat => stat.Count)
+            .ThenBy(static stat => stat.Tag, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private readonly struct MarkdownFixPassResult
+    {
+        public MarkdownFixPassResult(string updated, int mediaTagReplacements, int htmlTagReplacements, WebMarkdownFixTagStat[] mediaTagStats)
+        {
+            Updated = updated;
+            MediaTagReplacements = mediaTagReplacements;
+            HtmlTagReplacements = htmlTagReplacements;
+            MediaTagStats = mediaTagStats ?? Array.Empty<WebMarkdownFixTagStat>();
+        }
+
+        public string Updated { get; }
+        public int MediaTagReplacements { get; }
+        public int HtmlTagReplacements { get; }
+        public int Replacements => MediaTagReplacements + HtmlTagReplacements;
+        public WebMarkdownFixTagStat[] MediaTagStats { get; }
     }
 }
