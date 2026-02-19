@@ -1264,6 +1264,44 @@ Notes:
   - `purge` uses verify paths plus purge-only artifacts (`/404.html`, `llms` files).
 - `cloudflare` steps are intentionally not cacheable (external side effects).
 
+#### engine-lock
+Reads/verifies/updates `.powerforge/engine-lock.json` from pipeline runs.
+
+Verify drift (default operation):
+```json
+{
+  "task": "engine-lock",
+  "path": "./.powerforge/engine-lock.json",
+  "expectedRepository": "EvotecIT/PSPublishModule",
+  "expectedRef": "ab58992450def6b736a2ea87e6a492400250959f",
+  "failOnDrift": true
+}
+```
+
+Update pin:
+```json
+{
+  "task": "engine-lock",
+  "operation": "update",
+  "path": "./.powerforge/engine-lock.json",
+  "repository": "EvotecIT/PSPublishModule",
+  "ref": "0123456789abcdef",
+  "channel": "candidate",
+  "reportPath": "./_reports/engine-lock.json",
+  "summaryPath": "./_reports/engine-lock.md"
+}
+```
+
+Notes:
+- Task aliases: `engine-lock` and `enginelock`.
+- Operations:
+  - `verify` (default): fail on drift unless `failOnDrift:false`
+  - `show`: read and report current lock
+  - `update`: write/refresh lock file values
+- `useEnv:true` can pull expected values from env (`POWERFORGE_REPOSITORY`, `POWERFORGE_REF`, `POWERFORGE_CHANNEL`) or custom env names via `repositoryEnv`/`refEnv`/`channelEnv`.
+- `continueOnError:true` keeps pipeline green if this step fails (useful for canary diagnostics).
+- `engine-lock` steps are intentionally not cacheable.
+
 #### github-artifacts-prune
 Prunes GitHub Actions artifacts to control repository storage quota.  
 Safe by default: `dryRun` is `true` unless you set `apply:true`.
