@@ -106,6 +106,38 @@
       "additionalProperties": false,
       "properties": {
         "Name": { "type": "string" },
+        "Preset": {
+          "type": "string",
+          "enum": [
+            "blog",
+            "news",
+            "changelog",
+            "editorial",
+            "docs",
+            "knowledgebase",
+            "kb",
+            "pages",
+            "landing",
+            "release-notes",
+            "releases"
+          ]
+        },
+        "preset": {
+          "type": "string",
+          "enum": [
+            "blog",
+            "news",
+            "changelog",
+            "editorial",
+            "docs",
+            "knowledgebase",
+            "kb",
+            "pages",
+            "landing",
+            "release-notes",
+            "releases"
+          ]
+        },
         "Input": { "type": "string" },
         "Output": { "type": "string" },
         "DefaultLayout": { "type": "string" },
@@ -119,7 +151,10 @@
         "Outputs": { "type": "array", "items": { "type": "string" } },
         "Seo": { "$ref": "#/$defs/SeoSpec" },
         "seo": { "$ref": "#/$defs/SeoSpec" },
-        "PageSize": { "type": "integer", "minimum": 1 }
+        "PageSize": { "type": "integer", "minimum": 1 },
+        "AutoGenerateSectionIndex": { "type": "boolean", "default": false },
+        "AutoSectionTitle": { "type": "string" },
+        "AutoSectionDescription": { "type": "string" }
       },
       "required": ["Name", "Input", "Output"]
     },

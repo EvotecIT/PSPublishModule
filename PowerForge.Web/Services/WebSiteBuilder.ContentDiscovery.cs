@@ -56,8 +56,10 @@ public static partial class WebSiteBuilder
         foreach (var collection in spec.Collections)
         {
             if (collection is null) continue;
-            var include = collection.Include;
-            var exclude = collection.Exclude;
+            var resolvedCollection = CollectionPresetDefaults.Apply(collection);
+            var collectionItems = new List<ContentItem>();
+            var include = resolvedCollection.Include;
+            var exclude = resolvedCollection.Exclude;
             var themeRoot = ResolveThemeRoot(spec, plan.RootPath);
             var loader = new ThemeLoader();
             ThemeManifest? manifest = null;
@@ -74,7 +76,7 @@ public static partial class WebSiteBuilder
                 };
             }
 
-            var markdownFiles = EnumerateCollectionFiles(plan.RootPath, contentRoots, collection.Input, include, exclude).ToList();
+            var markdownFiles = EnumerateCollectionFiles(plan.RootPath, contentRoots, resolvedCollection.Input, include, exclude).ToList();
             var leafBundleRoots = BuildLeafBundleRoots(markdownFiles);
 
             foreach (var file in markdownFiles)
@@ -82,7 +84,7 @@ public static partial class WebSiteBuilder
                 if (IsUnderAnyRoot(file, leafBundleRoots) && !IsLeafBundleIndex(file))
                     continue;
 
-                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, contentRoots, collection.Input, file);
+                var collectionRoot = ResolveCollectionRootForFile(plan.RootPath, contentRoots, resolvedCollection.Input, file);
                 var markdown = File.ReadAllText(file);
                 var (matter, body) = FrontMatterParser.Parse(markdown);
                 var effectiveBody = IncludePreprocessor.Apply(body, plan.RootPath, file, collectionRoot);
@@ -142,16 +144,16 @@ public static partial class WebSiteBuilder
                 var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
                 if (isSectionIndex || isBundleIndex)
                     slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
-                var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
+                var baseOutput = ReplaceProjectPlaceholder(resolvedCollection.Output, projectSlug);
                 var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
                 route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
-                var kind = ResolvePageKind(route, collection, isSectionIndex);
+                var kind = ResolvePageKind(route, resolvedCollection, isSectionIndex);
                 var layout = matter?.Layout;
                 if (string.IsNullOrWhiteSpace(layout))
                 {
                     layout = kind == PageKind.Section
-                        ? (string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout)
-                        : collection.DefaultLayout;
+                        ? (string.IsNullOrWhiteSpace(resolvedCollection.ListLayout) ? resolvedCollection.DefaultLayout : resolvedCollection.ListLayout)
+                        : resolvedCollection.DefaultLayout;
                 }
 
                 if (matter?.Aliases is { Length: > 0 })
@@ -186,22 +188,27 @@ public static partial class WebSiteBuilder
                 htmlContent = NormalizeCodeBlockClasses(htmlContent, ResolvePrismDefaultLanguage(meta, spec));
                 EnsurePrismAssets(meta, htmlContent, spec, plan.RootPath);
                 var toc = BuildTableOfContents(htmlContent);
-                if (collection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
+                if (resolvedCollection.Name.Equals("projects", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(projectSlug) &&
                     projectContentMap.TryGetValue(projectSlug, out var perProject))
                 {
                     var projectInclude = perProject.Include;
                     var projectExclude = perProject.Exclude;
-                    if (!MatchesFile(plan.RootPath, contentRoots, file, collection.Input, projectInclude, projectExclude))
+                    if (!MatchesFile(plan.RootPath, contentRoots, file, resolvedCollection.Input, projectInclude, projectExclude))
                         continue;
                 }
-                items.Add(new ContentItem
+                if (!string.IsNullOrWhiteSpace(resolvedCollection.Preset) &&
+                    !TryGetMetaValue(meta, "collection_preset", out _))
+                {
+                    meta["collection_preset"] = resolvedCollection.Preset;
+                }
+                var contentItem = new ContentItem
                 {
                     SourcePath = file,
-                    Collection = collection.Name,
+                    Collection = resolvedCollection.Name,
                     OutputPath = route,
                     Language = resolvedLanguage,
-                    TranslationKey = ResolveTranslationKey(matter, collection.Name, localizedRelativePath),
+                    TranslationKey = ResolveTranslationKey(matter, resolvedCollection.Name, localizedRelativePath),
                     Title = title,
                     Description = description,
                     Date = matter?.Date,
@@ -223,12 +230,98 @@ public static partial class WebSiteBuilder
                         : Array.Empty<PageResource>(),
                     ProjectSlug = projectSlug,
                     Meta = meta,
-                    Outputs = ResolveOutputs(matter?.Meta, collection)
-                });
+                    Outputs = ResolveOutputs(matter?.Meta, resolvedCollection)
+                };
+                items.Add(contentItem);
+                collectionItems.Add(contentItem);
             }
+
+            AddAutoGeneratedSectionIndexes(spec, resolvedCollection, collectionItems, items);
         }
 
         return items;
+    }
+
+    private static void AddAutoGeneratedSectionIndexes(
+        SiteSpec spec,
+        CollectionSpec collection,
+        IReadOnlyList<ContentItem> collectionItems,
+        List<ContentItem> allItems)
+    {
+        if (spec is null || collection is null || collectionItems is null || allItems is null)
+            return;
+        if (!collection.AutoGenerateSectionIndex)
+            return;
+        if (collectionItems.Count == 0)
+            return;
+
+        var publishedItems = collectionItems
+            .Where(static item => item is not null && !item.Draft)
+            .ToList();
+        if (publishedItems.Count == 0)
+            return;
+
+        var localization = ResolveLocalizationConfig(spec);
+        var groupedByProject = publishedItems
+            .GroupBy(item => item.ProjectSlug ?? string.Empty, StringComparer.OrdinalIgnoreCase);
+        foreach (var projectGroup in groupedByProject)
+        {
+            var projectSlug = string.IsNullOrWhiteSpace(projectGroup.Key) ? null : projectGroup.Key;
+            var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
+            if (string.IsNullOrWhiteSpace(baseOutput))
+                continue;
+
+            var languages = projectGroup
+                .Select(item => ResolveEffectiveLanguageCode(localization, item.Language))
+                .Where(language => !string.IsNullOrWhiteSpace(language))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (languages.Count == 0)
+                languages.Add(localization.DefaultLanguage);
+
+            foreach (var language in languages)
+            {
+                var expectedRoute = BuildRoute(baseOutput, string.Empty, spec.TrailingSlash);
+                expectedRoute = ApplyLanguagePrefixToRoute(spec, expectedRoute, language);
+                var normalizedExpected = NormalizeRouteForMatch(expectedRoute);
+
+                var hasLanding = projectGroup
+                    .Where(item => item.Kind == PageKind.Section || item.Kind == PageKind.Home || item.Kind == PageKind.Page)
+                    .Select(item => NormalizeRouteForMatch(item.OutputPath))
+                    .Any(route => string.Equals(route, normalizedExpected, StringComparison.OrdinalIgnoreCase));
+                if (hasLanding)
+                    continue;
+
+                var generatedTitle = string.IsNullOrWhiteSpace(collection.AutoSectionTitle)
+                    ? HumanizeSegment(collection.Name)
+                    : collection.AutoSectionTitle!.Trim();
+                var generatedDescription = string.IsNullOrWhiteSpace(collection.AutoSectionDescription)
+                    ? string.Empty
+                    : collection.AutoSectionDescription!.Trim();
+
+                allItems.Add(new ContentItem
+                {
+                    SourcePath = $"[generated:{collection.Name}]",
+                    Collection = collection.Name,
+                    OutputPath = expectedRoute,
+                    Language = language,
+                    TranslationKey = string.IsNullOrWhiteSpace(projectSlug)
+                        ? $"collection:{collection.Name}:index"
+                        : $"collection:{collection.Name}:{projectSlug}:index",
+                    Title = generatedTitle,
+                    Description = generatedDescription,
+                    Slug = "index",
+                    Kind = PageKind.Section,
+                    Layout = string.IsNullOrWhiteSpace(collection.ListLayout) ? collection.DefaultLayout : collection.ListLayout,
+                    ProjectSlug = projectSlug,
+                    Meta = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["auto_generated_section_index"] = true
+                    },
+                    Outputs = collection.Outputs
+                });
+            }
+        }
     }
 
     private static List<ContentItem> BuildTaxonomyItems(SiteSpec spec, IReadOnlyList<ContentItem> items)

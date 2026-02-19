@@ -79,7 +79,7 @@ public static partial class WebSiteBuilder
         var crawlMeta = BuildCrawlMetaHtml(spec, item);
         projectMap.TryGetValue(item.ProjectSlug ?? string.Empty, out var projectSpec);
         var breadcrumbs = BuildBreadcrumbs(spec, item, menuSpecs);
-        var fullListItems = ResolveListItems(item, allItems);
+        var fullListItems = ResolveListItems(spec, item, allItems);
         var pagination = ResolvePaginationRuntime(spec, item, fullListItems);
         var listItems = ApplyPagination(fullListItems, pagination);
         var headHtml = BuildHeadHtml(spec, item, allItems, rootPath);
@@ -88,9 +88,9 @@ public static partial class WebSiteBuilder
         var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);
         var extraCss = GetMetaString(item.Meta, "extra_css");
         var extraScripts = BuildExtraScriptsHtml(item, rootPath);
-        var taxonomyTerms = BuildTaxonomyTermsRuntime(item, allItems);
-        var taxonomyIndex = BuildTaxonomyIndexRuntime(item, allItems);
-        var taxonomyTermSummary = BuildTaxonomyTermSummaryRuntime(item, allItems);
+        var taxonomyTerms = BuildTaxonomyTermsRuntime(spec, item, allItems);
+        var taxonomyIndex = BuildTaxonomyIndexRuntime(spec, item, allItems);
+        var taxonomyTermSummary = BuildTaxonomyTermSummaryRuntime(spec, item, allItems);
 
         var renderContext = new ThemeRenderContext
         {
@@ -214,9 +214,10 @@ public static partial class WebSiteBuilder
             return Array.Empty<string>();
         if (spec.Feed?.Enabled == false)
             return Array.Empty<string>();
+        var collection = ResolveCollectionSpec(spec, item.Collection);
 
         if (item.Kind == PageKind.Section &&
-            IsEditorialCollection(item.Collection))
+            CollectionPresetDefaults.IsEditorialCollection(collection, item.Collection))
         {
             return BuildImplicitFeedFormats(spec.Feed);
         }
@@ -231,13 +232,27 @@ public static partial class WebSiteBuilder
         return Array.Empty<string>();
     }
 
+    private static CollectionSpec? ResolveCollectionSpec(SiteSpec spec, string? collectionName)
+    {
+        if (spec?.Collections is null || spec.Collections.Length == 0 || string.IsNullOrWhiteSpace(collectionName))
+            return null;
+        var match = spec.Collections.FirstOrDefault(collection =>
+            collection is not null &&
+            !string.IsNullOrWhiteSpace(collection.Name) &&
+            collection.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+            return null;
+        return CollectionPresetDefaults.Apply(match);
+    }
+
     private static bool IsEditorialCollection(string? collection)
     {
         if (string.IsNullOrWhiteSpace(collection))
             return false;
 
         return collection.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
-               collection.Equals("news", StringComparison.OrdinalIgnoreCase);
+               collection.Equals("news", StringComparison.OrdinalIgnoreCase) ||
+               collection.Equals("changelog", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string[] BuildImplicitFeedFormats(FeedSpec? feed)
@@ -389,7 +404,7 @@ public static partial class WebSiteBuilder
 
     private static string RenderJsonOutput(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
-        var listItems = ResolveListItems(item, items);
+        var listItems = ResolveListItems(spec, item, items);
         var payload = new Dictionary<string, object?>
         {
             ["title"] = item.Title,
@@ -426,7 +441,7 @@ public static partial class WebSiteBuilder
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "rss", Suffix = "xml" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
 
-        var orderedItems = ResolveFeedItems(item, items, maxItems);
+        var orderedItems = ResolveFeedItems(spec, item, items, maxItems);
 
         var contentNs = XNamespace.Get("http://purl.org/rss/1.0/modules/content/");
         var atomNs = XNamespace.Get("http://www.w3.org/2005/Atom");
@@ -487,7 +502,7 @@ public static partial class WebSiteBuilder
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "atom", Suffix = "atom.xml" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
         var siteLink = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
-        var orderedItems = ResolveFeedItems(item, items, maxItems).ToArray();
+        var orderedItems = ResolveFeedItems(spec, item, items, maxItems).ToArray();
         var updated = orderedItems
             .Select(entry => entry.Date?.ToUniversalTime())
             .Where(static value => value.HasValue)
@@ -553,7 +568,7 @@ public static partial class WebSiteBuilder
         var feedRoute = ResolveOutputRoute(item.OutputPath, new OutputFormatSpec { Name = "jsonfeed", Suffix = "feed.json" });
         var feedSelfLink = string.IsNullOrWhiteSpace(baseUrl) ? feedRoute : baseUrl + feedRoute;
         var homePageUrl = string.IsNullOrWhiteSpace(baseUrl) ? item.OutputPath : baseUrl + item.OutputPath;
-        var orderedItems = ResolveFeedItems(item, items, maxItems);
+        var orderedItems = ResolveFeedItems(spec, item, items, maxItems);
 
         var payload = new Dictionary<string, object?>
         {
@@ -597,9 +612,9 @@ public static partial class WebSiteBuilder
                ?? outputs.FirstOrDefault(output => !output.IsCurrent)?.Url;
     }
 
-    private static IEnumerable<ContentItem> ResolveFeedItems(ContentItem item, IReadOnlyList<ContentItem> items, int maxItems)
+    private static IEnumerable<ContentItem> ResolveFeedItems(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items, int maxItems)
     {
-        IEnumerable<ContentItem> orderedItems = ResolveListItems(item, items)
+        IEnumerable<ContentItem> orderedItems = ResolveListItems(spec, item, items)
             .OrderByDescending(entry => entry.Date ?? DateTime.MinValue)
             .ThenBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase);
         if (maxItems > 0)
@@ -666,7 +681,7 @@ public static partial class WebSiteBuilder
         }
     }
 
-    private static IReadOnlyList<ContentItem> ResolveListItems(ContentItem item, IReadOnlyList<ContentItem> items)
+    private static IReadOnlyList<ContentItem> ResolveListItems(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> items)
     {
         if (item.Kind == PageKind.Section)
         {
@@ -679,15 +694,21 @@ public static partial class WebSiteBuilder
             }
 
             var current = NormalizeRouteForMatch(sectionRoot);
-            return items
+            var sectionItems = items
                 .Where(i => !i.Draft)
                 .Where(i => i.Collection == item.Collection)
                 .Where(i => i.OutputPath != item.OutputPath)
                 .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
                 .Where(i => NormalizeRouteForMatch(i.OutputPath).StartsWith(current, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(i => i.Order ?? int.MaxValue)
-                .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+            var collection = (spec.Collections ?? Array.Empty<CollectionSpec>())
+                .FirstOrDefault(c => c is not null &&
+                                     c.Name.Equals(item.Collection, StringComparison.OrdinalIgnoreCase));
+            if (collection is not null)
+                collection = CollectionPresetDefaults.Apply(collection);
+            var editorialDefault = CollectionPresetDefaults.IsEditorialCollection(collection, item.Collection);
+            return SortListItems(sectionItems, collection?.SortBy, collection?.SortOrder, editorialDefault);
         }
 
         if (item.Kind == PageKind.Taxonomy)
@@ -707,17 +728,72 @@ public static partial class WebSiteBuilder
             if (string.IsNullOrWhiteSpace(term))
                 return Array.Empty<ContentItem>();
 
-            return items
+            var termItems = items
                 .Where(i => !i.Draft)
                 .Where(i => i.Kind == PageKind.Page || i.Kind == PageKind.Home)
                 .Where(i => GetTaxonomyValues(i, new TaxonomySpec { Name = taxonomy }).Any(t =>
                     string.Equals(t, term, StringComparison.OrdinalIgnoreCase)))
-                .OrderBy(i => i.Order ?? int.MaxValue)
-                .ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            return SortListItems(termItems, sortBy: null, sortOrder: null, editorialDefaultByDate: false);
         }
 
         return Array.Empty<ContentItem>();
+    }
+
+    private static IReadOnlyList<ContentItem> SortListItems(
+        IReadOnlyList<ContentItem> items,
+        string? sortBy,
+        SortOrder? sortOrder,
+        bool editorialDefaultByDate)
+    {
+        if (items is null || items.Count == 0)
+            return Array.Empty<ContentItem>();
+
+        var mode = string.IsNullOrWhiteSpace(sortBy)
+            ? (editorialDefaultByDate ? "date" : "order")
+            : sortBy.Trim().ToLowerInvariant();
+        var descending = sortOrder.HasValue
+            ? sortOrder.Value == SortOrder.Desc
+            : mode == "date";
+
+        return mode switch
+        {
+            "date" => descending
+                ? items.OrderByDescending(item => item.Date ?? DateTime.MinValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Date ?? DateTime.MinValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            "title" => descending
+                ? items.OrderByDescending(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            "slug" => descending
+                ? items.OrderByDescending(item => item.Slug, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Slug, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            "route" or "path" or "url" => descending
+                ? items.OrderByDescending(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.OutputPath, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+            _ => descending
+                ? items.OrderByDescending(item => item.Order ?? int.MaxValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : items.OrderBy(item => item.Order ?? int.MaxValue)
+                    .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+        };
     }
 
     private static TaxonomySpec? ResolveTaxonomy(SiteSpec spec, ContentItem item)

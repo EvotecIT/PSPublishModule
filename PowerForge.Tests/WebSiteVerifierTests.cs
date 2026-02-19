@@ -252,7 +252,114 @@ public partial class WebSiteVerifierTests
 
             Assert.True(result.Success);
             Assert.Contains(result.Warnings, warning =>
-                warning.Contains("looks like an editorial stream (blog/news) but has no landing page", StringComparison.OrdinalIgnoreCase));
+                warning.Contains("looks like an editorial stream", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("has no landing page", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotWarnWhenBlogCollectionAutoGeneratesLandingPage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-blog-landing-auto-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "first-post.md"),
+                """
+                ---
+                title: First Post
+                ---
+
+                Hello
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Blog Landing Auto Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        AutoGenerateSectionIndex = true
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("looks like an editorial stream", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("has no landing page", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotWarnWhenCustomCollectionUsesBlogPreset()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-blog-preset-custom-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var updatesPath = Path.Combine(root, "content", "updates");
+            Directory.CreateDirectory(updatesPath);
+            File.WriteAllText(Path.Combine(updatesPath, "first-post.md"),
+                """
+                ---
+                title: First Post
+                ---
+
+                Hello
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Blog Preset Custom Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "updates",
+                        Preset = "blog",
+                        Input = "content/updates",
+                        Output = "/updates"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("looks like an editorial stream", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("has no landing page", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -364,6 +364,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "pages",
+                    Preset = "pages",
                     Input = "content/pages",
                     Output = "/",
                     DefaultLayout = "page",
@@ -372,6 +373,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "docs",
+                    Preset = "docs",
                     Input = "content/docs",
                     Output = "/docs",
                     DefaultLayout = "docs",
@@ -380,6 +382,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "blog",
+                    Preset = "blog",
                     Input = "content/blog",
                     Output = "/blog",
                     DefaultLayout = "post",
@@ -389,6 +392,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "news",
+                    Preset = "news",
                     Input = "content/news",
                     Output = "/news",
                     DefaultLayout = "post",

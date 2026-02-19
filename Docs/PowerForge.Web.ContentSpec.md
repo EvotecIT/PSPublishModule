@@ -271,11 +271,64 @@ Collections map markdown inputs to output routes:
   "Output": "/docs",
   "DefaultLayout": "docs",
   "ListLayout": "docs-list",
-  "Include": ["*.md", "**/*.md"]
+  "Include": ["*.md", "**/*.md"],
+  "SortBy": "order",
+  "SortOrder": "asc"
 }
 ```
 
 `ListLayout` is used for `_index.md` section pages.
+
+### Collection presets
+Use `Preset` for WordPress-like behavior with sensible defaults:
+
+- `blog`: `post` + `list`, newest-first, page size `10`, auto section index enabled
+- `news`: `post` + `list`, newest-first, page size `15`, auto section index enabled
+- `changelog` (also `release-notes` / `releases`): `post` + `list`, newest-first, page size `30`, auto section index enabled
+- `editorial`: generic editorial stream (`post` + `list`, newest-first, auto section index)
+- `docs`: `docs` + `docs-list`, order-first
+- `knowledgebase` / `kb`: docs-like ordering and layouts
+- `pages` / `landing`: page-oriented ordering defaults
+
+Example with a custom collection name:
+
+```json
+{
+  "Name": "updates",
+  "Preset": "blog",
+  "Input": "content/updates",
+  "Output": "/updates"
+}
+```
+
+This gives blog behavior even though the collection name is not literally `blog`.
+
+### Auto-generated section indexes
+For editorial-like collections you can let PowerForge generate the landing page
+when no non-draft `_index.md`/`slug:index` page exists:
+
+```json
+{
+  "Name": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "ListLayout": "list",
+  "AutoGenerateSectionIndex": true,
+  "AutoSectionTitle": "Blog",
+  "AutoSectionDescription": "Product updates and walkthroughs."
+}
+```
+
+This removes the need to manually maintain a blog/news landing page file just to expose latest posts.
+
+### Collection sorting
+`SortBy` and `SortOrder` apply to section list item ordering:
+- Supported `SortBy`: `order`, `date`, `title`, `slug`, `route` (`path`/`url` aliases)
+- `SortOrder`: `asc` / `desc`
+
+Default behavior:
+- editorial collections (`blog`/`news`) default to `date desc` (newest first)
+- other collections default to `order asc`, then title
 
 ### TOC overrides
 Collections can define a table of contents file (DocFX‑style):

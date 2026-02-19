@@ -248,6 +248,7 @@ public static partial class WebSiteVerifier
             return;
 
         var collections = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Select(CollectionPresetDefaults.Apply)
             .Where(IsEditorialCollection)
             .ToArray();
         if (collections.Length == 0)
@@ -384,37 +385,37 @@ public static partial class WebSiteVerifier
 
     private static bool IsEditorialCollection(CollectionSpec? collection)
     {
-        if (collection is null)
-            return false;
-        if (!string.IsNullOrWhiteSpace(collection.Name) &&
-            (collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
-             collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase)))
-            return true;
-
-        return !string.IsNullOrWhiteSpace(collection.Output) &&
-               (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase) ||
-                collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase));
+        var effectiveCollection = collection is null ? null : CollectionPresetDefaults.Apply(collection);
+        return CollectionPresetDefaults.IsEditorialCollection(effectiveCollection, collection?.Name);
     }
 
     private static string ResolveEditorialFeatureName(CollectionSpec collection)
     {
         if (collection is null)
             return string.Empty;
+        var effectiveCollection = CollectionPresetDefaults.Apply(collection);
+        var preset = CollectionPresetDefaults.ResolvePresetKey(effectiveCollection.Preset);
+        if (preset is "blog" or "news")
+            return preset;
+        if (preset is "editorial" or "changelog")
+            return "blog";
 
-        if (!string.IsNullOrWhiteSpace(collection.Name))
+        if (!string.IsNullOrWhiteSpace(effectiveCollection.Name))
         {
-            var normalized = NormalizeFeatureName(collection.Name);
+            var normalized = NormalizeFeatureName(effectiveCollection.Name);
             if (string.Equals(normalized, "blog", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalized, "news", StringComparison.OrdinalIgnoreCase))
                 return normalized;
         }
 
-        if (!string.IsNullOrWhiteSpace(collection.Output))
+        if (!string.IsNullOrWhiteSpace(effectiveCollection.Output))
         {
-            if (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase))
+            if (effectiveCollection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase))
                 return "blog";
-            if (collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase))
+            if (effectiveCollection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase))
                 return "news";
+            if (effectiveCollection.Output.StartsWith("/changelog", StringComparison.OrdinalIgnoreCase))
+                return "blog";
         }
 
         return string.Empty;
