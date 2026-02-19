@@ -110,6 +110,39 @@ public class WebMarkdownRendererGfmTests
     }
 
     [Fact]
+    public void Build_MarkdownImageSyntax_AddsDefaultImageHints()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg)
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("alt=\"Issue Ops board\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HtmlImageTag_RespectsExplicitLoadingAndAddsMissingDecoding()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg" alt="Issue Ops board" loading="eager" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"eager\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_MultilineHtmlIframeTag_IsPreservedWithAttributes()
     {
         var html = BuildSinglePageSite(
