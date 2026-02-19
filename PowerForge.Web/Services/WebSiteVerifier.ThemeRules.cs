@@ -319,32 +319,6 @@ public static partial class WebSiteVerifier
         if (usages.Length == 0)
             return;
 
-        var feature = ResolveEditorialFeatureName(collection);
-        if (string.IsNullOrWhiteSpace(feature))
-            return;
-
-        var contract = TryGetFeatureContract(manifest, feature);
-        if (contract is null)
-        {
-            if (manifest.FeatureContracts is { Count: > 0 })
-            {
-                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature} is not defined. Add requiredCssSelectors for contract-driven editorial styling.");
-            }
-            return;
-        }
-
-        var requiredSelectors = (contract.RequiredCssSelectors ?? Array.Empty<string>())
-            .Where(static selector => !string.IsNullOrWhiteSpace(selector))
-            .Select(static selector => selector.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (requiredSelectors.Length == 0)
-        {
-            warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature}.requiredCssSelectors is empty.");
-            return;
-        }
-
         var expectedSelectors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var usage in usages)
         {
@@ -358,6 +332,33 @@ public static partial class WebSiteVerifier
         if (expectedSelectors.Count == 0)
             return;
 
+        var feature = ResolveEditorialFeatureName(collection);
+        if (string.IsNullOrWhiteSpace(feature))
+            return;
+
+        var suggestion = BuildEditorialSelectorContractHint(feature, expectedSelectors);
+        var contract = TryGetFeatureContract(manifest, feature);
+        if (contract is null)
+        {
+            if (manifest.FeatureContracts is { Count: > 0 })
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature} is not defined. Add requiredCssSelectors for contract-driven editorial styling. Suggested contract fragment: {suggestion}");
+            }
+            return;
+        }
+
+        var requiredSelectors = (contract.RequiredCssSelectors ?? Array.Empty<string>())
+            .Where(static selector => !string.IsNullOrWhiteSpace(selector))
+            .Select(static selector => selector.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (requiredSelectors.Length == 0)
+        {
+            warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature}.requiredCssSelectors is empty. Suggested contract fragment: {suggestion}");
+            return;
+        }
+
         var missing = expectedSelectors
             .Where(expected => !ContainsContractSelector(requiredSelectors, expected))
             .ToArray();
@@ -367,7 +368,8 @@ public static partial class WebSiteVerifier
 
         var preview = string.Join(", ", missing.Take(8));
         var more = missing.Length > 8 ? $" (+{missing.Length - 8} more)" : string.Empty;
-        warnings.Add($"Theme CSS contract: feature '{feature}' layout '{listLayout}' uses pf.editorial_cards selectors that are not declared in featureContracts.{feature}.requiredCssSelectors: {preview}{more}.");
+        var missingSuggestion = BuildEditorialSelectorContractHint(feature, missing);
+        warnings.Add($"Theme CSS contract: feature '{feature}' layout '{listLayout}' uses pf.editorial_cards selectors that are not declared in featureContracts.{feature}.requiredCssSelectors: {preview}{more}. Suggested additions: {missingSuggestion}");
     }
 
     private static bool IsEditorialCollection(CollectionSpec? collection)
@@ -423,6 +425,27 @@ public static partial class WebSiteVerifier
         }
 
         return false;
+    }
+
+    private static string BuildEditorialSelectorContractHint(string feature, IEnumerable<string> selectors)
+    {
+        if (string.IsNullOrWhiteSpace(feature) || selectors is null)
+            return "\"featureContracts\": {}";
+
+        var normalized = selectors
+            .Where(static selector => !string.IsNullOrWhiteSpace(selector))
+            .Select(static selector => selector.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static selector => selector, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalized.Length == 0)
+            return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": [] }} }}";
+
+        var take = normalized.Take(10).ToArray();
+        var values = string.Join(", ", take.Select(static selector => "\"" + selector + "\""));
+        var suffix = normalized.Length > take.Length ? ", \"...\"" : string.Empty;
+        return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": [{values}{suffix}] }} }}";
     }
 
     private static EditorialCardsUsage[] ExtractEditorialCardsUsages(string layoutContent)
