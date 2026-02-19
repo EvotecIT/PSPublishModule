@@ -170,7 +170,7 @@ internal static partial class WebPipelineRunner
             var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
             var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
             var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
-            var checkSeoMeta = GetBool(step, "checkSeoMeta") ?? GetBool(step, "check-seo-meta") ?? false;
+            var checkSeoMeta = GetBool(step, "checkSeoMeta") ?? GetBool(step, "check-seo-meta") ?? true;
             var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
             var checkMediaEmbeds = GetBool(step, "checkMediaEmbeds") ?? GetBool(step, "checkMedia") ?? true;
             var checkNetworkHints = GetBool(step, "checkNetworkHints") ?? true;
@@ -189,7 +189,7 @@ internal static partial class WebPipelineRunner
             var renderedCheckErrors = GetBool(step, "renderedCheckConsoleErrors") ?? true;
             var renderedCheckWarnings = GetBool(step, "renderedCheckConsoleWarnings") ?? true;
             var renderedCheckFailures = GetBool(step, "renderedCheckFailedRequests") ?? true;
-            var renderedCheckContrast = GetBool(step, "renderedCheckContrast") ?? false;
+            var renderedCheckContrast = GetBool(step, "renderedCheckContrast") ?? rendered;
             var renderedContrastMinRatio = GetDouble(step, "renderedContrastMinRatio") ?? 4.5d;
             var renderedContrastMaxFindings = GetInt(step, "renderedContrastMaxFindings") ?? 10;
             var renderedInclude = GetString(step, "renderedInclude");

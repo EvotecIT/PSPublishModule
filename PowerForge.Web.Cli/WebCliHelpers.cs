@@ -28,6 +28,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web doctor --config <site.json> [--out <path>] [--site-root <dir>] [--no-build] [--no-verify] [--no-audit]");
         Console.WriteLine("                     [--include <glob>] [--exclude <glob>] [--summary] [--summary-path <file>] [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--required-route <path[,path]>] [--nav-required-link <path[,path]>]");
+        Console.WriteLine("                     [--seo-meta] [--no-seo-meta]");
         Console.WriteLine("                     [--rendered] [--rendered-contrast] [--rendered-contrast-min <ratio>] [--rendered-contrast-max-findings <n>]");
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
         Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
@@ -38,6 +39,7 @@ internal static class WebCliHelpers
         Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");
         Console.WriteLine("                     [--no-heading-order] [--no-link-purpose] [--no-media]");
+        Console.WriteLine("                     [--seo-meta] [--no-seo-meta]");
         Console.WriteLine("                     [--rendered] [--rendered-engine <chromium|firefox|webkit>] [--rendered-max <n>] [--rendered-timeout <ms>]");
         Console.WriteLine("                     [--rendered-headful] [--rendered-base-url <url>] [--rendered-host <host>] [--rendered-port <n>] [--rendered-no-serve]");
         Console.WriteLine("                     [--rendered-no-install]");
@@ -299,6 +301,7 @@ internal static class WebCliHelpers
         var checkMetaCharset = !HasOption(argv, "--no-meta-charset");
         var checkReplacementChars = !HasOption(argv, "--no-replacement-char-check");
         var checkHeadingOrder = !HasOption(argv, "--no-heading-order");
+        var checkSeoMeta = HasOption(argv, "--seo-meta") || !HasOption(argv, "--no-seo-meta");
         var checkLinkPurpose = !HasOption(argv, "--no-link-purpose");
         var checkMediaEmbeds = !HasOption(argv, "--no-media");
         var checkNetworkHints = !HasOption(argv, "--no-network-hints");
@@ -320,7 +323,8 @@ internal static class WebCliHelpers
         var renderedNoConsoleErrors = HasOption(argv, "--rendered-no-console-errors");
         var renderedNoConsoleWarnings = HasOption(argv, "--rendered-no-console-warnings");
         var renderedNoFailures = HasOption(argv, "--rendered-no-failures");
-        var renderedContrast = HasOption(argv, "--rendered-contrast") && !HasOption(argv, "--rendered-no-contrast");
+        var renderedContrast = !HasOption(argv, "--rendered-no-contrast") &&
+                               (HasOption(argv, "--rendered-contrast") || rendered);
         var renderedContrastMinText = TryGetOptionValue(argv, "--rendered-contrast-min");
         var renderedContrastMaxFindingsText = TryGetOptionValue(argv, "--rendered-contrast-max-findings");
         var renderedInclude = ReadOptionList(argv, "--rendered-include");
@@ -382,6 +386,7 @@ internal static class WebCliHelpers
             CheckMetaCharset = checkMetaCharset,
             CheckUnicodeReplacementChars = checkReplacementChars,
             CheckHeadingOrder = checkHeadingOrder,
+            CheckSeoMeta = checkSeoMeta,
             CheckLinkPurposeConsistency = checkLinkPurpose,
             CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
@@ -454,6 +459,8 @@ internal static class WebCliHelpers
                 recommendations.Add("Add `preconnect`/`dns-prefetch` hints for external origins (for example Google Fonts) to reduce critical path latency.");
             if (ContainsCategory(audit, "render-blocking"))
                 recommendations.Add("Reduce render-blocking head resources: defer non-critical scripts and consolidate CSS.");
+            if (ContainsCategory(audit, "seo"))
+                recommendations.Add("Harden SEO metadata contracts: canonical/OG/Twitter tags, hreflang alternates, and keep noindex routes out of sitemap.xml.");
             if (ContainsCategory(audit, "rendered-contrast"))
                 recommendations.Add("Improve color contrast on rendered pages (especially accent links/tabs in light mode) to meet WCAG AA.");
             if (ContainsCategory(audit, "heading-order"))

@@ -118,6 +118,7 @@ public static partial class WebSiteAuditor
         var navMismatchCount = 0;
         var navCheckedCount = 0;
         var navIgnoredCount = 0;
+        var noIndexRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var navMissing = new Dictionary<string, (int Count, List<string> Samples)>(StringComparer.OrdinalIgnoreCase);
         var duplicateIdCount = 0;
         var requiredRouteCount = 0;
@@ -291,6 +292,16 @@ public static partial class WebSiteAuditor
 
             if (options.CheckUtf8 && options.CheckUnicodeReplacementChars && html.IndexOf('\uFFFD') >= 0)
                 AddIssue("warning", "utf8", relativePath, "contains replacement characters (�).", "replacement-char");
+
+            var routePath = ToRoutePath(relativePath);
+            if (HasNoIndexRobots(doc))
+            {
+                foreach (var candidate in BuildRouteCandidatesForSeoChecks(relativePath, routePath, doc))
+                {
+                    if (!string.IsNullOrWhiteSpace(candidate))
+                        noIndexRoutes.Add(candidate);
+                }
+            }
 
             if (options.CheckUtf8 && options.CheckMetaCharset && !HasUtf8Meta(doc))
                 AddIssue("warning", "utf8", relativePath, "missing UTF-8 meta charset declaration.", "meta-charset");
@@ -486,6 +497,9 @@ public static partial class WebSiteAuditor
                     $"nav-missing:{selector}");
             }
         }
+
+        if (options.CheckSeoMeta)
+            ValidateSitemapNoIndexConsistency(siteRoot, noIndexRoutes, AddIssue);
 
         if (options.CheckRendered && htmlFiles.Count > 0)
         {

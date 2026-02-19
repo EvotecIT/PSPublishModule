@@ -476,6 +476,7 @@ internal static partial class WebCliCommandHandlers
         var checkMetaCharset = !HasOption(subArgs, "--no-meta-charset");
         var checkReplacementChars = !HasOption(subArgs, "--no-replacement-char-check");
         var checkHeadingOrder = !HasOption(subArgs, "--no-heading-order");
+        var checkSeoMeta = HasOption(subArgs, "--seo-meta") && !HasOption(subArgs, "--no-seo-meta");
         var checkLinkPurpose = !HasOption(subArgs, "--no-link-purpose");
         var checkMediaEmbeds = !HasOption(subArgs, "--no-media");
         var checkNetworkHints = !HasOption(subArgs, "--no-network-hints");
@@ -571,6 +572,7 @@ internal static partial class WebCliCommandHandlers
             CheckMetaCharset = checkMetaCharset,
             CheckUnicodeReplacementChars = checkReplacementChars,
             CheckHeadingOrder = checkHeadingOrder,
+            CheckSeoMeta = checkSeoMeta,
             CheckLinkPurposeConsistency = checkLinkPurpose,
             CheckMediaEmbeds = checkMediaEmbeds,
             CheckNetworkHints = checkNetworkHints,
