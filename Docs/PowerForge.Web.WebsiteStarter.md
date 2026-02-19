@@ -1,6 +1,6 @@
 # PowerForge.Web Website Starter (Golden Path)
 
-Last updated: 2026-02-18
+Last updated: 2026-02-19
 
 This is the canonical, short "how we build sites" document meant to prevent:
 - half-cooked themes,
@@ -55,9 +55,11 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - if your site depends on content/projects sourced from other repos, declare them under `Sources` in `site.json`
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes
+   - run `sitemap` after `build` so XML/JSON sitemap artifacts stay in sync with generated routes
    - run heavy steps only in CI (`modes:["ci"]`):
      - `audit` (and rendered checks if enabled)
      - `optimize`
+     - `indexnow` (recommended with `optionalKey:true` so missing secrets skip safely in forks/dev)
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. CI workflow:
    - keep engine source pinned in workflow env:
