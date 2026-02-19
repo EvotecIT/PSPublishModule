@@ -504,7 +504,24 @@ a { color: inherit; text-decoration: none; }
                 { "task": "verify", "id": "verify-dev", "dependsOn": "build-site", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
                 { "task": "verify", "id": "verify-ci", "dependsOn": "build-site", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
 
-                { "task": "audit", "id": "audit-ci", "dependsOn": "build-site", "siteRoot": "./_site", "modes": ["ci"], "summary": true, "sarif": true, "baseline": "./.powerforge/audit-baseline.json", "failOnNewIssues": true }
+                {
+                  "task": "audit",
+                  "id": "audit-ci",
+                  "dependsOn": "build-site",
+                  "siteRoot": "./_site",
+                  "modes": ["ci"],
+                  "summary": true,
+                  "sarif": true,
+                  "baseline": "./.powerforge/audit-baseline.json",
+                  "failOnNewIssues": true,
+                  "requireExplicitChecks": true,
+                  "checkSeoMeta": false,
+                  "checkNetworkHints": true,
+                  "checkRenderBlockingResources": true,
+                  "checkHeadingOrder": true,
+                  "checkLinkPurposeConsistency": true,
+                  "checkMediaEmbeds": true
+                }
               ]
             }
             """,

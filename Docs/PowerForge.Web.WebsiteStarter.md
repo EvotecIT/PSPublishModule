@@ -42,6 +42,15 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 3. `pipeline.json`:
    - keep root `pipeline.json` small and inherit shared defaults via `extends`
    - put shared build/verify/audit/cache/profile defaults in `config/presets/pipeline.web-quality.json`
+   - for CI `audit`/`doctor` steps, lock compatibility-sensitive defaults:
+     - `requireExplicitChecks: true`
+     - explicitly set:
+       - `checkSeoMeta`
+       - `checkNetworkHints`
+       - `checkRenderBlockingResources`
+       - `checkHeadingOrder`
+       - `checkLinkPurposeConsistency`
+       - `checkMediaEmbeds`
    - if your site depends on content/projects sourced from other repos, declare them under `Sources` in `site.json`
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes

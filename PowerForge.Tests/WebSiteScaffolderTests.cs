@@ -54,6 +54,19 @@ public class WebSiteScaffolderTests
             var pipeline = pipelineDoc.RootElement;
             Assert.Equal("./config/presets/pipeline.web-quality.json", pipeline.GetProperty("extends").GetString());
             Assert.False(pipeline.TryGetProperty("steps", out _));
+
+            using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
+            var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+            var auditStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "audit", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(auditStep.GetProperty("requireExplicitChecks").GetBoolean());
+            Assert.False(auditStep.GetProperty("checkSeoMeta").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkNetworkHints").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkRenderBlockingResources").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkHeadingOrder").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkLinkPurposeConsistency").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkMediaEmbeds").GetBoolean());
         }
         finally
         {
