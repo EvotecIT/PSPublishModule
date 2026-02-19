@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using HtmlTinkerX;
 
 namespace PowerForge.Web;
@@ -8,6 +9,10 @@ namespace PowerForge.Web;
 /// <summary>Audits generated HTML output using static checks.</summary>
 public static partial class WebSiteAuditor
 {
+    private static readonly Regex HreflangTokenPattern = new(
+        "^(x-default|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, bool useDefaultExcludes, out bool truncated)
     {
         // Best-effort: avoid full traversal when auditing just wants a budget check.
@@ -362,11 +367,18 @@ public static partial class WebSiteAuditor
         if (HasNoIndexRobots(doc))
             return;
 
-        var canonicalLinks = doc.Head.QuerySelectorAll("link[rel='canonical'][href]")
+        var canonicalLinks = doc.Head.QuerySelectorAll("link[rel][href]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "canonical"))
             .Select(link => (link.GetAttribute("href") ?? string.Empty).Trim())
             .Where(href => !string.IsNullOrWhiteSpace(href))
             .ToArray();
-        if (canonicalLinks.Length > 1)
+        if (canonicalLinks.Length == 0)
+        {
+            addIssue("warning", "seo", relativePath,
+                "missing canonical link (<link rel=\"canonical\" ...>).",
+                "seo-missing-canonical");
+        }
+        else if (canonicalLinks.Length > 1)
         {
             addIssue("warning", "seo", relativePath,
                 $"duplicate canonical links detected ({canonicalLinks.Length}).",
@@ -380,14 +392,20 @@ public static partial class WebSiteAuditor
         }
 
         var ogTitle = GetMetaPropertyValues(doc, "og:title");
+        if (ogTitle.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing og:title meta tag.", "seo-missing-og-title");
         if (ogTitle.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate og:title tags detected ({ogTitle.Length}).", "seo-duplicate-og-title");
 
         var ogDescription = GetMetaPropertyValues(doc, "og:description");
+        if (ogDescription.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing og:description meta tag.", "seo-missing-og-description");
         if (ogDescription.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate og:description tags detected ({ogDescription.Length}).", "seo-duplicate-og-description");
 
         var ogUrl = GetMetaPropertyValues(doc, "og:url");
+        if (ogUrl.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing og:url meta tag.", "seo-missing-og-url");
         if (ogUrl.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate og:url tags detected ({ogUrl.Length}).", "seo-duplicate-og-url");
         foreach (var value in ogUrl.Where(value => !IsAbsoluteHttpUrl(value)))
@@ -415,18 +433,26 @@ public static partial class WebSiteAuditor
         }
 
         var twitterCard = GetMetaNameValues(doc, "twitter:card");
+        if (twitterCard.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing twitter:card meta tag.", "seo-missing-twitter-card");
         if (twitterCard.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:card tags detected ({twitterCard.Length}).", "seo-duplicate-twitter-card");
 
         var twitterTitle = GetMetaNameValues(doc, "twitter:title");
+        if (twitterTitle.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing twitter:title meta tag.", "seo-missing-twitter-title");
         if (twitterTitle.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:title tags detected ({twitterTitle.Length}).", "seo-duplicate-twitter-title");
 
         var twitterDescription = GetMetaNameValues(doc, "twitter:description");
+        if (twitterDescription.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing twitter:description meta tag.", "seo-missing-twitter-description");
         if (twitterDescription.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:description tags detected ({twitterDescription.Length}).", "seo-duplicate-twitter-description");
 
         var twitterUrl = GetMetaNameValues(doc, "twitter:url");
+        if (twitterUrl.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing twitter:url meta tag.", "seo-missing-twitter-url");
         if (twitterUrl.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:url tags detected ({twitterUrl.Length}).", "seo-duplicate-twitter-url");
         foreach (var value in twitterUrl.Where(value => !IsAbsoluteHttpUrl(value)))
@@ -437,6 +463,8 @@ public static partial class WebSiteAuditor
         }
 
         var twitterImage = GetMetaNameValues(doc, "twitter:image");
+        if (twitterImage.Length == 0)
+            addIssue("warning", "seo", relativePath, "missing twitter:image meta tag.", "seo-missing-twitter-image");
         if (twitterImage.Length > 1)
             addIssue("warning", "seo", relativePath, $"duplicate twitter:image tags detected ({twitterImage.Length}).", "seo-duplicate-twitter-image");
         foreach (var value in twitterImage.Where(value => !IsAbsoluteHttpUrl(value)))
@@ -444,6 +472,221 @@ public static partial class WebSiteAuditor
             addIssue("warning", "seo", relativePath,
                 $"twitter:image should be absolute http(s) but was '{value}'.",
                 "seo-twitter-image-absolute");
+        }
+
+        if (canonicalLinks.Length > 0 &&
+            IsAbsoluteHttpUrl(canonicalLinks[0]) &&
+            ogUrl.Length > 0 &&
+            IsAbsoluteHttpUrl(ogUrl[0]) &&
+            !SeoUrlsMatch(canonicalLinks[0], ogUrl[0]))
+        {
+            addIssue("warning", "seo", relativePath,
+                $"canonical URL does not match og:url ('{canonicalLinks[0]}' vs '{ogUrl[0]}').",
+                "seo-canonical-ogurl-mismatch");
+        }
+
+        if (canonicalLinks.Length > 0 &&
+            IsAbsoluteHttpUrl(canonicalLinks[0]) &&
+            twitterUrl.Length > 0 &&
+            IsAbsoluteHttpUrl(twitterUrl[0]) &&
+            !SeoUrlsMatch(canonicalLinks[0], twitterUrl[0]))
+        {
+            addIssue("warning", "seo", relativePath,
+                $"canonical URL does not match twitter:url ('{canonicalLinks[0]}' vs '{twitterUrl[0]}').",
+                "seo-canonical-twitterurl-mismatch");
+        }
+
+        var hreflangLinks = doc.Head.QuerySelectorAll("link[rel][hreflang][href]")
+            .Where(link => ContainsRelToken(link.GetAttribute("rel"), "alternate"))
+            .Select(link => new
+            {
+                HrefLang = (link.GetAttribute("hreflang") ?? string.Empty).Trim(),
+                Href = (link.GetAttribute("href") ?? string.Empty).Trim()
+            })
+            .Where(link => !string.IsNullOrWhiteSpace(link.HrefLang) && !string.IsNullOrWhiteSpace(link.Href))
+            .ToArray();
+
+        if (hreflangLinks.Length > 0)
+        {
+            foreach (var duplicate in hreflangLinks
+                         .GroupBy(link => link.HrefLang, StringComparer.OrdinalIgnoreCase)
+                         .Where(group => group.Count() > 1))
+            {
+                addIssue("warning", "seo", relativePath,
+                    $"duplicate hreflang '{duplicate.Key}' entries detected ({duplicate.Count()}).",
+                    "seo-hreflang-duplicate");
+            }
+
+            foreach (var link in hreflangLinks)
+            {
+                if (!HreflangTokenPattern.IsMatch(link.HrefLang))
+                {
+                    addIssue("warning", "seo", relativePath,
+                        $"invalid hreflang value '{link.HrefLang}'.",
+                        "seo-hreflang-invalid");
+                }
+
+                if (!IsAbsoluteHttpUrl(link.Href))
+                {
+                    addIssue("warning", "seo", relativePath,
+                        $"hreflang '{link.HrefLang}' should be absolute http(s) but was '{link.Href}'.",
+                        "seo-hreflang-absolute");
+                }
+            }
+
+            if (hreflangLinks.All(link => !link.HrefLang.Equals("x-default", StringComparison.OrdinalIgnoreCase)))
+            {
+                addIssue("warning", "seo", relativePath,
+                    "hreflang alternates are present but x-default is missing.",
+                    "seo-hreflang-x-default-missing");
+            }
+        }
+    }
+
+    private static bool SeoUrlsMatch(string left, string right)
+    {
+        var leftNormalized = NormalizeComparableSeoUrl(left);
+        var rightNormalized = NormalizeComparableSeoUrl(right);
+        if (string.IsNullOrWhiteSpace(leftNormalized) || string.IsNullOrWhiteSpace(rightNormalized))
+            return false;
+        return string.Equals(leftNormalized, rightNormalized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeComparableSeoUrl(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            return string.Empty;
+
+        var path = uri.AbsolutePath;
+        if (string.IsNullOrWhiteSpace(path))
+            path = "/";
+
+        if (!path.Equals("/", StringComparison.Ordinal) && path.EndsWith("/", StringComparison.Ordinal))
+            path = path.TrimEnd('/');
+
+        return $"{uri.Scheme.ToLowerInvariant()}://{uri.Host.ToLowerInvariant()}{path}";
+    }
+
+    private static string[] BuildRouteCandidatesForSeoChecks(string relativePath, string routePath, AngleSharp.Dom.IDocument doc)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        AddRouteCandidates(candidates, routePath);
+        AddRouteCandidates(candidates, "/" + relativePath.Replace('\\', '/').TrimStart('/'));
+
+        if (doc.Head is not null)
+        {
+            var canonicalHref = doc.Head.QuerySelectorAll("link[rel][href]")
+                .Where(link => ContainsRelToken(link.GetAttribute("rel"), "canonical"))
+                .Select(link => (link.GetAttribute("href") ?? string.Empty).Trim())
+                .FirstOrDefault(href => !string.IsNullOrWhiteSpace(href));
+            if (!string.IsNullOrWhiteSpace(canonicalHref))
+                AddRouteCandidates(candidates, canonicalHref);
+        }
+
+        return candidates.ToArray();
+    }
+
+    private static void AddRouteCandidates(HashSet<string> routes, string? value)
+    {
+        var normalized = NormalizeRouteLikeValue(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return;
+
+        routes.Add(normalized);
+
+        if (normalized.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            var folder = normalized.Substring(0, normalized.Length - "index.html".Length);
+            if (string.IsNullOrWhiteSpace(folder))
+                folder = "/";
+            routes.Add(folder);
+        }
+        else if (normalized.EndsWith("/", StringComparison.Ordinal))
+        {
+            routes.Add(normalized.Equals("/", StringComparison.Ordinal)
+                ? "/index.html"
+                : normalized + "index.html");
+        }
+    }
+
+    private static string NormalizeRouteLikeValue(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var raw = value.Trim();
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var absolute))
+            raw = absolute.AbsolutePath;
+
+        var queryIndex = raw.IndexOf('?');
+        if (queryIndex >= 0)
+            raw = raw.Substring(0, queryIndex);
+        var fragmentIndex = raw.IndexOf('#');
+        if (fragmentIndex >= 0)
+            raw = raw.Substring(0, fragmentIndex);
+
+        raw = raw.Replace('\\', '/').Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            return "/";
+        if (!raw.StartsWith("/", StringComparison.Ordinal))
+            raw = "/" + raw;
+        return raw;
+    }
+
+    private static void ValidateSitemapNoIndexConsistency(
+        string siteRoot,
+        HashSet<string> noIndexRoutes,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        if (noIndexRoutes.Count == 0)
+            return;
+
+        var sitemapPath = Path.Combine(siteRoot, "sitemap.xml");
+        if (!File.Exists(sitemapPath))
+            return;
+
+        try
+        {
+            var doc = XDocument.Load(sitemapPath);
+            var locs = doc
+                .Descendants()
+                .Where(node => node.Name.LocalName.Equals("loc", StringComparison.OrdinalIgnoreCase))
+                .Select(node => NormalizeRouteLikeValue(node.Value))
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var noIndexInSitemap = new List<string>();
+            foreach (var loc in locs)
+            {
+                var matches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                AddRouteCandidates(matches, loc);
+                if (matches.Any(candidate => noIndexRoutes.Contains(candidate)))
+                    noIndexInSitemap.Add(loc);
+            }
+
+            foreach (var route in noIndexInSitemap
+                         .Distinct(StringComparer.OrdinalIgnoreCase)
+                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                         .Take(50))
+            {
+                addIssue("warning", "seo", "sitemap.xml",
+                    $"sitemap includes noindex route '{route}'.",
+                    $"seo-sitemap-noindex:{route}");
+            }
+
+            if (noIndexInSitemap.Count > 50)
+            {
+                addIssue("warning", "seo", "sitemap.xml",
+                    $"sitemap includes additional noindex routes ({noIndexInSitemap.Count - 50} more).",
+                    "seo-sitemap-noindex-more");
+            }
+        }
+        catch (Exception ex)
+        {
+            addIssue("warning", "seo", "sitemap.xml",
+                $"failed to parse sitemap.xml for noindex validation ({ex.Message}).",
+                "seo-sitemap-parse");
         }
     }
 
@@ -1042,12 +1285,12 @@ public static partial class WebSiteAuditor
         return false;
     }
 
-    private static bool ContainsRelToken(string relValue, string token)
+    private static bool ContainsRelToken(string? relValue, string token)
     {
         if (string.IsNullOrWhiteSpace(relValue) || string.IsNullOrWhiteSpace(token))
             return false;
 
-        var parts = relValue.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var parts = relValue.Split(new[] { ' ', '\t', '\r', '\n', ',' }, StringSplitOptions.RemoveEmptyEntries);
         foreach (var part in parts)
         {
             if (part.Equals(token, StringComparison.OrdinalIgnoreCase))

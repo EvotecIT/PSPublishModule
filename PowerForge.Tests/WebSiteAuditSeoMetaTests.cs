@@ -36,8 +36,55 @@ public class WebSiteAuditSeoMetaTests
             Assert.Contains(result.Issues, issue => issue.Hint == "seo-duplicate-canonical");
             Assert.Contains(result.Issues, issue => issue.Hint == "seo-duplicate-og-url");
             Assert.Contains(result.Issues, issue => issue.Hint == "seo-og-url-absolute");
+            Assert.Contains(result.Issues, issue => issue.Hint == "seo-missing-og-description");
             Assert.Contains(result.Issues, issue => issue.Hint == "seo-missing-og-image");
+            Assert.Contains(result.Issues, issue => issue.Hint == "seo-missing-twitter-title");
+            Assert.Contains(result.Issues, issue => issue.Hint == "seo-missing-twitter-description");
+            Assert.Contains(result.Issues, issue => issue.Hint == "seo-missing-twitter-url");
             Assert.Contains(result.Issues, issue => issue.Hint == "seo-twitter-image-absolute");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_FlagsSitemapNoIndexMismatch_WhenNoIndexRouteIsInSitemap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-seo-sitemap-noindex-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "search"));
+            File.WriteAllText(Path.Combine(root, "search", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Search</title>
+                  <meta name="robots" content="noindex,nofollow" />
+                </head>
+                <body>Search</body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/</loc></url>
+                  <url><loc>https://example.test/search/</loc></url>
+                </urlset>
+                """);
+
+            var result = WebSiteAuditor.Audit(CreateSeoOnlyOptions(root));
+
+            Assert.Contains(result.Issues, issue => issue.Category == "seo" &&
+                                                   issue.Path == "sitemap.xml" &&
+                                                   issue.Hint.StartsWith("seo-sitemap-noindex", StringComparison.Ordinal));
         }
         finally
         {
