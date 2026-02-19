@@ -29,6 +29,10 @@ internal static partial class WebCliCommandHandlers
         var expectedRepository = TryGetOptionValue(subArgs, "--repository") ?? TryGetOptionValue(subArgs, "--repo");
         var expectedRef = TryGetOptionValue(subArgs, "--ref");
         var expectedChannel = TryGetOptionValue(subArgs, "--channel");
+        var requireImmutableRef = HasOption(subArgs, "--require-immutable-ref") ||
+                                  HasOption(subArgs, "--requireImmutableRef") ||
+                                  HasOption(subArgs, "--require-sha") ||
+                                  HasOption(subArgs, "--requireSha");
         var useEnv = HasOption(subArgs, "--use-env") || HasOption(subArgs, "--env");
         if (useEnv)
         {
@@ -83,6 +87,10 @@ internal static partial class WebCliCommandHandlers
                     {
                         error = string.Join(" ", validation);
                     }
+                    else if (requireImmutableRef && !WebEngineLockFile.IsCommitSha(lockSpec.Ref))
+                    {
+                        error = $"engine-lock verify failed: lock ref '{lockSpec.Ref}' is not an immutable commit SHA (40/64 hex).";
+                    }
                     else
                     {
                         AddEngineLockDriftIfAny(driftReasons, "repository", lockSpec.Repository, expectedRepository);
@@ -109,6 +117,10 @@ internal static partial class WebCliCommandHandlers
                 if (updateValidation.Length > 0)
                 {
                     error = string.Join(" ", updateValidation);
+                }
+                else if (requireImmutableRef && !WebEngineLockFile.IsCommitSha(candidate.Ref))
+                {
+                    error = $"engine-lock update failed: ref '{candidate.Ref}' is not an immutable commit SHA (40/64 hex).";
                 }
                 else
                 {

@@ -119,6 +119,40 @@ public class WebCliEngineLockTests
         }
     }
 
+    [Fact]
+    public void HandleSubCommand_EngineLock_Verify_RequireImmutableRef_FailsForNonShaRef()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-engine-lock-verify-immutable-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var lockPath = Path.Combine(root, ".powerforge", "engine-lock.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(lockPath)!);
+            File.WriteAllText(lockPath,
+                """
+                {
+                  "repository": "EvotecIT/PSPublishModule",
+                  "ref": "main",
+                  "channel": "stable",
+                  "updatedUtc": "2026-02-19T00:00:00.0000000+00:00"
+                }
+                """);
+
+            var fail = WebCliCommandHandlers.HandleSubCommand(
+                "engine-lock",
+                new[] { "--path", lockPath, "--mode", "verify", "--require-immutable-ref" },
+                outputJson: true,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+            Assert.Equal(1, fail);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

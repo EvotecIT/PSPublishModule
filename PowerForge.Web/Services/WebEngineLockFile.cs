@@ -84,6 +84,28 @@ public static class WebEngineLockFile
         return issues.ToArray();
     }
 
+    /// <summary>Returns true when value looks like an immutable git commit SHA (40/64 hex).</summary>
+    public static bool IsCommitSha(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        if (trimmed.Length != 40 && trimmed.Length != 64)
+            return false;
+
+        foreach (var ch in trimmed)
+        {
+            var isHex = (ch >= '0' && ch <= '9') ||
+                        (ch >= 'a' && ch <= 'f') ||
+                        (ch >= 'A' && ch <= 'F');
+            if (!isHex)
+                return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Normalize lock values and optionally refresh the timestamp.</summary>
     /// <param name="spec">Lock payload to normalize.</param>
     /// <param name="stampUpdatedUtc">When true, refresh <c>updatedUtc</c> to current UTC time.</param>

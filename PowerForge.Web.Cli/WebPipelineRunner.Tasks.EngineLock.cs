@@ -15,6 +15,11 @@ internal static partial class WebPipelineRunner
                          "verify").Trim();
         var continueOnError = GetBool(step, "continueOnError") ?? false;
         var failOnDrift = GetBool(step, "failOnDrift") ?? GetBool(step, "fail-on-drift") ?? true;
+        var requireImmutableRef = GetBool(step, "requireImmutableRef") ??
+                                  GetBool(step, "require-immutable-ref") ??
+                                  GetBool(step, "requireSha") ??
+                                  GetBool(step, "require-sha") ??
+                                  false;
         var useEnv = GetBool(step, "useEnv") ?? GetBool(step, "use-env") ?? GetBool(step, "env") ?? false;
 
         var repository = GetString(step, "expectedRepository") ??
@@ -56,8 +61,8 @@ internal static partial class WebPipelineRunner
             var resolvedResult = operation.ToLowerInvariant() switch
             {
                 "show" => ExecuteEngineLockShow(lockPath, operation),
-                "verify" => ExecuteEngineLockVerify(lockPath, operation, repository, @ref, channel, failOnDrift),
-                "update" => ExecuteEngineLockUpdate(lockPath, operation, repository, @ref, channel),
+                "verify" => ExecuteEngineLockVerify(lockPath, operation, repository, @ref, channel, failOnDrift, requireImmutableRef),
+                "update" => ExecuteEngineLockUpdate(lockPath, operation, repository, @ref, channel, requireImmutableRef),
                 _ => throw new InvalidOperationException($"engine-lock: unsupported operation '{operation}'. Supported values: show, verify, update.")
             };
 
@@ -107,12 +112,15 @@ internal static partial class WebPipelineRunner
         string? expectedRepository,
         string? expectedRef,
         string? expectedChannel,
-        bool failOnDrift)
+        bool failOnDrift,
+        bool requireImmutableRef)
     {
         var lockSpec = WebEngineLockFile.Read(lockPath, WebCliJson.Options);
         var validation = WebEngineLockFile.Validate(lockSpec);
         if (validation.Length > 0)
             throw new InvalidOperationException($"engine-lock verify failed: {string.Join(" ", validation)}");
+        if (requireImmutableRef && !WebEngineLockFile.IsCommitSha(lockSpec.Ref))
+            throw new InvalidOperationException($"engine-lock verify failed: lock ref '{lockSpec.Ref}' is not an immutable commit SHA (40/64 hex).");
 
         var driftReasons = new List<string>();
         AddEngineLockPipelineDriftIfAny(driftReasons, "repository", lockSpec.Repository, expectedRepository);
@@ -141,7 +149,8 @@ internal static partial class WebPipelineRunner
         string operation,
         string? repository,
         string? @ref,
-        string? channel)
+        string? channel,
+        bool requireImmutableRef)
     {
         var candidate = File.Exists(lockPath)
             ? WebEngineLockFile.Read(lockPath, WebCliJson.Options)
@@ -158,6 +167,8 @@ internal static partial class WebPipelineRunner
         var validation = WebEngineLockFile.Validate(normalized);
         if (validation.Length > 0)
             throw new InvalidOperationException($"engine-lock update failed: {string.Join(" ", validation)}");
+        if (requireImmutableRef && !WebEngineLockFile.IsCommitSha(normalized.Ref))
+            throw new InvalidOperationException($"engine-lock update failed: ref '{normalized.Ref}' is not an immutable commit SHA (40/64 hex).");
 
         WebEngineLockFile.Write(lockPath, normalized, WebCliJson.Options);
         var saved = WebEngineLockFile.Read(lockPath, WebCliJson.Options);

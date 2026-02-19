@@ -494,6 +494,10 @@
 
         "failOnDrift": { "type": "boolean", "description": "When false, verify mode reports drift but keeps step green." },
         "fail-on-drift": { "type": "boolean", "description": "Alias for failOnDrift." },
+        "requireImmutableRef": { "type": "boolean", "description": "When true, verify/update require lock ref to be an immutable commit SHA (40/64 hex)." },
+        "require-immutable-ref": { "type": "boolean", "description": "Alias for requireImmutableRef." },
+        "requireSha": { "type": "boolean", "description": "Alias for requireImmutableRef." },
+        "require-sha": { "type": "boolean", "description": "Alias for requireImmutableRef." },
         "continueOnError": { "type": "boolean", "description": "When true, keep step green when show/verify/update fails." },
 
         "reportPath": { "type": "string", "description": "Optional JSON report output path." },

@@ -56,7 +56,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes
    - run `sitemap` after `build` so XML/JSON sitemap artifacts stay in sync with generated routes
-   - run `engine-lock` verify in CI so missing/invalid `.powerforge/engine-lock.json` fails fast
+   - run `engine-lock` verify in CI so missing/invalid `.powerforge/engine-lock.json` fails fast (prefer `requireImmutableRef:true`)
    - run heavy steps only in CI (`modes:["ci"]`):
      - `audit` (and rendered checks if enabled)
      - `optimize`
@@ -164,7 +164,7 @@ powerforge-web engine-lock --mode update --path .\.powerforge\engine-lock.json -
 Verify lock drift (for local checks/scripts):
 
 ```powershell
-powerforge-web engine-lock --mode verify --path .\.powerforge\engine-lock.json --ref <expected-sha>
+powerforge-web engine-lock --mode verify --path .\.powerforge\engine-lock.json --ref <expected-sha> --require-immutable-ref
 ```
 
 ## Theme Inheritance (extends)

@@ -1274,7 +1274,8 @@ Verify drift (default operation):
   "path": "./.powerforge/engine-lock.json",
   "expectedRepository": "EvotecIT/PSPublishModule",
   "expectedRef": "ab58992450def6b736a2ea87e6a492400250959f",
-  "failOnDrift": true
+  "failOnDrift": true,
+  "requireImmutableRef": true
 }
 ```
 
@@ -1285,7 +1286,7 @@ Update pin:
   "operation": "update",
   "path": "./.powerforge/engine-lock.json",
   "repository": "EvotecIT/PSPublishModule",
-  "ref": "0123456789abcdef",
+  "ref": "0123456789abcdef0123456789abcdef01234567",
   "channel": "candidate",
   "reportPath": "./_reports/engine-lock.json",
   "summaryPath": "./_reports/engine-lock.md"
@@ -1299,6 +1300,7 @@ Notes:
   - `show`: read and report current lock
   - `update`: write/refresh lock file values
 - `useEnv:true` can pull expected values from env (`POWERFORGE_REPOSITORY`, `POWERFORGE_REF`, `POWERFORGE_CHANNEL`) or custom env names via `repositoryEnv`/`refEnv`/`channelEnv`.
+- `requireImmutableRef:true` (aliases: `require-immutable-ref`, `requireSha`, `require-sha`) enforces commit SHA refs (40/64 hex), recommended for CI.
 - `continueOnError:true` keeps pipeline green if this step fails (useful for canary diagnostics).
 - `engine-lock` steps are intentionally not cacheable.
 

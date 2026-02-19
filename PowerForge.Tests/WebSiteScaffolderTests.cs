@@ -74,6 +74,7 @@ public class WebSiteScaffolderTests
             Assert.Equal("verify", engineLockStep.GetProperty("operation").GetString());
             Assert.Equal("./.powerforge/engine-lock.json", engineLockStep.GetProperty("path").GetString());
             Assert.True(engineLockStep.GetProperty("failOnDrift").GetBoolean());
+            Assert.True(engineLockStep.GetProperty("requireImmutableRef").GetBoolean());
             Assert.Contains(engineLockStep.GetProperty("modes").EnumerateArray().Select(e => e.GetString() ?? string.Empty), m => string.Equals(m, "ci", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(presetSteps, step => string.Equals(step.GetProperty("task").GetString(), "sitemap", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(presetSteps, step => string.Equals(step.GetProperty("task").GetString(), "indexnow", StringComparison.OrdinalIgnoreCase));
