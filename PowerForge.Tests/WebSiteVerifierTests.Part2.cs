@@ -426,6 +426,203 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsWhenEditorialVariantContractSelectorsAreNotDeclared()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-variant-contract-missing-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-contract-warning");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body>{{ pf.editorial_cards 0 160 true true true true "16/9" "" "hero" "news-grid" "news-card" }}{{ pf.editorial_pager }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-contract-warning",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"],
+                  "featureContracts": {
+                    "blog": {
+                      "requiredCssSelectors": []
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial selector contract warning test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-contract-warning",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("featureContracts.blog.requiredCssSelectors is empty", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotWarnWhenEditorialVariantContractSelectorsAreDeclared()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-editorial-variant-contract-ok-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                ---
+
+                # Blog
+                """);
+            File.WriteAllText(Path.Combine(blogPath, "post-1.md"),
+                """
+                ---
+                title: Post 1
+                date: 2026-01-01
+                ---
+
+                Post content
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "editorial-contract-ok");
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "partials"));
+            Directory.CreateDirectory(Path.Combine(themeRoot, "styles"));
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "list.html"),
+                """
+                <!doctype html><html><body>{{ pf.editorial_cards 0 160 true true true true "16/9" "" "hero" "news-grid" "news-card" }}{{ pf.editorial_pager }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html><html><body>{{ content }}</body></html>
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "partials", "theme-tokens.html"), "<style></style>");
+            File.WriteAllText(Path.Combine(themeRoot, "styles", "editorial.css"),
+                """
+                .pf-editorial-grid--hero {}
+                .pf-editorial-card--hero {}
+                .news-grid {}
+                .news-card {}
+                """);
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "name": "editorial-contract-ok",
+                  "schemaVersion": 2,
+                  "engine": "scriban",
+                  "defaultLayout": "list",
+                  "features": ["blog"],
+                  "featureContracts": {
+                    "blog": {
+                      "cssHrefs": ["styles/editorial.css"],
+                      "requiredCssSelectors": [".pf-editorial-grid--hero", ".pf-editorial-card--hero", ".news-grid", ".news-card"]
+                    }
+                  }
+                }
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Editorial selector contract ok test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                DefaultTheme = "editorial-contract-ok",
+                ThemesRoot = "themes",
+                Features = new[] { "blog" },
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "list",
+                        PageSize = 5
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("uses pf.editorial_cards selectors that are not declared", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("featureContracts.blog.requiredCssSelectors is empty", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_ThemeFeatureContracts_WarnWhenRequiredSurfacesMissingAndSiteDoesNotDefineSurfaces()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-theme-required-surfaces-missing-" + Guid.NewGuid().ToString("N"));

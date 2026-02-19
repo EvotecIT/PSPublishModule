@@ -1,13 +1,18 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Web;
 
 /// <summary>Theme contract, layout, and token verification rules.</summary>
 public static partial class WebSiteVerifier
 {
+    private static readonly TimeSpan EditorialRegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex ScribanEditorialCardsCallRegex = new(@"pf\.editorial_cards(?<args>[^\r\n}]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, EditorialRegexTimeout);
+    private static readonly Regex ScribanArgumentRegex = new("\"[^\"]*\"|'[^']*'|\\S+", RegexOptions.Compiled | RegexOptions.CultureInvariant, EditorialRegexTimeout);
+
     private static void ValidateThemeFeatureContract(SiteSpec spec, WebSitePlan plan, List<string> warnings)
     {
         if (spec is null || plan is null || warnings is null) return;
@@ -280,6 +285,10 @@ public static partial class WebSiteVerifier
                 warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' is used for editorial collection '{collection.Name}' but does not render list context (`items`) or `pf.editorial_cards`. " +
                              "Editorial section pages may render headers without posts.");
             }
+            else if (hasEditorialCards)
+            {
+                ValidateEditorialCardsCssContracts(collection, manifest, listLayout, layoutContent, warnings);
+            }
 
             var paginationEnabled = (collection.PageSize ?? 0) > 0 || paginationDefault;
             if (!paginationEnabled)
@@ -294,6 +303,73 @@ public static partial class WebSiteVerifier
         }
     }
 
+    private static void ValidateEditorialCardsCssContracts(
+        CollectionSpec collection,
+        ThemeManifest manifest,
+        string listLayout,
+        string layoutContent,
+        List<string> warnings)
+    {
+        if (collection is null || manifest is null || warnings is null || string.IsNullOrWhiteSpace(layoutContent))
+            return;
+
+        var usages = ExtractEditorialCardsUsages(layoutContent)
+            .Where(static usage => usage.RequiresSelectorContract)
+            .ToArray();
+        if (usages.Length == 0)
+            return;
+
+        var feature = ResolveEditorialFeatureName(collection);
+        if (string.IsNullOrWhiteSpace(feature))
+            return;
+
+        var contract = TryGetFeatureContract(manifest, feature);
+        if (contract is null)
+        {
+            if (manifest.FeatureContracts is { Count: > 0 })
+            {
+                warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature} is not defined. Add requiredCssSelectors for contract-driven editorial styling.");
+            }
+            return;
+        }
+
+        var requiredSelectors = (contract.RequiredCssSelectors ?? Array.Empty<string>())
+            .Where(static selector => !string.IsNullOrWhiteSpace(selector))
+            .Select(static selector => selector.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (requiredSelectors.Length == 0)
+        {
+            warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature}.requiredCssSelectors is empty.");
+            return;
+        }
+
+        var expectedSelectors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var usage in usages)
+        {
+            foreach (var selector in usage.GetExpectedSelectors())
+            {
+                if (!string.IsNullOrWhiteSpace(selector))
+                    expectedSelectors.Add(selector);
+            }
+        }
+
+        if (expectedSelectors.Count == 0)
+            return;
+
+        var missing = expectedSelectors
+            .Where(expected => !ContainsContractSelector(requiredSelectors, expected))
+            .ToArray();
+
+        if (missing.Length == 0)
+            return;
+
+        var preview = string.Join(", ", missing.Take(8));
+        var more = missing.Length > 8 ? $" (+{missing.Length - 8} more)" : string.Empty;
+        warnings.Add($"Theme CSS contract: feature '{feature}' layout '{listLayout}' uses pf.editorial_cards selectors that are not declared in featureContracts.{feature}.requiredCssSelectors: {preview}{more}.");
+    }
+
     private static bool IsEditorialCollection(CollectionSpec? collection)
     {
         if (collection is null)
@@ -306,6 +382,146 @@ public static partial class WebSiteVerifier
         return !string.IsNullOrWhiteSpace(collection.Output) &&
                (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase) ||
                 collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ResolveEditorialFeatureName(CollectionSpec collection)
+    {
+        if (collection is null)
+            return string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(collection.Name))
+        {
+            var normalized = NormalizeFeatureName(collection.Name);
+            if (string.Equals(normalized, "blog", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "news", StringComparison.OrdinalIgnoreCase))
+                return normalized;
+        }
+
+        if (!string.IsNullOrWhiteSpace(collection.Output))
+        {
+            if (collection.Output.StartsWith("/blog", StringComparison.OrdinalIgnoreCase))
+                return "blog";
+            if (collection.Output.StartsWith("/news", StringComparison.OrdinalIgnoreCase))
+                return "news";
+        }
+
+        return string.Empty;
+    }
+
+    private static bool ContainsContractSelector(IEnumerable<string> selectors, string expectedSelector)
+    {
+        if (selectors is null || string.IsNullOrWhiteSpace(expectedSelector))
+            return false;
+
+        foreach (var selector in selectors)
+        {
+            if (string.IsNullOrWhiteSpace(selector))
+                continue;
+
+            if (selector.IndexOf(expectedSelector, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static EditorialCardsUsage[] ExtractEditorialCardsUsages(string layoutContent)
+    {
+        if (string.IsNullOrWhiteSpace(layoutContent))
+            return Array.Empty<EditorialCardsUsage>();
+
+        var usages = new List<EditorialCardsUsage>();
+        foreach (Match call in ScribanEditorialCardsCallRegex.Matches(layoutContent))
+        {
+            if (!call.Success)
+                continue;
+
+            var args = call.Groups["args"].Value;
+            var tokens = ScribanArgumentRegex.Matches(args)
+                .Select(match => TrimScribanArgument(match.Value))
+                .ToArray();
+
+            var variant = tokens.Length > 8 ? NormalizeEditorialVariantArgument(tokens[8]) : "default";
+            var gridClasses = tokens.Length > 9 ? ParseCssClassTokens(tokens[9]) : Array.Empty<string>();
+            var cardClasses = tokens.Length > 10 ? ParseCssClassTokens(tokens[10]) : Array.Empty<string>();
+
+            usages.Add(new EditorialCardsUsage(variant, gridClasses, cardClasses));
+        }
+
+        return usages.ToArray();
+    }
+
+    private static string TrimScribanArgument(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var trimmed = value.Trim();
+        if ((trimmed.StartsWith("\"", StringComparison.Ordinal) && trimmed.EndsWith("\"", StringComparison.Ordinal) && trimmed.Length >= 2) ||
+            (trimmed.StartsWith("'", StringComparison.Ordinal) && trimmed.EndsWith("'", StringComparison.Ordinal) && trimmed.Length >= 2))
+            return trimmed.Substring(1, trimmed.Length - 2);
+
+        return trimmed;
+    }
+
+    private static string[] ParseCssClassTokens(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+
+        return value
+            .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static token => token.Trim().TrimStart('.'))
+            .Where(static token => !string.IsNullOrWhiteSpace(token))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string NormalizeEditorialVariantArgument(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "default";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "compact" => "compact",
+            "hero" => "hero",
+            "featured" => "featured",
+            _ => "default"
+        };
+    }
+
+    private readonly record struct EditorialCardsUsage(string Variant, string[] GridClasses, string[] CardClasses)
+    {
+        public bool RequiresSelectorContract => !string.Equals(Variant, "default", StringComparison.OrdinalIgnoreCase) ||
+                                                GridClasses.Length > 0 ||
+                                                CardClasses.Length > 0;
+
+        public IEnumerable<string> GetExpectedSelectors()
+        {
+            if (string.Equals(Variant, "compact", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return ".pf-editorial-grid--compact";
+                yield return ".pf-editorial-card--compact";
+            }
+            else if (string.Equals(Variant, "hero", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return ".pf-editorial-grid--hero";
+                yield return ".pf-editorial-card--hero";
+            }
+            else if (string.Equals(Variant, "featured", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return ".pf-editorial-grid--featured";
+                yield return ".pf-editorial-card--featured";
+            }
+
+            foreach (var gridClass in GridClasses)
+                yield return "." + gridClass;
+
+            foreach (var cardClass in CardClasses)
+                yield return "." + cardClass;
+        }
     }
 
 

@@ -57,6 +57,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `docs`: required `docs` layout and required slots/partials
    - for Scriban editorial layouts (`blog`/`news`), prefer `{{ pf.editorial_cards ... }}` + `{{ pf.editorial_pager ... }}` in list layouts so verify can detect regressions early
    - `pf.editorial_cards` supports variants (`default`, `compact`, `hero`, `featured`) plus optional `grid_class`/`card_class` overrides so themes can evolve layout style without duplicating list rendering loops
+   - if you define `featureContracts.blog` / `featureContracts.news`, include selectors for the variants/override classes used by `pf.editorial_cards` in `requiredCssSelectors`
 5. Layout hooks:
    - layouts must include:
      - `{{ assets.critical_css_html }}`

@@ -491,6 +491,7 @@ Best practice (theme rendering):
     - `grid_class` (optional extra classes appended to the wrapper grid container)
     - `card_class` (optional extra classes appended to each rendered card)
     - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}`
+    - Verify integration: if the theme defines `featureContracts.blog/news`, verify checks that variant and override selectors used by `pf.editorial_cards` are declared in `requiredCssSelectors`.
   - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
     - `newer_label` (default `"Newer posts"`)
     - `older_label` (default `"Older posts"`)
