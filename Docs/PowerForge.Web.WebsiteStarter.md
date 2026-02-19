@@ -56,6 +56,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes
    - run `sitemap` after `build` so XML/JSON sitemap artifacts stay in sync with generated routes
+   - run `engine-lock` verify in CI so missing/invalid `.powerforge/engine-lock.json` fails fast
    - run heavy steps only in CI (`modes:["ci"]`):
      - `audit` (and rendered checks if enabled)
      - `optimize`

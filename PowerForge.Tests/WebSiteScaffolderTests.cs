@@ -69,6 +69,12 @@ public class WebSiteScaffolderTests
 
             using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
             var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+            var engineLockStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "engine-lock", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("verify", engineLockStep.GetProperty("operation").GetString());
+            Assert.Equal("./.powerforge/engine-lock.json", engineLockStep.GetProperty("path").GetString());
+            Assert.True(engineLockStep.GetProperty("failOnDrift").GetBoolean());
+            Assert.Contains(engineLockStep.GetProperty("modes").EnumerateArray().Select(e => e.GetString() ?? string.Empty), m => string.Equals(m, "ci", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(presetSteps, step => string.Equals(step.GetProperty("task").GetString(), "sitemap", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(presetSteps, step => string.Equals(step.GetProperty("task").GetString(), "indexnow", StringComparison.OrdinalIgnoreCase));
             var auditStep = presetSteps.First(step =>

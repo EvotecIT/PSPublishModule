@@ -503,6 +503,7 @@ a { color: inherit; text-decoration: none; }
               "profile": true,
               "profilePath": "./_reports/pipeline-profile.json",
               "steps": [
+                { "task": "engine-lock", "id": "engine-lock-ci", "modes": ["ci"], "operation": "verify", "path": "./.powerforge/engine-lock.json", "failOnDrift": true, "reportPath": "./_reports/engine-lock.json", "summaryPath": "./_reports/engine-lock.md" },
                 { "task": "build", "id": "build-site", "config": "./site.json", "out": "./_site", "clean": true },
                 { "task": "sitemap", "id": "sitemap", "dependsOn": "build-site", "config": "./site.json", "siteRoot": "./_site", "baseUrl": "{{baseUrl}}", "json": true, "jsonOut": "./_site/sitemap/index.json" },
                 { "task": "indexnow", "id": "indexnow-ci", "dependsOn": "sitemap", "modes": ["ci"], "sitemap": "./_site/sitemap.xml", "keyEnv": "INDEXNOW_KEY", "optionalKey": true, "continueOnError": true, "reportPath": "./_reports/indexnow.json", "summaryPath": "./_reports/indexnow.md" },
