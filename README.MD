@@ -133,6 +133,16 @@ Authoring `about_*` topics:
 This project includes a reusable C# core (`PowerForge`) and a CLI (`powerforge`) that can run builds/pipelines from JSON (CI/VSCode-friendly).
 See `JSON_SCHEMA.md` for the shipped schema files and example pipeline configs.
 
+GitHub artifact quota cleanup (safe defaults):
+
+```powershell
+# dry-run by default (uses GITHUB_REPOSITORY + GITHUB_TOKEN)
+powerforge github artifacts prune --name "test-results*,coverage*,github-pages"
+
+# apply deletions
+powerforge github artifacts prune --apply --keep 5 --max-age-days 7 --max-delete 200
+```
+
 Introduced in **1.0.0** a new way to build PowerShell module based on DSL language.
 
 ```powershell
