@@ -9,6 +9,7 @@ Start here:
 - `AGENTS.md` (repo + website paths and working agreements)
 - `Docs\PowerForge.Web.Roadmap.md` (Have/Partial/Missing + milestones)
 - `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract pattern)
+- `Docs\PowerForge.Web.ReleaseChannels.md` (stable/candidate/nightly rollout + canary model)
 
 ## Repos / Paths
 
@@ -68,7 +69,7 @@ Key doc: `Docs\PowerForge.Web.ApiDocs.md`.
 ### Verify / lint
 
 - Verify includes: navigation lint, theme contract checks, not-found checks, markdown hygiene warnings.
-- There is a markdown hygiene fixer step (`markdown-fix`) (dry-run and apply).
+- There is a markdown hygiene fixer step (`markdown-fix`) (dry-run/apply, optional `failOnChanges`, JSON report, markdown summary).
 - Verify supports baselines to keep CI stable while fixing legacy warnings:
   - `powerforge-web verify --baseline-generate` writes `./.powerforge/verify-baseline.json` by default
   - `--fail-on-new` / `failOnNewWarnings` fails only on newly introduced verify warnings

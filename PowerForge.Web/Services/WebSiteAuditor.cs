@@ -331,7 +331,7 @@ public static partial class WebSiteAuditor
             if (mediaProfile?.Ignore == true)
                 mediaIgnored = true;
             if (options.CheckMediaEmbeds && !mediaIgnored)
-                ValidateMediaEmbeds(doc, relativePath, mediaProfile, AddIssue);
+                ValidateMediaEmbeds(doc, html, relativePath, mediaProfile, AddIssue);
 
             if (options.CheckTitles)
             {

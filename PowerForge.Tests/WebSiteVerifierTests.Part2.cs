@@ -1560,6 +1560,113 @@ public partial class WebSiteVerifierTests
     }
 
     [Fact]
+    public void Verify_WarnsOnMarkdownMultilineMediaTagHygiene()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-md-multiline-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                slug: index
+                ---
+
+                <img src="/assets/screenshots/example.png"
+                     alt="Example"
+                     width="1200"
+                     height="630" />
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Warnings, warning =>
+                warning.Contains("multiline HTML media tags", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Verify_DoesNotWarnOnSingleLineMarkdownMediaTag()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-md-singleline-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogPath = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogPath);
+            File.WriteAllText(Path.Combine(blogPath, "_index.md"),
+                """
+                ---
+                title: Blog
+                slug: index
+                ---
+
+                <img src="/assets/screenshots/example.png" alt="Example" width="1200" height="630" />
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Verifier Test",
+                BaseUrl = "https://example.test",
+                ContentRoot = "content",
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Input = "content/blog",
+                        Output = "/blog"
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var result = WebSiteVerifier.Verify(spec, plan);
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("multiline HTML media tags", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Verify_WarnsWhen404RouteHasNoAssetBundleMatch()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-404-" + Guid.NewGuid().ToString("N"));

@@ -18,6 +18,7 @@ public class WebSiteScaffolderTests
             Assert.True(File.Exists(Path.Combine(root, "content", "news", "_index.md")));
             Assert.True(File.Exists(Path.Combine(root, "content", "news", "release-1-0.md")));
             Assert.True(File.Exists(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
+            Assert.True(File.Exists(Path.Combine(root, ".github", "workflows", "website-ci.yml")));
 
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
             var spec = specDoc.RootElement;
@@ -54,6 +55,27 @@ public class WebSiteScaffolderTests
             var pipeline = pipelineDoc.RootElement;
             Assert.Equal("./config/presets/pipeline.web-quality.json", pipeline.GetProperty("extends").GetString());
             Assert.False(pipeline.TryGetProperty("steps", out _));
+
+            var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
+            Assert.Contains("POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule", workflow, StringComparison.Ordinal);
+            Assert.Contains("POWERFORGE_REF:", workflow, StringComparison.Ordinal);
+            Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
+            Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
+
+            using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
+            var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+            var auditStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "audit", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(auditStep.GetProperty("requireExplicitChecks").GetBoolean());
+            Assert.False(auditStep.GetProperty("checkSeoMeta").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkNetworkHints").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkRenderBlockingResources").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkHeadingOrder").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkLinkPurposeConsistency").GetBoolean());
+            Assert.True(auditStep.GetProperty("checkMediaEmbeds").GetBoolean());
         }
         finally
         {

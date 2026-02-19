@@ -5,6 +5,8 @@ public sealed class CollectionSpec
 {
     /// <summary>Collection name.</summary>
     public string Name { get; set; } = string.Empty;
+    /// <summary>Optional preset that applies sensible defaults (for example: blog, news, changelog, docs).</summary>
+    public string? Preset { get; set; }
     /// <summary>Input folder path.</summary>
     public string Input { get; set; } = string.Empty;
     /// <summary>Output route prefix.</summary>
@@ -31,4 +33,10 @@ public sealed class CollectionSpec
     public SeoSpec? Seo { get; set; }
     /// <summary>Optional page size for generated section pagination.</summary>
     public int? PageSize { get; set; }
+    /// <summary>Auto-generate the collection landing page (section index) when no non-draft index exists.</summary>
+    public bool AutoGenerateSectionIndex { get; set; }
+    /// <summary>Optional title for auto-generated section index pages.</summary>
+    public string? AutoSectionTitle { get; set; }
+    /// <summary>Optional description for auto-generated section index pages.</summary>
+    public string? AutoSectionDescription { get; set; }
 }

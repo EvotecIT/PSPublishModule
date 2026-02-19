@@ -234,6 +234,14 @@
         "checkLinkPurpose": { "type": "boolean" },
         "checkMediaEmbeds": { "type": "boolean" },
         "checkMedia": { "type": "boolean" },
+        "requireExplicitChecks": {
+          "type": "boolean",
+          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds)."
+        },
+        "require-explicit-checks": {
+          "type": "boolean",
+          "description": "Alias for requireExplicitChecks."
+        },
         "checkNetworkHints": { "type": "boolean" },
         "checkRenderBlockingResources": { "type": "boolean" },
         "checkRenderBlocking": { "type": "boolean" },
@@ -293,7 +301,13 @@
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },
-        "apply": { "type": "boolean" }
+        "apply": { "type": "boolean" },
+        "failOnChanges": { "type": "boolean", "description": "When true, fail the step if dry-run detects files that need markdown hygiene fixes." },
+        "fail-on-changes": { "type": "boolean", "description": "Alias for failOnChanges." },
+        "reportPath": { "type": "string", "description": "Optional JSON report output path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string", "description": "Optional markdown summary output path." },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
       },
       "required": ["task"]
     },
@@ -311,6 +325,11 @@
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
 
+        "operation": { "type": "string", "enum": ["purge", "verify"], "description": "Cloudflare operation. Defaults to purge." },
+        "action": { "type": "string", "enum": ["purge", "verify"], "description": "Alias for operation." },
+        "siteConfig": { "type": "string", "description": "Path to site.json used to auto-resolve baseUrl and route profiles." },
+        "site-config": { "type": "string", "description": "Alias for siteConfig." },
+        "config": { "type": "string", "description": "Alias for siteConfig." },
         "zoneId": { "type": "string" },
         "zone-id": { "type": "string" },
         "tokenEnv": { "type": "string", "description": "Env var name containing a Cloudflare API token (recommended). Defaults to CLOUDFLARE_API_TOKEN." },
@@ -318,19 +337,54 @@
         "token": { "type": "string", "description": "Inline API token (discouraged; prefer tokenEnv and CI secrets)." },
         "baseUrl": { "type": "string", "description": "Base URL used to combine with paths (required when using paths)." },
         "base-url": { "type": "string", "description": "Alias for baseUrl." },
-        "paths": { "type": "string", "description": "Comma-separated paths to purge (combined with baseUrl)." },
+        "paths": { "type": "string", "description": "Comma-separated paths to target (combined with baseUrl)." },
         "path": { "type": "string", "description": "Alias for paths." },
-        "urls": { "type": "string", "description": "Comma-separated full URLs to purge." },
+        "urls": { "type": "string", "description": "Comma-separated full URLs to target." },
         "url": { "type": "string", "description": "Alias for urls." },
         "purgeEverything": { "type": "boolean" },
         "purge-everything": { "type": "boolean" },
         "dryRun": { "type": "boolean" },
-        "dry-run": { "type": "boolean" }
+        "dry-run": { "type": "boolean" },
+        "warmup": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Verify operation: warm-up requests per URL before status check." },
+        "warmupRequests": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Alias for warmup." },
+        "warmup-requests": { "type": "integer", "minimum": 0, "maximum": 10, "description": "Alias for warmup." },
+        "timeoutMs": { "type": "integer", "minimum": 1000, "maximum": 120000, "description": "Verify operation: HTTP timeout in milliseconds." },
+        "timeout-ms": { "type": "integer", "minimum": 1000, "maximum": 120000, "description": "Alias for timeoutMs." },
+        "timeout": { "type": "integer", "minimum": 1000, "maximum": 120000, "description": "Alias for timeoutMs." },
+        "allowStatuses": { "type": "string", "description": "Verify operation: allowed CF-Cache-Status values (comma-separated)." },
+        "allow-statuses": { "type": "string", "description": "Alias for allowStatuses." },
+        "allowStatus": { "type": "string", "description": "Alias for allowStatuses." },
+        "allow-status": { "type": "string", "description": "Alias for allowStatuses." },
+        "allow": { "type": "string", "description": "Alias for allowStatuses." },
+        "reportPath": { "type": "string", "description": "Verify operation: optional JSON report output path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string", "description": "Verify operation: optional Markdown summary output path." },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
       },
       "required": ["task"],
-      "anyOf": [
-        { "required": ["zoneId"] },
-        { "required": ["zone-id"] }
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["operation"],
+                  "properties": { "operation": { "const": "verify" } }
+                },
+                {
+                  "required": ["action"],
+                  "properties": { "action": { "const": "verify" } }
+                }
+              ]
+            }
+          },
+          "then": {
+            "anyOf": [
+              { "required": ["zoneId"] },
+              { "required": ["zone-id"] }
+            ]
+          }
+        }
       ]
     },
     "IndexNowStep": {
@@ -2093,10 +2147,26 @@
         "checkUtf8": { "type": "boolean" },
         "checkMetaCharset": { "type": "boolean" },
         "checkUnicodeReplacementChars": { "type": "boolean" },
+        "checkHeadingOrder": { "type": "boolean" },
         "checkSeoMeta": { "type": "boolean", "description": "Validate canonical/OpenGraph/Twitter metadata consistency." },
         "check-seo-meta": { "type": "boolean", "description": "Alias for checkSeoMeta." },
+        "checkLinkPurposeConsistency": { "type": "boolean" },
+        "checkLinkPurpose": { "type": "boolean" },
         "checkMediaEmbeds": { "type": "boolean" },
         "checkMedia": { "type": "boolean" },
+        "checkNetworkHints": { "type": "boolean" },
+        "checkRenderBlockingResources": { "type": "boolean" },
+        "checkRenderBlocking": { "type": "boolean" },
+        "maxHeadBlockingResources": { "type": "integer", "minimum": 0 },
+        "max-head-blocking": { "type": "integer", "minimum": 0 },
+        "requireExplicitChecks": {
+          "type": "boolean",
+          "description": "When true, require explicit values for compatibility-sensitive checks (checkSeoMeta, checkNetworkHints, checkRenderBlockingResources, checkHeadingOrder, checkLinkPurposeConsistency, checkMediaEmbeds)."
+        },
+        "require-explicit-checks": {
+          "type": "boolean",
+          "description": "Alias for requireExplicitChecks."
+        },
         "suppressIssues": {
           "type": "array",
           "items": { "type": "string" },

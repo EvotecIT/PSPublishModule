@@ -109,6 +109,54 @@ public class WebMarkdownRendererGfmTests
         Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Build_MultilineHtmlIframeTag_IsPreservedWithAttributes()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Demo
+
+            <iframe
+              src="https://example.test/embed/demo"
+              loading="lazy"
+              title="Demo embed"
+              referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            """);
+
+        Assert.Contains("<iframe", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"https://example.test/embed/demo\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("title=\"Demo embed\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("&lt;iframe", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MultilineHtmlPictureAndSourceTags_ArePreserved()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Responsive Image
+
+            <picture>
+              <source
+                srcset="/images/hero-1600.webp"
+                media="(min-width: 1200px)" />
+              <img
+                src="/images/hero-640.webp"
+                alt="Hero image"
+                loading="lazy"
+                decoding="async" />
+            </picture>
+            """);
+
+        Assert.Contains("<picture>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<source", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("srcset=\"/images/hero-1600.webp\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("media=\"(min-width: 1200px)\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("&lt;source", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string BuildSinglePageSite(string markdown)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));

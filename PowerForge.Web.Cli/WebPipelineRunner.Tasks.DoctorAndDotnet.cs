@@ -195,6 +195,8 @@ internal static partial class WebPipelineRunner
             var renderedInclude = GetString(step, "renderedInclude");
             var renderedExclude = GetString(step, "renderedExclude");
 
+            EnforceExplicitAuditCheckContract(step, "doctor");
+
             var requiredRouteList = CliPatternHelper.SplitPatterns(requiredRoutes).ToList();
             if (requiredRouteList.Count == 0)
                 requiredRouteList.Add("/404.html");

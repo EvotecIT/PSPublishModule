@@ -31,6 +31,7 @@ public static partial class WebSiteBuilder
         var pageSegment = NormalizePaginationSegment(pagination?.PathSegment);
         var defaultPageSize = pagination?.DefaultPageSize ?? 0;
         var collectionPageSizes = (spec.Collections ?? Array.Empty<CollectionSpec>())
+            .Select(CollectionPresetDefaults.Apply)
             .Where(collection => collection is not null && !string.IsNullOrWhiteSpace(collection.Name))
             .Where(collection => (collection.PageSize ?? 0) > 0)
             .ToDictionary(collection => collection.Name, collection => collection.PageSize!.Value, StringComparer.OrdinalIgnoreCase);
@@ -57,7 +58,7 @@ public static partial class WebSiteBuilder
             if (pageSize <= 0)
                 continue;
 
-            var fullList = ResolveListItems(item, sourceItems);
+            var fullList = ResolveListItems(spec, item, sourceItems);
             var totalItems = fullList.Count;
             var totalPages = totalItems <= 0 ? 1 : (int)Math.Ceiling(totalItems / (double)pageSize);
 
@@ -143,7 +144,7 @@ public static partial class WebSiteBuilder
         return fullItems.Skip(skip).Take(pagination.PageSize).ToList();
     }
 
-    private static TaxonomyIndexRuntime? BuildTaxonomyIndexRuntime(ContentItem item, IReadOnlyList<ContentItem> allItems)
+    private static TaxonomyIndexRuntime? BuildTaxonomyIndexRuntime(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems)
     {
         if (item.Kind != PageKind.Taxonomy)
             return null;
@@ -152,7 +153,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(taxonomyKey))
             return null;
 
-        var terms = BuildTaxonomyTermsRuntime(item, allItems);
+        var terms = BuildTaxonomyTermsRuntime(spec, item, allItems);
         var totalItems = terms.Sum(term => term.Count);
         return new TaxonomyIndexRuntime
         {
@@ -164,7 +165,7 @@ public static partial class WebSiteBuilder
         };
     }
 
-    private static TaxonomyTermRuntime[] BuildTaxonomyTermsRuntime(ContentItem item, IReadOnlyList<ContentItem> allItems)
+    private static TaxonomyTermRuntime[] BuildTaxonomyTermsRuntime(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems)
     {
         if (item.Kind != PageKind.Taxonomy)
             return Array.Empty<TaxonomyTermRuntime>();
@@ -183,7 +184,7 @@ public static partial class WebSiteBuilder
             .Where(candidate => string.Equals(GetMetaString(candidate.Meta, "taxonomy"), taxonomyKey, StringComparison.OrdinalIgnoreCase))
             .Select(candidate =>
             {
-                var termItems = ResolveListItems(candidate, allItems);
+                var termItems = ResolveListItems(spec, candidate, allItems);
                 return new TaxonomyTermRuntime
                 {
                     Name = GetMetaString(candidate.Meta, "term"),
@@ -201,7 +202,7 @@ public static partial class WebSiteBuilder
             .ToArray();
     }
 
-    private static TaxonomyTermSummaryRuntime? BuildTaxonomyTermSummaryRuntime(ContentItem item, IReadOnlyList<ContentItem> allItems)
+    private static TaxonomyTermSummaryRuntime? BuildTaxonomyTermSummaryRuntime(SiteSpec spec, ContentItem item, IReadOnlyList<ContentItem> allItems)
     {
         if (item.Kind != PageKind.Term)
             return null;
@@ -210,7 +211,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(term))
             return null;
 
-        var termItems = ResolveListItems(item, allItems);
+        var termItems = ResolveListItems(spec, item, allItems);
         return new TaxonomyTermSummaryRuntime
         {
             Name = term,

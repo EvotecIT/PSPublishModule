@@ -33,8 +33,8 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--ignore-media <glob>] [--no-default-ignore-media]");
         Console.WriteLine("                     [--nav-profiles <file.json>] [--media-profiles <file.json>]");
         Console.WriteLine("                     [--fail-on-warnings] [--fail-on-nav-lint] [--fail-on-theme-contract] [--suppress-warning <pattern>] [--output json]");
-        Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
-        Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--output json]");
+        Console.WriteLine("  powerforge-web markdown-fix --path <dir> [--include <glob>] [--exclude <glob>] [--apply] [--fail-on-changes] [--report-path <file>] [--summary-path <file>] [--output json]");
+        Console.WriteLine("  powerforge-web markdown-fix --config <site.json> [--path <dir>] [--include <glob>] [--exclude <glob>] [--apply] [--fail-on-changes] [--report-path <file>] [--summary-path <file>] [--output json]");
         Console.WriteLine("  powerforge-web audit --site-root <dir> [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("  powerforge-web audit --config <site.json> [--out <path>] [--include <glob>] [--exclude <glob>] [--max-html-files <n>] [--nav-selector <css>]");
         Console.WriteLine("                     [--no-links] [--no-assets] [--no-nav] [--no-titles] [--no-ids] [--no-structure]");

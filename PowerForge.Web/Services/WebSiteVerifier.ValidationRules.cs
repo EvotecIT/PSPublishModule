@@ -241,12 +241,12 @@ public static partial class WebSiteVerifier
         {
             if (collection is null || string.IsNullOrWhiteSpace(collection.Name))
                 continue;
+            var effectiveCollection = CollectionPresetDefaults.Apply(collection);
 
-            var isEditorialCollection = collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase) ||
-                                        collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase) ||
-                                        collection.Output.Contains("blog", StringComparison.OrdinalIgnoreCase) ||
-                                        collection.Output.Contains("news", StringComparison.OrdinalIgnoreCase);
+            var isEditorialCollection = CollectionPresetDefaults.IsEditorialCollection(effectiveCollection, collection.Name);
             if (!isEditorialCollection)
+                continue;
+            if (effectiveCollection.AutoGenerateSectionIndex)
                 continue;
 
             if (!collectionRoutes.TryGetValue(collection.Name, out var routes) || routes.Count == 0)
@@ -261,7 +261,7 @@ public static partial class WebSiteVerifier
                 : new[] { localization.DefaultLanguage };
             foreach (var language in expectedLanguages)
             {
-                var expectedRoute = BuildRoute(collection.Output, string.Empty, spec.TrailingSlash);
+                var expectedRoute = BuildRoute(effectiveCollection.Output, string.Empty, spec.TrailingSlash);
                 expectedRoute = ApplyLanguagePrefixToRoute(spec, localization, expectedRoute, language);
                 expectedRoute = NormalizeRouteForNavigationMatch(expectedRoute);
                 var hasLanding = routes
@@ -271,7 +271,7 @@ public static partial class WebSiteVerifier
                     .Any(route => string.Equals(route, expectedRoute, StringComparison.OrdinalIgnoreCase));
                 if (!hasLanding)
                 {
-                    warnings.Add($"Collection '{collection.Name}' looks like an editorial stream (blog/news) but has no landing page at '{expectedRoute}' for language '{language}'. Add '_index.md' or a page with slug 'index'.");
+                    warnings.Add($"Collection '{collection.Name}' looks like an editorial stream (blog/news/changelog) but has no landing page at '{expectedRoute}' for language '{language}'. Add '_index.md', a page with slug 'index', or enable AutoGenerateSectionIndex / Preset.");
                 }
             }
         }

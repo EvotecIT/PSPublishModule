@@ -12,6 +12,10 @@ Result (minimal structure):
 ```
 MySite/
   site.json
+  pipeline.json
+  .github/
+    workflows/
+      website-ci.yml
   content/
     pages/
       index.md
@@ -33,6 +37,7 @@ Collections map markdown input folders to output URLs.
   "Collections": [
     {
       "Name": "docs",
+      "Preset": "docs",
       "Input": "content/docs",
       "Output": "docs",
       "DefaultLayout": "docs",
@@ -42,6 +47,9 @@ Collections map markdown input folders to output URLs.
   ]
 }
 ```
+
+Presets are optional but useful for common streams (`blog`, `news`, `changelog`, `docs`, `kb`, `pages`).
+They apply layout/sort/landing-page defaults so custom collection names can still behave like editorial/docs collections.
 
 ## 3) Add front matter to markdown
 ```
@@ -108,6 +116,12 @@ For repeatable builds, use pipeline or publish specs:
 powerforge-web pipeline --config ./pipeline.json
 powerforge-web publish --config ./publish.json
 ```
+
+Scaffolded CI workflow:
+- `./.github/workflows/website-ci.yml` is generated automatically.
+- It checks out `EvotecIT/PSPublishModule` at a pinned default ref and runs `pipeline --mode ci`.
+- It includes workflow concurrency cancelation and NuGet cache reuse by default.
+- Override ref per repo/org via GitHub variable `POWERFORGE_REF`.
 
 Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:
 ```

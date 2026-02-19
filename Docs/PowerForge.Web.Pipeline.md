@@ -161,6 +161,31 @@ Notes:
   - `warningPreviewCount`: number of warnings included in the thrown failure summary
   - `errorPreviewCount`: number of errors included in the thrown failure summary
 
+#### markdown-fix
+Normalizes markdown hygiene issues in content folders (dry-run by default).
+```json
+{
+  "task": "markdown-fix",
+  "config": "./site.json",
+  "include": "blog/**/*.md",
+  "exclude": "**/archive/**",
+  "apply": false,
+  "failOnChanges": true,
+  "reportPath": "./_reports/markdown-fix.json",
+  "summaryPath": "./_reports/markdown-fix.md"
+}
+```
+Notes:
+- Fixes run against markdown files (`*.md`) under `root`/`path`/`siteRoot`, or from `config` (content root).
+- `apply: false` is a dry-run (CI-friendly); `apply: true` writes changes.
+- `failOnChanges: true` fails the step when dry-run detects files that need fixes.
+- Reports:
+  - `reportPath`: writes structured JSON output
+  - `summaryPath`: writes markdown summary with totals and per-file breakdown
+- Current normalizations include:
+  - multiline media tag normalization outside code fences (`img`, `iframe`, `video`, `audio`, `source`, `picture`)
+  - simple HTML-to-markdown replacements (`h1..h6`, `strong/b`, `em/i`, `p`, `br`)
+
 #### doctor
 Runs build/verify/audit as one health-check step.
 ```json
@@ -693,6 +718,7 @@ Notes:
 - `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:
   - iframe checks: `loading="lazy"`, `title`, external `referrerpolicy`, YouTube nocookie host hint
   - image checks: loading/decoding hints, intrinsic size/aspect-ratio hints, `srcset` + `sizes` pairing
+  - rendered-content check: flags escaped media HTML tags (hint `media-escaped-html-tag`) when `<img>/<iframe>/...` appears as literal text outside code blocks
 - `checkSeoMeta` validates canonical/OpenGraph/Twitter metadata consistency:
   - duplicate canonical, OG, and Twitter tags
   - absolute URL checks for canonical, `og:url`, `og:image`, `twitter:url`, `twitter:image`
@@ -785,6 +811,7 @@ Notes:
   - orphan page candidates (zero inbound links from scanned pages)
   - optional focus-keyphrase checks via page meta tags
   - canonical checks (duplicate/absolute URL + optional required canonical)
+  - canonical alias hygiene (`*.html` pages that duplicate `/<slug>/index.html` must include `robots noindex`)
   - hreflang checks (duplicate/invalid/absolute URL + optional required `x-default`)
   - JSON-LD checks (invalid payload shape/JSON + missing `@context` or `@type`)
 - `includeNoIndexPages` defaults to `false`, so `robots noindex` pages are skipped by default.
@@ -1183,6 +1210,57 @@ Notes:
 - `removeUnselected` defaults to `true`.
 - `strict: true` fails if selected target artifacts are missing.
 - `site-root` is supported as an alias for `siteRoot`.
+
+#### cloudflare
+Purges Cloudflare cache or verifies `cf-cache-status` on selected URLs.
+
+```json
+{
+  "task": "cloudflare",
+  "operation": "purge",
+  "zoneId": "YOUR_ZONE_ID",
+  "tokenEnv": "CLOUDFLARE_API_TOKEN",
+  "baseUrl": "https://example.com",
+  "paths": "/,/docs/,/api/,/blog/"
+}
+```
+
+Verify mode (good for post-deploy smoke checks):
+
+```json
+{
+  "task": "cloudflare",
+  "operation": "verify",
+  "baseUrl": "https://example.com",
+  "paths": "/,/docs/,/api/,/blog/",
+  "allowStatuses": "HIT,REVALIDATED,EXPIRED,STALE",
+  "warmupRequests": 1,
+  "timeoutMs": 15000,
+  "reportPath": "./_reports/cloudflare-cache.json",
+  "summaryPath": "./_reports/cloudflare-cache.md"
+}
+```
+
+Site-profile mode (auto route discovery from `site.json`):
+
+```json
+{
+  "task": "cloudflare",
+  "operation": "verify",
+  "siteConfig": "./site.json"
+}
+```
+
+Notes:
+- `operation` (`action`) supports `purge` (default) and `verify`.
+- `purge` requires `zoneId` (`zone-id`) plus `token` or `tokenEnv` (defaults to `CLOUDFLARE_API_TOKEN`).
+- `verify` does not require zone/token and fails the step when a URL returns a non-allowed cache status.
+- `paths` are combined with `baseUrl`; `urls` accepts full URLs directly.
+- `reportPath`/`summaryPath` (verify mode) write JSON + Markdown artifacts for CI diagnostics.
+- When `siteConfig` is provided and no explicit `paths`/`urls` are passed:
+  - `verify` uses route-derived verify paths.
+  - `purge` uses verify paths plus purge-only artifacts (`/404.html`, `llms` files).
+- `cloudflare` steps are intentionally not cacheable (external side effects).
 
 #### indexnow
 Submits changed or selected canonical URLs to IndexNow-compatible endpoints.

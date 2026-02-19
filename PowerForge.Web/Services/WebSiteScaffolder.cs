@@ -6,6 +6,7 @@ namespace PowerForge.Web;
 public static partial class WebSiteScaffolder
 {
     private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/";
+    private const string DefaultStablePowerForgeRef = "ab58992450def6b736a2ea87e6a492400250959f";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
@@ -363,6 +364,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "pages",
+                    Preset = "pages",
                     Input = "content/pages",
                     Output = "/",
                     DefaultLayout = "page",
@@ -371,6 +373,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "docs",
+                    Preset = "docs",
                     Input = "content/docs",
                     Output = "/docs",
                     DefaultLayout = "docs",
@@ -379,6 +382,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "blog",
+                    Preset = "blog",
                     Input = "content/blog",
                     Output = "/blog",
                     DefaultLayout = "post",
@@ -388,6 +392,7 @@ a { color: inherit; text-decoration: none; }
                 new CollectionSpec
                 {
                     Name = "news",
+                    Preset = "news",
                     Input = "content/news",
                     Output = "/news",
                     DefaultLayout = "post",
@@ -504,7 +509,24 @@ a { color: inherit; text-decoration: none; }
                 { "task": "verify", "id": "verify-dev", "dependsOn": "build-site", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
                 { "task": "verify", "id": "verify-ci", "dependsOn": "build-site", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
 
-                { "task": "audit", "id": "audit-ci", "dependsOn": "build-site", "siteRoot": "./_site", "modes": ["ci"], "summary": true, "sarif": true, "baseline": "./.powerforge/audit-baseline.json", "failOnNewIssues": true }
+                {
+                  "task": "audit",
+                  "id": "audit-ci",
+                  "dependsOn": "build-site",
+                  "siteRoot": "./_site",
+                  "modes": ["ci"],
+                  "summary": true,
+                  "sarif": true,
+                  "baseline": "./.powerforge/audit-baseline.json",
+                  "failOnNewIssues": true,
+                  "requireExplicitChecks": true,
+                  "checkSeoMeta": false,
+                  "checkNetworkHints": true,
+                  "checkRenderBlockingResources": true,
+                  "checkHeadingOrder": true,
+                  "checkLinkPurposeConsistency": true,
+                  "checkMediaEmbeds": true
+                }
               ]
             }
             """,
@@ -519,6 +541,73 @@ a { color: inherit; text-decoration: none; }
             """,
             DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
+
+        var workflowsRoot = Path.Combine(fullOutput, ".github", "workflows");
+        Directory.CreateDirectory(workflowsRoot);
+        var workflowTemplate = """
+name: Website CI
+
+on:
+  pull_request:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule
+  POWERFORGE_REF: ${{ vars.POWERFORGE_REF != '' && vars.POWERFORGE_REF || '__POWERFORGE_STABLE_REF__' }}
+
+jobs:
+  verify-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout website
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Checkout PowerForge engine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POWERFORGE_REPOSITORY }}
+          ref: ${{ env.POWERFORGE_REF }}
+          path: ./.powerforge-engine
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Run pipeline (ci mode)
+        shell: pwsh
+        run: |
+          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerforge-reports
+          path: |
+            ./_reports/**
+            ./_site/_reports/**
+          if-no-files-found: ignore
+""";
+        var workflowYaml = workflowTemplate.Replace("__POWERFORGE_STABLE_REF__", DefaultStablePowerForgeRef, StringComparison.Ordinal);
+        created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowYaml);
 
         var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
         Directory.CreateDirectory(powerforgeRoot);

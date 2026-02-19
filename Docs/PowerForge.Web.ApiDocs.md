@@ -138,6 +138,7 @@ Sidebar sections:
 URL behavior:
 - Docs template uses clean URLs ending with `/` (for example: `/api/my-type/`).
 - The generator writes `index.html` under `/api/<slug>/` so static servers render correctly.
+- The generator also writes a legacy flat alias (`/api/<slug>.html`) for backward compatibility, but marks that alias page as `noindex,follow` to keep `/api/<slug>/` as the indexable canonical route.
 - The "Back to Docs" link defaults to `/docs/` and can be overridden via `docsHomeUrl`.
 
 Overview chips:

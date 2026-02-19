@@ -59,17 +59,34 @@ When `--site-config` is used, PowerForge resolves a stable route profile from fe
 You can add a `cloudflare` task to `pipeline.json`, typically as a CI-only step.
 Important: purging is most correct **after** the origin content has been updated.
 
-Example step:
+Purge example step:
 
 ```json
 {
   "task": "cloudflare",
   "id": "purge-cloudflare",
   "modes": ["ci"],
+  "operation": "purge",
   "zoneId": "YOUR_ZONE_ID",
   "tokenEnv": "CLOUDFLARE_API_TOKEN",
-  "baseUrl": "https://example.com",
-  "paths": "/,/docs/,/api/"
+  "siteConfig": "./site.json"
+}
+```
+
+Verify example step (no token/zone required):
+
+```json
+{
+  "task": "cloudflare",
+  "id": "verify-cloudflare-cache",
+  "dependsOn": "purge-cloudflare",
+  "modes": ["ci"],
+  "operation": "verify",
+  "siteConfig": "./site.json",
+  "warmupRequests": 1,
+  "allowStatuses": "HIT,REVALIDATED,EXPIRED,STALE",
+  "reportPath": "./_reports/cloudflare-cache.json",
+  "summaryPath": "./_reports/cloudflare-cache.md"
 }
 ```
 
