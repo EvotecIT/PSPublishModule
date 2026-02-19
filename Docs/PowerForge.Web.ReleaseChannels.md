@@ -45,3 +45,13 @@ env:
 - Use pipeline baselines with `failOnNewWarnings`/`failOnNewIssues`.
 - Use `requireExplicitChecks: true` in `audit`/`doctor` to freeze check behavior across upgrades.
 - Require changelog notes for any behavioral default change.
+
+## Scaffold Alignment
+
+`powerforge-web scaffold` now generates `./.github/workflows/website-ci.yml` with this pattern:
+
+- `POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule`
+- `POWERFORGE_REF` resolved from GitHub variable fallback to pinned stable SHA
+- CI executes `pipeline --mode ci` using the checked-out engine
+
+This keeps new websites aligned with channel pinning by default.

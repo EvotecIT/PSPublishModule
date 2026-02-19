@@ -6,6 +6,7 @@ namespace PowerForge.Web;
 public static partial class WebSiteScaffolder
 {
     private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/";
+    private const string DefaultStablePowerForgeRef = "ab58992450def6b736a2ea87e6a492400250959f";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
@@ -536,6 +537,61 @@ a { color: inherit; text-decoration: none; }
             """,
             DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
+
+        var workflowsRoot = Path.Combine(fullOutput, ".github", "workflows");
+        Directory.CreateDirectory(workflowsRoot);
+        var workflowTemplate = """
+name: Website CI
+
+on:
+  pull_request:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule
+  POWERFORGE_REF: ${{ vars.POWERFORGE_REF != '' && vars.POWERFORGE_REF || '__POWERFORGE_STABLE_REF__' }}
+
+jobs:
+  verify-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout website
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Checkout PowerForge engine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.POWERFORGE_REPOSITORY }}
+          ref: ${{ env.POWERFORGE_REF }}
+          path: ./.powerforge-engine
+
+      - name: Run pipeline (ci mode)
+        shell: pwsh
+        run: |
+          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerforge-reports
+          path: |
+            ./_reports/**
+            ./_site/_reports/**
+          if-no-files-found: ignore
+""";
+        var workflowYaml = workflowTemplate.Replace("__POWERFORGE_STABLE_REF__", DefaultStablePowerForgeRef, StringComparison.Ordinal);
+        created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowYaml);
 
         var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
         Directory.CreateDirectory(powerforgeRoot);

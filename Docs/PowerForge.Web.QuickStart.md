@@ -12,6 +12,10 @@ Result (minimal structure):
 ```
 MySite/
   site.json
+  pipeline.json
+  .github/
+    workflows/
+      website-ci.yml
   content/
     pages/
       index.md
@@ -108,6 +112,11 @@ For repeatable builds, use pipeline or publish specs:
 powerforge-web pipeline --config ./pipeline.json
 powerforge-web publish --config ./publish.json
 ```
+
+Scaffolded CI workflow:
+- `./.github/workflows/website-ci.yml` is generated automatically.
+- It checks out `EvotecIT/PSPublishModule` at a pinned default ref and runs `pipeline --mode ci`.
+- Override ref per repo/org via GitHub variable `POWERFORGE_REF`.
 
 Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:
 ```

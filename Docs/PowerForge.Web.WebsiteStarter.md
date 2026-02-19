@@ -28,6 +28,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 1. Create/confirm these files exist at repo root:
    - `site.json`
    - `pipeline.json`
+   - `.github/workflows/website-ci.yml`
    - `config/presets/pipeline.web-quality.json`
    - `.powerforge/verify-baseline.json`
    - `.powerforge/audit-baseline.json`
@@ -58,7 +59,13 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `audit` (and rendered checks if enabled)
      - `optimize`
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
-4. Theme manifest (`theme.manifest.json` recommended):
+4. CI workflow:
+   - keep engine source pinned in workflow env:
+     - `POWERFORGE_REPOSITORY`
+     - `POWERFORGE_REF` (SHA/tag/branch; prefer pinned SHA)
+   - default scaffolder workflow reads `POWERFORGE_REF` from GitHub vars and falls back to a known-good pinned SHA.
+   - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
+5. Theme manifest (`theme.manifest.json` recommended):
    - set `schemaVersion: 2`
    - declare `features`
    - define `featureContracts` for drift-prone features:
@@ -67,7 +74,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - for Scriban editorial layouts (`blog`/`news`), prefer `{{ pf.editorial_cards ... }}` + `{{ pf.editorial_pager ... }}` in list layouts so verify can detect regressions early
    - `pf.editorial_cards` supports variants (`default`, `compact`, `hero`, `featured`) plus optional `grid_class`/`card_class` overrides so themes can evolve layout style without duplicating list rendering loops
    - if you define `featureContracts.blog` / `featureContracts.news`, include selectors for the variants/override classes used by `pf.editorial_cards` in `requiredCssSelectors`
-5. Layout hooks:
+6. Layout hooks:
    - layouts must include:
      - `{{ assets.critical_css_html }}`
      - `{{ include "theme-tokens" }}`
@@ -75,7 +82,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `{{ assets.css_html }}`
      - `{{ assets.js_html }}`
      - `{{ extra_scripts_html }}`
-6. API docs rule:
+7. API docs rule:
    - API pages must use the same global CSS as normal pages plus API-specific CSS.
    - Use multi-css in apidocs: `"/css/app.css,/css/api.css"`.
    - If your site uses `Navigation.Profiles` and you want API pages to select an `/api/` profile override for nav token injection, set `navContextPath: "/api/"` on the apidocs pipeline step.
