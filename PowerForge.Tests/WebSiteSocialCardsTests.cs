@@ -209,6 +209,58 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_GeneratesSocialCardImage_ForLongCommandLikeContent_WithinSafeLayout()
+    {
+        var root = CreateTempRoot("pf-web-social-generated-long-");
+        try
+        {
+            WritePage(root, "index.md",
+                """
+                ---
+                title: Connect-IntelligenceX -Transport Native|AppServer|CompatibleHttp|CopilotCli -WorkingDirectory C:\very\long\workspace\path\that\keeps\going\on\and\on
+                description: Invoke-IntelligenceXChat -Text "List risks and suggest remediations for this giant pull request with architecture notes and deployment caveats" -Stream -WaitSeconds 10 -AllowNetwork -Workspace C:\repo\workspace\with\very\long\name\and\subfolders.
+                slug: index
+                ---
+
+                Long card text stress test.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated",
+                GeneratedCardWidth = 1200,
+                GeneratedCardHeight = 630
+            };
+
+            var html = BuildAndRead(root, spec, "index.html");
+            const string marker = "property=\"og:image\" content=\"";
+            var start = html.IndexOf(marker, StringComparison.Ordinal);
+            Assert.True(start >= 0, "Expected og:image meta tag.");
+
+            var valueStart = start + marker.Length;
+            var valueEnd = html.IndexOf('"', valueStart);
+            Assert.True(valueEnd > valueStart, "Expected og:image content value.");
+
+            var imageUrl = html[valueStart..valueEnd];
+            Assert.Contains("/assets/social/generated/", imageUrl, StringComparison.Ordinal);
+
+            var relativePath = imageUrl.Replace("https://example.test/", string.Empty, StringComparison.Ordinal);
+            var generatedPath = Path.Combine(root, "_site", relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(generatedPath), $"Generated social card missing: {generatedPath}");
+            Assert.Contains("property=\"og:image:width\" content=\"1200\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:height\" content=\"630\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_DoesNotAutoGenerateCards_ForDocsPages_UnlessOverridden()
     {
         var root = CreateTempRoot("pf-web-social-generated-scope-");

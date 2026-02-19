@@ -104,6 +104,25 @@ internal static class WebSocialCardGenerator
         var contentLeft = panelInset + contentPadding;
         var contentRight = panelInset + panelWidth - contentPadding;
         var contentWidth = Math.Max(120, contentRight - contentLeft);
+        var safeMarginX = Math.Max(contentPadding, (int)Math.Round(width * 0.08));
+        var safeMarginY = Math.Max(GetScaledPixels(width, height, basePixels: 26, minimum: 16), (int)Math.Round(height * 0.09));
+        var safeLeft = Math.Max(contentLeft, safeMarginX);
+        var safeRight = Math.Min(contentRight, width - safeMarginX);
+        var safeTop = Math.Max(panelInset + contentPadding, safeMarginY);
+        var safeBottom = Math.Min(panelInset + panelHeight - contentPadding, height - safeMarginY);
+        if (safeRight - safeLeft < GetScaledPixels(width, height, basePixels: 260, minimum: 200))
+        {
+            safeLeft = contentLeft;
+            safeRight = contentRight;
+        }
+
+        if (safeBottom - safeTop < GetScaledPixels(width, height, basePixels: 180, minimum: 132))
+        {
+            safeTop = panelInset + contentPadding;
+            safeBottom = panelInset + panelHeight - contentPadding;
+        }
+
+        var safeWidth = Math.Max(120, safeRight - safeLeft);
         var topBandHeight = GetScaledPixels(width, height, basePixels: 9, minimum: 5);
         var eyebrowFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
         var titleFontSize = GetScaledPixels(width, height, basePixels: 60, minimum: 32);
@@ -111,23 +130,23 @@ internal static class WebSocialCardGenerator
         var badgeFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
         var badgeRectHeight = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
         var badgeRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
-        var badgeRectY = panelInset + panelHeight - badgeRectHeight - GetScaledPixels(width, height, basePixels: 26, minimum: 16);
-        var badgeRectX = contentLeft;
+        var badgeRectY = safeBottom - badgeRectHeight;
+        var badgeRectX = safeLeft;
         var badgeRectWidth = Math.Max(
             GetScaledPixels(width, height, basePixels: 220, minimum: 160),
-            Math.Min(contentWidth, GetScaledPixels(width, height, basePixels: 760, minimum: 420)));
+            Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 760, minimum: 420)));
         var badgeTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
         var badgeTextY = badgeRectY + (badgeRectHeight / 2);
         var pillPaddingX = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
         var pillHeight = GetScaledPixels(width, height, basePixels: 40, minimum: 26);
         var pillRadius = GetScaledPixels(width, height, basePixels: 20, minimum: 13);
         var pillFontSize = GetScaledPixels(width, height, basePixels: 18, minimum: 12);
-        var pillMaxWidth = Math.Min(contentWidth, GetScaledPixels(width, height, basePixels: 320, minimum: 192));
+        var pillMaxWidth = Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 320, minimum: 192));
         var pillMinWidth = GetScaledPixels(width, height, basePixels: 148, minimum: 112);
         var pillTextWidth = EstimateTextWidth(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24), pillFontSize);
         var pillWidth = Math.Clamp(pillTextWidth + (pillPaddingX * 2), pillMinWidth, pillMaxWidth);
-        var pillX = contentRight - pillWidth;
-        var pillY = panelInset + GetScaledPixels(width, height, basePixels: 26, minimum: 16);
+        var pillX = safeRight - pillWidth;
+        var pillY = safeTop;
         var pillTextX = pillX + pillPaddingX;
         var pillTextY = pillY + (pillHeight / 2);
         var glowRadiusLarge = GetScaledPixels(width, height, basePixels: 240, minimum: 140);
@@ -136,11 +155,11 @@ internal static class WebSocialCardGenerator
         var rightGlowY = GetScaledPixels(width, height, basePixels: 126, minimum: 76);
         var leftGlowX = GetScaledPixels(width, height, basePixels: 180, minimum: 108);
         var leftGlowY = height - GetScaledPixels(width, height, basePixels: 104, minimum: 66);
-        var eyebrowY = panelInset + GetScaledPixels(width, height, basePixels: 60, minimum: 38);
+        var eyebrowY = safeTop + GetScaledPixels(width, height, basePixels: 26, minimum: 18);
         var titleY = eyebrowY + GetScaledPixels(width, height, basePixels: 94, minimum: 56);
         var titleLineHeight = GetScaledPixels(width, height, basePixels: 62, minimum: 30);
         var descriptionLineHeight = GetScaledPixels(width, height, basePixels: 34, minimum: 20);
-        var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(width), maxLines: 3);
+        var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(safeWidth, titleFontSize), maxLines: 3);
         var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(width, height, basePixels: 24, minimum: 16);
         var descriptionBottomY = badgeRectY - GetScaledPixels(width, height, basePixels: 24, minimum: 16);
         var maxDescriptionLines = Math.Max(
@@ -148,11 +167,11 @@ internal static class WebSocialCardGenerator
             (descriptionBottomY - descriptionY) / descriptionLineHeight);
         var descriptionLines = WrapText(
             primaryDescription,
-            maxChars: GetDescriptionWrapWidth(width),
+            maxChars: GetDescriptionWrapWidth(safeWidth, descriptionFontSize),
             maxLines: Math.Min(3, maxDescriptionLines));
         var accentLineY = badgeRectY - GetScaledPixels(width, height, basePixels: 36, minimum: 22);
-        var accentLineX = contentLeft;
-        var accentLineWidth = Math.Max(GetScaledPixels(width, height, basePixels: 160, minimum: 120), contentWidth);
+        var accentLineX = safeLeft;
+        var accentLineWidth = Math.Max(GetScaledPixels(width, height, basePixels: 160, minimum: 120), safeWidth);
 
         var svg = new StringBuilder();
         svg.AppendLine($@"<svg xmlns=""http://www.w3.org/2000/svg"" width=""{width}"" height=""{height}"" viewBox=""0 0 {width} {height}"">");
@@ -190,20 +209,20 @@ internal static class WebSocialCardGenerator
         svg.AppendLine($@"  <rect x=""{pillX}"" y=""{pillY}"" width=""{pillWidth}"" height=""{pillHeight}"" rx=""{pillRadius}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.78"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.76""/>");
         svg.AppendLine($@"  <text x=""{pillTextX}"" y=""{pillTextY}"" fill=""{palette.ChipText}"" font-size=""{pillFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeBadgeUpper}</text>");
 
-        svg.AppendLine($@"  <text x=""{contentLeft}"" y=""{eyebrowY}"" fill=""{palette.AccentSoft}"" font-size=""{eyebrowFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"">");
+        svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{eyebrowY}"" fill=""{palette.AccentSoft}"" font-size=""{eyebrowFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"">");
         svg.AppendLine($"    {safeEyebrow}");
         svg.AppendLine(@"  </text>");
 
         for (var i = 0; i < titleLines.Count; i++)
         {
             var y = titleY + (i * titleLineHeight);
-            svg.AppendLine($@"  <text x=""{contentLeft}"" y=""{y}"" fill=""{palette.TextPrimary}"" font-size=""{titleFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""800"">{EscapeXml(titleLines[i])}</text>");
+            svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextPrimary}"" font-size=""{titleFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""800"">{EscapeXml(titleLines[i])}</text>");
         }
 
         for (var i = 0; i < descriptionLines.Count; i++)
         {
             var y = descriptionY + (i * descriptionLineHeight);
-            svg.AppendLine($@"  <text x=""{contentLeft}"" y=""{y}"" fill=""{palette.TextSecondary}"" font-size=""{descriptionFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""500"">{EscapeXml(descriptionLines[i])}</text>");
+            svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextSecondary}"" font-size=""{descriptionFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""500"">{EscapeXml(descriptionLines[i])}</text>");
         }
 
         svg.AppendLine($@"  <rect x=""{badgeRectX}"" y=""{badgeRectY}"" rx=""{badgeRectRadius}"" ry=""{badgeRectRadius}"" width=""{badgeRectWidth}"" height=""{badgeRectHeight}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.68"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.58""/>");
@@ -317,16 +336,23 @@ internal static class WebSocialCardGenerator
         return Math.Max(minimum, (int)Math.Round(basePixels * scale));
     }
 
-    private static int GetTitleWrapWidth(int width)
+    private static int GetTitleWrapWidth(int safeWidth, int fontSize)
     {
-        var dynamicWidth = width / 33;
-        return Math.Clamp(dynamicWidth, 24, 42);
+        return EstimateCharsFromWidth(safeWidth, fontSize, minChars: 20, maxChars: 42);
     }
 
-    private static int GetDescriptionWrapWidth(int width)
+    private static int GetDescriptionWrapWidth(int safeWidth, int fontSize)
     {
-        var dynamicWidth = width / 20;
-        return Math.Clamp(dynamicWidth, 46, 74);
+        return EstimateCharsFromWidth(safeWidth, fontSize, minChars: 34, maxChars: 74);
+    }
+
+    private static int EstimateCharsFromWidth(int pixelWidth, int fontSize, int minChars, int maxChars)
+    {
+        if (pixelWidth <= 0 || fontSize <= 0)
+            return minChars;
+
+        var estimated = (int)Math.Floor(pixelWidth / Math.Max(1d, fontSize * 0.56));
+        return Math.Clamp(estimated, minChars, maxChars);
     }
 
     private static int EstimateTextWidth(string text, int fontSize, double glyphFactor = 0.56)
