@@ -50,6 +50,8 @@ public sealed class SiteSpec
     public FeedSpec? Feed { get; set; }
     /// <summary>Taxonomy definitions (tags, categories).</summary>
     public TaxonomySpec[] Taxonomies { get; set; } = Array.Empty<TaxonomySpec>();
+    /// <summary>Markdown rendering options.</summary>
+    public MarkdownSpec? Markdown { get; set; }
 
     /// <summary>Head configuration applied to all pages.</summary>
     public HeadSpec? Head { get; set; }

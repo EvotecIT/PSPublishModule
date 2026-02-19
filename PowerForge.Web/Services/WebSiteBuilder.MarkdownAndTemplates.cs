@@ -11,17 +11,17 @@ namespace PowerForge.Web;
 /// <summary>Markdown rendering, prism injection, and data-template helpers.</summary>
 public static partial class WebSiteBuilder
 {
-    private static string RenderMarkdown(string content, string sourcePath, BuildCacheSpec? cache, string? cacheRoot)
+    private static string RenderMarkdown(string content, string sourcePath, BuildCacheSpec? cache, string? cacheRoot, MarkdownSpec? markdown)
     {
         if (cache?.Enabled != true || string.IsNullOrWhiteSpace(cacheRoot))
-            return MarkdownRenderer.RenderToHtml(content);
+            return MarkdownRenderer.RenderToHtml(content, markdown);
 
         var key = ComputeCacheKey(content, sourcePath, cache);
         var cacheFile = Path.Combine(cacheRoot, key + ".html");
         if (File.Exists(cacheFile))
             return File.ReadAllText(cacheFile);
 
-        var html = MarkdownRenderer.RenderToHtml(content);
+        var html = MarkdownRenderer.RenderToHtml(content, markdown);
         File.WriteAllText(cacheFile, html);
         return html;
     }

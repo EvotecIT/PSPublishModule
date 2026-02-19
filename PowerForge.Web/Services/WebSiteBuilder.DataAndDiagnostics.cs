@@ -21,14 +21,14 @@ public static partial class WebSiteBuilder
         if (themeData is not null)
             data["theme"] = themeData;
 
-        LoadDataFromFolder(basePath, data);
-        LoadProjectData(plan, projects, data);
+        LoadDataFromFolder(basePath, data, spec.Markdown);
+        LoadProjectData(plan, projects, data, spec.Markdown);
         NormalizeKnownData(data);
 
         return data;
     }
 
-    private static void LoadProjectData(WebSitePlan plan, IReadOnlyList<ProjectSpec> projects, Dictionary<string, object?> data)
+    private static void LoadProjectData(WebSitePlan plan, IReadOnlyList<ProjectSpec> projects, Dictionary<string, object?> data, MarkdownSpec? markdown)
     {
         if (plan.Projects is null || plan.Projects.Length == 0) return;
 
@@ -44,7 +44,7 @@ public static partial class WebSiteBuilder
             if (!Directory.Exists(dataRoot)) continue;
 
             var projectBag = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            LoadDataFromFolder(dataRoot, projectBag);
+            LoadDataFromFolder(dataRoot, projectBag, markdown);
 
             if (projectSpecMap.TryGetValue(project.Slug, out var spec))
             {
@@ -77,7 +77,7 @@ public static partial class WebSiteBuilder
         return merged;
     }
 
-    private static void LoadDataFromFolder(string basePath, Dictionary<string, object?> data)
+    private static void LoadDataFromFolder(string basePath, Dictionary<string, object?> data, MarkdownSpec? markdown)
     {
         if (!Directory.Exists(basePath))
             return;
@@ -93,7 +93,7 @@ public static partial class WebSiteBuilder
             {
                 using var doc = JsonDocument.Parse(File.ReadAllText(file));
                 value = ConvertJsonElement(doc.RootElement);
-                value = NormalizeMarkdownData(value);
+                value = NormalizeMarkdownData(value, markdown);
             }
             catch (Exception ex)
             {
@@ -526,13 +526,13 @@ public static partial class WebSiteBuilder
         return null;
     }
 
-    private static object? NormalizeMarkdownData(object? value)
+    private static object? NormalizeMarkdownData(object? value, MarkdownSpec? markdown)
     {
         if (value is Dictionary<string, object?> map)
         {
             foreach (var key in map.Keys.ToList())
             {
-                map[key] = NormalizeMarkdownData(map[key]);
+                map[key] = NormalizeMarkdownData(map[key], markdown);
             }
 
             foreach (var key in map.Keys.ToList())
@@ -545,7 +545,7 @@ public static partial class WebSiteBuilder
                     continue;
 
                 if (!map.ContainsKey(baseKey) || map[baseKey] is null)
-                    map[baseKey] = RenderMarkdownValue(map[key]);
+                    map[baseKey] = RenderMarkdownValue(map[key], markdown);
             }
 
             return map;
@@ -555,7 +555,7 @@ public static partial class WebSiteBuilder
         {
             for (var i = 0; i < list.Count; i++)
             {
-                list[i] = NormalizeMarkdownData(list[i]);
+                list[i] = NormalizeMarkdownData(list[i], markdown);
             }
             return list;
         }
@@ -576,12 +576,12 @@ public static partial class WebSiteBuilder
         return key;
     }
 
-    private static object? RenderMarkdownValue(object? value)
+    private static object? RenderMarkdownValue(object? value, MarkdownSpec? markdown)
     {
         if (value is null) return null;
 
         if (value is string text)
-            return MarkdownRenderer.RenderToHtml(text);
+            return MarkdownRenderer.RenderToHtml(text, markdown);
 
         if (value is IEnumerable<object?> list && value is not string)
         {
@@ -589,7 +589,7 @@ public static partial class WebSiteBuilder
             foreach (var item in list)
             {
                 if (item is string itemText)
-                    rendered.Add(MarkdownRenderer.RenderToHtml(itemText));
+                    rendered.Add(MarkdownRenderer.RenderToHtml(itemText, markdown));
                 else
                     rendered.Add(item);
             }

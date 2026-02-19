@@ -1023,6 +1023,22 @@ PowerForge.Web generates:
 - `/tags/` (taxonomy list)
 - `/tags/<term>/` (term pages)
 
+## Markdown image hints
+Use markdown-first image syntax and let PowerForge add sensible defaults on render:
+- missing `loading` becomes `lazy`
+- missing `decoding` becomes `async`
+
+You can tune or disable this in `site.json`:
+```json
+{
+  "Markdown": {
+    "AutoImageHints": true,
+    "DefaultImageLoading": "lazy",
+    "DefaultImageDecoding": "async"
+  }
+}
+```
+
 ## Outputs
 Enable multiple outputs (HTML/JSON/RSS/Atom/JSON Feed) per page kind:
 ```json

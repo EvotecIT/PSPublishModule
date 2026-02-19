@@ -23,7 +23,7 @@ internal static class MarkdownRenderer
         DefinitionLists = false
     };
 
-    public static string RenderToHtml(string content)
+    public static string RenderToHtml(string content, MarkdownSpec? markdown = null)
     {
         if (string.IsNullOrWhiteSpace(content)) return string.Empty;
 
@@ -41,7 +41,7 @@ internal static class MarkdownRenderer
                 }
             };
             var html = doc.ToHtmlFragment(options);
-            html = InjectDefaultImageHints(html);
+            html = InjectDefaultImageHints(html, markdown);
             return InjectHeadingIds(html);
         }
         catch (Exception ex)
@@ -76,10 +76,20 @@ internal static class MarkdownRenderer
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
     }
 
-    private static string InjectDefaultImageHints(string html)
+    private static string InjectDefaultImageHints(string html, MarkdownSpec? markdown)
     {
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
+
+        if (markdown?.AutoImageHints == false)
+            return html;
+
+        var loadingValue = string.IsNullOrWhiteSpace(markdown?.DefaultImageLoading)
+            ? "lazy"
+            : markdown!.DefaultImageLoading.Trim();
+        var decodingValue = string.IsNullOrWhiteSpace(markdown?.DefaultImageDecoding)
+            ? "async"
+            : markdown!.DefaultImageDecoding.Trim();
 
         return ImageTagRegex.Replace(html, match =>
         {
@@ -95,9 +105,9 @@ internal static class MarkdownRenderer
 
             var attrsUpdated = attrs;
             if (!hasLoading)
-                attrsUpdated += " loading=\"lazy\"";
+                attrsUpdated += $" loading=\"{System.Web.HttpUtility.HtmlEncode(loadingValue)}\"";
             if (!hasDecoding)
-                attrsUpdated += " decoding=\"async\"";
+                attrsUpdated += $" decoding=\"{System.Web.HttpUtility.HtmlEncode(decodingValue)}\"";
 
             return $"<img{attrsUpdated}{close}>";
         });
