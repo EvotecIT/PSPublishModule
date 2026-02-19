@@ -4,6 +4,18 @@ namespace PowerForge.Web;
 
 internal static class MarkdownRenderer
 {
+    private static readonly System.Text.RegularExpressions.Regex ImageTagRegex = new(
+        "<img\\b(?<attrs>[^>]*?)(?<close>\\s*/?)>",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex LoadingAttributeRegex = new(
+        "\\bloading\\s*=",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex DecodingAttributeRegex = new(
+        "\\bdecoding\\s*=",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private static readonly MarkdownReaderOptions GitHubLikeReaderOptions = new()
     {
         // GitHub-flavored markdown does not support definition lists by default.
@@ -11,7 +23,7 @@ internal static class MarkdownRenderer
         DefinitionLists = false
     };
 
-    public static string RenderToHtml(string content)
+    public static string RenderToHtml(string content, MarkdownSpec? markdown = null)
     {
         if (string.IsNullOrWhiteSpace(content)) return string.Empty;
 
@@ -29,6 +41,7 @@ internal static class MarkdownRenderer
                 }
             };
             var html = doc.ToHtmlFragment(options);
+            html = InjectDefaultImageHints(html, markdown);
             return InjectHeadingIds(html);
         }
         catch (Exception ex)
@@ -61,6 +74,43 @@ internal static class MarkdownRenderer
                 return $"<h{level}{attrsWithId}>{headingHtml}</h{level}>";
             },
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+    }
+
+    private static string InjectDefaultImageHints(string html, MarkdownSpec? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        if (markdown?.AutoImageHints == false)
+            return html;
+
+        var loadingValue = string.IsNullOrWhiteSpace(markdown?.DefaultImageLoading)
+            ? "lazy"
+            : markdown!.DefaultImageLoading.Trim();
+        var decodingValue = string.IsNullOrWhiteSpace(markdown?.DefaultImageDecoding)
+            ? "async"
+            : markdown!.DefaultImageDecoding.Trim();
+
+        return ImageTagRegex.Replace(html, match =>
+        {
+            var attrs = match.Groups["attrs"].Value;
+            var close = match.Groups["close"].Value;
+            if (string.IsNullOrEmpty(close))
+                close = string.Empty;
+
+            var hasLoading = LoadingAttributeRegex.IsMatch(attrs);
+            var hasDecoding = DecodingAttributeRegex.IsMatch(attrs);
+            if (hasLoading && hasDecoding)
+                return match.Value;
+
+            var attrsUpdated = attrs;
+            if (!hasLoading)
+                attrsUpdated += $" loading=\"{System.Web.HttpUtility.HtmlEncode(loadingValue)}\"";
+            if (!hasDecoding)
+                attrsUpdated += $" decoding=\"{System.Web.HttpUtility.HtmlEncode(decodingValue)}\"";
+
+            return $"<img{attrsUpdated}{close}>";
+        });
     }
 
     private static string NormalizeInlineCodeInHeading(string headingHtml)

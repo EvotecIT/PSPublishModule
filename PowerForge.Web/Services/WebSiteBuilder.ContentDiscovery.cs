@@ -182,7 +182,7 @@ public static partial class WebSiteBuilder
                 if (skipMarkdown)
                     renderMarkdown = false;
                 var htmlContent = renderMarkdown
-                    ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot)
+                    ? RenderMarkdown(processedBody, file, spec.Cache, cacheRoot, spec.Markdown)
                     : processedBody;
                 var meta = matter?.Meta ?? new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
                 htmlContent = NormalizeCodeBlockClasses(htmlContent, ResolvePrismDefaultLanguage(meta, spec));

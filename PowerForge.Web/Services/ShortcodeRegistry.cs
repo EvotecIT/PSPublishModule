@@ -203,8 +203,8 @@ internal static partial class ShortcodeDefaults
                         continue;
 
                     var id = HtmlAny(item, "id");
-                    var question = ResolveFaqInline(item, "question", "q", "title");
-                    var answer = ResolveFaqBlock(item, "answer", "a", "text", "summary");
+                    var question = ResolveFaqInline(item, context.Site.Markdown, "question", "q", "title");
+                    var answer = ResolveFaqBlock(item, context.Site.Markdown, "answer", "a", "text", "summary");
 
                     sb.Append($"    <div class=\"pf-faq-item\"");
                     if (!string.IsNullOrWhiteSpace(id))
@@ -224,16 +224,16 @@ internal static partial class ShortcodeDefaults
         return sb.ToString();
     }
 
-    private static string ResolveFaqInline(IReadOnlyDictionary<string, object?> map, params string[] keys)
+    private static string ResolveFaqInline(IReadOnlyDictionary<string, object?> map, MarkdownSpec? markdown, params string[] keys)
     {
-        var html = ResolveFaqContent(map, keys);
+        var html = ResolveFaqContent(map, markdown, keys);
         return StripSingleParagraphWrapper(html);
     }
 
-    private static string ResolveFaqBlock(IReadOnlyDictionary<string, object?> map, params string[] keys)
-        => ResolveFaqContent(map, keys);
+    private static string ResolveFaqBlock(IReadOnlyDictionary<string, object?> map, MarkdownSpec? markdown, params string[] keys)
+        => ResolveFaqContent(map, markdown, keys);
 
-    private static string ResolveFaqContent(IReadOnlyDictionary<string, object?> map, params string[] keys)
+    private static string ResolveFaqContent(IReadOnlyDictionary<string, object?> map, MarkdownSpec? markdown, params string[] keys)
     {
         var htmlKeys = keys.Select(k => $"{k}_html").ToArray();
         var markdownKeys = keys
@@ -246,7 +246,7 @@ internal static partial class ShortcodeDefaults
 
         var explicitMarkdown = RawAny(map, markdownKeys);
         if (!string.IsNullOrWhiteSpace(explicitMarkdown))
-            return MarkdownRenderer.RenderToHtml(explicitMarkdown);
+            return MarkdownRenderer.RenderToHtml(explicitMarkdown, markdown);
 
         var raw = RawAny(map, keys);
         if (string.IsNullOrWhiteSpace(raw))
@@ -256,7 +256,7 @@ internal static partial class ShortcodeDefaults
             return raw;
 
         if (LooksLikeMarkdown(raw))
-            return MarkdownRenderer.RenderToHtml(raw);
+            return MarkdownRenderer.RenderToHtml(raw, markdown);
 
         return System.Web.HttpUtility.HtmlEncode(raw);
     }

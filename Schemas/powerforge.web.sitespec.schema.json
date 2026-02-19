@@ -74,6 +74,8 @@
     "AssetRegistry": { "$ref": "#/$defs/AssetRegistrySpec" },
     "AssetPolicy": { "$ref": "#/$defs/AssetPolicySpec" },
     "Prism": { "$ref": "#/$defs/PrismSpec" },
+    "Markdown": { "$ref": "#/$defs/MarkdownSpec" },
+    "markdown": { "$ref": "#/$defs/MarkdownSpec" },
     "A11y": { "$ref": "#/$defs/A11ySpec" },
     "LinkRules": { "$ref": "#/$defs/LinkRulesSpec" },
     "Analytics": { "$ref": "#/$defs/AnalyticsSpec" },
@@ -157,6 +159,15 @@
         "AutoSectionDescription": { "type": "string" }
       },
       "required": ["Name", "Input", "Output"]
+    },
+    "MarkdownSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "AutoImageHints": { "type": "boolean", "default": true },
+        "DefaultImageLoading": { "type": "string", "default": "lazy" },
+        "DefaultImageDecoding": { "type": "string", "default": "async" }
+      }
     },
     "EditLinksSpec": {
       "type": "object",

@@ -682,6 +682,7 @@ Notes:
 - `imagePreferNextGen` rewrites `<img src>` to next-gen output when available.
 - `imageWidths` generates responsive variants and `srcset` entries.
 - `imageEnhanceTags` injects `loading=\"lazy\"`, `decoding=\"async\"`, and intrinsic `width`/`height` (when known) on rewritten image tags.
+- Markdown rendering also injects default `loading=\"lazy\"` and `decoding=\"async\"` on `<img>` tags when missing, so markdown image syntax (`![](...)`) gets sane defaults even before optimize runs. Control this via `site.json -> Markdown` (`AutoImageHints`, `DefaultImageLoading`, `DefaultImageDecoding`).
 - `imageMaxBytesPerFile` / `imageMaxTotalBytes` define budgets; `imageFailOnBudget` fails the step if budgets are exceeded.
 - `scopeFromBuildUpdated`: when enabled, and `htmlInclude` is not set, limits HTML processing to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site optimize even in fast mode.
 

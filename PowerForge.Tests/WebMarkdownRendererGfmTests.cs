@@ -110,6 +110,58 @@ public class WebMarkdownRendererGfmTests
     }
 
     [Fact]
+    public void Build_MarkdownImageSyntax_AddsDefaultImageHints()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg)
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("src=\"/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("alt=\"Issue Ops board\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_HtmlImageTag_RespectsExplicitLoadingAndAddsMissingDecoding()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            <img src="/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg" alt="Issue Ops board" loading="eager" />
+            """);
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("loading=\"eager\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("loading=\"lazy\"", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Build_MarkdownImageSyntax_DoesNotAddHints_WhenAutoImageHintsDisabled()
+    {
+        var html = BuildSinglePageSite(
+            """
+            # Screenshot
+
+            ![Issue Ops board](/assets/screenshots/ix-issue-ops/ix-issue-ops-01-board-overview.svg)
+            """,
+            markdownOptions: new MarkdownSpec
+            {
+                AutoImageHints = false
+            });
+
+        Assert.Contains("<img", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("loading=", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("decoding=", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Build_MultilineHtmlIframeTag_IsPreservedWithAttributes()
     {
         var html = BuildSinglePageSite(
@@ -157,7 +209,7 @@ public class WebMarkdownRendererGfmTests
         Assert.DoesNotContain("&lt;source", html, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string BuildSinglePageSite(string markdown)
+    private static string BuildSinglePageSite(string markdown, MarkdownSpec? markdownOptions = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-markdown-gfm-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -202,6 +254,7 @@ public class WebMarkdownRendererGfmTests
                 ContentRoot = "content",
                 DefaultTheme = "t",
                 ThemesRoot = "themes",
+                Markdown = markdownOptions,
                 Collections = new[]
                 {
                     new CollectionSpec
