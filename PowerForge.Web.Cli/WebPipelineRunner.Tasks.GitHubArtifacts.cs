@@ -12,6 +12,22 @@ internal static partial class WebPipelineRunner
 {
     private static void ExecuteGitHubArtifactsPrune(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
+        var continueOnError = GetBool(step, "continueOnError") ?? false;
+        var optional = GetBool(step, "optional") ?? false;
+        var optionalRepository = GetBool(step, "optionalRepository") ??
+                                 GetBool(step, "optional-repository") ??
+                                 GetBool(step, "skipIfMissingRepository") ??
+                                 GetBool(step, "skip-if-missing-repository") ??
+                                 optional;
+        var optionalToken = GetBool(step, "optionalToken") ??
+                            GetBool(step, "optional-token") ??
+                            GetBool(step, "skipIfMissingToken") ??
+                            GetBool(step, "skip-if-missing-token") ??
+                            optional;
+
+        var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
+        var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
+
         var repository = GetString(step, "repo") ??
                          GetString(step, "repository") ??
                          GetString(step, "githubRepository") ??
@@ -20,14 +36,38 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(repository))
             repository = Environment.GetEnvironmentVariable(repoEnv);
         if (string.IsNullOrWhiteSpace(repository))
-            throw new InvalidOperationException($"github-artifacts-prune: missing repository (set '{repoEnv}' or provide repo/repository).");
+        {
+            if (!optionalRepository)
+                throw new InvalidOperationException($"github-artifacts-prune: missing repository (set '{repoEnv}' or provide repo/repository).");
+
+            var skippedResult = CreateGitHubArtifactCleanupSkippedResult(
+                repository: string.Empty,
+                dryRun: true,
+                message: $"Skipped: missing repository (set '{repoEnv}' or provide repo/repository).");
+            WriteGitHubArtifactCleanupArtifacts(baseDir, reportPath, summaryPath, skippedResult);
+            stepResult.Success = true;
+            stepResult.Message = "github-artifacts-prune skipped: missing repository.";
+            return;
+        }
 
         var token = GetString(step, "token") ?? GetString(step, "apiToken") ?? GetString(step, "api-token");
         var tokenEnv = GetString(step, "tokenEnv") ?? GetString(step, "token-env") ?? "GITHUB_TOKEN";
         if (string.IsNullOrWhiteSpace(token))
             token = Environment.GetEnvironmentVariable(tokenEnv);
         if (string.IsNullOrWhiteSpace(token))
-            throw new InvalidOperationException($"github-artifacts-prune: missing token (set '{tokenEnv}' or provide token).");
+        {
+            if (!optionalToken)
+                throw new InvalidOperationException($"github-artifacts-prune: missing token (set '{tokenEnv}' or provide token).");
+
+            var skippedResult = CreateGitHubArtifactCleanupSkippedResult(
+                repository: repository,
+                dryRun: true,
+                message: $"Skipped: missing token (set '{tokenEnv}' or provide token).");
+            WriteGitHubArtifactCleanupArtifacts(baseDir, reportPath, summaryPath, skippedResult);
+            stepResult.Success = true;
+            stepResult.Message = "github-artifacts-prune skipped: missing token.";
+            return;
+        }
 
         var dryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? true;
         if (GetBool(step, "apply") == true || GetBool(step, "execute") == true)
@@ -60,9 +100,7 @@ internal static partial class WebPipelineRunner
 
         var failOnDeleteError = GetBool(step, "failOnDeleteError") ?? GetBool(step, "fail-on-delete-error") ?? false;
         var apiBaseUrl = GetString(step, "apiBaseUrl") ?? GetString(step, "api-base-url");
-
-        var service = new GitHubArtifactCleanupService(new NullLogger());
-        var result = service.Prune(new GitHubArtifactCleanupSpec
+        var spec = new GitHubArtifactCleanupSpec
         {
             ApiBaseUrl = apiBaseUrl,
             Repository = repository,
@@ -75,30 +113,30 @@ internal static partial class WebPipelineRunner
             PageSize = pageSize,
             DryRun = dryRun,
             FailOnDeleteError = failOnDeleteError
-        });
-
-        var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
-        if (!string.IsNullOrWhiteSpace(reportPath))
+        };
+        var service = new GitHubArtifactCleanupService(new NullLogger());
+        GitHubArtifactCleanupResult result;
+        try
         {
-            var resolvedReportPath = ResolvePathWithinRoot(baseDir, reportPath, reportPath);
-            var reportDirectory = Path.GetDirectoryName(resolvedReportPath);
-            if (!string.IsNullOrWhiteSpace(reportDirectory))
-                Directory.CreateDirectory(reportDirectory);
-            File.WriteAllText(resolvedReportPath, JsonSerializer.Serialize(result, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
-            }));
+            result = service.Prune(spec);
+        }
+        catch (Exception ex) when (continueOnError)
+        {
+            result = CreateGitHubArtifactCleanupSkippedResult(repository, dryRun, $"Cleanup failed: {ex.Message}");
+            result.Success = false;
+            WriteGitHubArtifactCleanupArtifacts(baseDir, reportPath, summaryPath, result);
+            stepResult.Success = true;
+            stepResult.Message = $"github-artifacts-prune allowed failure: {ex.Message}";
+            return;
         }
 
-        var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
-        if (!string.IsNullOrWhiteSpace(summaryPath))
+        WriteGitHubArtifactCleanupArtifacts(baseDir, reportPath, summaryPath, result);
+
+        if (!result.Success && continueOnError)
         {
-            var resolvedSummaryPath = ResolvePathWithinRoot(baseDir, summaryPath, summaryPath);
-            var summaryDirectory = Path.GetDirectoryName(resolvedSummaryPath);
-            if (!string.IsNullOrWhiteSpace(summaryDirectory))
-                Directory.CreateDirectory(summaryDirectory);
-            File.WriteAllText(resolvedSummaryPath, BuildGitHubArtifactCleanupSummary(result));
+            stepResult.Success = true;
+            stepResult.Message = $"github-artifacts-prune allowed failure: {BuildGitHubArtifactCleanupMessage(result)}";
+            return;
         }
 
         stepResult.Success = result.Success;
@@ -175,5 +213,41 @@ internal static partial class WebPipelineRunner
         }
 
         return builder.ToString();
+    }
+
+    private static GitHubArtifactCleanupResult CreateGitHubArtifactCleanupSkippedResult(string repository, bool dryRun, string message)
+    {
+        return new GitHubArtifactCleanupResult
+        {
+            Repository = repository,
+            DryRun = dryRun,
+            Success = true,
+            Message = message
+        };
+    }
+
+    private static void WriteGitHubArtifactCleanupArtifacts(string baseDir, string? reportPath, string? summaryPath, GitHubArtifactCleanupResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(reportPath))
+        {
+            var resolvedReportPath = ResolvePathWithinRoot(baseDir, reportPath, reportPath);
+            var reportDirectory = Path.GetDirectoryName(resolvedReportPath);
+            if (!string.IsNullOrWhiteSpace(reportDirectory))
+                Directory.CreateDirectory(reportDirectory);
+            File.WriteAllText(resolvedReportPath, JsonSerializer.Serialize(result, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = true
+            }));
+        }
+
+        if (!string.IsNullOrWhiteSpace(summaryPath))
+        {
+            var resolvedSummaryPath = ResolvePathWithinRoot(baseDir, summaryPath, summaryPath);
+            var summaryDirectory = Path.GetDirectoryName(resolvedSummaryPath);
+            if (!string.IsNullOrWhiteSpace(summaryDirectory))
+                Directory.CreateDirectory(summaryDirectory);
+            File.WriteAllText(resolvedSummaryPath, BuildGitHubArtifactCleanupSummary(result));
+        }
     }
 }

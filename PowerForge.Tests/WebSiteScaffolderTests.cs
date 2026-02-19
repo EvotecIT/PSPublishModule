@@ -79,6 +79,10 @@ public class WebSiteScaffolderTests
             Assert.Contains(engineLockStep.GetProperty("modes").EnumerateArray().Select(e => e.GetString() ?? string.Empty), m => string.Equals(m, "ci", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(presetSteps, step => string.Equals(step.GetProperty("task").GetString(), "sitemap", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(presetSteps, step => string.Equals(step.GetProperty("task").GetString(), "indexnow", StringComparison.OrdinalIgnoreCase));
+            var artifactsStep = presetSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "github-artifacts-prune", StringComparison.OrdinalIgnoreCase));
+            Assert.True(artifactsStep.GetProperty("optional").GetBoolean());
+            Assert.True(artifactsStep.GetProperty("dryRun").GetBoolean());
             var auditStep = presetSteps.First(step =>
                 string.Equals(step.GetProperty("task").GetString(), "audit", StringComparison.OrdinalIgnoreCase));
 

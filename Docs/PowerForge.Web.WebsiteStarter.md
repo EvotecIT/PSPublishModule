@@ -61,6 +61,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `audit` (and rendered checks if enabled)
      - `optimize`
      - `indexnow` (recommended with `optionalKey:true` so missing secrets skip safely in forks/dev)
+     - `github-artifacts-prune` (recommended `dryRun:true` + `optional:true`; flip to `apply:true` in scheduled maintenance runs)
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. CI workflow:
    - keep `.powerforge/engine-lock.json` committed (prefer immutable SHA in `ref`)

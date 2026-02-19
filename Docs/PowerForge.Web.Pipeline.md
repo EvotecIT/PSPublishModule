@@ -1344,12 +1344,17 @@ Notes:
 - Repo/token resolution:
   - `repo`/`repository`, fallback env `repoEnv` (default `GITHUB_REPOSITORY`).
   - `token`, fallback env `tokenEnv` (default `GITHUB_TOKEN`).
+- Optional mode:
+  - `optional:true` skips green when required repo/token values are missing.
+  - `optionalToken:true` / `skipIfMissingToken:true` skips green only for missing token.
+  - `optionalRepository:true` / `skipIfMissingRepository:true` skips green only for missing repository.
 - Pattern options:
   - include: `name`/`names`/`include`/`includes`
   - exclude: `exclude`/`excludes`/`excludeNames`
 - Safety defaults:
   - `dryRun:true`, `keep:5`, `maxAgeDays:7`, `maxDelete:200`
 - Use `apiBaseUrl` for GitHub Enterprise API endpoints or local integration testing.
+- `continueOnError:true` keeps pipeline green if API errors or delete failures occur.
 - `reportPath`/`summaryPath` write JSON + Markdown outputs for CI diagnostics.
 - `github-artifacts-prune` steps are intentionally not cacheable (external side effects).
 

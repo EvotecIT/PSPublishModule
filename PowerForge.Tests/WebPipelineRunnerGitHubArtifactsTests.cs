@@ -193,6 +193,106 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_GitHubArtifactsPrune_OptionalToken_CanSkipWhenMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-gh-artifacts-optional-token-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var originalToken = Environment.GetEnvironmentVariable("PF_GH_ARTIFACTS_TEST_TOKEN");
+        try
+        {
+            Environment.SetEnvironmentVariable("PF_GH_ARTIFACTS_TEST_TOKEN", null);
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "github-artifacts-prune",
+                      "repository": "EvotecIT/IntelligenceX",
+                      "tokenEnv": "PF_GH_ARTIFACTS_TEST_TOKEN",
+                      "optionalToken": true,
+                      "reportPath": "./_reports/gh-artifacts.json",
+                      "summaryPath": "./_reports/gh-artifacts.md"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+            Assert.Contains("skipped", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+
+            var reportPath = Path.Combine(root, "_reports", "gh-artifacts.json");
+            var summaryPath = Path.Combine(root, "_reports", "gh-artifacts.md");
+            Assert.True(File.Exists(reportPath));
+            Assert.True(File.Exists(summaryPath));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PF_GH_ARTIFACTS_TEST_TOKEN", originalToken);
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_GitHubArtifactsPrune_ContinueOnError_CanKeepStepGreen()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-gh-artifacts-continue-on-error-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+
+        try
+        {
+            var port = GetFreePort();
+            var artifacts = new[]
+            {
+                Artifact(401, "test-results", 40),
+                Artifact(402, "test-results", 35)
+            };
+            (listener, cts, serverTask, _) = StartGitHubArtifactsServer(port, artifacts, failDeleteIds: new[] { 401L, 402L });
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                $$"""
+                {
+                  "steps": [
+                    {
+                      "task": "github-artifacts-prune",
+                      "repository": "EvotecIT/CodeGlyphX",
+                      "token": "test-token",
+                      "apiBaseUrl": "http://127.0.0.1:{{port}}/",
+                      "name": "test-results*",
+                      "keep": 0,
+                      "maxAgeDays": 0,
+                      "maxDelete": 20,
+                      "apply": true,
+                      "failOnDeleteError": true,
+                      "continueOnError": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            Assert.Single(result.Steps);
+            Assert.True(result.Steps[0].Success);
+            Assert.Contains("allowed failure", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static FakeArtifact Artifact(long id, string name, int daysAgo)
     {
         var timestamp = DateTimeOffset.UtcNow.AddDays(-daysAgo);
