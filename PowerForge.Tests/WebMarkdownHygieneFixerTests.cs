@@ -110,4 +110,57 @@ public class WebMarkdownHygieneFixerTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void Fix_Apply_NormalizesMultilineMediaTags_AndKeepsCodeFenceContent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-md-fix-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var file = Path.Combine(root, "media.md");
+            File.WriteAllText(file,
+                """
+                # Media
+
+                <iframe
+                  src="https://example.test/embed"
+                  loading="lazy"
+                  title="Demo"></iframe>
+
+                ```html
+                <iframe
+                  src="https://example.test/keep-raw"
+                  loading="lazy"></iframe>
+                ```
+                """);
+
+            var result = WebMarkdownHygieneFixer.Fix(new WebMarkdownFixOptions
+            {
+                RootPath = root,
+                ApplyChanges = true
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(1, result.ChangedFileCount);
+            Assert.True(result.ReplacementCount >= 1);
+
+            var updated = File.ReadAllText(file);
+            Assert.Contains("<iframe src=\"https://example.test/embed\" loading=\"lazy\" title=\"Demo\"></iframe>", updated, StringComparison.Ordinal);
+            Assert.Contains(
+                """
+                <iframe
+                  src="https://example.test/keep-raw"
+                  loading="lazy"></iframe>
+                """,
+                updated,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
 }

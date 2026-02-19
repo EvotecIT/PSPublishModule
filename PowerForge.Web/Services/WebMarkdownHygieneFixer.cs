@@ -179,12 +179,14 @@ public static class WebMarkdownHygieneFixer
         if (string.IsNullOrWhiteSpace(content))
             return (content, 0);
 
+        content = MarkdownMediaTagNormalizer.NormalizeMultilineMediaTagsOutsideFences(content, out var mediaTagReplacements);
+
         var lines = content.Split('\n');
         var inFence = false;
         var outsideFence = new System.Text.StringBuilder();
         var insideFence = new System.Text.StringBuilder();
         var rebuilt = new System.Text.StringBuilder(content.Length + 64);
-        var replacements = 0;
+        var replacements = mediaTagReplacements;
 
         void FlushOutside()
         {
