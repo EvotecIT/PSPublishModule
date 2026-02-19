@@ -53,5 +53,6 @@ env:
 - `POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule`
 - `POWERFORGE_REF` resolved from GitHub variable fallback to pinned stable SHA
 - CI executes `pipeline --mode ci` using the checked-out engine
+- workflow-level concurrency cancelation and NuGet package caching enabled by default
 
 This keeps new websites aligned with channel pinning by default.

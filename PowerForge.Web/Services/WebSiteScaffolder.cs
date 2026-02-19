@@ -546,11 +546,15 @@ name: Website CI
 on:
   pull_request:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: website-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule
@@ -574,6 +578,14 @@ jobs:
           repository: ${{ env.POWERFORGE_REPOSITORY }}
           ref: ${{ env.POWERFORGE_REF }}
           path: ./.powerforge-engine
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
       - name: Run pipeline (ci mode)
         shell: pwsh

@@ -116,6 +116,7 @@ powerforge-web publish --config ./publish.json
 Scaffolded CI workflow:
 - `./.github/workflows/website-ci.yml` is generated automatically.
 - It checks out `EvotecIT/PSPublishModule` at a pinned default ref and runs `pipeline --mode ci`.
+- It includes workflow concurrency cancelation and NuGet cache reuse by default.
 - Override ref per repo/org via GitHub variable `POWERFORGE_REF`.
 
 Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:

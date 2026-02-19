@@ -59,6 +59,8 @@ public class WebSiteScaffolderTests
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
             Assert.Contains("POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule", workflow, StringComparison.Ordinal);
             Assert.Contains("POWERFORGE_REF:", workflow, StringComparison.Ordinal);
+            Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
             Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
             Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
 
