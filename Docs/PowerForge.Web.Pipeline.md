@@ -1184,6 +1184,54 @@ Notes:
 - `strict: true` fails if selected target artifacts are missing.
 - `site-root` is supported as an alias for `siteRoot`.
 
+#### cloudflare
+Purges Cloudflare cache or verifies `cf-cache-status` on selected URLs.
+
+```json
+{
+  "task": "cloudflare",
+  "operation": "purge",
+  "zoneId": "YOUR_ZONE_ID",
+  "tokenEnv": "CLOUDFLARE_API_TOKEN",
+  "baseUrl": "https://example.com",
+  "paths": "/,/docs/,/api/,/blog/"
+}
+```
+
+Verify mode (good for post-deploy smoke checks):
+
+```json
+{
+  "task": "cloudflare",
+  "operation": "verify",
+  "baseUrl": "https://example.com",
+  "paths": "/,/docs/,/api/,/blog/",
+  "allowStatuses": "HIT,REVALIDATED,EXPIRED,STALE",
+  "warmupRequests": 1,
+  "timeoutMs": 15000
+}
+```
+
+Site-profile mode (auto route discovery from `site.json`):
+
+```json
+{
+  "task": "cloudflare",
+  "operation": "verify",
+  "siteConfig": "./site.json"
+}
+```
+
+Notes:
+- `operation` (`action`) supports `purge` (default) and `verify`.
+- `purge` requires `zoneId` (`zone-id`) plus `token` or `tokenEnv` (defaults to `CLOUDFLARE_API_TOKEN`).
+- `verify` does not require zone/token and fails the step when a URL returns a non-allowed cache status.
+- `paths` are combined with `baseUrl`; `urls` accepts full URLs directly.
+- When `siteConfig` is provided and no explicit `paths`/`urls` are passed:
+  - `verify` uses route-derived verify paths.
+  - `purge` uses verify paths plus purge-only artifacts (`/404.html`, `llms` files).
+- `cloudflare` steps are intentionally not cacheable (external side effects).
+
 #### indexnow
 Submits changed or selected canonical URLs to IndexNow-compatible endpoints.
 ```json

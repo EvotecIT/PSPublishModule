@@ -94,3 +94,33 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 - Add budgets only when you can defend them:
   - `maxTotalFiles` is a simple early warning for accidental output explosion.
   - Sites with API references can legitimately exceed 800 files (per-type pages add up quickly). Set a budget that reflects the site's expected scale (example: 2000-5000) or exclude known large outputs from budgets via `budgetExclude` (for example `api/**`).
+
+## Compatibility Lock (Prevent Silent Default Drift)
+
+If you want CI behavior to stay frozen across engine updates, enable:
+
+- `requireExplicitChecks: true` on `audit`/`doctor` steps
+
+When enabled, the step fails fast unless these checks are explicitly set in the step:
+
+- `checkSeoMeta`
+- `checkNetworkHints`
+- `checkRenderBlockingResources`
+- `checkHeadingOrder`
+- `checkLinkPurposeConsistency`
+- `checkMediaEmbeds`
+
+Example:
+```json
+{
+  "task": "audit",
+  "siteRoot": "./_site",
+  "requireExplicitChecks": true,
+  "checkSeoMeta": false,
+  "checkNetworkHints": true,
+  "checkRenderBlockingResources": true,
+  "checkHeadingOrder": true,
+  "checkLinkPurposeConsistency": true,
+  "checkMediaEmbeds": true
+}
+```

@@ -9,6 +9,7 @@ Start here:
 - `AGENTS.md` (repo + website paths and working agreements)
 - `Docs\PowerForge.Web.Roadmap.md` (Have/Partial/Missing + milestones)
 - `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract pattern)
+- `Docs\PowerForge.Web.ReleaseChannels.md` (stable/candidate/nightly rollout + canary model)
 
 ## Repos / Paths
 

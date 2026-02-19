@@ -57,6 +57,29 @@ internal static partial class WebPipelineRunner
                value.ValueKind == JsonValueKind.False ? false : null;
     }
 
+    private static bool HasProperty(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return false;
+        return element.TryGetProperty(name, out _);
+    }
+
+    private static bool HasAnyProperty(JsonElement element, params string[] names)
+    {
+        if (element.ValueKind != JsonValueKind.Object || names is null || names.Length == 0)
+            return false;
+
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            if (element.TryGetProperty(name, out _))
+                return true;
+        }
+
+        return false;
+    }
+
     private static int? GetInt(JsonElement element, string name)
     {
         if (element.ValueKind != JsonValueKind.Object) return null;

@@ -99,6 +99,8 @@ internal static partial class WebPipelineRunner
         var maxTotalFiles = GetInt(step, "maxTotalFiles") ?? GetInt(step, "max-total-files") ?? 0;
         var suppressIssues = GetArrayOfStrings(step, "suppressIssues") ?? GetArrayOfStrings(step, "suppress-issues");
 
+        EnforceExplicitAuditCheckContract(step, "audit");
+
         if ((baselineGenerate || baselineUpdate) && string.IsNullOrWhiteSpace(baselinePath))
             baselinePath = ".powerforge/audit-baseline.json";
 
