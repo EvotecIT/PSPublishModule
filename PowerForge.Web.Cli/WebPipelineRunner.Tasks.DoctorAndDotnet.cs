@@ -170,7 +170,7 @@ internal static partial class WebPipelineRunner
             var checkMetaCharset = GetBool(step, "checkMetaCharset") ?? true;
             var checkReplacement = GetBool(step, "checkUnicodeReplacementChars") ?? true;
             var checkHeadingOrder = GetBool(step, "checkHeadingOrder") ?? true;
-            var checkSeoMeta = GetBool(step, "checkSeoMeta") ?? GetBool(step, "check-seo-meta") ?? true;
+            var checkSeoMeta = GetBool(step, "checkSeoMeta") ?? GetBool(step, "check-seo-meta") ?? false;
             var checkLinkPurpose = GetBool(step, "checkLinkPurposeConsistency") ?? GetBool(step, "checkLinkPurpose") ?? true;
             var checkMediaEmbeds = GetBool(step, "checkMediaEmbeds") ?? GetBool(step, "checkMedia") ?? true;
             var checkNetworkHints = GetBool(step, "checkNetworkHints") ?? true;
