@@ -488,7 +488,9 @@ Best practice (theme rendering):
     - `image_aspect` (default `"16/9"`, accepts `/` or `:` like `"4:3"`)
     - `fallback_image` (default empty; if omitted, helper falls back to `site.social.image` when set)
     - `variant` (default `"default"`, options: `"default"`, `"compact"`, `"hero"`, `"featured"`; controls helper-emitted CSS classes)
-    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" }}`
+    - `grid_class` (optional extra classes appended to the wrapper grid container)
+    - `card_class` (optional extra classes appended to each rendered card)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}`
   - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
     - `newer_label` (default `"Newer posts"`)
     - `older_label` (default `"Older posts"`)

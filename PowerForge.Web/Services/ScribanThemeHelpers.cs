@@ -151,7 +151,9 @@ internal sealed class ScribanThemeHelpers
         bool showImage = true,
         string? imageAspect = "16/9",
         string? fallbackImage = null,
-        string? variant = "default")
+        string? variant = "default",
+        string? gridClass = null,
+        string? cardClass = null)
     {
         var items = _context.Items ?? Array.Empty<ContentItem>();
         if (items.Count == 0)
@@ -173,7 +175,7 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var sb = new StringBuilder();
-        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant))).Append("\">");
+        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant, gridClass))).Append("\">");
         for (var index = 0; index < selected.Length; index++)
         {
             var item = selected[index];
@@ -181,7 +183,7 @@ internal sealed class ScribanThemeHelpers
             var summary = ResolveSummary(item, maxExcerptLength);
             var image = showImage ? ResolveCardImage(item.Meta, defaultFallbackImage) : string.Empty;
 
-            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
+            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, cardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
             if (!string.IsNullOrWhiteSpace(image))
             {
                 sb.Append("<span class=\"pf-editorial-card-media\"");
@@ -536,26 +538,61 @@ internal sealed class ScribanThemeHelpers
         };
     }
 
-    private static string BuildEditorialGridClass(string variant)
+    private static string BuildEditorialGridClass(string variant, string? additionalClass)
     {
-        return variant switch
+        var baseline = variant switch
         {
             "compact" => "pf-editorial-grid pf-editorial-grid--compact",
             "hero" => "pf-editorial-grid pf-editorial-grid--hero",
             "featured" => "pf-editorial-grid pf-editorial-grid--featured",
             _ => "pf-editorial-grid"
         };
+        return MergeClassList(baseline, additionalClass);
     }
 
-    private static string BuildEditorialCardClass(string variant, int index)
+    private static string BuildEditorialCardClass(string variant, int index, string? additionalClass)
     {
+        var baseline = "pf-editorial-card";
         if (variant == "compact")
-            return "pf-editorial-card pf-editorial-card--compact";
-        if (variant == "featured")
-            return "pf-editorial-card pf-editorial-card--featured";
-        if (variant == "hero" && index == 0)
-            return "pf-editorial-card pf-editorial-card--hero";
-        return "pf-editorial-card";
+            baseline = "pf-editorial-card pf-editorial-card--compact";
+        else if (variant == "featured")
+            baseline = "pf-editorial-card pf-editorial-card--featured";
+        else if (variant == "hero" && index == 0)
+            baseline = "pf-editorial-card pf-editorial-card--hero";
+        return MergeClassList(baseline, additionalClass);
+    }
+
+    private static string MergeClassList(string baseline, string? additionalClass)
+    {
+        var ordered = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var token in TokenizeCssClassList(baseline))
+        {
+            if (seen.Add(token))
+                ordered.Add(token);
+        }
+
+        foreach (var token in TokenizeCssClassList(additionalClass))
+        {
+            if (seen.Add(token))
+                ordered.Add(token);
+        }
+
+        return ordered.Count == 0 ? string.Empty : string.Join(" ", ordered);
+    }
+
+    private static IEnumerable<string> TokenizeCssClassList(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            yield break;
+
+        var parts = value.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var part in parts)
+        {
+            if (!string.IsNullOrWhiteSpace(part))
+                yield return part;
+        }
     }
 
     private static string BuildClass(NavigationItem item, string? baseClass)

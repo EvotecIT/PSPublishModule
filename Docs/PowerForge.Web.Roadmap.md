@@ -213,6 +213,7 @@ Goal: themes/agents stop guessing and API/docs nav stops drifting.
   - Scriban `pf.editorial_cards` helper renders reusable editorial card markup (collection/date/summary/tags/image) from list contexts so non-scaffold themes can adopt the same listing behavior quickly.
   - Scriban `pf.editorial_pager` helper standardizes previous/next links for paginated editorial streams.
   - `pf.editorial_cards` now supports style variants (`default`/`compact`/`hero`/`featured`) so themes can switch editorial density/emphasis without duplicating loops.
+  - `pf.editorial_cards` also supports optional `grid_class`/`card_class` overrides for per-site styling without forking helper markup.
   - Verify now warns when Scriban editorial list layouts don't render list context (`items`/`pf.editorial_cards`) or omit pagination rendering for paginated collections.
 - Remaining:
   - Add optional render-mode contracts so themes can declare which editorial variants are officially styled.

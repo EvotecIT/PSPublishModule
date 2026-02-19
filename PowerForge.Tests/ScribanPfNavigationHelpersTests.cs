@@ -222,7 +222,7 @@ public class ScribanPfNavigationHelpersTests
                 <body>
                   {{ include "header" }}
                   <main>
-                    {{ pf.editorial_cards 0 120 true true true true "4:3" "/images/fallback.png" "hero" }}
+                    {{ pf.editorial_cards 0 120 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}
                     {{ pf.editorial_pager "Newer" "Older" }}
                   </main>
                   {{ include "footer" }}
@@ -275,8 +275,10 @@ public class ScribanPfNavigationHelpersTests
             var blogHtml = File.ReadAllText(Path.Combine(outDir, "blog", "index.html"));
             Assert.Contains("pf-editorial-grid", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-editorial-grid--hero", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("custom-grid", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/blog/first-post/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-editorial-card--hero", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("custom-card", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("pf-editorial-card-image", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/images/first-post.png", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("aspect-ratio: 4 / 3;", blogHtml, StringComparison.OrdinalIgnoreCase);
