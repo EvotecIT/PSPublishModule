@@ -489,6 +489,25 @@ public partial class WebSiteVerifierTests
                 DefaultTheme = "editorial-contract-warning",
                 ThemesRoot = "themes",
                 Features = new[] { "blog" },
+                AssetRegistry = new AssetRegistrySpec
+                {
+                    Bundles = new[]
+                    {
+                        new AssetBundleSpec
+                        {
+                            Name = "blogstyles",
+                            Css = new[] { "/css/app.css" }
+                        }
+                    },
+                    RouteBundles = new[]
+                    {
+                        new RouteBundleSpec
+                        {
+                            Match = "/blog/**",
+                            Bundles = new[] { "blogstyles" }
+                        }
+                    }
+                },
                 Collections = new[]
                 {
                     new CollectionSpec
@@ -512,7 +531,8 @@ public partial class WebSiteVerifierTests
                 warning.Contains("featureContracts.blog.requiredCssSelectors is empty", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.Warnings, warning =>
                 warning.Contains("Suggested contract fragment", StringComparison.OrdinalIgnoreCase) &&
-                warning.Contains("\"featureContracts\": { \"blog\": { \"requiredCssSelectors\":", StringComparison.OrdinalIgnoreCase));
+                warning.Contains("\"featureContracts\": { \"blog\": { \"cssHrefs\": [\"/css/app.css\"]", StringComparison.OrdinalIgnoreCase) &&
+                warning.Contains("\"requiredCssSelectors\":", StringComparison.OrdinalIgnoreCase));
         }
         finally
         {

@@ -287,7 +287,7 @@ public static partial class WebSiteVerifier
             }
             else if (hasEditorialCards)
             {
-                ValidateEditorialCardsCssContracts(collection, manifest, listLayout, layoutContent, warnings);
+                ValidateEditorialCardsCssContracts(spec, collection, manifest, themeRoot, loader, listLayout, layoutContent, warnings);
             }
 
             var paginationEnabled = (collection.PageSize ?? 0) > 0 || paginationDefault;
@@ -304,13 +304,16 @@ public static partial class WebSiteVerifier
     }
 
     private static void ValidateEditorialCardsCssContracts(
+        SiteSpec spec,
         CollectionSpec collection,
         ThemeManifest manifest,
+        string themeRoot,
+        ThemeLoader loader,
         string listLayout,
         string layoutContent,
         List<string> warnings)
     {
-        if (collection is null || manifest is null || warnings is null || string.IsNullOrWhiteSpace(layoutContent))
+        if (spec is null || collection is null || manifest is null || loader is null || warnings is null || string.IsNullOrWhiteSpace(themeRoot) || string.IsNullOrWhiteSpace(layoutContent))
             return;
 
         var usages = ExtractEditorialCardsUsages(layoutContent)
@@ -336,7 +339,8 @@ public static partial class WebSiteVerifier
         if (string.IsNullOrWhiteSpace(feature))
             return;
 
-        var suggestion = BuildEditorialSelectorContractHint(feature, expectedSelectors);
+        var suggestedCssHrefs = ResolveCssHrefsForRoute(spec, themeRoot, loader, manifest, ResolveFeatureSampleRoute(feature));
+        var suggestion = BuildEditorialSelectorContractHint(feature, expectedSelectors, suggestedCssHrefs);
         var contract = TryGetFeatureContract(manifest, feature);
         if (contract is null)
         {
@@ -352,10 +356,16 @@ public static partial class WebSiteVerifier
             .Select(static selector => selector.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var declaredCssHrefs = (contract.CssHrefs ?? Array.Empty<string>())
+            .Where(static href => !string.IsNullOrWhiteSpace(href))
+            .Select(static href => href.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hintCssHrefs = declaredCssHrefs.Length > 0 ? declaredCssHrefs : suggestedCssHrefs;
 
         if (requiredSelectors.Length == 0)
         {
-            warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature}.requiredCssSelectors is empty. Suggested contract fragment: {suggestion}");
+            warnings.Add($"Best practice: theme '{manifest.Name}' layout '{listLayout}' uses pf.editorial_cards variants/classes for feature '{feature}', but featureContracts.{feature}.requiredCssSelectors is empty. Suggested contract fragment: {BuildEditorialSelectorContractHint(feature, expectedSelectors, hintCssHrefs)}");
             return;
         }
 
@@ -368,7 +378,7 @@ public static partial class WebSiteVerifier
 
         var preview = string.Join(", ", missing.Take(8));
         var more = missing.Length > 8 ? $" (+{missing.Length - 8} more)" : string.Empty;
-        var missingSuggestion = BuildEditorialSelectorContractHint(feature, missing);
+        var missingSuggestion = BuildEditorialSelectorContractHint(feature, missing, hintCssHrefs);
         warnings.Add($"Theme CSS contract: feature '{feature}' layout '{listLayout}' uses pf.editorial_cards selectors that are not declared in featureContracts.{feature}.requiredCssSelectors: {preview}{more}. Suggested additions: {missingSuggestion}");
     }
 
@@ -427,7 +437,7 @@ public static partial class WebSiteVerifier
         return false;
     }
 
-    private static string BuildEditorialSelectorContractHint(string feature, IEnumerable<string> selectors)
+    private static string BuildEditorialSelectorContractHint(string feature, IEnumerable<string> selectors, IEnumerable<string>? cssHrefs = null)
     {
         if (string.IsNullOrWhiteSpace(feature) || selectors is null)
             return "\"featureContracts\": {}";
@@ -438,14 +448,39 @@ public static partial class WebSiteVerifier
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static selector => selector, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var normalizedCssHrefs = (cssHrefs ?? Array.Empty<string>())
+            .Where(static href => !string.IsNullOrWhiteSpace(href))
+            .Select(static href => href.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static href => href, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         if (normalized.Length == 0)
-            return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": [] }} }}";
+        {
+            if (normalizedCssHrefs.Length == 0)
+                return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": [] }} }}";
 
-        var take = normalized.Take(10).ToArray();
-        var values = string.Join(", ", take.Select(static selector => "\"" + selector + "\""));
-        var suffix = normalized.Length > take.Length ? ", \"...\"" : string.Empty;
-        return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": [{values}{suffix}] }} }}";
+            var cssHintOnly = BuildHintArrayLiteral(normalizedCssHrefs);
+            return $"\"featureContracts\": {{ \"{feature}\": {{ \"cssHrefs\": {cssHintOnly}, \"requiredCssSelectors\": [] }} }}";
+        }
+
+        var selectorHint = BuildHintArrayLiteral(normalized);
+        if (normalizedCssHrefs.Length == 0)
+            return $"\"featureContracts\": {{ \"{feature}\": {{ \"requiredCssSelectors\": {selectorHint} }} }}";
+
+        var cssHint = BuildHintArrayLiteral(normalizedCssHrefs);
+        return $"\"featureContracts\": {{ \"{feature}\": {{ \"cssHrefs\": {cssHint}, \"requiredCssSelectors\": {selectorHint} }} }}";
+    }
+
+    private static string BuildHintArrayLiteral(string[] values)
+    {
+        if (values is null || values.Length == 0)
+            return "[]";
+
+        var take = values.Take(10).ToArray();
+        var encoded = string.Join(", ", take.Select(static value => "\"" + value + "\""));
+        var suffix = values.Length > take.Length ? ", \"...\"" : string.Empty;
+        return $"[{encoded}{suffix}]";
     }
 
     private static EditorialCardsUsage[] ExtractEditorialCardsUsages(string layoutContent)
