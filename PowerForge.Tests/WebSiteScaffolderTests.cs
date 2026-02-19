@@ -19,6 +19,7 @@ public class WebSiteScaffolderTests
             Assert.True(File.Exists(Path.Combine(root, "content", "news", "release-1-0.md")));
             Assert.True(File.Exists(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
             Assert.True(File.Exists(Path.Combine(root, ".github", "workflows", "website-ci.yml")));
+            Assert.True(File.Exists(Path.Combine(root, ".powerforge", "engine-lock.json")));
 
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
             var spec = specDoc.RootElement;
@@ -57,8 +58,10 @@ public class WebSiteScaffolderTests
             Assert.False(pipeline.TryGetProperty("steps", out _));
 
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
-            Assert.Contains("POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule", workflow, StringComparison.Ordinal);
-            Assert.Contains("POWERFORGE_REF:", workflow, StringComparison.Ordinal);
+            Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
+            Assert.Contains("Resolve PowerForge engine lock", workflow, StringComparison.Ordinal);
+            Assert.Contains("steps.powerforge-lock.outputs.repository", workflow, StringComparison.Ordinal);
+            Assert.Contains("steps.powerforge-lock.outputs.ref", workflow, StringComparison.Ordinal);
             Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
             Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
             Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
@@ -78,6 +81,12 @@ public class WebSiteScaffolderTests
             Assert.True(auditStep.GetProperty("checkHeadingOrder").GetBoolean());
             Assert.True(auditStep.GetProperty("checkLinkPurposeConsistency").GetBoolean());
             Assert.True(auditStep.GetProperty("checkMediaEmbeds").GetBoolean());
+
+            using var engineLockDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, ".powerforge", "engine-lock.json")));
+            var engineLock = engineLockDoc.RootElement;
+            Assert.Equal("EvotecIT/PSPublishModule", engineLock.GetProperty("repository").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(engineLock.GetProperty("ref").GetString()));
+            Assert.Equal("stable", engineLock.GetProperty("channel").GetString());
         }
         finally
         {

@@ -6,7 +6,6 @@ namespace PowerForge.Web;
 public static partial class WebSiteScaffolder
 {
     private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/";
-    private const string DefaultStablePowerForgeRef = "ab58992450def6b736a2ea87e6a492400250959f";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
@@ -544,6 +543,13 @@ a { color: inherit; text-decoration: none; }
             DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
 
+        var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
+        Directory.CreateDirectory(powerforgeRoot);
+        var engineLock = WebEngineLockFile.CreateDefault();
+        created += WriteFile(
+            Path.Combine(powerforgeRoot, "engine-lock.json"),
+            JsonSerializer.Serialize(engineLock, new JsonSerializerOptions(WebJson.Options) { WriteIndented = true }));
+
         var workflowsRoot = Path.Combine(fullOutput, ".github", "workflows");
         Directory.CreateDirectory(workflowsRoot);
         var workflowTemplate = """
@@ -563,8 +569,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule
-  POWERFORGE_REF: ${{ vars.POWERFORGE_REF != '' && vars.POWERFORGE_REF || '__POWERFORGE_STABLE_REF__' }}
+  POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json
 
 jobs:
   verify-site:
@@ -578,11 +583,45 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Resolve PowerForge engine lock
+        id: powerforge-lock
+        shell: pwsh
+        run: |
+          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
+          if (-not (Test-Path -LiteralPath $lockPath)) {
+            throw "Missing engine lock file: $lockPath"
+          }
+
+          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+          if ($null -eq $lock) {
+            throw "Invalid engine lock JSON: $lockPath"
+          }
+
+          $lockedRepository = [string]$lock.repository
+          $lockedRef = [string]$lock.ref
+
+          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
+            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
+          }
+
+          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
+          $refOverride = "${{ vars.POWERFORGE_REF }}"
+
+          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
+          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
+
+          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
+            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
+          }
+
+          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Checkout PowerForge engine
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.POWERFORGE_REPOSITORY }}
-          ref: ${{ env.POWERFORGE_REF }}
+          repository: ${{ steps.powerforge-lock.outputs.repository }}
+          ref: ${{ steps.powerforge-lock.outputs.ref }}
           path: ./.powerforge-engine
 
       - name: Cache NuGet packages
@@ -608,11 +647,7 @@ jobs:
             ./_site/_reports/**
           if-no-files-found: ignore
 """;
-        var workflowYaml = workflowTemplate.Replace("__POWERFORGE_STABLE_REF__", DefaultStablePowerForgeRef, StringComparison.Ordinal);
-        created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowYaml);
-
-        var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
-        Directory.CreateDirectory(powerforgeRoot);
+        created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowTemplate);
 
         created += WriteFile(Path.Combine(fullOutput, "README.md"),
 @$"# {name}
@@ -647,6 +682,19 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 ```
 
 Commit the generated files under `.powerforge/` so CI can run `failOnNewWarnings` / `failOnNewIssues`.
+
+## Engine pinning
+
+The scaffold includes `.powerforge/engine-lock.json` and CI resolves engine checkout from this lock by default.
+
+Upgrade the lock intentionally:
+
+```powershell
+powerforge-web engine-lock --mode update --path .\.powerforge\engine-lock.json --ref <new-sha>
+```
+
+Canary override (optional):
+- set GitHub variables `POWERFORGE_REPOSITORY` and/or `POWERFORGE_REF` in one repo to test candidate engine refs without editing the lock file.
 
 Schema refs:
 - The scaffold uses `$schema` URLs pointing at the PSPublishModule `main` branch so they work outside this repo.

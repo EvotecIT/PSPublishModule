@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.web.enginelock.schema.json",
+  "title": "PowerForge Web Engine Lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repository", "ref"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema": { "type": "string" },
+    "repository": { "type": "string", "minLength": 1 },
+    "ref": { "type": "string", "minLength": 1 },
+    "channel": { "type": "string" },
+    "updatedUtc": { "type": "string", "format": "date-time" }
+  }
+}

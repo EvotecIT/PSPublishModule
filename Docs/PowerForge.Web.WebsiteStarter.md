@@ -62,10 +62,9 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      - `indexnow` (recommended with `optionalKey:true` so missing secrets skip safely in forks/dev)
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. CI workflow:
-   - keep engine source pinned in workflow env:
-     - `POWERFORGE_REPOSITORY`
-     - `POWERFORGE_REF` (SHA/tag/branch; prefer pinned SHA)
-   - default scaffolder workflow reads `POWERFORGE_REF` from GitHub vars and falls back to a known-good pinned SHA.
+   - keep `.powerforge/engine-lock.json` committed (prefer immutable SHA in `ref`)
+   - default scaffolder workflow resolves engine checkout from `POWERFORGE_LOCK_PATH`
+   - optional canary override: set GitHub vars `POWERFORGE_REPOSITORY` / `POWERFORGE_REF` without editing lock file
    - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
 5. Theme manifest (`theme.manifest.json` recommended):
    - set `schemaVersion: 2`
@@ -152,6 +151,20 @@ Recommended deploy pattern:
 
 Prefer `--site-config` over hardcoded route lists so route coverage stays aligned with
 `Features` and `Navigation` as the site evolves.
+
+## Engine Lock Updates
+
+Upgrade pinned engine ref intentionally:
+
+```powershell
+powerforge-web engine-lock --mode update --path .\.powerforge\engine-lock.json --ref <new-sha> --channel stable
+```
+
+Verify lock drift (for local checks/scripts):
+
+```powershell
+powerforge-web engine-lock --mode verify --path .\.powerforge\engine-lock.json --ref <expected-sha>
+```
 
 ## Theme Inheritance (extends)
 

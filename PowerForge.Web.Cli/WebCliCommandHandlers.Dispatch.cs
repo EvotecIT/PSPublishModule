@@ -36,6 +36,8 @@ collection: {{collection}}
             "changelog" => HandleChangelog(subArgs, outputJson, logger, outputSchemaVersion),
             "optimize" => HandleOptimize(subArgs, outputJson, logger, outputSchemaVersion),
             "pipeline" => HandlePipeline(subArgs, outputJson, logger, outputSchemaVersion),
+            "engine-lock" => HandleEngineLock(subArgs, outputJson, logger, outputSchemaVersion),
+            "enginelock" => HandleEngineLock(subArgs, outputJson, logger, outputSchemaVersion),
             "dotnet-build" => HandleDotNetBuild(subArgs, outputJson, outputSchemaVersion, logger),
             "dotnet-publish" => HandleDotNetPublish(subArgs, outputJson, outputSchemaVersion, logger),
             "overlay" => HandleOverlay(subArgs, outputJson, logger, outputSchemaVersion),
