@@ -45,6 +45,8 @@ public static partial class WebSiteVerifier
         foreach (var collection in spec.Collections)
         {
             if (collection is null) continue;
+            var effectiveCollection = CollectionPresetDefaults.Apply(collection);
+            var isEditorialCollection = CollectionPresetDefaults.IsEditorialCollection(effectiveCollection, collection.Name);
             var files = WebSiteBuilder.EnumerateCollectionFilesForDiscovery(plan, collection);
             if (files.Length == 0)
             {
@@ -75,6 +77,15 @@ public static partial class WebSiteVerifier
                 CollectTaxonomyTerms(spec.Taxonomies, matter, resolvedLanguage, taxonomyTermsByLanguage, usedTaxonomyNames);
                 var isSectionIndex = IsSectionIndex(file);
                 var isBundleIndex = IsLeafBundleIndex(file);
+                if (isEditorialCollection &&
+                    !(matter?.Draft ?? false) &&
+                    !isSectionIndex &&
+                    !isBundleIndex &&
+                    !(matter?.Date.HasValue ?? false))
+                {
+                    var relativeFile = Path.GetRelativePath(plan.RootPath, file).Replace('\\', '/');
+                    warnings.Add($"Editorial content '{relativeFile}' is missing front matter 'date'. Add a publish date for stable SEO/social metadata and chronological ordering.");
+                }
                 var slugPath = ResolveSlugPath(localizedRelativePath, relativeDir, matter?.Slug);
                 if (isSectionIndex || isBundleIndex)
                     slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
@@ -185,6 +196,9 @@ public static partial class WebSiteVerifier
 
         if (trimmed.StartsWith("Localization:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.LOCALIZATION] " + warning;
+
+        if (trimmed.StartsWith("Editorial content '", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.SEO.DATE] " + warning;
 
         return warning;
     }

@@ -121,10 +121,23 @@ internal static partial class WebPipelineRunner
         }
 
         var keyEnv = GetString(step, "keyEnv") ?? GetString(step, "key-env") ?? "INDEXNOW_KEY";
+        var optionalKey = GetBool(step, "optionalKey") ??
+                          GetBool(step, "optional-key") ??
+                          GetBool(step, "skipIfMissingKey") ??
+                          GetBool(step, "skip-if-missing-key") ??
+                          false;
         if (string.IsNullOrWhiteSpace(key))
             key = Environment.GetEnvironmentVariable(keyEnv);
         if (string.IsNullOrWhiteSpace(key))
+        {
+            if (optionalKey)
+            {
+                stepResult.Success = true;
+                stepResult.Message = $"indexnow: skipped (missing key env '{keyEnv}')";
+                return;
+            }
             throw new InvalidOperationException($"indexnow: missing key (set env '{keyEnv}' or provide key/keyPath).");
+        }
 
         var endpointValues = new List<string>();
         endpointValues.AddRange(ReadIndexNowStringList(step, "endpoint", "apiEndpoint", "engine"));

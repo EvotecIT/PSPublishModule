@@ -443,6 +443,10 @@
         "key-path": { "type": "string", "description": "Alias for keyPath." },
         "keyEnv": { "type": "string", "description": "Env var name used when key is not provided. Defaults to INDEXNOW_KEY." },
         "key-env": { "type": "string", "description": "Alias for keyEnv." },
+        "optionalKey": { "type": "boolean", "description": "When true, skip the step (success) if key/keyPath/keyEnv is missing." },
+        "optional-key": { "type": "boolean", "description": "Alias for optionalKey." },
+        "skipIfMissingKey": { "type": "boolean", "description": "Alias for optionalKey." },
+        "skip-if-missing-key": { "type": "boolean", "description": "Alias for optionalKey." },
         "keyLocation": { "type": "string", "description": "Absolute/relative key file URL. Defaults to https://<host>/<key>.txt." },
         "key-location": { "type": "string", "description": "Alias for keyLocation." },
 
@@ -1880,8 +1884,11 @@
         "only-modes": { "type": "array", "items": { "type": "string" } },
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "config": { "type": "string", "description": "Optional site.json path used to resolve baseUrl when baseUrl is not provided." },
         "siteRoot": { "type": "string" },
+        "site-root": { "type": "string" },
         "baseUrl": { "type": "string" },
+        "base-url": { "type": "string" },
         "apiSitemap": { "type": "string" },
         "out": { "type": "string" },
         "output": { "type": "string" },
@@ -1940,7 +1947,23 @@
         "includeGeneratedHtmlRouteInXml": { "type": "boolean" },
         "include-generated-html-route-in-xml": { "type": "boolean" }
       },
-      "required": ["task", "siteRoot", "baseUrl"]
+      "required": ["task"],
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["siteRoot"] },
+            { "required": ["site-root"] },
+            { "required": ["config"] }
+          ]
+        },
+        {
+          "anyOf": [
+            { "required": ["baseUrl"] },
+            { "required": ["base-url"] },
+            { "required": ["config"] }
+          ]
+        }
+      ]
     },
     "OptimizeStep": {
       "type": "object",

@@ -50,7 +50,7 @@ internal static partial class WebPipelineRunner
                 ExecuteCompatibilityMatrix(step, baseDir, stepResult);
                 break;
             case "sitemap":
-                ExecuteSitemap(step, baseDir, stepResult);
+                ExecuteSitemap(step, baseDir, lastBuildOutPath, stepResult);
                 break;
             case "xref-merge":
                 ExecuteXrefMerge(step, label, baseDir, fast, effectiveMode, logger, stepResult);

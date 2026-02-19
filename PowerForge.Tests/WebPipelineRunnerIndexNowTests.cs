@@ -9,6 +9,64 @@ namespace PowerForge.Tests;
 public class WebPipelineRunnerIndexNowTests
 {
     [Fact]
+    public void RunPipeline_IndexNow_OptionalKey_SkipsWhenKeyMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-optional-key-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "optionalKey": true,
+                      "sitemap": "./missing-sitemap.xml"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("sitemap file not found", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"),
+                """
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.com/</loc></url>
+                </urlset>
+                """);
+
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "indexnow",
+                      "optionalKey": true,
+                      "sitemap": "./sitemap.xml"
+                    }
+                  ]
+                }
+                """);
+
+            var second = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.Single(second.Steps);
+            Assert.True(second.Steps[0].Success, second.Steps[0].Message);
+            Assert.Contains("skipped", second.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_IndexNow_DryRun_CanCollectUrlsAndWriteReports()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-indexnow-dryrun-" + Guid.NewGuid().ToString("N"));

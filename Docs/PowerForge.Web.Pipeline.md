@@ -630,6 +630,7 @@ Generates `sitemap.xml` and (optionally) JSON/HTML outputs, `sitemap-news.xml`, 
 ```
 Notes:
 - By default, HTML discovery excludes utility pages (`*.scripts.html`, `*.head.html`, `api-fragments/**`) and pages with robots `noindex`.
+- `siteRoot` and `baseUrl` can be inferred from `config` (`site.json`) plus a prior `build` step output, so you can avoid duplicating values.
 - `entries` only override metadata (priority/changefreq/lastmod) for specific paths.
 - `entriesJson` can load entries from a file (`[{...}]` or `{ "entries":[...] }`) so sitemap HTML can be driven from JSON content.
 - `newsOut` / `newsPaths` generate a Google News sitemap from matching routes. If omitted, defaults target `**/news/**`.
@@ -1301,6 +1302,7 @@ Notes:
   - `scopeFromBuildUpdated` (`--fast` defaults this behavior on) when a preceding `build` step updated HTML files.
 - Auth/key options:
   - `key` (inline), `keyPath` (file), or `keyEnv` (recommended; defaults to `INDEXNOW_KEY`).
+  - `optionalKey:true` (aliases: `optional-key`, `skipIfMissingKey`) turns missing key into a non-failing skip.
   - `keyLocation` can be explicit, otherwise defaults to `https://<host>/<key>.txt`.
 - Endpoint options:
   - default endpoint is `https://api.indexnow.org/indexnow`
@@ -1383,5 +1385,5 @@ If you need API docs, multiple overlays, or per-project outputs, use pipeline.
 ## Common pitfalls (and how to avoid them)
 
 - **Generated output in source**: keep API docs in `Artifacts/` and overlay into output.
-- **Wrong base URL**: set `BaseUrl` in `site.json` and `baseUrl` in sitemap step.
+- **Wrong base URL**: set `BaseUrl` in `site.json` and either pass `baseUrl` in sitemap step or use `config` so the step can resolve it.
 - **Paths resolve wrong**: remember specs resolve relative to their own JSON file.

@@ -158,6 +158,7 @@ PowerForge.Web resolves missing values using simple defaults:
 - `slug`: `front matter slug` → filename
 - `description`: `front matter description` (no automatic fallback)
 - `date`: `front matter date` (no git/mtime fallback yet)
+  - `verify` warns when editorial posts (`blog`/`news`/`changelog` presets) omit `date`
 
 ### Content templating
 Use `meta.content_engine` when you need template logic inside page content.

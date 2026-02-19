@@ -1090,12 +1090,23 @@ internal static partial class WebPipelineRunner
         }
     }
 
-    private static void ExecuteSitemap(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
+    private static void ExecuteSitemap(JsonElement step, string baseDir, string lastBuildOutPath, WebPipelineStepResult stepResult)
     {
         var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
         var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url");
+        var configPath = ResolvePath(baseDir, GetString(step, "config"));
+        if (!string.IsNullOrWhiteSpace(configPath) && File.Exists(configPath))
+        {
+            var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                baseUrl = spec.BaseUrl;
+        }
+
+        if (string.IsNullOrWhiteSpace(siteRoot) && !string.IsNullOrWhiteSpace(lastBuildOutPath))
+            siteRoot = lastBuildOutPath;
+
         if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(baseUrl))
-            throw new InvalidOperationException("sitemap requires siteRoot and baseUrl.");
+            throw new InvalidOperationException("sitemap requires siteRoot and baseUrl (or config + prior build output).");
 
         var entries = GetSitemapEntries(step, "entries");
         var entriesJson = ResolvePath(baseDir,
