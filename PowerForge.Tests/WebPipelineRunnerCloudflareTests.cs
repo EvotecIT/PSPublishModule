@@ -33,7 +33,9 @@ public class WebPipelineRunnerCloudflareTests
                       "operation": "verify",
                       "warmupRequests": 0,
                       "allowStatuses": "HIT",
-                      "urls": "http://127.0.0.1:{{port}}/"
+                      "urls": "http://127.0.0.1:{{port}}/",
+                      "reportPath": "./_reports/cloudflare-verify.json",
+                      "summaryPath": "./_reports/cloudflare-verify.md"
                     }
                   ]
                 }
@@ -43,6 +45,13 @@ public class WebPipelineRunnerCloudflareTests
             Assert.True(result.Success);
             Assert.Single(result.Steps);
             Assert.True(result.Steps[0].Success, result.Steps[0].Message);
+
+            var reportPath = Path.Combine(root, "_reports", "cloudflare-verify.json");
+            var summaryPath = Path.Combine(root, "_reports", "cloudflare-verify.md");
+            Assert.True(File.Exists(reportPath));
+            Assert.True(File.Exists(summaryPath));
+            Assert.Contains("\"ok\": true", File.ReadAllText(reportPath), StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("CF-Cache-Status", File.ReadAllText(summaryPath), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

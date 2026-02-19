@@ -1208,7 +1208,9 @@ Verify mode (good for post-deploy smoke checks):
   "paths": "/,/docs/,/api/,/blog/",
   "allowStatuses": "HIT,REVALIDATED,EXPIRED,STALE",
   "warmupRequests": 1,
-  "timeoutMs": 15000
+  "timeoutMs": 15000,
+  "reportPath": "./_reports/cloudflare-cache.json",
+  "summaryPath": "./_reports/cloudflare-cache.md"
 }
 ```
 
@@ -1227,6 +1229,7 @@ Notes:
 - `purge` requires `zoneId` (`zone-id`) plus `token` or `tokenEnv` (defaults to `CLOUDFLARE_API_TOKEN`).
 - `verify` does not require zone/token and fails the step when a URL returns a non-allowed cache status.
 - `paths` are combined with `baseUrl`; `urls` accepts full URLs directly.
+- `reportPath`/`summaryPath` (verify mode) write JSON + Markdown artifacts for CI diagnostics.
 - When `siteConfig` is provided and no explicit `paths`/`urls` are passed:
   - `verify` uses route-derived verify paths.
   - `purge` uses verify paths plus purge-only artifacts (`/404.html`, `llms` files).

@@ -349,7 +349,11 @@
         "allow-statuses": { "type": "string", "description": "Alias for allowStatuses." },
         "allowStatus": { "type": "string", "description": "Alias for allowStatuses." },
         "allow-status": { "type": "string", "description": "Alias for allowStatuses." },
-        "allow": { "type": "string", "description": "Alias for allowStatuses." }
+        "allow": { "type": "string", "description": "Alias for allowStatuses." },
+        "reportPath": { "type": "string", "description": "Verify operation: optional JSON report output path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string", "description": "Verify operation: optional Markdown summary output path." },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
       },
       "required": ["task"],
       "allOf": [

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 
 namespace PowerForge.Web.Cli;
@@ -35,7 +37,7 @@ internal static partial class WebPipelineRunner
 
         if (operation.Equals("verify", StringComparison.OrdinalIgnoreCase))
         {
-            ExecuteCloudflareVerify(step, urls, stepResult);
+            ExecuteCloudflareVerify(step, baseDir, urls, stepResult);
             return;
         }
 
@@ -105,7 +107,7 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException(message);
     }
 
-    private static void ExecuteCloudflareVerify(JsonElement step, IReadOnlyList<string> urls, WebPipelineStepResult stepResult)
+    private static void ExecuteCloudflareVerify(JsonElement step, string baseDir, IReadOnlyList<string> urls, WebPipelineStepResult stepResult)
     {
         if (urls.Count == 0)
             throw new InvalidOperationException("cloudflare: missing target URLs. Provide 'urls'/'url' or 'paths'/'path' (with baseUrl).");
@@ -125,17 +127,95 @@ internal static partial class WebPipelineRunner
         if (allowedStatuses.Length == 0)
             allowedStatuses = CloudflareCacheVerifier.DefaultAllowedStatuses;
 
-        var (ok, message, _) = CloudflareCacheVerifier.Verify(
+        var (ok, message, entries) = CloudflareCacheVerifier.Verify(
             urls: urls,
             warmupRequests: warmupRequests,
             allowedStatuses: allowedStatuses,
             timeoutMs: timeoutMs,
             logger: null);
 
+        var reportPath = ResolvePath(baseDir, GetString(step, "reportPath") ?? GetString(step, "report-path"));
+        if (!string.IsNullOrWhiteSpace(reportPath))
+            WriteCloudflareVerifyReport(reportPath, ok, message, urls.Count, warmupRequests, timeoutMs, allowedStatuses, entries);
+
+        var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path"));
+        if (!string.IsNullOrWhiteSpace(summaryPath))
+            WriteCloudflareVerifySummary(summaryPath, ok, message, urls.Count, warmupRequests, timeoutMs, allowedStatuses, entries);
+
         stepResult.Success = ok;
         stepResult.Message = message;
         if (!ok)
             throw new InvalidOperationException(message);
+    }
+
+    private static void WriteCloudflareVerifyReport(
+        string reportPath,
+        bool ok,
+        string message,
+        int urlCount,
+        int warmupRequests,
+        int timeoutMs,
+        string[] allowedStatuses,
+        CloudflareVerifyEntry[] entries)
+    {
+        var directory = Path.GetDirectoryName(reportPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var payload = new
+        {
+            ok,
+            message,
+            urlCount,
+            warmupRequests,
+            timeoutMs,
+            allowedStatuses,
+            entries
+        };
+
+        File.WriteAllText(reportPath, JsonSerializer.Serialize(payload, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        }));
+    }
+
+    private static void WriteCloudflareVerifySummary(
+        string summaryPath,
+        bool ok,
+        string message,
+        int urlCount,
+        int warmupRequests,
+        int timeoutMs,
+        string[] allowedStatuses,
+        IEnumerable<CloudflareVerifyEntry> entries)
+    {
+        var directory = Path.GetDirectoryName(summaryPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("# Cloudflare Cache Verify");
+        builder.AppendLine();
+        builder.AppendLine($"- Result: {(ok ? "pass" : "fail")}");
+        builder.AppendLine($"- URLs: {urlCount}");
+        builder.AppendLine($"- Allowed statuses: {string.Join(", ", allowedStatuses)}");
+        builder.AppendLine($"- Warmup requests: {warmupRequests}");
+        builder.AppendLine($"- Timeout (ms): {timeoutMs}");
+        builder.AppendLine();
+        builder.AppendLine(message);
+        builder.AppendLine();
+        builder.AppendLine("| URL | CF-Cache-Status | HTTP | Result |");
+        builder.AppendLine("| --- | --- | ---: | --- |");
+
+        foreach (var entry in entries)
+        {
+            var result = entry.Success ? "pass" : "fail";
+            builder.AppendLine($"| {entry.Url} | {entry.Status} | {entry.HttpStatusCode} | {result} |");
+            if (!string.IsNullOrWhiteSpace(entry.Error))
+                builder.AppendLine($"|  | error: {entry.Error.Replace('|', '/')} |  |  |");
+        }
+
+        File.WriteAllText(summaryPath, builder.ToString());
     }
 
     private static IEnumerable<string> ReadStringList(JsonElement step, params string[] names)
