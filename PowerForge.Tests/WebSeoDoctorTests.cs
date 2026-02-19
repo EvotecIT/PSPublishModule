@@ -336,6 +336,105 @@ public class WebSeoDoctorTests
         }
     }
 
+    [Fact]
+    public void Analyze_FlagsFlatAliasWithoutNoIndex_WhenDirectoryCanonicalExists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-alias-noindex-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "api", "sample-type"));
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html><head><title>Home</title></head><body><a href="/api/sample-type/">Type</a></body></html>
+                """);
+            File.WriteAllText(Path.Combine(root, "api", "sample-type", "index.html"),
+                """
+                <!doctype html>
+                <html><head><title>Sample Type</title></head><body><h1>Sample Type</h1></body></html>
+                """);
+            File.WriteAllText(Path.Combine(root, "api", "sample-type.html"),
+                """
+                <!doctype html>
+                <html><head><title>Sample Type Alias</title></head><body><h1>Sample Type Alias</h1></body></html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false
+            });
+
+            Assert.Contains(result.Issues, issue =>
+                issue.Hint == "canonical-alias-noindex" &&
+                issue.Path == "api/sample-type.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void Analyze_DoesNotFlagFlatAlias_WhenNoIndexRobotsIsPresent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-seo-doctor-alias-noindex-ok-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "api", "sample-type"));
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html><head><title>Home</title></head><body><a href="/api/sample-type/">Type</a></body></html>
+                """);
+            File.WriteAllText(Path.Combine(root, "api", "sample-type", "index.html"),
+                """
+                <!doctype html>
+                <html><head><title>Sample Type</title></head><body><h1>Sample Type</h1></body></html>
+                """);
+            File.WriteAllText(Path.Combine(root, "api", "sample-type.html"),
+                """
+                <!doctype html>
+                <html>
+                <head>
+                  <title>Sample Type Alias</title>
+                  <meta name="robots" content="noindex,follow" />
+                </head>
+                <body><h1>Sample Type Alias</h1></body>
+                </html>
+                """);
+
+            var result = WebSeoDoctor.Analyze(new WebSeoDoctorOptions
+            {
+                SiteRoot = root,
+                CheckTitleLength = false,
+                CheckDescriptionLength = false,
+                CheckH1 = false,
+                CheckImageAlt = false,
+                CheckDuplicateTitles = false,
+                CheckOrphanPages = false,
+                IncludeNoIndexPages = true
+            });
+
+            Assert.DoesNotContain(result.Issues, issue =>
+                issue.Hint == "canonical-alias-noindex" &&
+                issue.Path == "api/sample-type.html");
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static void TryDeleteDirectory(string path)
     {
         try

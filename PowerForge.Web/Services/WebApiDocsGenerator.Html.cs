@@ -178,16 +178,35 @@ public static partial class WebApiDocsGenerator
                 ["DOCS_SCRIPT"] = docsScript
             });
 
-            var htmlPath = Path.Combine(outputPath, $"{type.Slug}.html");
-            File.WriteAllText(htmlPath, typeHtml, Encoding.UTF8);
-
             var typeDir = Path.Combine(outputPath, type.Slug);
             Directory.CreateDirectory(typeDir);
             File.WriteAllText(Path.Combine(typeDir, "index.html"), typeHtml, Encoding.UTF8);
+
+            // Keep legacy flat *.html aliases for backward compatibility,
+            // but mark them as noindex to avoid duplicate indexing against canonical /{slug}/ routes.
+            var htmlPath = Path.Combine(outputPath, $"{type.Slug}.html");
+            var aliasHtml = InjectNoIndexRobotsMeta(typeHtml);
+            File.WriteAllText(htmlPath, aliasHtml, Encoding.UTF8);
         }
 
         var sitemapPath = Path.Combine(outputPath, "sitemap.xml");
         GenerateDocsSitemap(sitemapPath, baseUrl, types);
+    }
+
+    private static string InjectNoIndexRobotsMeta(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return html;
+
+        if (Regex.IsMatch(html, "<meta\\s+name\\s*=\\s*[\"']robots[\"'][^>]*\\bnoindex\\b", RegexOptions.IgnoreCase))
+            return html;
+
+        const string noIndexMeta = "<meta name=\"robots\" content=\"noindex,follow\" data-pf=\"api-docs-legacy-alias\" />";
+        var headMatch = Regex.Match(html, "<head\\b[^>]*>", RegexOptions.IgnoreCase);
+        if (!headMatch.Success)
+            return $"{noIndexMeta}{Environment.NewLine}{html}";
+
+        return html.Insert(headMatch.Index + headMatch.Length, $"{Environment.NewLine}  {noIndexMeta}");
     }
 
     private static void ApplyNavFallback(WebApiDocsOptions options, List<string> warnings, ref string header, ref string footer)

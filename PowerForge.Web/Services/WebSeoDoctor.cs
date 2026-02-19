@@ -129,7 +129,16 @@ public static class WebSeoDoctor
                 continue;
             }
 
-            if (!options.IncludeNoIndexPages && HasNoIndexRobots(doc))
+            var hasNoIndexRobots = HasNoIndexRobots(doc);
+            if (TryResolveDirectoryAliasRoute(siteRoot, relativePath, out var canonicalAliasRoute) && !hasNoIndexRobots)
+            {
+                AddIssue("warning", "canonical", relativePath,
+                    $"flat HTML alias has matching directory route '{canonicalAliasRoute}' but is missing a noindex robots meta tag.",
+                    "canonical-alias-noindex",
+                    canonicalAliasRoute);
+            }
+
+            if (!options.IncludeNoIndexPages && hasNoIndexRobots)
                 continue;
 
             var route = ToRoute(relativePath);
@@ -1188,6 +1197,49 @@ public static class WebSeoDoctor
             return "/" + normalized[..^"/index.htm".Length] + "/";
 
         return "/" + normalized;
+    }
+
+    private static bool TryResolveDirectoryAliasRoute(string siteRoot, string relativePath, out string canonicalRoute)
+    {
+        canonicalRoute = string.Empty;
+        if (string.IsNullOrWhiteSpace(siteRoot) || string.IsNullOrWhiteSpace(relativePath))
+            return false;
+
+        var normalized = relativePath.Replace('\\', '/').TrimStart('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+        if (normalized.Equals("index.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("index.htm", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("/index.htm", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (normalized.Equals("404.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals("404.htm", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("/404.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("/404.htm", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (normalized.EndsWith(".scripts.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith(".scripts.htm", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith(".head.html", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith(".head.htm", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var ext = Path.GetExtension(normalized);
+        if (!ext.Equals(".html", StringComparison.OrdinalIgnoreCase) &&
+            !ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var withoutExtension = normalized[..^ext.Length];
+        if (string.IsNullOrWhiteSpace(withoutExtension))
+            return false;
+
+        var directoryRoutePath = $"{withoutExtension}/index.html";
+        var candidateFile = Path.Combine(siteRoot, directoryRoutePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(candidateFile))
+            return false;
+
+        canonicalRoute = $"/{withoutExtension.Trim('/')}/";
+        return true;
     }
 
     private static bool IsOrphanCandidateRoute(string route)
