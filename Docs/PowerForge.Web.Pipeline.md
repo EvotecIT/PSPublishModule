@@ -693,6 +693,7 @@ Notes:
 - `checkMediaEmbeds` (alias `checkMedia`) validates media/embed hygiene for page speed and UX:
   - iframe checks: `loading="lazy"`, `title`, external `referrerpolicy`, YouTube nocookie host hint
   - image checks: loading/decoding hints, intrinsic size/aspect-ratio hints, `srcset` + `sizes` pairing
+  - rendered-content check: flags escaped media HTML tags (hint `media-escaped-html-tag`) when `<img>/<iframe>/...` appears as literal text outside code blocks
 - `checkSeoMeta` validates canonical/OpenGraph/Twitter metadata consistency:
   - duplicate canonical, OG, and Twitter tags
   - absolute URL checks for canonical, `og:url`, `og:image`, `twitter:url`, `twitter:image`

@@ -12,6 +12,9 @@ public static partial class WebSiteAuditor
     private static readonly Regex HreflangTokenPattern = new(
         "^(x-default|[a-z]{2,3}(?:-[a-z0-9]{2,8})*)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex EscapedMediaTagPattern = new(
+        "&lt;\\s*(img|iframe|video|source|picture)\\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static int CountAllFiles(string root, int stopAfter, string[] budgetExcludePatterns, bool useDefaultExcludes, out bool truncated)
     {
@@ -1051,10 +1054,13 @@ public static partial class WebSiteAuditor
 
     private static void ValidateMediaEmbeds(
         AngleSharp.Dom.IDocument doc,
+        string rawHtml,
         string relativePath,
         WebAuditMediaProfile? profile,
         Action<string, string, string?, string, string?> addIssue)
     {
+        ValidateEscapedMediaTags(doc, rawHtml, relativePath, addIssue);
+
         var requireIframeLazy = profile?.RequireIframeLazy ?? true;
         var requireIframeTitle = profile?.RequireIframeTitle ?? true;
         var requireIframeReferrerPolicy = profile?.RequireIframeReferrerPolicy ?? true;
@@ -1219,6 +1225,43 @@ public static partial class WebSiteAuditor
                 $"page contains {eagerImageCount} eagerly loaded images; max allowed is {maxEagerImages}.",
                 "media-img-eager");
         }
+    }
+
+    private static void ValidateEscapedMediaTags(
+        AngleSharp.Dom.IDocument doc,
+        string rawHtml,
+        string relativePath,
+        Action<string, string, string?, string, string?> addIssue)
+    {
+        if (string.IsNullOrWhiteSpace(rawHtml))
+            return;
+
+        var searchable = rawHtml;
+        foreach (var codeElement in doc.QuerySelectorAll("code,pre"))
+        {
+            var encoded = codeElement.InnerHtml;
+            if (string.IsNullOrWhiteSpace(encoded))
+                continue;
+
+            // Keep legitimate escaped HTML examples in code blocks from triggering media warnings.
+            searchable = searchable.Replace(encoded, string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var matches = EscapedMediaTagPattern.Matches(searchable);
+        if (matches.Count == 0)
+            return;
+
+        var tags = matches
+            .Select(match => match.Groups[1].Value.ToLowerInvariant())
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        addIssue("warning", "media", relativePath,
+            $"escaped media HTML tags detected in rendered content ({string.Join(", ", tags)}). " +
+            "This usually means markdown HTML was not rendered as intended; prefer markdown image syntax or supported media shortcodes.",
+            "media-escaped-html-tag");
     }
 
     private static string BuildMediaSampleSuffix(IEnumerable<string> values)

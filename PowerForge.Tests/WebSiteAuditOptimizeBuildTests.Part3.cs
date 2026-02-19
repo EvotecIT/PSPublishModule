@@ -574,6 +574,82 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_WarnsWhenRenderedContentContainsEscapedMediaTags()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-escaped-tags-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <main>
+                    <p>&lt;img src="/images/hero.jpg" alt="Hero" loading="lazy" decoding="async" /&gt;</p>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>()
+            });
+
+            Assert.True(result.Success);
+            Assert.Contains(result.Issues, issue => issue.Hint.Equals("media-escaped-html-tag", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Audit_DoesNotWarnForEscapedMediaTagsInsideCodeBlocks()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-escaped-code-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Home</title></head>
+                <body>
+                  <pre><code>&lt;img src="/images/hero.jpg" alt="Hero" /&gt;</code></pre>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>()
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Hint.Equals("media-escaped-html-tag", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_MediaEmbedChecksCanBeDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-disabled-" + Guid.NewGuid().ToString("N"));
