@@ -71,6 +71,7 @@ Notes:
 - Use `suppressIssues` (audit) as a scalpel too (e.g. `PFAUDIT.BUDGET`), but prefer baselines for existing debt and `failOnCategories` for enforceable budgets.
 - Verify baseline keys strip any leading `[CODE]` prefix for stability (so adding/changing warning codes does not break baselines).
 - An empty verify baseline (0 keys) is valid and enables `failOnNewWarnings` semantics ("any warning is new").
+- Verify markdown hygiene now flags multiline HTML media tags (`img`/`iframe`/etc.) because they can render as escaped text in output; keep media tags single-line or use markdown/shortcodes.
 
 ## Creating/Updating Baselines
 

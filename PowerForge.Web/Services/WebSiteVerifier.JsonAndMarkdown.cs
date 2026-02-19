@@ -166,9 +166,6 @@ public static partial class WebSiteVerifier
     {
         if (string.IsNullOrWhiteSpace(body))
             return;
-        if (string.IsNullOrWhiteSpace(collectionName) ||
-            collectionName.IndexOf("doc", StringComparison.OrdinalIgnoreCase) < 0)
-            return;
 
         var markdownHygieneWarnings = warnings.Count(warning =>
             warning.StartsWith("Markdown hygiene:", StringComparison.OrdinalIgnoreCase));
@@ -176,6 +173,30 @@ public static partial class WebSiteVerifier
             return;
 
         var withoutCodeBlocks = MarkdownFenceRegex.Replace(body, string.Empty);
+        var relative = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
+
+        var multilineMediaMatches = MarkdownMultilineMediaHtmlRegex.Matches(withoutCodeBlocks);
+        if (multilineMediaMatches.Count > 0)
+        {
+            var mediaTags = multilineMediaMatches
+                .Select(match => match.Groups[1].Value.ToLowerInvariant())
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(5)
+                .ToArray();
+
+            if (mediaTags.Length > 0)
+            {
+                warnings.Add(
+                    $"Markdown hygiene: '{relative}' contains multiline HTML media tags ({string.Join(", ", mediaTags)}). " +
+                    "These can render as escaped text. Prefer markdown image syntax or keep media tags single-line.");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(collectionName) ||
+            collectionName.IndexOf("doc", StringComparison.OrdinalIgnoreCase) < 0)
+            return;
+
         var matches = MarkdownRawHtmlRegex.Matches(withoutCodeBlocks);
         if (matches.Count == 0)
             return;
@@ -190,7 +211,6 @@ public static partial class WebSiteVerifier
         if (tags.Length == 0)
             return;
 
-        var relative = Path.GetRelativePath(rootPath, filePath).Replace('\\', '/');
         warnings.Add($"Markdown hygiene: '{relative}' contains raw HTML tags ({string.Join(", ", tags)}). Prefer Markdown syntax when possible.");
     }
 
