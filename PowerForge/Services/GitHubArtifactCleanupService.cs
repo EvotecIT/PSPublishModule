@@ -51,7 +51,7 @@ public sealed class GitHubArtifactCleanupService
         if (spec is null) throw new ArgumentNullException(nameof(spec));
 
         var normalized = NormalizeSpec(spec);
-        var allArtifacts = ListArtifacts(normalized.Repository, normalized.Token, normalized.PageSize);
+        var allArtifacts = ListArtifacts(normalized.ApiBaseUri, normalized.Repository, normalized.Token, normalized.PageSize);
         var now = DateTimeOffset.UtcNow;
         var ageCutoff = normalized.MaxAgeDays is > 0
             ? now.AddDays(-normalized.MaxAgeDays.Value)
@@ -133,7 +133,7 @@ public sealed class GitHubArtifactCleanupService
 
         foreach (var item in orderedPlanned)
         {
-            var deleteResult = DeleteArtifact(normalized.Repository, normalized.Token, item.Id);
+            var deleteResult = DeleteArtifact(normalized.ApiBaseUri, normalized.Repository, normalized.Token, item.Id);
             if (deleteResult.Ok)
             {
                 deleted.Add(item);
@@ -175,6 +175,7 @@ public sealed class GitHubArtifactCleanupService
 
     private sealed class NormalizedSpec
     {
+        public Uri ApiBaseUri { get; set; } = new Uri("https://api.github.com/", UriKind.Absolute);
         public string Repository { get; set; } = string.Empty;
         public string Token { get; set; } = string.Empty;
         public string[] IncludeNames { get; set; } = Array.Empty<string>();
@@ -205,6 +206,7 @@ public sealed class GitHubArtifactCleanupService
 
         return new NormalizedSpec
         {
+            ApiBaseUri = NormalizeApiBaseUri(spec.ApiBaseUrl),
             Repository = repository,
             Token = token,
             IncludeNames = include,
@@ -218,7 +220,7 @@ public sealed class GitHubArtifactCleanupService
         };
     }
 
-    private GitHubArtifactRecord[] ListArtifacts(string repository, string token, int pageSize)
+    private GitHubArtifactRecord[] ListArtifacts(Uri apiBaseUri, string repository, string token, int pageSize)
     {
         var records = new List<GitHubArtifactRecord>();
         var page = 1;
@@ -226,7 +228,7 @@ public sealed class GitHubArtifactCleanupService
 
         while (true)
         {
-            var uri = new Uri($"https://api.github.com/repos/{repository}/actions/artifacts?per_page={pageSize}&page={page}");
+            var uri = BuildApiUri(apiBaseUri, repository, $"actions/artifacts?per_page={pageSize}&page={page}");
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -266,9 +268,9 @@ public sealed class GitHubArtifactCleanupService
         return records.ToArray();
     }
 
-    private (bool Ok, int? StatusCode, string? Error) DeleteArtifact(string repository, string token, long artifactId)
+    private (bool Ok, int? StatusCode, string? Error) DeleteArtifact(Uri apiBaseUri, string repository, string token, long artifactId)
     {
-        var uri = new Uri($"https://api.github.com/repos/{repository}/actions/artifacts/{artifactId}");
+        var uri = BuildApiUri(apiBaseUri, repository, $"actions/artifacts/{artifactId}");
         using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -490,6 +492,32 @@ public sealed class GitHubArtifactCleanupService
         var normalized = repository!.Trim().Trim('"').Trim();
         normalized = normalized.Trim('/');
         return normalized;
+    }
+
+    private static Uri NormalizeApiBaseUri(string? apiBaseUrl)
+    {
+        var raw = (apiBaseUrl ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            return new Uri("https://api.github.com/", UriKind.Absolute);
+
+        if (!raw.EndsWith("/", StringComparison.Ordinal))
+            raw += "/";
+
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
+            throw new InvalidOperationException($"Invalid GitHub API base URL: {apiBaseUrl}");
+
+        if (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Unsupported GitHub API base URL scheme: {uri.Scheme}");
+
+        return uri;
+    }
+
+    private static Uri BuildApiUri(Uri apiBaseUri, string repository, string relativePathWithQuery)
+    {
+        var repoPath = repository.Trim().Trim('/');
+        var relative = $"repos/{repoPath}/{relativePathWithQuery.TrimStart('/')}";
+        return new Uri(apiBaseUri, relative);
     }
 
     private static int Clamp(int value, int min, int max)

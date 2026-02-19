@@ -8,6 +8,11 @@ namespace PowerForge;
 public sealed class GitHubArtifactCleanupSpec
 {
     /// <summary>
+    /// GitHub API base URL (for example <c>https://api.github.com/</c>).
+    /// </summary>
+    public string? ApiBaseUrl { get; set; }
+
+    /// <summary>
     /// Repository in <c>owner/repo</c> format.
     /// </summary>
     public string Repository { get; set; } = string.Empty;

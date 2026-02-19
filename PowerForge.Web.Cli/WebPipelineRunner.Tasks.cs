@@ -82,6 +82,10 @@ internal static partial class WebPipelineRunner
             case "cloudflare":
                 ExecuteCloudflare(step, baseDir, stepResult);
                 break;
+            case "github-artifacts-prune":
+            case "github-artifacts":
+                ExecuteGitHubArtifactsPrune(step, baseDir, stepResult);
+                break;
             case "indexnow":
                 ExecuteIndexNow(step, baseDir, fast, lastBuildOutPath, lastBuildUpdatedFiles, stepResult);
                 break;

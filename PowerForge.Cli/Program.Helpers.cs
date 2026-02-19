@@ -31,7 +31,7 @@ internal static partial class Program
                        [--repo-uri <Uri>] [--repo-source-uri <Uri>] [--repo-publish-uri <Uri>] [--repo-priority <N>] [--repo-api-version auto|v2|v3]
                        [--repo-trusted|--repo-untrusted] [--repo-ensure|--no-repo-ensure] [--repo-unregister-after-use]
                        [--repo-credential-username <User>] [--repo-credential-secret <Secret>] [--repo-credential-secret-file <Path>]
-      powerforge github artifacts prune [--repo <owner/repo>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>]
+      powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>]
                                        [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply]
                                        [--fail-on-delete-error] [--output json]
       --verbose, -Verbose              Enable verbose diagnostics

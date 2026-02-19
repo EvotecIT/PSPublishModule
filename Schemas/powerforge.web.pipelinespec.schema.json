@@ -61,6 +61,7 @@
         { "$ref": "#/$defs/OverlayStep" },
         { "$ref": "#/$defs/HostingStep" },
         { "$ref": "#/$defs/CloudflareStep" },
+        { "$ref": "#/$defs/GitHubArtifactsPruneStep" },
         { "$ref": "#/$defs/IndexNowStep" },
         { "$ref": "#/$defs/HookStep" },
         { "$ref": "#/$defs/HtmlTransformStep" },
@@ -386,6 +387,64 @@
           }
         }
       ]
+    },
+    "GitHubArtifactsPruneStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "enum": ["github-artifacts-prune", "github-artifacts"] },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "mode": { "type": "string" },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "onlyModes": { "type": "array", "items": { "type": "string" } },
+        "only-modes": { "type": "array", "items": { "type": "string" } },
+        "skipModes": { "type": "array", "items": { "type": "string" } },
+        "skip-modes": { "type": "array", "items": { "type": "string" } },
+
+        "repo": { "type": "string", "description": "GitHub repository in owner/repo format." },
+        "repository": { "type": "string", "description": "Alias for repo." },
+        "repoEnv": { "type": "string", "description": "Environment variable name used when repo is omitted. Defaults to GITHUB_REPOSITORY." },
+        "repo-env": { "type": "string", "description": "Alias for repoEnv." },
+        "token": { "type": "string", "description": "GitHub API token (prefer tokenEnv in CI)." },
+        "tokenEnv": { "type": "string", "description": "Environment variable name used when token is omitted. Defaults to GITHUB_TOKEN." },
+        "token-env": { "type": "string", "description": "Alias for tokenEnv." },
+        "apiBaseUrl": { "type": "string", "description": "Optional API base URL (for example https://api.github.com/ or GHES endpoint)." },
+        "api-base-url": { "type": "string", "description": "Alias for apiBaseUrl." },
+
+        "names": { "type": "string", "description": "Include artifact name patterns (comma/semicolon/newline-separated)." },
+        "name": { "type": "string", "description": "Alias for names." },
+        "include": { "type": "string", "description": "Alias for names." },
+        "includes": { "type": "string", "description": "Alias for names." },
+        "exclude": { "type": "string", "description": "Exclude artifact name patterns (comma/semicolon/newline-separated)." },
+        "excludes": { "type": "string", "description": "Alias for exclude." },
+        "excludeNames": { "type": "string", "description": "Alias for exclude." },
+        "exclude-names": { "type": "string", "description": "Alias for exclude." },
+
+        "keep": { "type": "integer", "minimum": 0, "description": "Keep newest N artifacts per artifact name. Defaults to 5." },
+        "keepLatestPerName": { "type": "integer", "minimum": 0, "description": "Alias for keep." },
+        "keep-latest-per-name": { "type": "integer", "minimum": 0, "description": "Alias for keep." },
+        "maxAgeDays": { "type": "integer", "minimum": 0, "description": "Delete only artifacts older than this many days. 0 disables age filter. Defaults to 7." },
+        "max-age-days": { "type": "integer", "minimum": 0, "description": "Alias for maxAgeDays." },
+        "maxDelete": { "type": "integer", "minimum": 1, "description": "Maximum artifacts deleted in one run. Defaults to 200." },
+        "max-delete": { "type": "integer", "minimum": 1, "description": "Alias for maxDelete." },
+        "limit": { "type": "integer", "minimum": 1, "description": "Alias for maxDelete." },
+        "pageSize": { "type": "integer", "minimum": 1, "maximum": 100, "description": "GitHub list page size (1-100)." },
+        "page-size": { "type": "integer", "minimum": 1, "maximum": 100, "description": "Alias for pageSize." },
+
+        "dryRun": { "type": "boolean", "description": "When true (default), only plans deletions." },
+        "dry-run": { "type": "boolean", "description": "Alias for dryRun." },
+        "apply": { "type": "boolean", "description": "When true, execute delete operations (sets dryRun=false)." },
+        "execute": { "type": "boolean", "description": "Alias for apply." },
+        "failOnDeleteError": { "type": "boolean", "description": "When true, fail step if any delete call fails." },
+        "fail-on-delete-error": { "type": "boolean", "description": "Alias for failOnDeleteError." },
+
+        "reportPath": { "type": "string", "description": "Optional JSON report output path." },
+        "report-path": { "type": "string", "description": "Alias for reportPath." },
+        "summaryPath": { "type": "string", "description": "Optional markdown summary output path." },
+        "summary-path": { "type": "string", "description": "Alias for summaryPath." }
+      },
+      "required": ["task"]
     },
     "IndexNowStep": {
       "type": "object",

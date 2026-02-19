@@ -1264,6 +1264,54 @@ Notes:
   - `purge` uses verify paths plus purge-only artifacts (`/404.html`, `llms` files).
 - `cloudflare` steps are intentionally not cacheable (external side effects).
 
+#### github-artifacts-prune
+Prunes GitHub Actions artifacts to control repository storage quota.  
+Safe by default: `dryRun` is `true` unless you set `apply:true`.
+
+```json
+{
+  "task": "github-artifacts-prune",
+  "repo": "EvotecIT/IntelligenceX",
+  "tokenEnv": "GITHUB_TOKEN",
+  "name": "test-results*,coverage*,github-pages",
+  "keep": 5,
+  "maxAgeDays": 7,
+  "maxDelete": 200,
+  "dryRun": true,
+  "reportPath": "./_reports/github-artifacts.json",
+  "summaryPath": "./_reports/github-artifacts.md"
+}
+```
+
+Apply mode:
+```json
+{
+  "task": "github-artifacts-prune",
+  "repo": "EvotecIT/IntelligenceX",
+  "tokenEnv": "GITHUB_TOKEN",
+  "name": "test-results*,coverage*,github-pages",
+  "keep": 5,
+  "maxAgeDays": 7,
+  "maxDelete": 200,
+  "apply": true,
+  "failOnDeleteError": true
+}
+```
+
+Notes:
+- Task aliases: `github-artifacts-prune` and `github-artifacts`.
+- Repo/token resolution:
+  - `repo`/`repository`, fallback env `repoEnv` (default `GITHUB_REPOSITORY`).
+  - `token`, fallback env `tokenEnv` (default `GITHUB_TOKEN`).
+- Pattern options:
+  - include: `name`/`names`/`include`/`includes`
+  - exclude: `exclude`/`excludes`/`excludeNames`
+- Safety defaults:
+  - `dryRun:true`, `keep:5`, `maxAgeDays:7`, `maxDelete:200`
+- Use `apiBaseUrl` for GitHub Enterprise API endpoints or local integration testing.
+- `reportPath`/`summaryPath` write JSON + Markdown outputs for CI diagnostics.
+- `github-artifacts-prune` steps are intentionally not cacheable (external side effects).
+
 #### indexnow
 Submits changed or selected canonical URLs to IndexNow-compatible endpoints.
 ```json

@@ -11,7 +11,7 @@ internal static partial class Program
         var argv = filteredArgs.Skip(1).ToArray();
         if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Usage: powerforge github artifacts prune [--repo <owner/repo>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]");
+            Console.WriteLine("Usage: powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]");
             return 2;
         }
 
@@ -23,7 +23,7 @@ internal static partial class Program
                 var subArgs = argv.Skip(1).ToArray();
                 if (subArgs.Length == 0 || subArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || subArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine("Usage: powerforge github artifacts prune [--repo <owner/repo>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]");
+                    Console.WriteLine("Usage: powerforge github artifacts prune [--repo <owner/repo>] [--api-base-url <Url>] [--token-env <ENV>] [--token <TOKEN>] [--name <pattern[,pattern...]>] [--exclude <pattern[,pattern...]>] [--keep <N>] [--max-age-days <N>] [--max-delete <N>] [--dry-run|--apply] [--fail-on-delete-error] [--output json]");
                     return 2;
                 }
 
@@ -151,6 +151,10 @@ internal static partial class Program
                     break;
                 case "--repo-env":
                     repoEnv = ++i < argv.Length ? argv[i] : repoEnv;
+                    break;
+                case "--api-base-url":
+                case "--api-url":
+                    spec.ApiBaseUrl = ++i < argv.Length ? argv[i] : string.Empty;
                     break;
                 case "--name":
                 case "--names":
