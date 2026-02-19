@@ -139,6 +139,7 @@ internal static partial class WebCliCommandHandlers
             Exists = existed,
             Repository = resolved.Repository,
             Ref = resolved.Ref,
+            ImmutableRef = WebEngineLockFile.IsCommitSha(resolved.Ref),
             Channel = resolved.Channel,
             UpdatedUtc = resolved.UpdatedUtc,
             DriftDetected = driftReasons.Count > 0,
@@ -200,6 +201,7 @@ internal static partial class WebCliCommandHandlers
         logger.Info($"Path: {result.Path}");
         if (!string.IsNullOrWhiteSpace(result.Channel))
             logger.Info($"Channel: {result.Channel}");
+        logger.Info($"Immutable ref: {(result.ImmutableRef ? "yes" : "no")}");
         if (!string.IsNullOrWhiteSpace(result.UpdatedUtc))
             logger.Info($"Updated UTC: {result.UpdatedUtc}");
 

@@ -615,6 +615,10 @@ jobs:
             Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
           }
 
+          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
+          }
+
           "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 

@@ -18,6 +18,9 @@ public sealed class WebEngineLockResult
     /// <summary>Resolved ref from lock data.</summary>
     public string Ref { get; set; } = string.Empty;
 
+    /// <summary>True when <see cref="Ref"/> is an immutable commit SHA (40/64 hex).</summary>
+    public bool ImmutableRef { get; set; }
+
     /// <summary>Resolved channel from lock data.</summary>
     public string Channel { get; set; } = string.Empty;
 

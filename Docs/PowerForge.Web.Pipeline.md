@@ -1302,6 +1302,7 @@ Notes:
 - `useEnv:true` can pull expected values from env (`POWERFORGE_REPOSITORY`, `POWERFORGE_REF`, `POWERFORGE_CHANNEL`) or custom env names via `repositoryEnv`/`refEnv`/`channelEnv`.
 - `requireImmutableRef:true` (aliases: `require-immutable-ref`, `requireSha`, `require-sha`) enforces commit SHA refs (40/64 hex), recommended for CI.
 - `continueOnError:true` keeps pipeline green if this step fails (useful for canary diagnostics).
+- JSON/summary artifacts include `immutableRef` so CI logs can quickly spot branch/tag pins.
 - `engine-lock` steps are intentionally not cacheable.
 
 #### github-artifacts-prune

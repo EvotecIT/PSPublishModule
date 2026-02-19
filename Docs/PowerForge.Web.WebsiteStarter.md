@@ -65,6 +65,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 4. CI workflow:
    - keep `.powerforge/engine-lock.json` committed (prefer immutable SHA in `ref`)
    - default scaffolder workflow resolves engine checkout from `POWERFORGE_LOCK_PATH`
+   - scaffolded workflow fails early when lock/override `ref` is not a full commit SHA (40/64 hex)
    - optional canary override: set GitHub vars `POWERFORGE_REPOSITORY` / `POWERFORGE_REF` without editing lock file
    - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
 5. Theme manifest (`theme.manifest.json` recommended):

@@ -101,6 +101,7 @@ internal static partial class WebPipelineRunner
             Exists = true,
             Repository = lockSpec.Repository,
             Ref = lockSpec.Ref,
+            ImmutableRef = WebEngineLockFile.IsCommitSha(lockSpec.Ref),
             Channel = lockSpec.Channel,
             UpdatedUtc = lockSpec.UpdatedUtc
         };
@@ -137,6 +138,7 @@ internal static partial class WebPipelineRunner
             Exists = true,
             Repository = lockSpec.Repository,
             Ref = lockSpec.Ref,
+            ImmutableRef = WebEngineLockFile.IsCommitSha(lockSpec.Ref),
             Channel = lockSpec.Channel,
             UpdatedUtc = lockSpec.UpdatedUtc,
             DriftDetected = driftReasons.Count > 0,
@@ -180,6 +182,7 @@ internal static partial class WebPipelineRunner
             Exists = true,
             Repository = saved.Repository,
             Ref = saved.Ref,
+            ImmutableRef = WebEngineLockFile.IsCommitSha(saved.Ref),
             Channel = saved.Channel,
             UpdatedUtc = saved.UpdatedUtc
         };
@@ -262,6 +265,7 @@ internal static partial class WebPipelineRunner
             builder.AppendLine($"- Repository: `{result.Repository}`");
         if (!string.IsNullOrWhiteSpace(result.Ref))
             builder.AppendLine($"- Ref: `{result.Ref}`");
+        builder.AppendLine($"- Immutable ref: {(result.ImmutableRef ? "yes" : "no")}");
         if (!string.IsNullOrWhiteSpace(result.Channel))
             builder.AppendLine($"- Channel: `{result.Channel}`");
         if (!string.IsNullOrWhiteSpace(result.UpdatedUtc))

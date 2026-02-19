@@ -121,6 +121,7 @@ Scaffolded CI workflow:
 - `./.github/workflows/website-ci.yml` is generated automatically.
 - It resolves engine checkout from `./.powerforge/engine-lock.json` and runs `pipeline --mode ci`.
 - The generated quality preset includes an `engine-lock` verify step in CI mode with `requireImmutableRef:true`.
+- Workflow lock resolution also validates that resolved `ref` is a full commit SHA (40/64 hex).
 - It includes workflow concurrency cancelation and NuGet cache reuse by default.
 - Optional canary override via GitHub variables `POWERFORGE_REPOSITORY` / `POWERFORGE_REF`.
 

@@ -62,6 +62,7 @@ public class WebSiteScaffolderTests
             Assert.Contains("Resolve PowerForge engine lock", workflow, StringComparison.Ordinal);
             Assert.Contains("steps.powerforge-lock.outputs.repository", workflow, StringComparison.Ordinal);
             Assert.Contains("steps.powerforge-lock.outputs.ref", workflow, StringComparison.Ordinal);
+            Assert.Contains("immutable commit SHA", workflow, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
             Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
             Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
