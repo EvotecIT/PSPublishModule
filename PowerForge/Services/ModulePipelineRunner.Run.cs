@@ -29,6 +29,7 @@ public sealed partial class ModulePipelineRunner
 
         var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
+        var shouldPatchRequiredModules = plan.RequiredModules is { Length: > 0 };
 
         var reporter = progress ?? NullModulePipelineProgressReporter.Instance;
         var steps = ModulePipelineStep.Create(plan);
@@ -107,7 +108,7 @@ public sealed partial class ModulePipelineRunner
                 if (plan.CompatiblePSEditions is { Length: > 0 })
                     ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
 
-                if (manifestRequiredModules is { Length: > 0 })
+                if (shouldPatchRequiredModules)
                     ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
                 if (plan.ExternalModuleDependencies is { Length: > 0 })
                     ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
@@ -282,7 +283,7 @@ public sealed partial class ModulePipelineRunner
 
             try
             {
-                if (manifestRequiredModules is { Length: > 0 })
+                if (shouldPatchRequiredModules)
                     ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
 
                 if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
