@@ -12,6 +12,7 @@ public class WebSiteScaffolderTests
         {
             var result = WebSiteScaffolder.Scaffold(root, "Starter", "https://example.test", "simple");
             Assert.True(Directory.Exists(result.OutputPath));
+            Assert.Equal("balanced", result.MaintenanceProfile);
 
             Assert.True(File.Exists(Path.Combine(root, "content", "blog", "_index.md")));
             Assert.True(File.Exists(Path.Combine(root, "content", "blog", "hello-world.md")));
@@ -104,7 +105,11 @@ public class WebSiteScaffolderTests
             Assert.True(maintenanceArtifactsStep.GetProperty("optional").GetBoolean());
             Assert.True(maintenanceArtifactsStep.GetProperty("apply").GetBoolean());
             Assert.True(maintenanceArtifactsStep.GetProperty("continueOnError").GetBoolean());
+            Assert.Equal(7, maintenanceArtifactsStep.GetProperty("keep").GetInt32());
+            Assert.Equal(14, maintenanceArtifactsStep.GetProperty("maxAgeDays").GetInt32());
             Assert.Equal(100, maintenanceArtifactsStep.GetProperty("maxDelete").GetInt32());
+            var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+            Assert.Contains("profile: `balanced`", readme, StringComparison.Ordinal);
 
             var auditStep = presetSteps.First(step =>
                 string.Equals(step.GetProperty("task").GetString(), "audit", StringComparison.OrdinalIgnoreCase));
@@ -122,6 +127,51 @@ public class WebSiteScaffolderTests
             Assert.Equal("EvotecIT/PSPublishModule", engineLock.GetProperty("repository").GetString());
             Assert.False(string.IsNullOrWhiteSpace(engineLock.GetProperty("ref").GetString()));
             Assert.Equal("stable", engineLock.GetProperty("channel").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Scaffold_MaintenanceProfile_OverridesMaintenanceBudgets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-scaffold-maintenance-profile-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var result = WebSiteScaffolder.Scaffold(root, "Starter", "https://example.test", "simple", "conservative");
+            Assert.Equal("conservative", result.MaintenanceProfile);
+
+            using var maintenancePresetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-maintenance.json")));
+            var maintenanceSteps = maintenancePresetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+            var maintenanceArtifactsStep = maintenanceSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "github-artifacts-prune", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(14, maintenanceArtifactsStep.GetProperty("keep").GetInt32());
+            Assert.Equal(30, maintenanceArtifactsStep.GetProperty("maxAgeDays").GetInt32());
+            Assert.Equal(50, maintenanceArtifactsStep.GetProperty("maxDelete").GetInt32());
+            var readme = File.ReadAllText(Path.Combine(root, "README.md"));
+            Assert.Contains("profile: `conservative`", readme, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Scaffold_MaintenanceProfile_Invalid_ThrowsArgumentException()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-scaffold-maintenance-profile-invalid-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var error = Assert.Throws<ArgumentException>(() =>
+                WebSiteScaffolder.Scaffold(root, "Starter", "https://example.test", "simple", "unsafe"));
+            Assert.Contains("maintenance profile", error.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -11,8 +11,9 @@ public static partial class WebSiteScaffolder
     /// <param name="siteName">Optional site name.</param>
     /// <param name="baseUrl">Optional base URL.</param>
     /// <param name="themeEngine">Template engine identifier.</param>
+    /// <param name="maintenanceProfileName">Maintenance profile (`conservative`, `balanced`, `aggressive`).</param>
     /// <returns>Result payload describing created files.</returns>
-    public static WebScaffoldResult Scaffold(string outputPath, string? siteName, string? baseUrl, string? themeEngine)
+    public static WebScaffoldResult Scaffold(string outputPath, string? siteName, string? baseUrl, string? themeEngine, string? maintenanceProfileName = null)
     {
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new ArgumentException("Output path is required.", nameof(outputPath));
@@ -28,6 +29,8 @@ public static partial class WebSiteScaffolder
         var engine = string.IsNullOrWhiteSpace(themeEngine) ? "simple" : themeEngine.Trim();
         var isScriban = engine.Equals("scriban", StringComparison.OrdinalIgnoreCase);
         var themeName = isScriban ? "nova" : "base";
+        var maintenanceProfile = NormalizeMaintenanceProfile(maintenanceProfileName);
+        var maintenanceBudgets = ResolveMaintenanceBudgets(maintenanceProfile);
 
         var created = 0;
 
@@ -537,7 +540,7 @@ a { color: inherit; text-decoration: none; }
         created += WriteFile(Path.Combine(configPresetsRoot, "pipeline.web-quality.json"), pipelinePresetJson);
 
         var maintenancePresetJson = InsertSchema(
-            """
+            $$"""
             {
               "steps": [
                 {
@@ -547,9 +550,9 @@ a { color: inherit; text-decoration: none; }
                   "optional": true,
                   "apply": true,
                   "continueOnError": true,
-                  "keep": 7,
-                  "maxAgeDays": 14,
-                  "maxDelete": 100,
+                  "keep": {{maintenanceBudgets.Keep}},
+                  "maxAgeDays": {{maintenanceBudgets.MaxAgeDays}},
+                  "maxDelete": {{maintenanceBudgets.MaxDelete}},
                   "reportPath": "./_reports/github-artifacts-maintenance.json",
                   "summaryPath": "./_reports/github-artifacts-maintenance.md"
                 }
@@ -788,7 +791,7 @@ jobs:
         created += WriteFile(Path.Combine(workflowsRoot, "website-maintenance.yml"), maintenanceWorkflowTemplate);
 
         created += WriteFile(Path.Combine(fullOutput, "README.md"),
-@$"# {name}
+$@"# {name}
 
 Starter site scaffolded by PowerForge.Web.
 
@@ -814,6 +817,7 @@ Starter preset file:
 Maintenance pipeline:
 - `pipeline.maintenance.json` (storage hygiene / scheduled maintenance)
 - `.github/workflows/website-maintenance.yml` (weekly schedule + manual run)
+- profile: `{maintenanceProfile}` (`keep: {maintenanceBudgets.Keep}`, `maxAgeDays: {maintenanceBudgets.MaxAgeDays}`, `maxDelete: {maintenanceBudgets.MaxDelete}`)
 
 ## Baselines (recommended workflow)
 
@@ -848,6 +852,7 @@ Schema refs:
             OutputPath = fullOutput,
             CreatedFileCount = created,
             ThemeEngine = engine,
+            MaintenanceProfile = maintenanceProfile,
             SiteName = name,
             BaseUrl = url
         };
@@ -885,4 +890,28 @@ Schema refs:
         }
     }
 
+    private static string NormalizeMaintenanceProfile(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "balanced";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "conservative" => "conservative",
+            "balanced" => "balanced",
+            "aggressive" => "aggressive",
+            _ => throw new ArgumentException($"Unsupported maintenance profile '{value}'. Use conservative, balanced, or aggressive.", nameof(value))
+        };
+    }
+
+    private static (int Keep, int MaxAgeDays, int MaxDelete) ResolveMaintenanceBudgets(string maintenanceProfile)
+    {
+        return maintenanceProfile switch
+        {
+            "conservative" => (Keep: 14, MaxAgeDays: 30, MaxDelete: 50),
+            "aggressive" => (Keep: 3, MaxAgeDays: 7, MaxDelete: 250),
+            _ => (Keep: 7, MaxAgeDays: 14, MaxDelete: 100)
+        };
+    }
 }

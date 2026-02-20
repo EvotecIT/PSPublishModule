@@ -73,6 +73,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - optional canary override: set GitHub vars `POWERFORGE_REPOSITORY` / `POWERFORGE_REF` without editing lock file
    - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
    - optional scheduled workflow: run `pipeline.maintenance.json` weekly for storage hygiene (`github-artifacts-prune` with `apply:true` + safe caps)
+   - scaffold maintenance caps intentionally with `powerforge-web scaffold --maintenance-profile conservative|balanced|aggressive` (default: `balanced`)
 5. Theme manifest (`theme.manifest.json` recommended):
    - set `schemaVersion: 2`
    - declare `features`

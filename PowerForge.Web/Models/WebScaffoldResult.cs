@@ -9,6 +9,8 @@ public sealed class WebScaffoldResult
     public int CreatedFileCount { get; set; }
     /// <summary>Template engine used for the scaffold.</summary>
     public string ThemeEngine { get; set; } = string.Empty;
+    /// <summary>Maintenance profile used for generated maintenance preset/workflow.</summary>
+    public string MaintenanceProfile { get; set; } = string.Empty;
     /// <summary>Site name used during scaffolding.</summary>
     public string SiteName { get; set; } = string.Empty;
     /// <summary>Base URL used during scaffolding.</summary>

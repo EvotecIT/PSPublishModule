@@ -5,8 +5,12 @@ Use it alongside `Samples/PowerForge.Web.Sample` for a working reference.
 
 ## 1) Create a site scaffold
 ```
-powerforge-web scaffold --out ./MySite --name "Evotec" --base-url "https://example.com" --engine scriban
+powerforge-web scaffold --out ./MySite --name "Evotec" --base-url "https://example.com" --engine scriban --maintenance-profile balanced
 ```
+Maintenance profiles:
+- `conservative` (`keep:14`, `maxAgeDays:30`, `maxDelete:50`)
+- `balanced` (`keep:7`, `maxAgeDays:14`, `maxDelete:100`) (default)
+- `aggressive` (`keep:3`, `maxAgeDays:7`, `maxDelete:250`)
 
 Result (minimal structure):
 ```
@@ -135,7 +139,7 @@ Scaffolded CI workflow:
 Scaffolded maintenance workflow:
 - `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.
 - It runs `pipeline.maintenance.json` in CI mode.
-- Default maintenance preset applies GitHub artifact cleanup with safe caps (`keep:7`, `maxAgeDays:14`, `maxDelete:100`) and `continueOnError:true`.
+- Maintenance preset applies GitHub artifact cleanup with caps based on `--maintenance-profile` and `continueOnError:true`.
 
 Upgrade engine pin intentionally:
 ```
