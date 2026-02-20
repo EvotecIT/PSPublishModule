@@ -574,7 +574,9 @@ Best practice (theme rendering):
     - `variant` (optional; when omitted, helper uses `collection.EditorialCards.Variant`, then `"default"`; options: `"default"`, `"compact"`, `"hero"`, `"featured"`)
     - `grid_class` (optional; when omitted, helper uses `collection.EditorialCards.GridClass`)
     - `card_class` (optional; when omitted, helper uses `collection.EditorialCards.CardClass`)
-    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}`
+    - `show_categories` (optional; default `false`, reads `categories` taxonomy/meta values)
+    - `link_taxonomy` (optional; default `false`, renders tag/category chips as links to taxonomy term pages)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" true true }}`
     - Per-item front matter metadata (stored under `meta`) supported by helper:
       - `cardImage` / `card_image` / `card.image`
       - `cardImageAlt` / `card_image_alt` / `card.image.alt`
@@ -587,6 +589,14 @@ Best practice (theme rendering):
     - `older_label` (default `"Older posts"`)
     - `css_class` (default `"pf-pagination"`)
     - Example: `{{ pf.editorial_pager "Newer" "Older" }}`
+  - `{{ pf.editorial_post_nav }}` renders post-level navigation for editorial collections (back to list, newer/older links, related posts):
+    - `back_label` (default `"Back to list"`)
+    - `newer_label` (default `"Newer post"`)
+    - `older_label` (default `"Older post"`)
+    - `related_heading` (default `"Related posts"`)
+    - `related_count` (default `3`, max `8`)
+    - `css_class` (default `"pf-post-nav"`)
+    - Example: `{{ pf.editorial_post_nav "Back to blog" "Newer" "Older" "You may also like" 4 "post-nav" }}`
 
 ### Navigation surfaces (stable projections)
 The runtime `navigation` object exposes `navigation.surfaces` as named projections.

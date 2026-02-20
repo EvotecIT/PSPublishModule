@@ -99,6 +99,7 @@ public static partial class WebSiteScaffolder
           {{ if page.description != """" }}<p class=""pf-editorial-summary"">{{ page.description }}</p>{{ end }}
         </header>
         {{ content }}
+        {{ pf.editorial_post_nav }}
       </article>
     </div>
   </main>
@@ -139,7 +140,7 @@ public static partial class WebSiteScaffolder
         </header>
         {{ content }}
         {{ if items && items.size > 0 }}
-          {{ pf.editorial_cards 0 160 true true true true ""16/9"" """" ""hero"" }}
+          {{ pf.editorial_cards }}
           {{ pf.editorial_pager ""Newer posts"" ""Older posts"" }}
         {{ else }}
           <p>No entries yet.</p>

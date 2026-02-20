@@ -345,6 +345,16 @@ a { color: inherit; text-decoration: none; }
 .pf-chip { border: 1px solid var(--pf-border, rgba(148, 163, 184, 0.2)); border-radius: 999px; padding: 2px 8px; font-size: .78rem; color: var(--pf-muted, #94a3b8); }
 .pf-pagination { margin-top: 18px; display: flex; justify-content: space-between; gap: 12px; }
 .pf-pagination a { color: var(--pf-accent, #38bdf8); }
+.pf-post-nav { margin-top: 28px; border-top: 1px solid var(--pf-border, rgba(148, 163, 184, 0.2)); padding-top: 18px; display: grid; gap: 16px; }
+.pf-post-nav-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; }
+.pf-post-nav-back { color: var(--pf-accent, #38bdf8); font-size: .92rem; }
+.pf-post-nav-links { display: flex; flex-wrap: wrap; gap: 12px; }
+.pf-post-nav-links a { color: var(--pf-muted, #94a3b8); font-size: .92rem; }
+.pf-post-nav-links a:hover { color: var(--pf-accent, #38bdf8); }
+.pf-post-nav-related h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.pf-post-nav-related ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.pf-post-nav-related a { color: var(--pf-muted, #94a3b8); }
+.pf-post-nav-related a:hover { color: var(--pf-accent, #38bdf8); }
 ");
 
         var siteSpec = new SiteSpec
@@ -387,7 +397,12 @@ a { color: inherit; text-decoration: none; }
                     Output = "/blog",
                     DefaultLayout = "post",
                     ListLayout = "list",
-                    Include = new[] { "*.md", "**/*.md" }
+                    Include = new[] { "*.md", "**/*.md" },
+                    EditorialCards = new EditorialCardsSpec
+                    {
+                        ImageAspect = "16/9",
+                        Variant = "hero"
+                    }
                 },
                 new CollectionSpec
                 {
@@ -397,7 +412,12 @@ a { color: inherit; text-decoration: none; }
                     Output = "/news",
                     DefaultLayout = "post",
                     ListLayout = "list",
-                    Include = new[] { "*.md", "**/*.md" }
+                    Include = new[] { "*.md", "**/*.md" },
+                    EditorialCards = new EditorialCardsSpec
+                    {
+                        ImageAspect = "16/9",
+                        Variant = "compact"
+                    }
                 }
             },
             Taxonomies = new[]
