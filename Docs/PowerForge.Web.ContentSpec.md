@@ -351,6 +351,8 @@ Supported `EditorialCards` fields:
 - `ImagePosition`: default `object-position` (for example `center`, `top center`, `20% 30%`)
 - `Variant`: default helper variant (`default`, `compact`, `hero`, `featured`)
 - `GridClass`, `CardClass`: default CSS class overrides for wrapper/card elements
+- `ShowCategories`: default `show_categories` helper behavior when argument is omitted
+- `LinkTaxonomy`: default `link_taxonomy` helper behavior when argument is omitted
 
 ### Collection sorting
 `SortBy` and `SortOrder` apply to section list item ordering:
@@ -574,8 +576,8 @@ Best practice (theme rendering):
     - `variant` (optional; when omitted, helper uses `collection.EditorialCards.Variant`, then `"default"`; options: `"default"`, `"compact"`, `"hero"`, `"featured"`)
     - `grid_class` (optional; when omitted, helper uses `collection.EditorialCards.GridClass`)
     - `card_class` (optional; when omitted, helper uses `collection.EditorialCards.CardClass`)
-    - `show_categories` (optional; default `false`, reads `categories` taxonomy/meta values)
-    - `link_taxonomy` (optional; default `false`, renders tag/category chips as links to taxonomy term pages)
+    - `show_categories` (optional; when omitted, helper uses `collection.EditorialCards.ShowCategories`, then `false`; reads `categories` taxonomy/meta values)
+    - `link_taxonomy` (optional; when omitted, helper uses `collection.EditorialCards.LinkTaxonomy`, then `false`; renders tag/category chips as links to taxonomy term pages)
     - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" true true }}`
     - Per-item front matter metadata (stored under `meta`) supported by helper:
       - `cardImage` / `card_image` / `card.image`

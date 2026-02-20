@@ -332,6 +332,9 @@ public class ScribanPfNavigationHelpersTests
                 description: First description
                 date: 2026-01-05
                 image: /images/ignored-first-generic.png
+                tags:
+                  - release
+                  - updates
                 cardImage: /images/override-card.png
                 cardImageAlt: Card override alt
                 cardImageFit: none
@@ -348,6 +351,10 @@ public class ScribanPfNavigationHelpersTests
                 description: Second description
                 date: 2026-01-04
                 image: /images/generic-second.png
+                tags:
+                  - updates
+                categories:
+                  - Product Updates
                 ---
 
                 # Second
@@ -428,7 +435,9 @@ public class ScribanPfNavigationHelpersTests
                             ImagePosition = "top center",
                             Variant = "featured",
                             GridClass = "collection-grid",
-                            CardClass = "collection-card"
+                            CardClass = "collection-card",
+                            ShowCategories = true,
+                            LinkTaxonomy = true
                         }
                     }
                 }
@@ -454,6 +463,8 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains("/images/default-collection-card.png", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("object-fit: contain;", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("object-position: top center;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("pf-chip--tag", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("href=\"/categories/product-updates/\"", blogHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

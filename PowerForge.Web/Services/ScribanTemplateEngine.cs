@@ -193,8 +193,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 8 => new ScriptParameterInfo(typeof(string), "variant", string.Empty),
                 9 => new ScriptParameterInfo(typeof(string), "grid_class", string.Empty),
                 10 => new ScriptParameterInfo(typeof(string), "card_class", string.Empty),
-                11 => new ScriptParameterInfo(typeof(bool), "show_categories", false),
-                12 => new ScriptParameterInfo(typeof(bool), "link_taxonomy", false),
+                11 => new ScriptParameterInfo(typeof(object), "show_categories", null),
+                12 => new ScriptParameterInfo(typeof(object), "link_taxonomy", null),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -212,8 +212,14 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var variant = arguments.Count > 8 ? arguments[8]?.ToString() : null;
             var gridClass = arguments.Count > 9 ? arguments[9]?.ToString() : null;
             var cardClass = arguments.Count > 10 ? arguments[10]?.ToString() : null;
-            var showCategories = arguments.Count > 11 && ScribanThemeHelpers.ParseBool(arguments[11], false);
-            var linkTaxonomy = arguments.Count > 12 && ScribanThemeHelpers.ParseBool(arguments[12], false);
+            var showCategoriesArg = arguments.Count > 11 ? arguments[11] : null;
+            var linkTaxonomyArg = arguments.Count > 12 ? arguments[12] : null;
+            bool? showCategories = showCategoriesArg is null
+                ? null
+                : ScribanThemeHelpers.ParseBool(showCategoriesArg, false);
+            bool? linkTaxonomy = linkTaxonomyArg is null
+                ? null
+                : ScribanThemeHelpers.ParseBool(linkTaxonomyArg, false);
             return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage, variant, gridClass, cardClass, showCategories, linkTaxonomy);
         }
 

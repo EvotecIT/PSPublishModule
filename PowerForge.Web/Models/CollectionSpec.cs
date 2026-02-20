@@ -60,4 +60,8 @@ public sealed class EditorialCardsSpec
     public string? GridClass { get; set; }
     /// <summary>Optional CSS classes appended to each rendered editorial card.</summary>
     public string? CardClass { get; set; }
+    /// <summary>Default behavior for rendering categories chips in <c>pf.editorial_cards</c> when helper argument is omitted.</summary>
+    public bool? ShowCategories { get; set; }
+    /// <summary>Default behavior for rendering taxonomy links in chips in <c>pf.editorial_cards</c> when helper argument is omitted.</summary>
+    public bool? LinkTaxonomy { get; set; }
 }

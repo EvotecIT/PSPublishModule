@@ -155,8 +155,8 @@ internal sealed class ScribanThemeHelpers
         string? variant = null,
         string? gridClass = null,
         string? cardClass = null,
-        bool showCategories = false,
-        bool linkTaxonomy = false)
+        bool? showCategories = null,
+        bool? linkTaxonomy = null)
     {
         var items = _context.Items ?? Array.Empty<ContentItem>();
         if (items.Count == 0)
@@ -170,6 +170,8 @@ internal sealed class ScribanThemeHelpers
         var normalizedVariant = NormalizeEditorialVariant(CoalesceTrimmed(variant, collectionCards?.Variant));
         var resolvedGridClass = CoalesceTrimmed(gridClass, collectionCards?.GridClass);
         var resolvedCardClass = CoalesceTrimmed(cardClass, collectionCards?.CardClass);
+        var resolvedShowCategories = showCategories ?? collectionCards?.ShowCategories ?? false;
+        var resolvedLinkTaxonomy = linkTaxonomy ?? collectionCards?.LinkTaxonomy ?? false;
         var defaultFallbackImage = CoalesceTrimmed(fallbackImage, collectionCards?.Image, _context.Site?.Social?.Image) ?? string.Empty;
 
         var selected = items
@@ -224,7 +226,7 @@ internal sealed class ScribanThemeHelpers
             if (!string.IsNullOrWhiteSpace(summary))
                 sb.Append("<p class=\"pf-editorial-summary\">").Append(Html(summary)).Append("</p>");
 
-            if (showTags || showCategories)
+            if (showTags || resolvedShowCategories)
             {
                 var tags = showTags
                     ? (item.Tags ?? Array.Empty<string>())
@@ -234,7 +236,7 @@ internal sealed class ScribanThemeHelpers
                         .Take(6)
                         .ToArray()
                     : Array.Empty<string>();
-                var categories = showCategories
+                var categories = resolvedShowCategories
                     ? ResolveTaxonomyValues(item, "categories")
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Take(6)
@@ -245,9 +247,9 @@ internal sealed class ScribanThemeHelpers
                 {
                     sb.Append("<div class=\"pf-editorial-tags\">");
                     foreach (var category in categories)
-                        AppendTaxonomyChip(sb, "categories", category, "pf-chip pf-chip--category", linkTaxonomy);
+                        AppendTaxonomyChip(sb, "categories", category, "pf-chip pf-chip--category", resolvedLinkTaxonomy);
                     foreach (var tag in tags)
-                        AppendTaxonomyChip(sb, "tags", tag, "pf-chip pf-chip--tag", linkTaxonomy);
+                        AppendTaxonomyChip(sb, "tags", tag, "pf-chip pf-chip--tag", resolvedLinkTaxonomy);
                     sb.Append("</div>");
                 }
             }
