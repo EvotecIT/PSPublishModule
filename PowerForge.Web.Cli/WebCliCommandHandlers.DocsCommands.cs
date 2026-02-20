@@ -35,6 +35,10 @@ internal static partial class WebCliCommandHandlers
         var docsHome = TryGetOptionValue(subArgs, "--docs-home") ?? TryGetOptionValue(subArgs, "--docs-home-url");
         var sidebarPosition = TryGetOptionValue(subArgs, "--sidebar") ?? TryGetOptionValue(subArgs, "--sidebar-position");
         var bodyClass = TryGetOptionValue(subArgs, "--body-class") ?? TryGetOptionValue(subArgs, "--bodyClass");
+        var legacyAliasMode = TryGetOptionValue(subArgs, "--legacy-alias-mode") ??
+                              TryGetOptionValue(subArgs, "--legacyAliasMode") ??
+                              TryGetOptionValue(subArgs, "--legacy-flat-alias-mode") ??
+                              TryGetOptionValue(subArgs, "--legacyFlatAliasMode");
         var displayNameMode = TryGetOptionValue(subArgs, "--display-name-mode") ?? TryGetOptionValue(subArgs, "--displayNameMode");
         var sourceRoot = TryGetOptionValue(subArgs, "--source-root");
         var sourcePathPrefix = TryGetOptionValue(subArgs, "--source-path-prefix");
@@ -86,6 +90,15 @@ internal static partial class WebCliCommandHandlers
         if (string.IsNullOrWhiteSpace(outPath))
             return Fail("Missing required --out.", outputJson, logger, "web.apidocs");
 
+        try
+        {
+            legacyAliasMode = NormalizeApiDocsLegacyAliasMode(legacyAliasMode);
+        }
+        catch (ArgumentException ex)
+        {
+            return Fail(ex.Message, outputJson, logger, "web.apidocs");
+        }
+
         var options = new WebApiDocsOptions
         {
             Type = apiType,
@@ -110,6 +123,7 @@ internal static partial class WebCliCommandHandlers
             DocsHomeUrl = docsHome,
             SidebarPosition = sidebarPosition,
             BodyClass = bodyClass,
+            LegacyAliasMode = legacyAliasMode,
             DisplayNameMode = displayNameMode,
             SourceRootPath = sourceRoot,
             SourcePathPrefix = sourcePathPrefix,

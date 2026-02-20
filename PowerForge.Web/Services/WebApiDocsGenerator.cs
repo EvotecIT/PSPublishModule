@@ -34,6 +34,11 @@ public sealed class WebApiDocsOptions
       public string? SidebarPosition { get; set; }
     /// <summary>Optional CSS class applied to the &lt;body&gt; element.</summary>
     public string? BodyClass { get; set; }
+    /// <summary>
+    /// Legacy flat alias behavior for docs template type pages (`/api/&lt;slug&gt;.html`).
+    /// Supported values: <c>noindex</c> (default), <c>redirect</c>, <c>omit</c>.
+    /// </summary>
+    public string? LegacyAliasMode { get; set; }
     /// <summary>Whether Prism assets should be injected for API code highlighting.</summary>
     public bool InjectPrismAssets { get; set; } = true;
     /// <summary>Optional Prism configuration inherited from site settings.</summary>

@@ -126,6 +126,7 @@ public static partial class WebApiDocsGenerator
             WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath)),
             prismScripts);
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
+        var legacyAliasMode = ResolveLegacyAliasMode(options.LegacyAliasMode);
         var social = ResolveApiSocialProfile(options);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames);
@@ -182,11 +183,14 @@ public static partial class WebApiDocsGenerator
             Directory.CreateDirectory(typeDir);
             File.WriteAllText(Path.Combine(typeDir, "index.html"), typeHtml, Encoding.UTF8);
 
-            // Keep legacy flat *.html aliases for backward compatibility,
-            // but mark them as noindex to avoid duplicate indexing against canonical /{slug}/ routes.
-            var htmlPath = Path.Combine(outputPath, $"{type.Slug}.html");
-            var aliasHtml = InjectNoIndexRobotsMeta(typeHtml);
-            File.WriteAllText(htmlPath, aliasHtml, Encoding.UTF8);
+            if (!string.Equals(legacyAliasMode, "omit", StringComparison.Ordinal))
+            {
+                var htmlPath = Path.Combine(outputPath, $"{type.Slug}.html");
+                var aliasHtml = string.Equals(legacyAliasMode, "redirect", StringComparison.Ordinal)
+                    ? BuildLegacyAliasRedirectHtml(typeRoute)
+                    : InjectNoIndexRobotsMeta(typeHtml);
+                File.WriteAllText(htmlPath, aliasHtml, Encoding.UTF8);
+            }
         }
 
         var sitemapPath = Path.Combine(outputPath, "sitemap.xml");
@@ -207,6 +211,61 @@ public static partial class WebApiDocsGenerator
             return $"{noIndexMeta}{Environment.NewLine}{html}";
 
         return html.Insert(headMatch.Index + headMatch.Length, $"{Environment.NewLine}  {noIndexMeta}");
+    }
+
+    private static string ResolveLegacyAliasMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "noindex";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "noindex" => "noindex",
+            "noindex-file" => "noindex",
+            "file" => "noindex",
+            "default" => "noindex",
+            "redirect" => "redirect",
+            "redirects" => "redirect",
+            "omit" => "omit",
+            "none" => "omit",
+            "disabled" => "omit",
+            "off" => "omit",
+            _ => throw new ArgumentException($"Unsupported legacy alias mode '{value}'. Use noindex, redirect, or omit.")
+        };
+    }
+
+    private static string BuildLegacyAliasRedirectHtml(string canonicalUrl)
+    {
+        var canonical = string.IsNullOrWhiteSpace(canonicalUrl) ? "/" : canonicalUrl.Trim();
+        if (!canonical.StartsWith("/", StringComparison.Ordinal) &&
+            !canonical.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !canonical.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            canonical = "/" + canonical;
+        }
+
+        var encodedCanonical = System.Web.HttpUtility.HtmlEncode(canonical);
+        var scriptCanonical = System.Web.HttpUtility.JavaScriptStringEncode(canonical);
+        return
+$@"<!doctype html>
+<html lang=""en"">
+<head>
+  <meta charset=""utf-8"" />
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
+  <title>Redirecting...</title>
+  <meta name=""robots"" content=""noindex,follow"" data-pf=""api-docs-legacy-alias"" />
+  <meta http-equiv=""refresh"" content=""0;url={encodedCanonical}"" />
+  <link rel=""canonical"" href=""{encodedCanonical}"" />
+</head>
+<body>
+  <p>This page moved to <a href=""{encodedCanonical}"">{encodedCanonical}</a>.</p>
+  <script>
+    window.location.replace('{scriptCanonical}');
+  </script>
+</body>
+</html>
+";
     }
 
     private static void ApplyNavFallback(WebApiDocsOptions options, List<string> warnings, ref string header, ref string footer)

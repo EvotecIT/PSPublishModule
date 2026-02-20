@@ -243,6 +243,10 @@ Notes:
   - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` + `api-footer.html` (when present), otherwise falls back to `header.html` + `footer.html`
 - `template`: `simple` (default) or `docs` (sidebar layout)
 - `type`: `CSharp` (default) or `PowerShell` (uses PowerShell help XML)
+- `legacyAliasMode` (`legacy-alias-mode`) controls docs-template flat aliases (`/api/<slug>.html`):
+  - `noindex` (default): keep compatibility alias pages, mark them `noindex,follow`
+  - `redirect`: emit lightweight alias redirect pages to canonical `/api/<slug>/`
+  - `omit`: do not emit flat alias pages
 - `templateRoot` lets you override built-in templates/assets by placing files like
   `index.html`, `type.html`, `docs-index.html`, `docs-type.html`, `docs.js`,
   `search.js`, or `fallback.css` in that folder

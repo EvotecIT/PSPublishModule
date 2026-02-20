@@ -100,6 +100,36 @@ public class WebCliApiDocsPreflightTests
         }
     }
 
+    [Fact]
+    public void HandleSubCommand_ApiDocs_FailsWhenLegacyAliasModeIsInvalid()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-cli-apidocs-legacy-mode-invalid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXml());
+            var outPath = Path.Combine(root, "_site", "api");
+
+            var args = new[]
+            {
+                "--type", "CSharp",
+                "--xml", xmlPath,
+                "--out", outPath,
+                "--format", "json",
+                "--legacy-alias-mode", "legacy"
+            };
+
+            var exitCode = WebCliCommandHandlers.HandleSubCommand("apidocs", args, outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);
+            Assert.Equal(2, exitCode);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalXml()
     {
         return
