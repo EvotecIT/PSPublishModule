@@ -10,18 +10,6 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModulePublisher
 {
-    private static readonly HashSet<string> InBoxExternalModuleDependenciesForPsGallery = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Microsoft.PowerShell.Core",
-        "Microsoft.PowerShell.Diagnostics",
-        "Microsoft.PowerShell.Host",
-        "Microsoft.PowerShell.Management",
-        "Microsoft.PowerShell.Security",
-        "Microsoft.PowerShell.Utility",
-        "Microsoft.PowerShell.Archive",
-        "Microsoft.WSMan.Management",
-    };
-
     private readonly ILogger _logger;
     private readonly PSResourceGetClient _psResourceGet;
     private readonly PowerShellGetClient _powerShellGet;
@@ -151,7 +139,7 @@ public sealed class ModulePublisher
             }
             else
             {
-                NormalizeExternalDependenciesInManifestForPublish(tool, repositoryName, plan, buildResult);
+                ValidateRequiredModulesForRepositoryPublish(repositoryName, credential, plan, buildResult);
 
                 _psResourceGet.Publish(
                     new PSResourcePublishOptions(
@@ -160,7 +148,7 @@ public sealed class ModulePublisher
                         repository: repositoryName,
                         apiKey: string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
                         destinationPath: null,
-                        skipDependenciesCheck: false,
+                        skipDependenciesCheck: true,
                         skipModuleManifestValidate: false,
                         credential: credential));
             }
@@ -192,73 +180,162 @@ public sealed class ModulePublisher
             errorMessage: null);
     }
 
-    private void NormalizeExternalDependenciesInManifestForPublish(
-        PublishTool tool,
+    private void ValidateRequiredModulesForRepositoryPublish(
         string repositoryName,
+        RepositoryCredential? credential,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult)
     {
-        if (string.IsNullOrWhiteSpace(buildResult.ManifestPath) || !File.Exists(buildResult.ManifestPath))
+        var requiredModules = GetRequiredModulesForPublish(buildResult, plan);
+        if (requiredModules.Length == 0)
             return;
 
-        var (filtered, removed) = NormalizeExternalModuleDependenciesForRepositoryPublish(
-            tool,
-            repositoryName,
-            plan.ExternalModuleDependencies);
+        var missing = new List<string>();
 
-        if (removed.Length == 0)
-            return;
-
-        ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", filtered);
-        _logger.Info(
-            $"Ignoring inbox ExternalModuleDependencies for {tool} publish to '{repositoryName}': {string.Join(", ", removed)}");
-    }
-
-    internal static (string[] Filtered, string[] Removed) NormalizeExternalModuleDependenciesForRepositoryPublish(
-        PublishTool tool,
-        string repositoryName,
-        IReadOnlyList<string>? externalModuleDependencies)
-    {
-        var normalized = NormalizeExternalModuleDependencies(externalModuleDependencies);
-        if (normalized.Length == 0)
-            return (Array.Empty<string>(), Array.Empty<string>());
-
-        if (tool != PublishTool.PSResourceGet ||
-            !string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
-            return (normalized, Array.Empty<string>());
-
-        var filtered = new List<string>(normalized.Length);
-        var removed = new List<string>();
-
-        foreach (var dependency in normalized)
+        foreach (var requiredModule in requiredModules)
         {
-            if (InBoxExternalModuleDependenciesForPsGallery.Contains(dependency))
-                removed.Add(dependency);
-            else
-                filtered.Add(dependency);
+            IReadOnlyList<string> versions;
+            try
+            {
+                versions = _psResourceGet.Find(
+                        new PSResourceFindOptions(
+                            names: new[] { requiredModule.ModuleName },
+                            version: null,
+                            prerelease: true,
+                            repositories: new[] { repositoryName },
+                            credential: credential),
+                        timeout: TimeSpan.FromMinutes(2))
+                    .Where(r => string.Equals(r.Name, requiredModule.ModuleName, StringComparison.OrdinalIgnoreCase))
+                    .Select(r => r.Version)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to verify required dependency '{requiredModule.ModuleName}' in repository '{repositoryName}' before publish. {ex.Message}");
+            }
+
+            if (!HasMatchingRequiredModuleVersion(requiredModule, versions))
+            {
+                missing.Add($"{requiredModule.ModuleName} [{FormatRequiredModuleConstraint(requiredModule)}]");
+            }
         }
 
-        return (filtered.ToArray(), removed.ToArray());
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Required module dependency check failed for repository '{repositoryName}'. Missing or incompatible: {string.Join(", ", missing)}.");
+        }
     }
 
-    private static string[] NormalizeExternalModuleDependencies(IReadOnlyList<string>? dependencies)
+    private static ManifestEditor.RequiredModule[] GetRequiredModulesForPublish(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
     {
-        if (dependencies is null || dependencies.Count == 0)
-            return Array.Empty<string>();
-
-        var list = new List<string>(dependencies.Count);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var dependency in dependencies)
+        if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
+            File.Exists(buildResult.ManifestPath) &&
+            ManifestEditor.TryGetRequiredModules(buildResult.ManifestPath, out var manifestModules) &&
+            manifestModules is { Length: > 0 })
         {
-            if (string.IsNullOrWhiteSpace(dependency))
-                continue;
-
-            var value = dependency.Trim();
-            if (seen.Add(value))
-                list.Add(value);
+            return manifestModules
+                .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
+                .ToArray()!;
         }
 
-        return list.ToArray();
+        var planned = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        if (planned.Length == 0)
+            return Array.Empty<ManifestEditor.RequiredModule>();
+
+        return planned
+            .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
+            .ToArray()!;
+    }
+
+    internal static bool HasMatchingRequiredModuleVersion(
+        ManifestEditor.RequiredModule requiredModule,
+        IReadOnlyList<string> repositoryVersions)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+
+        if (repositoryVersions is null || repositoryVersions.Count == 0)
+            return false;
+
+        foreach (var candidateVersion in repositoryVersions)
+        {
+            if (DoesVersionMatchRequiredModule(requiredModule, candidateVersion))
+                return true;
+        }
+
+        return false;
+    }
+
+    internal static bool DoesVersionMatchRequiredModule(ManifestEditor.RequiredModule requiredModule, string candidateVersion)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+        if (string.IsNullOrWhiteSpace(candidateVersion))
+            return false;
+
+        var hasConstraints =
+            !string.IsNullOrWhiteSpace(requiredModule.ModuleVersion) ||
+            !string.IsNullOrWhiteSpace(requiredModule.RequiredVersion) ||
+            !string.IsNullOrWhiteSpace(requiredModule.MaximumVersion);
+
+        if (!TryParseSemVer(candidateVersion, out var candidate))
+        {
+            if (!hasConstraints)
+                return true;
+
+            if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+                return string.Equals(candidateVersion.Trim(), requiredModule.RequiredVersion!.Trim(), StringComparison.OrdinalIgnoreCase);
+
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+        {
+            var requiredVersion = requiredModule.RequiredVersion!.Trim();
+            if (!TryParseSemVer(requiredVersion, out var required))
+                return string.Equals(candidateVersion.Trim(), requiredVersion, StringComparison.OrdinalIgnoreCase);
+
+            return candidate.CompareTo(required) == 0;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.ModuleVersion))
+        {
+            if (!TryParseSemVer(requiredModule.ModuleVersion!, out var minimum))
+                return false;
+
+            if (candidate.CompareTo(minimum) < 0)
+                return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.MaximumVersion))
+        {
+            if (!TryParseSemVer(requiredModule.MaximumVersion!, out var maximum))
+                return false;
+
+            if (candidate.CompareTo(maximum) > 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    internal static string FormatRequiredModuleConstraint(ManifestEditor.RequiredModule requiredModule)
+    {
+        if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+            return $"RequiredVersion = {requiredModule.RequiredVersion}";
+        if (!string.IsNullOrWhiteSpace(requiredModule.ModuleVersion) && !string.IsNullOrWhiteSpace(requiredModule.MaximumVersion))
+            return $"ModuleVersion >= {requiredModule.ModuleVersion}, MaximumVersion <= {requiredModule.MaximumVersion}";
+        if (!string.IsNullOrWhiteSpace(requiredModule.ModuleVersion))
+            return $"ModuleVersion >= {requiredModule.ModuleVersion}";
+        if (!string.IsNullOrWhiteSpace(requiredModule.MaximumVersion))
+            return $"MaximumVersion <= {requiredModule.MaximumVersion}";
+        return "Any version";
     }
 
     private void EnsureVersionIsGreaterThanRepository(
