@@ -79,13 +79,22 @@ internal static class WebVerifyPolicy
     }
 
     private static bool IsNavigationLintWarning(string warning) =>
-        !string.IsNullOrWhiteSpace(warning) &&
-        StripCodePrefix(warning).StartsWith("Navigation lint:", StringComparison.OrdinalIgnoreCase);
+        HasWarningCodePrefix(warning, "PFWEB.NAV.") ||
+        (!string.IsNullOrWhiteSpace(warning) &&
+         StripCodePrefix(warning).StartsWith("Navigation lint:", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsThemeContractWarning(string warning)
     {
         if (string.IsNullOrWhiteSpace(warning))
             return false;
+
+        var code = TryGetCode(warning);
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            if (code.StartsWith("PFWEB.THEME.CONTRACT", StringComparison.OrdinalIgnoreCase) ||
+                code.StartsWith("PFWEB.THEME.CSS.CONTRACT", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
 
         var normalized = StripCodePrefix(warning);
         return normalized.StartsWith("Theme contract:", StringComparison.OrdinalIgnoreCase) ||
@@ -172,6 +181,16 @@ internal static class WebVerifyPolicy
 
         var code = trimmed.Substring(1, end - 1).Trim();
         return string.IsNullOrWhiteSpace(code) ? null : code;
+    }
+
+    private static bool HasWarningCodePrefix(string warning, string codePrefix)
+    {
+        if (string.IsNullOrWhiteSpace(codePrefix))
+            return false;
+
+        var code = TryGetCode(warning);
+        return !string.IsNullOrWhiteSpace(code) &&
+               code.StartsWith(codePrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool WildcardIsMatch(string input, string pattern)
