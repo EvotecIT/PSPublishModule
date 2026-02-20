@@ -10,6 +10,18 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModulePublisher
 {
+    private static readonly HashSet<string> InBoxExternalModuleDependenciesForPsGallery = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Microsoft.PowerShell.Core",
+        "Microsoft.PowerShell.Diagnostics",
+        "Microsoft.PowerShell.Host",
+        "Microsoft.PowerShell.Management",
+        "Microsoft.PowerShell.Security",
+        "Microsoft.PowerShell.Utility",
+        "Microsoft.PowerShell.Archive",
+        "Microsoft.WSMan.Management",
+    };
+
     private readonly ILogger _logger;
     private readonly PSResourceGetClient _psResourceGet;
     private readonly PowerShellGetClient _powerShellGet;
@@ -139,6 +151,8 @@ public sealed class ModulePublisher
             }
             else
             {
+                NormalizeExternalDependenciesInManifestForPublish(tool, repositoryName, plan, buildResult);
+
                 _psResourceGet.Publish(
                     new PSResourcePublishOptions(
                         path: modulePath,
@@ -176,6 +190,75 @@ public sealed class ModulePublisher
             releaseUrl: null,
             succeeded: true,
             errorMessage: null);
+    }
+
+    private void NormalizeExternalDependenciesInManifestForPublish(
+        PublishTool tool,
+        string repositoryName,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult)
+    {
+        if (string.IsNullOrWhiteSpace(buildResult.ManifestPath) || !File.Exists(buildResult.ManifestPath))
+            return;
+
+        var (filtered, removed) = NormalizeExternalModuleDependenciesForRepositoryPublish(
+            tool,
+            repositoryName,
+            plan.ExternalModuleDependencies);
+
+        if (removed.Length == 0)
+            return;
+
+        ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", filtered);
+        _logger.Info(
+            $"Ignoring inbox ExternalModuleDependencies for {tool} publish to '{repositoryName}': {string.Join(", ", removed)}");
+    }
+
+    internal static (string[] Filtered, string[] Removed) NormalizeExternalModuleDependenciesForRepositoryPublish(
+        PublishTool tool,
+        string repositoryName,
+        IReadOnlyList<string>? externalModuleDependencies)
+    {
+        var normalized = NormalizeExternalModuleDependencies(externalModuleDependencies);
+        if (normalized.Length == 0)
+            return (Array.Empty<string>(), Array.Empty<string>());
+
+        if (tool != PublishTool.PSResourceGet ||
+            !string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase))
+            return (normalized, Array.Empty<string>());
+
+        var filtered = new List<string>(normalized.Length);
+        var removed = new List<string>();
+
+        foreach (var dependency in normalized)
+        {
+            if (InBoxExternalModuleDependenciesForPsGallery.Contains(dependency))
+                removed.Add(dependency);
+            else
+                filtered.Add(dependency);
+        }
+
+        return (filtered.ToArray(), removed.ToArray());
+    }
+
+    private static string[] NormalizeExternalModuleDependencies(IReadOnlyList<string>? dependencies)
+    {
+        if (dependencies is null || dependencies.Count == 0)
+            return Array.Empty<string>();
+
+        var list = new List<string>(dependencies.Count);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dependency in dependencies)
+        {
+            if (string.IsNullOrWhiteSpace(dependency))
+                continue;
+
+            var value = dependency.Trim();
+            if (seen.Add(value))
+                list.Add(value);
+        }
+
+        return list.ToArray();
     }
 
     private void EnsureVersionIsGreaterThanRepository(
