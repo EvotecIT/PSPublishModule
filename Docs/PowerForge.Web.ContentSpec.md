@@ -777,6 +777,8 @@ Notes:
 - wildcard patterns (`*`, `?`)
 - regex patterns prefixed with `re:`
 
+See `Docs/PowerForge.Web.WarningCodes.md` for the current code catalog.
+
 ## Redirects + aliases
 Use `aliases` in front matter for old URLs.  
 Use `Redirects` or `RouteOverrides` in `site.json` for permanent site‑level rules.
