@@ -28,8 +28,11 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 1. Create/confirm these files exist at repo root:
    - `site.json`
    - `pipeline.json`
+   - `pipeline.maintenance.json`
    - `.github/workflows/website-ci.yml`
+   - `.github/workflows/website-maintenance.yml`
    - `config/presets/pipeline.web-quality.json`
+   - `config/presets/pipeline.web-maintenance.json`
    - `.powerforge/verify-baseline.json`
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
@@ -69,6 +72,7 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
    - scaffolded workflow fails early when lock/override `ref` is not a full commit SHA (40/64 hex)
    - optional canary override: set GitHub vars `POWERFORGE_REPOSITORY` / `POWERFORGE_REF` without editing lock file
    - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
+   - optional scheduled workflow: run `pipeline.maintenance.json` weekly for storage hygiene (`github-artifacts-prune` with `apply:true` + safe caps)
 5. Theme manifest (`theme.manifest.json` recommended):
    - set `schemaVersion: 2`
    - declare `features`

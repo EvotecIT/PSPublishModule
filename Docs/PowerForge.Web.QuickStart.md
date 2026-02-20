@@ -13,9 +13,15 @@ Result (minimal structure):
 MySite/
   site.json
   pipeline.json
+  pipeline.maintenance.json
   .github/
     workflows/
       website-ci.yml
+      website-maintenance.yml
+  config/
+    presets/
+      pipeline.web-quality.json
+      pipeline.web-maintenance.json
   content/
     pages/
       index.md
@@ -125,6 +131,11 @@ Scaffolded CI workflow:
 - Workflow lock resolution also validates that resolved `ref` is a full commit SHA (40/64 hex).
 - It includes workflow concurrency cancelation and NuGet cache reuse by default.
 - Optional canary override via GitHub variables `POWERFORGE_REPOSITORY` / `POWERFORGE_REF`.
+
+Scaffolded maintenance workflow:
+- `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.
+- It runs `pipeline.maintenance.json` in CI mode.
+- Default maintenance preset applies GitHub artifact cleanup with safe caps (`keep:7`, `maxAgeDays:14`, `maxDelete:100`) and `continueOnError:true`.
 
 Upgrade engine pin intentionally:
 ```

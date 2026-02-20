@@ -18,8 +18,11 @@ public class WebSiteScaffolderTests
             Assert.True(File.Exists(Path.Combine(root, "content", "news", "_index.md")));
             Assert.True(File.Exists(Path.Combine(root, "content", "news", "release-1-0.md")));
             Assert.True(File.Exists(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
+            Assert.True(File.Exists(Path.Combine(root, "config", "presets", "pipeline.web-maintenance.json")));
             Assert.True(File.Exists(Path.Combine(root, ".github", "workflows", "website-ci.yml")));
+            Assert.True(File.Exists(Path.Combine(root, ".github", "workflows", "website-maintenance.yml")));
             Assert.True(File.Exists(Path.Combine(root, ".powerforge", "engine-lock.json")));
+            Assert.True(File.Exists(Path.Combine(root, "pipeline.maintenance.json")));
 
             using var specDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "site.json")));
             var spec = specDoc.RootElement;
@@ -57,6 +60,10 @@ public class WebSiteScaffolderTests
             Assert.Equal("./config/presets/pipeline.web-quality.json", pipeline.GetProperty("extends").GetString());
             Assert.False(pipeline.TryGetProperty("steps", out _));
 
+            using var maintenancePipelineDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "pipeline.maintenance.json")));
+            var maintenancePipeline = maintenancePipelineDoc.RootElement;
+            Assert.Equal("./config/presets/pipeline.web-maintenance.json", maintenancePipeline.GetProperty("extends").GetString());
+
             var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-ci.yml"));
             Assert.Contains("POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json", workflow, StringComparison.Ordinal);
             Assert.Contains("Resolve PowerForge engine lock", workflow, StringComparison.Ordinal);
@@ -67,6 +74,12 @@ public class WebSiteScaffolderTests
             Assert.Contains("actions/cache@v4", workflow, StringComparison.Ordinal);
             Assert.Contains("dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.json --mode ci", workflow, StringComparison.Ordinal);
             Assert.Contains("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
+
+            var maintenanceWorkflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "website-maintenance.yml"));
+            Assert.Contains("name: Website Maintenance", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("schedule:", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("actions: write", maintenanceWorkflow, StringComparison.Ordinal);
+            Assert.Contains("--config ./pipeline.maintenance.json --mode ci", maintenanceWorkflow, StringComparison.Ordinal);
 
             using var presetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-quality.json")));
             var presetSteps = presetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
@@ -83,6 +96,16 @@ public class WebSiteScaffolderTests
                 string.Equals(step.GetProperty("task").GetString(), "github-artifacts-prune", StringComparison.OrdinalIgnoreCase));
             Assert.True(artifactsStep.GetProperty("optional").GetBoolean());
             Assert.True(artifactsStep.GetProperty("dryRun").GetBoolean());
+
+            using var maintenancePresetDoc = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "config", "presets", "pipeline.web-maintenance.json")));
+            var maintenanceSteps = maintenancePresetDoc.RootElement.GetProperty("steps").EnumerateArray().ToArray();
+            var maintenanceArtifactsStep = maintenanceSteps.First(step =>
+                string.Equals(step.GetProperty("task").GetString(), "github-artifacts-prune", StringComparison.OrdinalIgnoreCase));
+            Assert.True(maintenanceArtifactsStep.GetProperty("optional").GetBoolean());
+            Assert.True(maintenanceArtifactsStep.GetProperty("apply").GetBoolean());
+            Assert.True(maintenanceArtifactsStep.GetProperty("continueOnError").GetBoolean());
+            Assert.Equal(100, maintenanceArtifactsStep.GetProperty("maxDelete").GetInt32());
+
             var auditStep = presetSteps.First(step =>
                 string.Equals(step.GetProperty("task").GetString(), "audit", StringComparison.OrdinalIgnoreCase));
 
