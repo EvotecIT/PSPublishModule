@@ -39,4 +39,25 @@ public sealed class CollectionSpec
     public string? AutoSectionTitle { get; set; }
     /// <summary>Optional description for auto-generated section index pages.</summary>
     public string? AutoSectionDescription { get; set; }
+    /// <summary>Optional editorial card defaults used by helper-based list layouts.</summary>
+    public EditorialCardsSpec? EditorialCards { get; set; }
+}
+
+/// <summary>Collection-level editorial card defaults.</summary>
+public sealed class EditorialCardsSpec
+{
+    /// <summary>Default fallback card image for collection items without an image.</summary>
+    public string? Image { get; set; }
+    /// <summary>Default object-fit value for card media (for example: cover, contain).</summary>
+    public string? ImageFit { get; set; }
+    /// <summary>Default object-position value for card media (for example: center, top center).</summary>
+    public string? ImagePosition { get; set; }
+    /// <summary>Default aspect ratio for card media (for example: 16/9, 4:3).</summary>
+    public string? ImageAspect { get; set; }
+    /// <summary>Default editorial_cards variant (default, compact, hero, featured).</summary>
+    public string? Variant { get; set; }
+    /// <summary>Optional CSS classes appended to the editorial grid wrapper.</summary>
+    public string? GridClass { get; set; }
+    /// <summary>Optional CSS classes appended to each rendered editorial card.</summary>
+    public string? CardClass { get; set; }
 }

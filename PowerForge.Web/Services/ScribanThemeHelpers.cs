@@ -15,6 +15,7 @@ internal sealed class ScribanThemeHelpers
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex AspectRatioRegex = new("^\\s*(?<w>\\d+(?:\\.\\d+)?)\\s*(?:/|:)\\s*(?<h>\\d+(?:\\.\\d+)?)\\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ObjectPositionTokenRegex = new("^-?(?:\\d+(?:\\.\\d+)?)(?:%|px|rem|em|vw|vh)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 
     public ScribanThemeHelpers(ThemeRenderContext context)
     {
@@ -149,9 +150,9 @@ internal sealed class ScribanThemeHelpers
         bool showDate = true,
         bool showTags = true,
         bool showImage = true,
-        string? imageAspect = "16/9",
+        string? imageAspect = null,
         string? fallbackImage = null,
-        string? variant = "default",
+        string? variant = null,
         string? gridClass = null,
         string? cardClass = null)
     {
@@ -159,13 +160,15 @@ internal sealed class ScribanThemeHelpers
         if (items.Count == 0)
             return string.Empty;
 
+        var currentCollection = ResolveCurrentCollection();
+        var collectionCards = currentCollection?.EditorialCards;
         var take = maxItems > 0 ? maxItems : int.MaxValue;
         var maxExcerptLength = Math.Clamp(excerptLength, 40, 600);
-        var normalizedAspect = NormalizeAspectRatio(imageAspect);
-        var normalizedVariant = NormalizeEditorialVariant(variant);
-        var defaultFallbackImage = string.IsNullOrWhiteSpace(fallbackImage)
-            ? (_context.Site?.Social?.Image ?? string.Empty)
-            : fallbackImage.Trim();
+        var normalizedAspect = NormalizeAspectRatio(CoalesceTrimmed(imageAspect, collectionCards?.ImageAspect));
+        var normalizedVariant = NormalizeEditorialVariant(CoalesceTrimmed(variant, collectionCards?.Variant));
+        var resolvedGridClass = CoalesceTrimmed(gridClass, collectionCards?.GridClass);
+        var resolvedCardClass = CoalesceTrimmed(cardClass, collectionCards?.CardClass);
+        var defaultFallbackImage = CoalesceTrimmed(fallbackImage, collectionCards?.Image, _context.Site?.Social?.Image) ?? string.Empty;
 
         var selected = items
             .Where(static item => item is not null && !item.Draft && !string.IsNullOrWhiteSpace(item.OutputPath))
@@ -175,22 +178,31 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var sb = new StringBuilder();
-        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant, gridClass))).Append("\">");
+        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant, resolvedGridClass))).Append("\">");
         for (var index = 0; index < selected.Length; index++)
         {
             var item = selected[index];
             var title = string.IsNullOrWhiteSpace(item.Title) ? item.OutputPath : item.Title;
             var summary = ResolveSummary(item, maxExcerptLength);
             var image = showImage ? ResolveCardImage(item.Meta, defaultFallbackImage) : string.Empty;
+            var imageAlt = ResolveCardImageAlt(item.Meta, title);
+            var imageFitRaw = ResolveCardImageFit(item.Meta, collectionCards?.ImageFit);
+            var imagePositionRaw = ResolveCardImagePosition(item.Meta, collectionCards?.ImagePosition);
+            var imageFit = NormalizeObjectFit(imageFitRaw);
+            var imagePosition = NormalizeObjectPosition(imagePositionRaw);
+            var imageStyle = BuildCardImageStyle(imageFitRaw, imageFit, imagePositionRaw, imagePosition);
 
-            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, cardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
+            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, resolvedCardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
             if (!string.IsNullOrWhiteSpace(image))
             {
                 sb.Append("<span class=\"pf-editorial-card-media\"");
                 if (!string.IsNullOrWhiteSpace(normalizedAspect))
                     sb.Append(" style=\"aspect-ratio: ").Append(Html(normalizedAspect)).Append(";\"");
                 sb.Append(">");
-                sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"\" loading=\"lazy\" decoding=\"async\" />");
+                sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"").Append(Html(imageAlt)).Append("\"");
+                if (!string.IsNullOrWhiteSpace(imageStyle))
+                    sb.Append(" style=\"").Append(Html(imageStyle)).Append("\"");
+                sb.Append(" loading=\"lazy\" decoding=\"async\" />");
                 sb.Append("</span>");
             }
 
@@ -427,19 +439,55 @@ internal sealed class ScribanThemeHelpers
         return Truncate(plain, maxLength);
     }
 
+    private CollectionSpec? ResolveCurrentCollection()
+    {
+        var collectionName = _context.Page?.Collection;
+        if (string.IsNullOrWhiteSpace(collectionName))
+            return null;
+
+        var collections = _context.Site?.Collections;
+        if (collections is null || collections.Length == 0)
+            return null;
+
+        var match = collections.FirstOrDefault(collection =>
+            collection is not null &&
+            !string.IsNullOrWhiteSpace(collection.Name) &&
+            collection.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+
+        return match is null ? null : CollectionPresetDefaults.Apply(match);
+    }
+
+    private static string? CoalesceTrimmed(params string?[] values)
+    {
+        if (values is null || values.Length == 0)
+            return null;
+
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return null;
+    }
+
     private static string ResolveCardImage(IReadOnlyDictionary<string, object?>? meta, string? fallbackImage)
     {
         if (meta is not null && meta.Count > 0)
         {
             var candidates = new[]
             {
-                "social_image",
-                "social.image",
+                "card_image",
+                "card.image",
+                "cardImage",
+                "cardImage.src",
+                "card.image.src",
                 "image",
                 "cover",
                 "thumbnail",
-                "card_image",
-                "card.image"
+                "social_image",
+                "social.image",
+                "socialImage"
             };
 
             foreach (var key in candidates)
@@ -451,6 +499,91 @@ internal sealed class ScribanThemeHelpers
         }
 
         return string.IsNullOrWhiteSpace(fallbackImage) ? string.Empty : fallbackImage.Trim();
+    }
+
+    private static string ResolveCardImageAlt(IReadOnlyDictionary<string, object?>? meta, string fallbackText)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_alt",
+                "card.image.alt",
+                "cardImageAlt",
+                "cardImage.alt",
+                "image_alt",
+                "imageAlt",
+                "social_image_alt",
+                "social.image.alt"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackText) ? string.Empty : fallbackText.Trim();
+    }
+
+    private static string? ResolveCardImageFit(IReadOnlyDictionary<string, object?>? meta, string? fallbackValue)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_fit",
+                "card.image.fit",
+                "cardImageFit",
+                "image_fit",
+                "imageFit"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackValue) ? null : fallbackValue.Trim();
+    }
+
+    private static string? ResolveCardImagePosition(IReadOnlyDictionary<string, object?>? meta, string? fallbackValue)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_position",
+                "card.image.position",
+                "cardImagePosition",
+                "image_position",
+                "imagePosition"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackValue) ? null : fallbackValue.Trim();
+    }
+
+    private static string BuildCardImageStyle(string? fitRaw, string normalizedFit, string? positionRaw, string normalizedPosition)
+    {
+        var declarations = new List<string>();
+        if (!string.IsNullOrWhiteSpace(fitRaw))
+            declarations.Add($"object-fit: {normalizedFit};");
+        if (!string.IsNullOrWhiteSpace(positionRaw))
+            declarations.Add($"object-position: {normalizedPosition};");
+        return declarations.Count == 0 ? string.Empty : string.Join(" ", declarations);
     }
 
     private static string? TryGetMetaString(IReadOnlyDictionary<string, object?> meta, string key)
@@ -536,6 +669,53 @@ internal sealed class ScribanThemeHelpers
             "featured" => "featured",
             _ => "default"
         };
+    }
+
+    private static string NormalizeObjectFit(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "cover";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "fill" => "fill",
+            "contain" => "contain",
+            "cover" => "cover",
+            "none" => "none",
+            "scale-down" => "scale-down",
+            _ => "cover"
+        };
+    }
+
+    private static string NormalizeObjectPosition(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "center";
+
+        var collapsed = WhitespaceRegex.Replace(value.Trim(), " ");
+        if (string.IsNullOrWhiteSpace(collapsed))
+            return "center";
+
+        var tokens = collapsed.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0 || tokens.Length > 4)
+            return "center";
+
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            var lower = token.ToLowerInvariant();
+            if (lower is "left" or "right" or "center" or "top" or "bottom")
+            {
+                tokens[i] = lower;
+                continue;
+            }
+
+            if (!ObjectPositionTokenRegex.IsMatch(token))
+                return "center";
+        }
+
+        return string.Join(" ", tokens);
     }
 
     private static string BuildEditorialGridClass(string variant, string? additionalClass)

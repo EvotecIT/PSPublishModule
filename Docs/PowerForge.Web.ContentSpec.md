@@ -322,6 +322,36 @@ when no non-draft `_index.md`/`slug:index` page exists:
 
 This removes the need to manually maintain a blog/news landing page file just to expose latest posts.
 
+### Collection-level editorial card defaults
+You can define default card rendering behavior for a collection, so themes can call
+`{{ pf.editorial_cards }}` without repeating image and class arguments everywhere:
+
+```json
+{
+  "Name": "blog",
+  "Preset": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "EditorialCards": {
+    "Image": "/images/blog-fallback.png",
+    "ImageAspect": "3:2",
+    "ImageFit": "contain",
+    "ImagePosition": "top center",
+    "Variant": "featured",
+    "GridClass": "blog-grid",
+    "CardClass": "blog-card"
+  }
+}
+```
+
+Supported `EditorialCards` fields:
+- `Image`: fallback card image when a post has no image metadata
+- `ImageAspect`: default aspect ratio (for example `16/9`, `4:3`, `3:2`)
+- `ImageFit`: default `object-fit` (`cover`, `contain`, `fill`, `none`, `scale-down`)
+- `ImagePosition`: default `object-position` (for example `center`, `top center`, `20% 30%`)
+- `Variant`: default helper variant (`default`, `compact`, `hero`, `featured`)
+- `GridClass`, `CardClass`: default CSS class overrides for wrapper/card elements
+
 ### Collection sorting
 `SortBy` and `SortOrder` apply to section list item ordering:
 - Supported `SortBy`: `order`, `date`, `title`, `slug`, `route` (`path`/`url` aliases)
@@ -539,12 +569,18 @@ Best practice (theme rendering):
     - `max_items` (default `0` = all)
     - `excerpt_length` (default `160`)
     - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
-    - `image_aspect` (default `"16/9"`, accepts `/` or `:` like `"4:3"`)
-    - `fallback_image` (default empty; if omitted, helper falls back to `site.social.image` when set)
-    - `variant` (default `"default"`, options: `"default"`, `"compact"`, `"hero"`, `"featured"`; controls helper-emitted CSS classes)
-    - `grid_class` (optional extra classes appended to the wrapper grid container)
-    - `card_class` (optional extra classes appended to each rendered card)
+    - `image_aspect` (optional; when omitted, helper uses `collection.EditorialCards.ImageAspect`, then `16/9`)
+    - `fallback_image` (optional; when omitted, helper uses `collection.EditorialCards.Image`, then `site.social.image`)
+    - `variant` (optional; when omitted, helper uses `collection.EditorialCards.Variant`, then `"default"`; options: `"default"`, `"compact"`, `"hero"`, `"featured"`)
+    - `grid_class` (optional; when omitted, helper uses `collection.EditorialCards.GridClass`)
+    - `card_class` (optional; when omitted, helper uses `collection.EditorialCards.CardClass`)
     - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}`
+    - Per-item front matter metadata (stored under `meta`) supported by helper:
+      - `cardImage` / `card_image` / `card.image`
+      - `cardImageAlt` / `card_image_alt` / `card.image.alt`
+      - `cardImageFit` / `card_image_fit` / `card.image.fit`
+      - `cardImagePosition` / `card_image_position` / `card.image.position`
+    - Image fallback priority: card-specific image keys → generic image keys (`image`/`cover`/`thumbnail`) → social image keys → collection/site fallback.
     - Verify integration: if the theme defines `featureContracts.blog/news`, verify checks that variant and override selectors used by `pf.editorial_cards` are declared in `requiredCssSelectors`, with copy/paste contract hints (including likely `cssHrefs` candidates when detectable) when missing.
   - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
     - `newer_label` (default `"Newer posts"`)

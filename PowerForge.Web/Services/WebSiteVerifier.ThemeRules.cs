@@ -317,7 +317,7 @@ public static partial class WebSiteVerifier
         if (spec is null || collection is null || manifest is null || loader is null || warnings is null || string.IsNullOrWhiteSpace(themeRoot) || string.IsNullOrWhiteSpace(layoutContent))
             return;
 
-        var usages = ExtractEditorialCardsUsages(layoutContent)
+        var usages = ExtractEditorialCardsUsages(layoutContent, collection)
             .Where(static usage => usage.RequiresSelectorContract)
             .ToArray();
         if (usages.Length == 0)
@@ -484,10 +484,15 @@ public static partial class WebSiteVerifier
         return $"[{encoded}{suffix}]";
     }
 
-    private static EditorialCardsUsage[] ExtractEditorialCardsUsages(string layoutContent)
+    private static EditorialCardsUsage[] ExtractEditorialCardsUsages(string layoutContent, CollectionSpec? collection = null)
     {
         if (string.IsNullOrWhiteSpace(layoutContent))
             return Array.Empty<EditorialCardsUsage>();
+
+        var effectiveCollection = collection is null ? null : CollectionPresetDefaults.Apply(collection);
+        var defaultVariant = NormalizeEditorialVariantArgument(effectiveCollection?.EditorialCards?.Variant);
+        var defaultGridClasses = ParseCssClassTokens(effectiveCollection?.EditorialCards?.GridClass);
+        var defaultCardClasses = ParseCssClassTokens(effectiveCollection?.EditorialCards?.CardClass);
 
         var usages = new List<EditorialCardsUsage>();
         foreach (Match call in ScribanEditorialCardsCallRegex.Matches(layoutContent))
@@ -500,9 +505,15 @@ public static partial class WebSiteVerifier
                 .Select(match => TrimScribanArgument(match.Value))
                 .ToArray();
 
-            var variant = tokens.Length > 8 ? NormalizeEditorialVariantArgument(tokens[8]) : "default";
-            var gridClasses = tokens.Length > 9 ? ParseCssClassTokens(tokens[9]) : Array.Empty<string>();
-            var cardClasses = tokens.Length > 10 ? ParseCssClassTokens(tokens[10]) : Array.Empty<string>();
+            var variantToken = tokens.Length > 8 ? tokens[8] : string.Empty;
+            var variant = string.IsNullOrWhiteSpace(variantToken)
+                ? defaultVariant
+                : NormalizeEditorialVariantArgument(variantToken);
+
+            var parsedGridClasses = tokens.Length > 9 ? ParseCssClassTokens(tokens[9]) : Array.Empty<string>();
+            var parsedCardClasses = tokens.Length > 10 ? ParseCssClassTokens(tokens[10]) : Array.Empty<string>();
+            var gridClasses = parsedGridClasses.Length == 0 ? defaultGridClasses : parsedGridClasses;
+            var cardClasses = parsedCardClasses.Length == 0 ? defaultCardClasses : parsedCardClasses;
 
             usages.Add(new EditorialCardsUsage(variant, gridClasses, cardClasses));
         }
@@ -523,7 +534,7 @@ public static partial class WebSiteVerifier
         return trimmed;
     }
 
-    private static string[] ParseCssClassTokens(string value)
+    private static string[] ParseCssClassTokens(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return Array.Empty<string>();
@@ -536,7 +547,7 @@ public static partial class WebSiteVerifier
             .ToArray();
     }
 
-    private static string NormalizeEditorialVariantArgument(string value)
+    private static string NormalizeEditorialVariantArgument(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return "default";

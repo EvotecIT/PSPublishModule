@@ -122,7 +122,8 @@ internal static class CollectionPresetDefaults
             PageSize = collection.PageSize,
             AutoGenerateSectionIndex = collection.AutoGenerateSectionIndex,
             AutoSectionTitle = collection.AutoSectionTitle,
-            AutoSectionDescription = collection.AutoSectionDescription
+            AutoSectionDescription = collection.AutoSectionDescription,
+            EditorialCards = collection.EditorialCards
         };
 
         if (string.IsNullOrWhiteSpace(resolved.DefaultLayout))

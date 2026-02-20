@@ -187,9 +187,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 3 => new ScriptParameterInfo(typeof(bool), "show_date", true),
                 4 => new ScriptParameterInfo(typeof(bool), "show_tags", true),
                 5 => new ScriptParameterInfo(typeof(bool), "show_image", true),
-                6 => new ScriptParameterInfo(typeof(string), "image_aspect", "16/9"),
+                6 => new ScriptParameterInfo(typeof(string), "image_aspect", string.Empty),
                 7 => new ScriptParameterInfo(typeof(string), "fallback_image", string.Empty),
-                8 => new ScriptParameterInfo(typeof(string), "variant", "default"),
+                8 => new ScriptParameterInfo(typeof(string), "variant", string.Empty),
                 9 => new ScriptParameterInfo(typeof(string), "grid_class", string.Empty),
                 10 => new ScriptParameterInfo(typeof(string), "card_class", string.Empty),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
@@ -204,11 +204,11 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var showDate = arguments.Count > 3 ? ScribanThemeHelpers.ParseBool(arguments[3], true) : true;
             var showTags = arguments.Count > 4 ? ScribanThemeHelpers.ParseBool(arguments[4], true) : true;
             var showImage = arguments.Count > 5 ? ScribanThemeHelpers.ParseBool(arguments[5], true) : true;
-            var imageAspect = arguments.Count > 6 ? arguments[6]?.ToString() : "16/9";
-            var fallbackImage = arguments.Count > 7 ? arguments[7]?.ToString() : string.Empty;
-            var variant = arguments.Count > 8 ? arguments[8]?.ToString() : "default";
-            var gridClass = arguments.Count > 9 ? arguments[9]?.ToString() : string.Empty;
-            var cardClass = arguments.Count > 10 ? arguments[10]?.ToString() : string.Empty;
+            var imageAspect = arguments.Count > 6 ? arguments[6]?.ToString() : null;
+            var fallbackImage = arguments.Count > 7 ? arguments[7]?.ToString() : null;
+            var variant = arguments.Count > 8 ? arguments[8]?.ToString() : null;
+            var gridClass = arguments.Count > 9 ? arguments[9]?.ToString() : null;
+            var cardClass = arguments.Count > 10 ? arguments[10]?.ToString() : null;
             return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage, variant, gridClass, cardClass);
         }
 

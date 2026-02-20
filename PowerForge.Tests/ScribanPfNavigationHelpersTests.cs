@@ -173,7 +173,7 @@ public class ScribanPfNavigationHelpersTests
                 ---
                 title: First post
                 description: First description for helper output.
-                date: 2026-01-03
+                date: 2026-01-05
                 tags:
                   - release
                   - update
@@ -282,7 +282,7 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains("pf-editorial-card-image", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("/images/first-post.png", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("aspect-ratio: 4 / 3;", blogHtml, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<time datetime=\"2026-01-03\">2026-01-03</time>", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<time datetime=\"2026-01-05\">2026-01-05</time>", blogHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<span class=\"pf-chip\">release</span>", blogHtml, StringComparison.OrdinalIgnoreCase);
 
             var blogPage2Html = File.ReadAllText(Path.Combine(outDir, "blog", "page", "2", "index.html"));
@@ -290,6 +290,170 @@ public class ScribanPfNavigationHelpersTests
             Assert.Contains(">Newer<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("href=\"/blog/\"", blogPage2Html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(">Older<", blogPage2Html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                    Directory.Delete(root, true);
+            }
+            catch
+            {
+                // ignore cleanup failures in tests
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_RendersPfEditorialCards_UsesCollectionDefaultsAndCardMeta()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-scriban-editorial-defaults-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var blogRoot = Path.Combine(root, "content", "blog");
+            Directory.CreateDirectory(blogRoot);
+            File.WriteAllText(Path.Combine(blogRoot, "_index.md"),
+                """
+                ---
+                title: Blog
+                description: Latest updates
+                ---
+
+                # Blog
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "first-post.md"),
+                """
+                ---
+                title: First post
+                description: First description
+                date: 2026-01-05
+                image: /images/ignored-first-generic.png
+                cardImage: /images/override-card.png
+                cardImageAlt: Card override alt
+                cardImageFit: none
+                cardImagePosition: left top
+                ---
+
+                # First
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "second-post.md"),
+                """
+                ---
+                title: Second post
+                description: Second description
+                date: 2026-01-04
+                image: /images/generic-second.png
+                ---
+
+                # Second
+                """);
+
+            File.WriteAllText(Path.Combine(blogRoot, "third-post.md"),
+                """
+                ---
+                title: Third post
+                description: Third description
+                date: 2026-01-03
+                ---
+
+                # Third
+                """);
+
+            var themeRoot = Path.Combine(root, "themes", "t");
+            Directory.CreateDirectory(themeRoot);
+            Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
+
+            File.WriteAllText(Path.Combine(themeRoot, "theme.manifest.json"),
+                """
+                {
+                  "schemaVersion": 2,
+                  "contractVersion": 2,
+                  "name": "t",
+                  "engine": "scriban",
+                  "layoutsPath": "layouts",
+                  "defaultLayout": "base"
+                }
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>
+                  <main>{{ pf.editorial_cards }}</main>
+                </body>
+                </html>
+                """);
+
+            File.WriteAllText(Path.Combine(themeRoot, "layouts", "post.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>{{ page.title }}</title></head>
+                <body>{{ content }}</body>
+                </html>
+                """);
+
+            var spec = new SiteSpec
+            {
+                Name = "Editorial",
+                BaseUrl = "https://example.com",
+                ContentRoot = "content",
+                ThemesRoot = "themes",
+                DefaultTheme = "t",
+                ThemeEngine = "scriban",
+                TrailingSlash = TrailingSlashMode.Always,
+                Collections = new[]
+                {
+                    new CollectionSpec
+                    {
+                        Name = "blog",
+                        Preset = "blog",
+                        Input = "content/blog",
+                        Output = "/blog",
+                        DefaultLayout = "post",
+                        ListLayout = "base",
+                        Include = new[] { "*.md", "**/*.md" },
+                        EditorialCards = new EditorialCardsSpec
+                        {
+                            Image = "/images/default-collection-card.png",
+                            ImageAspect = "3:2",
+                            ImageFit = "contain",
+                            ImagePosition = "top center",
+                            Variant = "featured",
+                            GridClass = "collection-grid",
+                            CardClass = "collection-card"
+                        }
+                    }
+                }
+            };
+
+            var configPath = Path.Combine(root, "site.json");
+            File.WriteAllText(configPath, "{}");
+            var plan = WebSitePlanner.Plan(spec, configPath);
+            var outDir = Path.Combine(root, "_site");
+            WebSiteBuilder.Build(spec, plan, outDir);
+
+            var blogHtml = File.ReadAllText(Path.Combine(outDir, "blog", "index.html"));
+            Assert.Contains("pf-editorial-grid--featured", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("collection-grid", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("collection-card", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("aspect-ratio: 3 / 2;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/override-card.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/images/ignored-first-generic.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("alt=\"Card override alt\"", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-fit: none;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-position: left top;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/generic-second.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/images/default-collection-card.png", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-fit: contain;", blogHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("object-position: top center;", blogHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

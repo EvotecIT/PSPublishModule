@@ -156,9 +156,31 @@
         "PageSize": { "type": "integer", "minimum": 1 },
         "AutoGenerateSectionIndex": { "type": "boolean", "default": false },
         "AutoSectionTitle": { "type": "string" },
-        "AutoSectionDescription": { "type": "string" }
+        "AutoSectionDescription": { "type": "string" },
+        "EditorialCards": { "$ref": "#/$defs/EditorialCardsSpec" },
+        "editorialCards": { "$ref": "#/$defs/EditorialCardsSpec" }
       },
       "required": ["Name", "Input", "Output"]
+    },
+    "EditorialCardsSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Image": { "type": "string" },
+        "image": { "type": "string" },
+        "ImageFit": { "type": "string" },
+        "imageFit": { "type": "string" },
+        "ImagePosition": { "type": "string" },
+        "imagePosition": { "type": "string" },
+        "ImageAspect": { "type": "string" },
+        "imageAspect": { "type": "string" },
+        "Variant": { "type": "string", "enum": ["default", "compact", "hero", "featured"] },
+        "variant": { "type": "string", "enum": ["default", "compact", "hero", "featured"] },
+        "GridClass": { "type": "string" },
+        "gridClass": { "type": "string" },
+        "CardClass": { "type": "string" },
+        "cardClass": { "type": "string" }
+      }
     },
     "MarkdownSpec": {
       "type": "object",
