@@ -47,6 +47,7 @@ The assembly to inspect.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named

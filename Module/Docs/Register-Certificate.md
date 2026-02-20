@@ -48,6 +48,7 @@ A PFX file to use for signing (mutually exclusive with -LocalStore/-Thumbprint).
 Type: String
 Parameter Sets: PFX
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -63,6 +64,7 @@ One or more path substrings to exclude from signing.
 Type: String[]
 Parameter Sets: Store, PFX
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -78,6 +80,7 @@ Hash algorithm used for the signature. Default: SHA256.
 Type: CertificateHashAlgorithm
 Parameter Sets: Store, PFX
 Aliases: None
+Possible values: SHA1, SHA256, SHA384, SHA512
 
 Required: False
 Position: named
@@ -93,6 +96,7 @@ File patterns to include during signing. Default: scripts only.
 Type: String[]
 Parameter Sets: Store, PFX
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -108,6 +112,7 @@ Which portion of the chain to include in the signature. Default: All.
 Type: CertificateChainInclude
 Parameter Sets: Store, PFX
 Aliases: None
+Possible values: All, NotRoot, Signer
 
 Required: False
 Position: named
@@ -123,6 +128,7 @@ Certificate store to search when using a certificate from the store.
 Type: CertificateStoreLocation
 Parameter Sets: Store
 Aliases: None
+Possible values: CurrentUser, LocalMachine
 
 Required: True
 Position: named
@@ -138,6 +144,7 @@ Root directory containing files to sign.
 Type: String
 Parameter Sets: Store, PFX
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -153,6 +160,7 @@ Certificate thumbprint to select a single certificate from the chosen store.
 Type: String
 Parameter Sets: Store
 Aliases: CertificateThumbprint
+Possible values: 
 
 Required: False
 Position: named
@@ -168,6 +176,7 @@ RFC3161 timestamp server URL. Default: http://timestamp.digicert.com.
 Type: String
 Parameter Sets: Store, PFX
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

@@ -784,9 +784,9 @@
       },
       "System.IO.Packaging": {
         "type": "Direct",
-        "requested": "[10.0.1, )",
-        "resolved": "10.0.1",
-        "contentHash": "KGS+cdplxa0R6cRQdVMRQRdnU8aY5UcUwDLyRJVHgOAstUnpF726xOYeaW3OxtkHcnfsijO0LfDjT4kDgvYn9A=="
+        "requested": "[8.0.1, )",
+        "resolved": "8.0.1",
+        "contentHash": "KYkIOAvPexQOLDxPO2g0BVoWInnQhPpkFzRqvNrNrMhVT6kqhVr0zEb6KCHlptLFukxnZrjuMVAnxK7pOGUYrw=="
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Direct",
@@ -1385,7 +1385,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.1, )",
-          "System.IO.Packaging": "[10.0.1, )",
+          "System.IO.Packaging": "[8.0.1, )",
           "System.Reflection.MetadataLoadContext": "[8.0.0, )"
         }
       }

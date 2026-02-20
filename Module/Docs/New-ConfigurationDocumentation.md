@@ -43,6 +43,7 @@ Enables creation of documentation from the module.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -58,6 +59,7 @@ Culture folder for generated external help (default: en-US).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -73,6 +75,7 @@ Optional file name override for external help (default: <ModuleName>-help.xml).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -88,6 +91,7 @@ Path to the folder where documentation will be created.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -103,6 +107,7 @@ Path to the readme file that will be used for the documentation.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -118,6 +123,7 @@ Disable conversion of about_* topics into markdown pages.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -133,6 +139,7 @@ Disable external help (MAML) generation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -148,6 +155,7 @@ Disable generating basic fallback examples for cmdlets missing examples.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -163,6 +171,7 @@ Removes all files from the documentation folder before creating new documentatio
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -179,6 +188,7 @@ back to the project root (e.g. en-US\<ModuleName>-help.xml).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -194,6 +204,7 @@ Documentation engine (legacy parameter; kept for compatibility).
 Type: DocumentationTool
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: PlatyPS, HelpOut, PowerForge
 
 Required: False
 Position: named
@@ -210,6 +221,7 @@ When enabled, generated documentation is also synced back to the project folder
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

@@ -97,8 +97,9 @@ public sealed partial class ModulePipelineRunner
                 throw;
             }
 
-            var mergedScripts = ApplyMerge(plan, buildResult);
-            ApplyPlaceholders(plan, buildResult);
+            var mergedScripts = plan.BuildSpec.RefreshManifestOnly ? false : ApplyMerge(plan, buildResult);
+            if (!plan.BuildSpec.RefreshManifestOnly)
+                ApplyPlaceholders(plan, buildResult);
 
             SafeStart(reporter, startedKeys, manifestStep);
             try
@@ -155,7 +156,7 @@ public sealed partial class ModulePipelineRunner
                     }
                 }
 
-                if (!mergedScripts)
+                if (!mergedScripts && !plan.BuildSpec.RefreshManifestOnly)
                     TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
                 SafeDone(reporter, manifestStep);

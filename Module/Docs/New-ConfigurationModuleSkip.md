@@ -41,6 +41,7 @@ Fail build when unresolved commands are detected during merge.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -56,6 +57,7 @@ Force build process to continue even if the module or command is not available.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -71,6 +73,7 @@ Ignore function name(s). If the function is not available it will be ignored.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -86,6 +89,7 @@ Ignore module name(s). If the module is not available it will be ignored.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

@@ -41,6 +41,7 @@ Enable PowerShell compatibility checking during build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -56,6 +57,7 @@ Directory names to exclude from compatibility analysis.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -71,6 +73,7 @@ Export detailed compatibility report to the artifacts directory.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -86,6 +89,7 @@ Fail the build if compatibility issues are found.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -101,6 +105,7 @@ Minimum percentage of files that must be cross-compatible. Default is 95.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -116,6 +121,7 @@ Custom filename for the compatibility report.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -131,6 +137,7 @@ Require cross-version compatibility (both PS 5.1 and PS 7).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -146,6 +153,7 @@ Require PowerShell 5.1 compatibility.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -161,6 +169,7 @@ Require PowerShell 7 compatibility.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -176,6 +185,7 @@ Severity for compatibility issues (overrides FailOnIncompatibility when specifie
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

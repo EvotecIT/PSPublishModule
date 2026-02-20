@@ -48,6 +48,7 @@ Custom placeholder replacements. Accepts legacy hashtable array (@{ Find='..'; R
 Type: PlaceHolderReplacement[]
 Parameter Sets: CustomReplacement
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -63,6 +64,7 @@ The string to find in the script or module content.
 Type: String
 Parameter Sets: FindAndReplace
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -78,6 +80,7 @@ The string to replace the Find string in the script or module content.
 Type: String
 Parameter Sets: FindAndReplace
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named

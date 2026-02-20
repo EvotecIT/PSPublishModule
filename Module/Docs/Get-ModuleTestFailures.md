@@ -57,6 +57,7 @@ Format for displaying test failures.
 Type: ModuleTestFailureOutputFormat
 Parameter Sets: Path, TestResults
 Aliases: None
+Possible values: Summary, Detailed, Json
 
 Required: False
 Position: named
@@ -72,6 +73,7 @@ Return the failure analysis object for further processing.
 Type: SwitchParameter
 Parameter Sets: Path, TestResults
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -87,6 +89,7 @@ Path to the NUnit XML test results file. If not specified, searches for TestResu
 Type: String
 Parameter Sets: Path
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -102,6 +105,7 @@ Path to the project directory used to locate test results when Path is not speci
 Type: String
 Parameter Sets: Path, TestResults
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -117,6 +121,7 @@ Include successful tests in the output (only applies to Summary format).
 Type: SwitchParameter
 Parameter Sets: Path, TestResults
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -133,6 +138,7 @@ or a precomputed T:PowerForge.ModuleTestFailureAnalysis.
 Type: Object
 Parameter Sets: TestResults
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named

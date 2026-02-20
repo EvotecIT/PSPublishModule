@@ -45,6 +45,7 @@ Path fragments (or folder names) to exclude from the search (in addition to defa
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -60,6 +61,7 @@ Optional module name to filter updates to specific projects/modules.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -75,6 +77,7 @@ Specific version number to set (format: x.x.x or x.x.x.x).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -90,6 +93,7 @@ Returns per-file update results when specified.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -105,6 +109,7 @@ The root path to search for project files. Defaults to current directory.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -120,6 +125,7 @@ The type of version increment: Major, Minor, Build, or Revision.
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

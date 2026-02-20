@@ -57,6 +57,7 @@ public sealed partial class ModulePipelineRunner
         bool mergeModuleSet = false;
         bool mergeMissing = false;
         bool mergeMissingSet = false;
+        bool refreshPsd1Only = false;
         SigningOptionsConfiguration? signing = null;
 
         string? dotnetConfigFromSegments = null;
@@ -136,6 +137,7 @@ public sealed partial class ModulePipelineRunner
                     if (!string.IsNullOrWhiteSpace(b.InstallMissingModulesRepository)) installMissingModulesRepository = b.InstallMissingModulesRepository;
                     if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
+                    if (b.RefreshPSD1Only.HasValue) refreshPsd1Only = b.RefreshPSD1Only.Value;
                     if (b.Merge.HasValue)
                     {
                         mergeModule = b.Merge.Value;
@@ -398,7 +400,7 @@ public sealed partial class ModulePipelineRunner
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
-            CsprojPath = csproj,
+            CsprojPath = refreshPsd1Only ? string.Empty : csproj,
             Version = resolved,
             Configuration = dotnetConfig,
             Frameworks = frameworks,
@@ -412,7 +414,8 @@ public sealed partial class ModulePipelineRunner
             ExcludeFiles = spec.Build.ExcludeFiles ?? Array.Empty<string>(),
             ExportAssemblies = exportAssemblies,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
-            KeepStaging = spec.Build.KeepStaging
+            KeepStaging = spec.Build.KeepStaging,
+            RefreshManifestOnly = refreshPsd1Only
         };
 
         var stagingWasGenerated = string.IsNullOrWhiteSpace(spec.Build.StagingPath);
@@ -472,7 +475,17 @@ public sealed partial class ModulePipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (!mergeModuleSet)
+        if (refreshPsd1Only)
+        {
+            if (!string.IsNullOrWhiteSpace(csproj))
+                _logger.Info("RefreshPSD1Only enabled: skipping .NET publish/binary rebuild for this run.");
+
+            if (mergeModule)
+                _logger.Info("RefreshPSD1Only enabled: disabling merge for this run.");
+            mergeModule = false;
+            mergeMissing = false;
+        }
+        else if (!mergeModuleSet)
         {
             mergeModule = true;
             _logger.Info("MergeModule not explicitly set; enabling by default for legacy compatibility.");
@@ -511,6 +524,27 @@ public sealed partial class ModulePipelineRunner
         var enabledPublishes = publishes
             .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
+
+        if (refreshPsd1Only)
+        {
+            if (signModule)
+                _logger.Info("RefreshPSD1Only enabled: disabling signing for this run.");
+
+            signModule = false;
+            installEnabled = false;
+            installMissingModules = false;
+            installMissingModulesForce = false;
+            installMissingModulesPrerelease = false;
+            documentation = null;
+            documentationBuild = null;
+            compatibilitySettings = null;
+            fileConsistencySettings = null;
+            validationSettings = null;
+            importModules = null;
+            testsAfterMerge.Clear();
+            enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
+            enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
+        }
 
         var commandDeps = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in commandDependencies)

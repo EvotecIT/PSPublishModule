@@ -44,6 +44,7 @@ Add required modules to artefact by copying them over.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: RequiredModules
+Possible values: 
 
 Required: False
 Position: named
@@ -59,6 +60,7 @@ The name of the artefact. If not specified, the default name will be used.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -74,6 +76,7 @@ Directories to copy to artefact (Source/Destination). Accepts legacy hashtable (
 Type: ArtefactCopyMapping[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -89,6 +92,7 @@ Define if destination directories should be relative to artefact root.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -104,6 +108,7 @@ Files to copy to artefact (Source/Destination). Accepts legacy hashtable (source
 Type: ArtefactCopyMapping[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -119,6 +124,7 @@ Define if destination files should be relative to artefact root.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -134,6 +140,7 @@ Do not clear artefact output directory before creating artefact.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -149,6 +156,7 @@ Enable artefact creation. By default artefact creation is disabled.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -164,6 +172,7 @@ Optional ID of the artefact (to be used by New-ConfigurationPublish).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -179,6 +188,7 @@ Include tag name in artefact name. By default tag name is not included.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -194,6 +204,7 @@ Path where main module (or required module) will be copied to.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -209,6 +220,7 @@ Path where artefact will be created.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -224,6 +236,7 @@ ScriptBlock that will be added at the end of the script (Script / ScriptPacked).
 Type: ScriptBlock
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: 0
@@ -239,6 +252,7 @@ Path to file that will be added at the end of the script (Script / ScriptPacked)
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -254,6 +268,7 @@ ScriptBlock that will be added at the beginning of the script (Script / ScriptPa
 Type: ScriptBlock
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: 1
@@ -269,6 +284,7 @@ Path to file that will be added at the beginning of the script (Script / ScriptP
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -284,6 +300,7 @@ Repository credential secret (password/token) in clear text used when downloadin
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -299,6 +316,7 @@ Repository credential secret (password/token) in a clear-text file used when dow
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -314,6 +332,7 @@ Repository credential username (basic auth) used when downloading required modul
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -329,6 +348,7 @@ Path where required modules will be copied to.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -344,6 +364,7 @@ Repository name used when downloading required modules (Save-PSResource / Save-M
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -359,6 +380,7 @@ Source used when resolving required modules (Auto / Installed / Download). When 
 Type: RequiredModulesSource
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Auto, Installed, Download
 
 Required: False
 Position: named
@@ -374,6 +396,7 @@ Tool used when downloading required modules (Save-PSResource / Save-Module).
 Type: ModuleSaveTool
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Auto, PSResourceGet, PowerShellGet
 
 Required: False
 Position: named
@@ -389,6 +412,7 @@ The name of the script artefact (alias: FileName).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: FileName
+Possible values: 
 
 Required: False
 Position: named
@@ -404,6 +428,7 @@ Artefact type to generate.
 Type: ArtefactType
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Unpacked, Packed, Script, ScriptPacked
 
 Required: True
 Position: named

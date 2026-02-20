@@ -41,6 +41,7 @@ Indicates whether to import required modules from the manifest.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -56,6 +57,7 @@ Indicates whether to import the current module itself.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
