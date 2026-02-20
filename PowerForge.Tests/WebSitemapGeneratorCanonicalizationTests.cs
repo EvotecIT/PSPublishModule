@@ -50,6 +50,55 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
+    public void Generate_CollapsesLegacyApiHtmlAliases_FromMergedApiSitemap()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-api-merge-alias-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var apiSitemapPath = Path.Combine(root, "api-sitemap.xml");
+            File.WriteAllText(
+                apiSitemapPath,
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                  <url><loc>https://example.test/api/sample-type.html</loc></url>
+                  <url><loc>https://example.test/api/types/legacy-flat.html</loc></url>
+                </urlset>
+                """);
+
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false,
+                ApiSitemapPath = apiSitemapPath
+            });
+
+            var doc = XDocument.Load(result.OutputPath);
+            var ns = XNamespace.Get("http://www.sitemaps.org/schemas/sitemap/0.9");
+            var locs = doc
+                .Descendants(ns + "url")
+                .Select(url => url.Element(ns + "loc")?.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToArray();
+
+            Assert.Contains("https://example.test/api/sample-type/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/api/sample-type.html", locs, StringComparer.OrdinalIgnoreCase);
+
+            // Keep simple-template API routes as flat .html.
+            Assert.Contains("https://example.test/api/types/legacy-flat.html", locs, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void GenerateHtmlSitemap_DisambiguatesDuplicateTitles_WithPathSuffix()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-title-dedupe-" + Guid.NewGuid().ToString("N"));
