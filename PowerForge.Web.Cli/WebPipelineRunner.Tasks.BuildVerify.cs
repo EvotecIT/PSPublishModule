@@ -44,8 +44,7 @@ internal static partial class WebPipelineRunner
 
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
         var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
-        var isCi = ConsoleEnvironment.IsCI;
-        var ciStrictDefaults = isCi && !isDev;
+        var ciStrictDefaults = UseCiStrictDefaults(effectiveMode, fast);
         var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
         var errorPreviewCount = GetInt(step, "errorPreviewCount") ?? GetInt(step, "error-preview") ?? (isDev ? 2 : 5);
 

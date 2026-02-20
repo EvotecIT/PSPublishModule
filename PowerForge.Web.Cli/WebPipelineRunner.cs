@@ -245,6 +245,19 @@ internal static partial class WebPipelineRunner
         return result;
     }
 
+    private static bool UseCiStrictDefaults(string effectiveMode, bool fast)
+    {
+        var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
+        if (isDev)
+            return false;
+
+        // Treat explicit pipeline mode=ci as strict even outside hosted CI environments.
+        if (string.Equals(effectiveMode, "ci", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return ConsoleEnvironment.IsCI;
+    }
+
     private static string BuildPipelineToolFingerprint()
     {
         var parts = new List<string>(capacity: 2);

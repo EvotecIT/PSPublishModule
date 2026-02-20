@@ -109,7 +109,7 @@ internal static partial class WebPipelineRunner
         var brandIcon = GetString(step, "brandIcon") ?? GetString(step, "brand-icon");
         var suppressWarnings = GetArrayOfStrings(step, "suppressWarnings");
         var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
-        var ciStrictDefaults = ConsoleEnvironment.IsCI && !isDev;
+        var ciStrictDefaults = UseCiStrictDefaults(effectiveMode, fast);
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
         var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
         var coveragePreviewCount = GetInt(step, "coveragePreviewCount") ?? GetInt(step, "coverage-preview") ?? (isDev ? 2 : 5);
@@ -1323,7 +1323,7 @@ internal static partial class WebPipelineRunner
         var maxReferenceGrowthCount = GetInt(step, "maxReferenceGrowthCount") ?? GetInt(step, "max-reference-growth-count") ?? 0;
         var maxReferenceGrowthPercent = GetDouble(step, "maxReferenceGrowthPercent") ?? GetDouble(step, "max-reference-growth-percent") ?? 0;
         var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
-        var ciStrictDefaults = ConsoleEnvironment.IsCI && !isDev;
+        var ciStrictDefaults = UseCiStrictDefaults(effectiveMode, fast);
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? ciStrictDefaults;
         var warningPreviewCount = GetInt(step, "warningPreviewCount") ?? GetInt(step, "warning-preview") ?? (isDev ? 2 : 5);
 
