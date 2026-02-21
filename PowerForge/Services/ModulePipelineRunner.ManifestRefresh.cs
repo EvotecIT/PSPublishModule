@@ -83,11 +83,22 @@ public sealed partial class ModulePipelineRunner
         ManifestEditor.TrySetRequiredModules(manifestPath, manifestRequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>());
         ManifestEditor.TrySetPsDataStringArray(manifestPath, "ExternalModuleDependencies", NormalizeStringArray(manifestExternalModuleDependencies));
 
-        if (!ManifestEditor.TryGetTopLevelStringArray(manifestPath, "ScriptsToProcess", out _) &&
-            !ManifestEditor.TryGetTopLevelString(manifestPath, "ScriptsToProcess", out _))
+        var scriptsToProcess = Array.Empty<string>();
+        if (ManifestEditor.TryGetTopLevelStringArray(manifestPath, "ScriptsToProcess", out var existingScripts) &&
+            existingScripts is not null)
         {
-            ManifestEditor.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", Array.Empty<string>());
+            scriptsToProcess = existingScripts;
         }
+        else if (ManifestEditor.TryGetTopLevelString(manifestPath, "ScriptsToProcess", out var singleScript) &&
+                 !string.IsNullOrWhiteSpace(singleScript))
+        {
+            scriptsToProcess = new[] { singleScript.Trim() };
+        }
+
+        // Normalize ScriptsToProcess layout by rewriting the key once using the current value.
+        // This cleans up historical insertion formatting artifacts (extra blank line before the key).
+        ManifestEditor.TryRemoveTopLevelKey(manifestPath, "ScriptsToProcess");
+        ManifestEditor.TrySetTopLevelStringArray(manifestPath, "ScriptsToProcess", scriptsToProcess);
 
         if (plan.CommandModuleDependencies is { Count: > 0 })
             ManifestEditor.TrySetTopLevelHashtableStringArray(manifestPath, "CommandModuleDependencies", plan.CommandModuleDependencies);

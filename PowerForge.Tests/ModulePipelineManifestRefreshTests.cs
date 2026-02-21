@@ -93,6 +93,54 @@ public sealed class ModulePipelineManifestRefreshTests
         }
     }
 
+    [Fact]
+    public void Run_NormalizesScriptsToProcessLayoutWithoutChangingValue()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            File.WriteAllText(Path.Combine(root.FullName, $"{moduleName}.psm1"), "function Test-Example { 'ok' }");
+            File.WriteAllText(Path.Combine(root.FullName, $"{moduleName}.psd1"),
+                "@{" + Environment.NewLine +
+                $"    RootModule = '{moduleName}.psm1'" + Environment.NewLine +
+                "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                "    ScriptsToProcess = @('Init.ps1')" + Environment.NewLine +
+                "}" + Environment.NewLine);
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+            var manifestPath = result.BuildResult.ManifestPath;
+
+            Assert.True(ManifestEditor.TryGetTopLevelStringArray(manifestPath, "ScriptsToProcess", out var scripts));
+            Assert.NotNull(scripts);
+            Assert.Equal(new[] { "Init.ps1" }, scripts);
+
+            var content = File.ReadAllText(manifestPath).Replace("\r\n", "\n");
+            Assert.Contains("ScriptsToProcess = @('Init.ps1')", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n\n    ScriptsToProcess = @('Init.ps1')", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static void WriteModuleWithStaleManifest(string rootPath, string moduleName, string version)
     {
         File.WriteAllText(Path.Combine(rootPath, $"{moduleName}.psm1"), "function Test-Example { 'ok' }");
