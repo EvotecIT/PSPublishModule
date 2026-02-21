@@ -57,6 +57,8 @@ internal static partial class WebPipelineRunner
                        GetString(step, "docs-home") ?? GetString(step, "docs-home-url");
         var sidebar = GetString(step, "sidebar") ?? GetString(step, "sidebarPosition") ?? GetString(step, "sidebar-position");
         var bodyClass = GetString(step, "bodyClass") ?? GetString(step, "body-class");
+        var legacyAliasMode = GetString(step, "legacyAliasMode") ?? GetString(step, "legacy-alias-mode") ??
+                              GetString(step, "legacyFlatAliasMode") ?? GetString(step, "legacy-flat-alias-mode");
         var displayNameMode = GetString(step, "displayNameMode") ?? GetString(step, "display-name-mode");
         var sourceRoot = ResolvePath(baseDir, GetString(step, "sourceRoot") ?? GetString(step, "source-root"));
         var sourcePathPrefix = GetString(step, "sourcePathPrefix") ?? GetString(step, "source-path-prefix");
@@ -127,6 +129,15 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("apidocs requires xml for CSharp.");
         if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
             throw new InvalidOperationException("apidocs requires help for PowerShell.");
+
+        try
+        {
+            legacyAliasMode = WebCliHelpers.NormalizeApiDocsLegacyAliasMode(legacyAliasMode);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException($"{label}: {ex.Message}", ex);
+        }
 
         var preflightWarnings = ValidateApiDocsPreflight(
             apiType,
@@ -280,6 +291,7 @@ internal static partial class WebPipelineRunner
             DocsHomeUrl = docsHome,
             SidebarPosition = sidebar,
             BodyClass = bodyClass,
+            LegacyAliasMode = legacyAliasMode,
             InjectPrismAssets = GetBool(step, "injectPrism") ?? GetBool(step, "inject-prism") ?? true,
             Prism = prismSpec,
             AssetPolicyMode = assetPolicyMode,

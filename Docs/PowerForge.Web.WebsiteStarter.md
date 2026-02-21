@@ -28,8 +28,11 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
 1. Create/confirm these files exist at repo root:
    - `site.json`
    - `pipeline.json`
+   - `pipeline.maintenance.json`
    - `.github/workflows/website-ci.yml`
+   - `.github/workflows/website-maintenance.yml`
    - `config/presets/pipeline.web-quality.json`
+   - `config/presets/pipeline.web-maintenance.json`
    - `.powerforge/verify-baseline.json`
    - `.powerforge/audit-baseline.json`
 2. `site.json`:
@@ -56,17 +59,21 @@ This is compatible with both "standalone themes" and "themes that extend a vendo
      and run `sources-sync` before `build` (or use `powerforge-web build --sync-sources` locally)
    - run `build` + `verify` in all modes
    - run `sitemap` after `build` so XML/JSON sitemap artifacts stay in sync with generated routes
+   - run `engine-lock` verify in CI so missing/invalid `.powerforge/engine-lock.json` fails fast (prefer `requireImmutableRef:true`)
    - run heavy steps only in CI (`modes:["ci"]`):
      - `audit` (and rendered checks if enabled)
      - `optimize`
      - `indexnow` (recommended with `optionalKey:true` so missing secrets skip safely in forks/dev)
+     - `github-artifacts-prune` (recommended `dryRun:true` + `optional:true`; flip to `apply:true` in scheduled maintenance runs)
    - keep audit media tuning in a reusable `./config/media-profiles.json` file and reference it via `mediaProfiles` on `audit`/`doctor`
 4. CI workflow:
-   - keep engine source pinned in workflow env:
-     - `POWERFORGE_REPOSITORY`
-     - `POWERFORGE_REF` (SHA/tag/branch; prefer pinned SHA)
-   - default scaffolder workflow reads `POWERFORGE_REF` from GitHub vars and falls back to a known-good pinned SHA.
+   - keep `.powerforge/engine-lock.json` committed (prefer immutable SHA in `ref`)
+   - default scaffolder workflow resolves engine checkout from `POWERFORGE_LOCK_PATH`
+   - scaffolded workflow fails early when lock/override `ref` is not a full commit SHA (40/64 hex)
+   - optional canary override: set GitHub vars `POWERFORGE_REPOSITORY` / `POWERFORGE_REF` without editing lock file
    - upload `_reports` artifacts on every run (`if: always()`) to make regressions debuggable.
+   - optional scheduled workflow: run `pipeline.maintenance.json` weekly for storage hygiene (`github-artifacts-prune` with `apply:true` + safe caps)
+   - scaffold maintenance caps intentionally with `powerforge-web scaffold --maintenance-profile conservative|balanced|aggressive` (default: `balanced`)
 5. Theme manifest (`theme.manifest.json` recommended):
    - set `schemaVersion: 2`
    - declare `features`
@@ -152,6 +159,20 @@ Recommended deploy pattern:
 
 Prefer `--site-config` over hardcoded route lists so route coverage stays aligned with
 `Features` and `Navigation` as the site evolves.
+
+## Engine Lock Updates
+
+Upgrade pinned engine ref intentionally:
+
+```powershell
+powerforge-web engine-lock --mode update --path .\.powerforge\engine-lock.json --ref <new-sha> --channel stable
+```
+
+Verify lock drift (for local checks/scripts):
+
+```powershell
+powerforge-web engine-lock --mode verify --path .\.powerforge\engine-lock.json --ref <expected-sha> --require-immutable-ref
+```
 
 ## Theme Inheritance (extends)
 

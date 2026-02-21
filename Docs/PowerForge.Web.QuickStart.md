@@ -5,17 +5,27 @@ Use it alongside `Samples/PowerForge.Web.Sample` for a working reference.
 
 ## 1) Create a site scaffold
 ```
-powerforge-web scaffold --out ./MySite --name "Evotec" --base-url "https://example.com" --engine scriban
+powerforge-web scaffold --out ./MySite --name "Evotec" --base-url "https://example.com" --engine scriban --maintenance-profile balanced
 ```
+Maintenance profiles:
+- `conservative` (`keep:14`, `maxAgeDays:30`, `maxDelete:50`)
+- `balanced` (`keep:7`, `maxAgeDays:14`, `maxDelete:100`) (default)
+- `aggressive` (`keep:3`, `maxAgeDays:7`, `maxDelete:250`)
 
 Result (minimal structure):
 ```
 MySite/
   site.json
   pipeline.json
+  pipeline.maintenance.json
   .github/
     workflows/
       website-ci.yml
+      website-maintenance.yml
+  config/
+    presets/
+      pipeline.web-quality.json
+      pipeline.web-maintenance.json
   content/
     pages/
       index.md
@@ -119,9 +129,22 @@ powerforge-web publish --config ./publish.json
 
 Scaffolded CI workflow:
 - `./.github/workflows/website-ci.yml` is generated automatically.
-- It checks out `EvotecIT/PSPublishModule` at a pinned default ref and runs `pipeline --mode ci`.
+- It resolves engine checkout from `./.powerforge/engine-lock.json` and runs `pipeline --mode ci`.
+- The generated quality preset includes an `engine-lock` verify step in CI mode with `requireImmutableRef:true`.
+- The generated quality preset also includes a `github-artifacts-prune` dry-run step (`optional:true`) so storage hygiene is visible without breaking forks/local runs.
+- Workflow lock resolution also validates that resolved `ref` is a full commit SHA (40/64 hex).
 - It includes workflow concurrency cancelation and NuGet cache reuse by default.
-- Override ref per repo/org via GitHub variable `POWERFORGE_REF`.
+- Optional canary override via GitHub variables `POWERFORGE_REPOSITORY` / `POWERFORGE_REF`.
+
+Scaffolded maintenance workflow:
+- `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.
+- It runs `pipeline.maintenance.json` in CI mode.
+- Maintenance preset applies GitHub artifact cleanup with caps based on `--maintenance-profile` and `continueOnError:true`.
+
+Upgrade engine pin intentionally:
+```
+powerforge-web engine-lock --mode update --path ./.powerforge/engine-lock.json --ref <new-sha>
+```
 
 Optional: run the built-in audit to validate links/assets/nav and (optionally) rendered checks:
 ```

@@ -67,6 +67,8 @@ internal static partial class Program
             return CommandPack(filteredArgs, cli, logger);
         case "dotnet":
             return CommandDotNet(filteredArgs, cli, logger);
+        case "github":
+            return CommandGitHub(filteredArgs, cli, logger);
         case "normalize":
         {
             var argv = filteredArgs.Skip(1).ToArray();

@@ -244,6 +244,10 @@ Notes:
   - if `headerHtml`/`footerHtml` are not set, the engine will try to use `themes/<defaultTheme>/partials/api-header.html` + `api-footer.html` (when present), otherwise falls back to `header.html` + `footer.html`
 - `template`: `simple` (default) or `docs` (sidebar layout)
 - `type`: `CSharp` (default) or `PowerShell` (uses PowerShell help XML)
+- `legacyAliasMode` (`legacy-alias-mode`) controls docs-template flat aliases (`/api/<slug>.html`):
+  - `noindex` (default): keep compatibility alias pages, mark them `noindex,follow`
+  - `redirect`: emit lightweight alias redirect pages to canonical `/api/<slug>/`
+  - `omit`: do not emit flat alias pages
 - `templateRoot` lets you override built-in templates/assets by placing files like
   `index.html`, `type.html`, `docs-index.html`, `docs-type.html`, `docs.js`,
   `search.js`, or `fallback.css` in that folder
@@ -1265,6 +1269,100 @@ Notes:
   - `verify` uses route-derived verify paths.
   - `purge` uses verify paths plus purge-only artifacts (`/404.html`, `llms` files).
 - `cloudflare` steps are intentionally not cacheable (external side effects).
+
+#### engine-lock
+Reads/verifies/updates `.powerforge/engine-lock.json` from pipeline runs.
+
+Verify drift (default operation):
+```json
+{
+  "task": "engine-lock",
+  "path": "./.powerforge/engine-lock.json",
+  "expectedRepository": "EvotecIT/PSPublishModule",
+  "expectedRef": "ab58992450def6b736a2ea87e6a492400250959f",
+  "failOnDrift": true,
+  "requireImmutableRef": true
+}
+```
+
+Update pin:
+```json
+{
+  "task": "engine-lock",
+  "operation": "update",
+  "path": "./.powerforge/engine-lock.json",
+  "repository": "EvotecIT/PSPublishModule",
+  "ref": "0123456789abcdef0123456789abcdef01234567",
+  "channel": "candidate",
+  "reportPath": "./_reports/engine-lock.json",
+  "summaryPath": "./_reports/engine-lock.md"
+}
+```
+
+Notes:
+- Task aliases: `engine-lock` and `enginelock`.
+- Operations:
+  - `verify` (default): fail on drift unless `failOnDrift:false`
+  - `show`: read and report current lock
+  - `update`: write/refresh lock file values
+- `useEnv:true` can pull expected values from env (`POWERFORGE_REPOSITORY`, `POWERFORGE_REF`, `POWERFORGE_CHANNEL`) or custom env names via `repositoryEnv`/`refEnv`/`channelEnv`.
+- `requireImmutableRef:true` (aliases: `require-immutable-ref`, `requireSha`, `require-sha`) enforces commit SHA refs (40/64 hex), recommended for CI.
+- `continueOnError:true` keeps pipeline green if this step fails (useful for canary diagnostics).
+- JSON/summary artifacts include `immutableRef` so CI logs can quickly spot branch/tag pins.
+- `engine-lock` steps are intentionally not cacheable.
+
+#### github-artifacts-prune
+Prunes GitHub Actions artifacts to control repository storage quota.  
+Safe by default: `dryRun` is `true` unless you set `apply:true`.
+
+```json
+{
+  "task": "github-artifacts-prune",
+  "repo": "EvotecIT/IntelligenceX",
+  "tokenEnv": "GITHUB_TOKEN",
+  "name": "test-results*,coverage*,github-pages",
+  "keep": 5,
+  "maxAgeDays": 7,
+  "maxDelete": 200,
+  "dryRun": true,
+  "reportPath": "./_reports/github-artifacts.json",
+  "summaryPath": "./_reports/github-artifacts.md"
+}
+```
+
+Apply mode:
+```json
+{
+  "task": "github-artifacts-prune",
+  "repo": "EvotecIT/IntelligenceX",
+  "tokenEnv": "GITHUB_TOKEN",
+  "name": "test-results*,coverage*,github-pages",
+  "keep": 5,
+  "maxAgeDays": 7,
+  "maxDelete": 200,
+  "apply": true,
+  "failOnDeleteError": true
+}
+```
+
+Notes:
+- Task aliases: `github-artifacts-prune` and `github-artifacts`.
+- Repo/token resolution:
+  - `repo`/`repository`, fallback env `repoEnv` (default `GITHUB_REPOSITORY`).
+  - `token`, fallback env `tokenEnv` (default `GITHUB_TOKEN`).
+- Optional mode:
+  - `optional:true` skips green when required repo/token values are missing.
+  - `optionalToken:true` / `skipIfMissingToken:true` skips green only for missing token.
+  - `optionalRepository:true` / `skipIfMissingRepository:true` skips green only for missing repository.
+- Pattern options:
+  - include: `name`/`names`/`include`/`includes`
+  - exclude: `exclude`/`excludes`/`excludeNames`
+- Safety defaults:
+  - `dryRun:true`, `keep:5`, `maxAgeDays:7`, `maxDelete:200`
+- Use `apiBaseUrl` for GitHub Enterprise API endpoints or local integration testing.
+- `continueOnError:true` keeps pipeline green if API errors or delete failures occur.
+- `reportPath`/`summaryPath` write JSON + Markdown outputs for CI diagnostics.
+- `github-artifacts-prune` steps are intentionally not cacheable (external side effects).
 
 #### indexnow
 Submits changed or selected canonical URLs to IndexNow-compatible endpoints.

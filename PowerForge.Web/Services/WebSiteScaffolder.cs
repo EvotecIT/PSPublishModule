@@ -6,14 +6,14 @@ namespace PowerForge.Web;
 public static partial class WebSiteScaffolder
 {
     private const string DefaultSchemaBaseUrl = "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/";
-    private const string DefaultStablePowerForgeRef = "ab58992450def6b736a2ea87e6a492400250959f";
     /// <summary>Creates a new site scaffold.</summary>
     /// <param name="outputPath">Output directory.</param>
     /// <param name="siteName">Optional site name.</param>
     /// <param name="baseUrl">Optional base URL.</param>
     /// <param name="themeEngine">Template engine identifier.</param>
+    /// <param name="maintenanceProfileName">Maintenance profile (`conservative`, `balanced`, `aggressive`).</param>
     /// <returns>Result payload describing created files.</returns>
-    public static WebScaffoldResult Scaffold(string outputPath, string? siteName, string? baseUrl, string? themeEngine)
+    public static WebScaffoldResult Scaffold(string outputPath, string? siteName, string? baseUrl, string? themeEngine, string? maintenanceProfileName = null)
     {
         if (string.IsNullOrWhiteSpace(outputPath))
             throw new ArgumentException("Output path is required.", nameof(outputPath));
@@ -29,6 +29,8 @@ public static partial class WebSiteScaffolder
         var engine = string.IsNullOrWhiteSpace(themeEngine) ? "simple" : themeEngine.Trim();
         var isScriban = engine.Equals("scriban", StringComparison.OrdinalIgnoreCase);
         var themeName = isScriban ? "nova" : "base";
+        var maintenanceProfile = NormalizeMaintenanceProfile(maintenanceProfileName);
+        var maintenanceBudgets = ResolveMaintenanceBudgets(maintenanceProfile);
 
         var created = 0;
 
@@ -524,9 +526,11 @@ a { color: inherit; text-decoration: none; }
               "profile": true,
               "profilePath": "./_reports/pipeline-profile.json",
               "steps": [
+                { "task": "engine-lock", "id": "engine-lock-ci", "modes": ["ci"], "operation": "verify", "path": "./.powerforge/engine-lock.json", "failOnDrift": true, "requireImmutableRef": true, "reportPath": "./_reports/engine-lock.json", "summaryPath": "./_reports/engine-lock.md" },
                 { "task": "build", "id": "build-site", "config": "./site.json", "out": "./_site", "clean": true },
                 { "task": "sitemap", "id": "sitemap", "dependsOn": "build-site", "config": "./site.json", "siteRoot": "./_site", "baseUrl": "{{baseUrl}}", "json": true, "jsonOut": "./_site/sitemap/index.json" },
                 { "task": "indexnow", "id": "indexnow-ci", "dependsOn": "sitemap", "modes": ["ci"], "sitemap": "./_site/sitemap.xml", "keyEnv": "INDEXNOW_KEY", "optionalKey": true, "continueOnError": true, "reportPath": "./_reports/indexnow.json", "summaryPath": "./_reports/indexnow.md" },
+                { "task": "github-artifacts-prune", "id": "github-artifacts-hygiene-ci", "modes": ["ci"], "tokenEnv": "GITHUB_TOKEN", "optional": true, "dryRun": true, "reportPath": "./_reports/github-artifacts.json", "summaryPath": "./_reports/github-artifacts.md" },
 
                 { "task": "verify", "id": "verify-dev", "dependsOn": "build-site", "config": "./site.json", "skipModes": ["ci"], "warningPreviewCount": 5, "errorPreviewCount": 5 },
                 { "task": "verify", "id": "verify-ci", "dependsOn": "build-site", "config": "./site.json", "modes": ["ci"], "baseline": "./.powerforge/verify-baseline.json", "failOnNewWarnings": true, "failOnNavLint": true, "failOnThemeContract": true, "warningPreviewCount": 10, "errorPreviewCount": 10 },
@@ -555,6 +559,29 @@ a { color: inherit; text-decoration: none; }
             DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
         created += WriteFile(Path.Combine(configPresetsRoot, "pipeline.web-quality.json"), pipelinePresetJson);
 
+        var maintenancePresetJson = InsertSchema(
+            $$"""
+            {
+              "steps": [
+                {
+                  "task": "github-artifacts-prune",
+                  "id": "github-artifacts-maintenance",
+                  "tokenEnv": "GITHUB_TOKEN",
+                  "optional": true,
+                  "apply": true,
+                  "continueOnError": true,
+                  "keep": {{maintenanceBudgets.Keep}},
+                  "maxAgeDays": {{maintenanceBudgets.MaxAgeDays}},
+                  "maxDelete": {{maintenanceBudgets.MaxDelete}},
+                  "reportPath": "./_reports/github-artifacts-maintenance.json",
+                  "summaryPath": "./_reports/github-artifacts-maintenance.md"
+                }
+              ]
+            }
+            """,
+            DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
+        created += WriteFile(Path.Combine(configPresetsRoot, "pipeline.web-maintenance.json"), maintenancePresetJson);
+
         var pipelineJson = InsertSchema(
             """
             {
@@ -563,6 +590,22 @@ a { color: inherit; text-decoration: none; }
             """,
             DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
         created += WriteFile(Path.Combine(fullOutput, "pipeline.json"), pipelineJson);
+
+        var maintenancePipelineJson = InsertSchema(
+            """
+            {
+              "extends": "./config/presets/pipeline.web-maintenance.json"
+            }
+            """,
+            DefaultSchemaBaseUrl + "powerforge.web.pipelinespec.schema.json");
+        created += WriteFile(Path.Combine(fullOutput, "pipeline.maintenance.json"), maintenancePipelineJson);
+
+        var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
+        Directory.CreateDirectory(powerforgeRoot);
+        var engineLock = WebEngineLockFile.CreateDefault();
+        created += WriteFile(
+            Path.Combine(powerforgeRoot, "engine-lock.json"),
+            JsonSerializer.Serialize(engineLock, new JsonSerializerOptions(WebJson.Options) { WriteIndented = true }));
 
         var workflowsRoot = Path.Combine(fullOutput, ".github", "workflows");
         Directory.CreateDirectory(workflowsRoot);
@@ -583,8 +626,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  POWERFORGE_REPOSITORY: EvotecIT/PSPublishModule
-  POWERFORGE_REF: ${{ vars.POWERFORGE_REF != '' && vars.POWERFORGE_REF || '__POWERFORGE_STABLE_REF__' }}
+  POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json
 
 jobs:
   verify-site:
@@ -598,11 +640,49 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Resolve PowerForge engine lock
+        id: powerforge-lock
+        shell: pwsh
+        run: |
+          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
+          if (-not (Test-Path -LiteralPath $lockPath)) {
+            throw "Missing engine lock file: $lockPath"
+          }
+
+          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+          if ($null -eq $lock) {
+            throw "Invalid engine lock JSON: $lockPath"
+          }
+
+          $lockedRepository = [string]$lock.repository
+          $lockedRef = [string]$lock.ref
+
+          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
+            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
+          }
+
+          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
+          $refOverride = "${{ vars.POWERFORGE_REF }}"
+
+          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
+          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
+
+          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
+            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
+          }
+
+          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
+          }
+
+          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Checkout PowerForge engine
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.POWERFORGE_REPOSITORY }}
-          ref: ${{ env.POWERFORGE_REF }}
+          repository: ${{ steps.powerforge-lock.outputs.repository }}
+          ref: ${{ steps.powerforge-lock.outputs.ref }}
           path: ./.powerforge-engine
 
       - name: Cache NuGet packages
@@ -628,14 +708,110 @@ jobs:
             ./_site/_reports/**
           if-no-files-found: ignore
 """;
-        var workflowYaml = workflowTemplate.Replace("__POWERFORGE_STABLE_REF__", DefaultStablePowerForgeRef, StringComparison.Ordinal);
-        created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowYaml);
+        created += WriteFile(Path.Combine(workflowsRoot, "website-ci.yml"), workflowTemplate);
 
-        var powerforgeRoot = Path.Combine(fullOutput, ".powerforge");
-        Directory.CreateDirectory(powerforgeRoot);
+        var maintenanceWorkflowTemplate = """
+name: Website Maintenance
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: website-maintenance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POWERFORGE_LOCK_PATH: ./.powerforge/engine-lock.json
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout website
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Resolve PowerForge engine lock
+        id: powerforge-lock
+        shell: pwsh
+        run: |
+          $lockPath = "${{ env.POWERFORGE_LOCK_PATH }}"
+          if (-not (Test-Path -LiteralPath $lockPath)) {
+            throw "Missing engine lock file: $lockPath"
+          }
+
+          $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+          if ($null -eq $lock) {
+            throw "Invalid engine lock JSON: $lockPath"
+          }
+
+          $lockedRepository = [string]$lock.repository
+          $lockedRef = [string]$lock.ref
+
+          if ([string]::IsNullOrWhiteSpace($lockedRepository) -or [string]::IsNullOrWhiteSpace($lockedRef)) {
+            throw "Engine lock requires non-empty 'repository' and 'ref': $lockPath"
+          }
+
+          $repoOverride = "${{ vars.POWERFORGE_REPOSITORY }}"
+          $refOverride = "${{ vars.POWERFORGE_REF }}"
+
+          $resolvedRepository = if ([string]::IsNullOrWhiteSpace($repoOverride)) { $lockedRepository } else { $repoOverride }
+          $resolvedRef = if ([string]::IsNullOrWhiteSpace($refOverride)) { $lockedRef } else { $refOverride }
+
+          if ($resolvedRepository -ne $lockedRepository -or $resolvedRef -ne $lockedRef) {
+            Write-Warning "Using POWERFORGE_* override instead of lock file (${lockedRepository}@${lockedRef})."
+          }
+
+          if ($resolvedRef -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+            throw "Engine lock ref must be an immutable commit SHA (40/64 hex): '$resolvedRef'."
+          }
+
+          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Checkout PowerForge engine
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.powerforge-lock.outputs.repository }}
+          ref: ${{ steps.powerforge-lock.outputs.ref }}
+          path: ./.powerforge-engine
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Run maintenance pipeline
+        shell: pwsh
+        run: |
+          dotnet run --project ./.powerforge-engine/PowerForge.Web.Cli -- pipeline --config ./pipeline.maintenance.json --mode ci
+
+      - name: Upload maintenance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: powerforge-maintenance-reports
+          path: |
+            ./_reports/**
+          if-no-files-found: ignore
+""";
+        created += WriteFile(Path.Combine(workflowsRoot, "website-maintenance.yml"), maintenanceWorkflowTemplate);
 
         created += WriteFile(Path.Combine(fullOutput, "README.md"),
-@$"# {name}
+$@"# {name}
 
 Starter site scaffolded by PowerForge.Web.
 
@@ -655,7 +831,13 @@ powerforge-web pipeline --config .\pipeline.json --mode ci
 
 Starter preset file:
 - `config/presets/pipeline.web-quality.json`
+- `config/presets/pipeline.web-maintenance.json`
 - Edit this preset to tune shared verify/audit/cache/profile behavior for the whole site.
+
+Maintenance pipeline:
+- `pipeline.maintenance.json` (storage hygiene / scheduled maintenance)
+- `.github/workflows/website-maintenance.yml` (weekly schedule + manual run)
+- profile: `{maintenanceProfile}` (`keep: {maintenanceBudgets.Keep}`, `maxAgeDays: {maintenanceBudgets.MaxAgeDays}`, `maxDelete: {maintenanceBudgets.MaxDelete}`)
 
 ## Baselines (recommended workflow)
 
@@ -668,6 +850,19 @@ powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline
 
 Commit the generated files under `.powerforge/` so CI can run `failOnNewWarnings` / `failOnNewIssues`.
 
+## Engine pinning
+
+The scaffold includes `.powerforge/engine-lock.json` and CI resolves engine checkout from this lock by default.
+
+Upgrade the lock intentionally:
+
+```powershell
+powerforge-web engine-lock --mode update --path .\.powerforge\engine-lock.json --ref <new-sha>
+```
+
+Canary override (optional):
+- set GitHub variables `POWERFORGE_REPOSITORY` and/or `POWERFORGE_REF` in one repo to test candidate engine refs without editing the lock file.
+
 Schema refs:
 - The scaffold uses `$schema` URLs pointing at the PSPublishModule `main` branch so they work outside this repo.
 ");
@@ -677,6 +872,7 @@ Schema refs:
             OutputPath = fullOutput,
             CreatedFileCount = created,
             ThemeEngine = engine,
+            MaintenanceProfile = maintenanceProfile,
             SiteName = name,
             BaseUrl = url
         };
@@ -714,4 +910,28 @@ Schema refs:
         }
     }
 
+    private static string NormalizeMaintenanceProfile(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "balanced";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "conservative" => "conservative",
+            "balanced" => "balanced",
+            "aggressive" => "aggressive",
+            _ => throw new ArgumentException($"Unsupported maintenance profile '{value}'. Use conservative, balanced, or aggressive.", nameof(value))
+        };
+    }
+
+    private static (int Keep, int MaxAgeDays, int MaxDelete) ResolveMaintenanceBudgets(string maintenanceProfile)
+    {
+        return maintenanceProfile switch
+        {
+            "conservative" => (Keep: 14, MaxAgeDays: 30, MaxDelete: 50),
+            "aggressive" => (Keep: 3, MaxAgeDays: 7, MaxDelete: 250),
+            _ => (Keep: 7, MaxAgeDays: 14, MaxDelete: 100)
+        };
+    }
 }

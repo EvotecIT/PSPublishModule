@@ -189,6 +189,46 @@ public class WebPipelineRunnerApiDocsPreflightTests
         }
     }
 
+    [Fact]
+    public void RunPipeline_ApiDocs_FailsWhenLegacyAliasModeIsInvalid()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-apidocs-legacy-mode-invalid-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var xmlPath = Path.Combine(root, "test.xml");
+            File.WriteAllText(xmlPath, BuildMinimalXml());
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "apidocs",
+                      "type": "CSharp",
+                      "xml": "./test.xml",
+                      "out": "./_site/api",
+                      "format": "json",
+                      "legacyAliasMode": "legacy"
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.False(result.Success);
+            Assert.Single(result.Steps);
+            Assert.False(result.Steps[0].Success);
+            Assert.Contains("legacy-alias-mode", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string BuildMinimalXml()
     {
         return

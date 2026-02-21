@@ -437,11 +437,12 @@ internal static partial class WebCliCommandHandlers
         var baseUrl = TryGetOptionValue(subArgs, "--base-url");
         var engine = TryGetOptionValue(subArgs, "--engine") ??
                      TryGetOptionValue(subArgs, "--theme-engine");
+        var maintenanceProfile = TryGetOptionValue(subArgs, "--maintenance-profile");
 
         if (string.IsNullOrWhiteSpace(outPath))
             return Fail("Missing required --out.", outputJson, logger, "web.scaffold");
 
-        var result = WebSiteScaffolder.Scaffold(outPath, name, baseUrl, engine);
+        var result = WebSiteScaffolder.Scaffold(outPath, name, baseUrl, engine, maintenanceProfile);
 
         if (outputJson)
         {
@@ -460,6 +461,7 @@ internal static partial class WebCliCommandHandlers
         logger.Success($"Web scaffold output: {result.OutputPath}");
         logger.Info($"Created files: {result.CreatedFileCount}");
         logger.Info($"Theme engine: {result.ThemeEngine}");
+        logger.Info($"Maintenance profile: {result.MaintenanceProfile}");
         return 0;
     }
 

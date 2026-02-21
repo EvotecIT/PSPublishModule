@@ -62,7 +62,11 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--sarif] [--sarif-path <file>]");
         Console.WriteLine("                     [--warning-preview <n>] [--error-preview <n>]");
         Console.WriteLine("                     [--suppress-issue <code|substring|wildcard|re:...>]");
-        Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban] [--output json]");
+        Console.WriteLine("  powerforge-web scaffold --out <path> [--name <SiteName>] [--base-url <url>] [--engine simple|scriban]");
+        Console.WriteLine("                     [--maintenance-profile conservative|balanced|aggressive] [--output json]");
+        Console.WriteLine("  powerforge-web engine-lock [--config <site.json>] [--path <file>] [--mode show|verify|update]");
+        Console.WriteLine("                     [--repository <owner/repo>] [--ref <sha|tag|branch>] [--channel <name>] [--use-env]");
+        Console.WriteLine("                     [--require-immutable-ref|--require-sha]");
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
         Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
         Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
@@ -72,6 +76,7 @@ internal static class WebCliHelpers
         Console.WriteLine("                     [--template <name>] [--template-root <dir>] [--template-index <file>] [--template-type <file>]");
         Console.WriteLine("                     [--template-docs-index <file>] [--template-docs-type <file>] [--docs-script <file>] [--search-script <file>]");
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
+        Console.WriteLine("                     [--legacy-alias-mode noindex|redirect|omit]");
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
         Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
         Console.WriteLine("                     [--ps-examples <file|dir>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
@@ -551,6 +556,28 @@ internal static class WebCliHelpers
             .Replace("{{slug}}", slug, StringComparison.OrdinalIgnoreCase)
             .Replace("{{date}}", date, StringComparison.OrdinalIgnoreCase)
             .Replace("{{collection}}", collection, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string? NormalizeApiDocsLegacyAliasMode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "noindex" => "noindex",
+            "noindex-file" => "noindex",
+            "file" => "noindex",
+            "default" => "noindex",
+            "redirect" => "redirect",
+            "redirects" => "redirect",
+            "omit" => "omit",
+            "none" => "omit",
+            "disabled" => "omit",
+            "off" => "omit",
+            _ => throw new ArgumentException($"Unsupported --legacy-alias-mode value '{value}'. Use noindex, redirect, or omit.")
+        };
     }
 
     internal static string Slugify(string input)
