@@ -98,6 +98,30 @@ public sealed partial class ModulePipelineRunner
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var manifestBaseline = TryReadProjectManifestBaseline(projectRoot, moduleName);
+        if (manifestBaseline is not null)
+        {
+            manifestConfiguration = manifestBaseline.Manifest;
+
+            if (manifestBaseline.Manifest.CompatiblePSEditions is { Length: > 0 })
+                compatible = manifestBaseline.Manifest.CompatiblePSEditions;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Prerelease))
+                preRelease = manifestBaseline.Manifest.Prerelease;
+
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Author))
+                author = manifestBaseline.Manifest.Author;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.CompanyName))
+                companyName = manifestBaseline.Manifest.CompanyName;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Description))
+                description = manifestBaseline.Manifest.Description;
+            if (manifestBaseline.Manifest.Tags is { Length: > 0 })
+                tags = manifestBaseline.Manifest.Tags;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.IconUri))
+                iconUri = manifestBaseline.Manifest.IconUri;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.ProjectUri))
+                projectUri = manifestBaseline.Manifest.ProjectUri;
+        }
+
         foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
         {
             switch (segment)

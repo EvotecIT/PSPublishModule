@@ -10,6 +10,52 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineRegressionParityTests
 {
     [Fact]
+    public void Plan_UsesProjectManifestAsBaseline_WhenManifestSegmentIsMissing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteModuleWithManifestMetadata(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.NotNull(plan.Manifest);
+            Assert.Equal("Baseline Author", plan.Manifest!.Author);
+            Assert.Equal("Baseline Company", plan.Manifest.CompanyName);
+            Assert.Equal("Baseline module", plan.Manifest.Description);
+            Assert.Equal("5.1", plan.Manifest.PowerShellVersion);
+            Assert.Contains("Desktop", plan.Manifest.CompatiblePSEditions, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Core", plan.Manifest.CompatiblePSEditions, StringComparer.OrdinalIgnoreCase);
+            Assert.NotNull(plan.Manifest.Tags);
+            Assert.Contains("Telemetry", plan.Manifest.Tags!, StringComparer.OrdinalIgnoreCase);
+            Assert.Equal("https://example.test/project", plan.Manifest.ProjectUri);
+            Assert.Equal("https://example.test/icon.png", plan.Manifest.IconUri);
+            Assert.Equal("https://example.test/license", plan.Manifest.LicenseUri);
+            Assert.Equal("preview1", plan.Manifest.Prerelease);
+            Assert.Empty(plan.ExternalModuleDependencies);
+            Assert.Empty(plan.RequiredModules);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_MirrorsExternalModulesToRequiredModules_ButKeepsPackagingListEmpty()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -574,6 +620,41 @@ public sealed class ModulePipelineRegressionParityTests
             "    FunctionsToExport = @()",
             "    CmdletsToExport = @()",
             "    AliasesToExport = @()",
+            "}"
+        }) + Environment.NewLine;
+
+        File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psd1"), psd1);
+    }
+
+    private static void WriteModuleWithManifestMetadata(string moduleRoot, string moduleName, string version)
+    {
+        Directory.CreateDirectory(moduleRoot);
+        File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), string.Empty);
+
+        var psd1 = string.Join(Environment.NewLine, new[]
+        {
+            "@{",
+            $"    RootModule = '{moduleName}.psm1'",
+            $"    ModuleVersion = '{version}'",
+            "    GUID = '11111111-1111-1111-1111-111111111111'",
+            "    Author = 'Baseline Author'",
+            "    CompanyName = 'Baseline Company'",
+            "    Description = 'Baseline module'",
+            "    PowerShellVersion = '5.1'",
+            "    CompatiblePSEditions = @('Desktop', 'Core')",
+            "    FunctionsToExport = @()",
+            "    CmdletsToExport = @()",
+            "    AliasesToExport = @()",
+            "    PrivateData = @{",
+            "        PSData = @{",
+            "            Tags = @('Telemetry', 'Events')",
+            "            IconUri = 'https://example.test/icon.png'",
+            "            ProjectUri = 'https://example.test/project'",
+            "            LicenseUri = 'https://example.test/license'",
+            "            Prerelease = 'preview1'",
+            "            ExternalModuleDependencies = @('Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Management')",
+            "        }",
+            "    }",
             "}"
         }) + Environment.NewLine;
 
