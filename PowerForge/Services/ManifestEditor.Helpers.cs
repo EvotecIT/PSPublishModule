@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Management.Automation.Language;
 
 namespace PowerForge;
@@ -337,16 +338,26 @@ public static partial class ManifestEditor
         int closingPos = end - 1;
         if (closingPos < 0 || closingPos >= content.Length) return false;
 
-        var needsLeadingNewLine =
-            closingPos > 0 &&
-            content[closingPos - 1] != '\r' &&
-            content[closingPos - 1] != '\n';
+        // Keep one deterministic newline before inserted keys and collapse any extra trailing
+        // blank lines that may have been left behind by previous remove/insert normalization.
+        var prefix = content.Substring(0, closingPos);
+        var normalizedPrefix = Regex.Replace(prefix, @"(?:\r?\n[ \t]*)+$", NewLine);
+        if (!normalizedPrefix.EndsWith(NewLine, StringComparison.Ordinal))
+            normalizedPrefix += NewLine;
 
-        var insertText =
-            (needsLeadingNewLine ? NewLine : string.Empty) +
-            indent + key + " = " + valueExpression + NewLine;
+        // Match established alignment in the hashtable by padding up to the widest key.
+        var maxKeyLength = Math.Max(
+            key.Length,
+            topHash.KeyValuePairs
+                .Select(kv => GetKeyName(kv.Item1))
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!.Length)
+                .DefaultIfEmpty(0)
+                .Max());
+        var keyPadding = new string(' ', Math.Max(1, (maxKeyLength - key.Length) + 1));
+        var insertText = indent + key + keyPadding + "= " + valueExpression + NewLine;
 
-        var newContent = content.Substring(0, closingPos) + insertText + content.Substring(closingPos);
+        var newContent = normalizedPrefix + insertText + content.Substring(closingPos);
         File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
         return true;
     }

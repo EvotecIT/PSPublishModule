@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -105,6 +106,7 @@ public sealed class ModulePipelineManifestRefreshTests
                 "@{" + Environment.NewLine +
                 $"    RootModule = '{moduleName}.psm1'" + Environment.NewLine +
                 "    ModuleVersion = '1.0.0'" + Environment.NewLine +
+                Environment.NewLine +
                 "    ScriptsToProcess = @('Init.ps1')" + Environment.NewLine +
                 "}" + Environment.NewLine);
 
@@ -132,8 +134,8 @@ public sealed class ModulePipelineManifestRefreshTests
             Assert.Equal(new[] { "Init.ps1" }, scripts);
 
             var content = File.ReadAllText(manifestPath).Replace("\r\n", "\n");
-            Assert.Contains("ScriptsToProcess = @('Init.ps1')", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("\n\n    ScriptsToProcess = @('Init.ps1')", content, StringComparison.Ordinal);
+            Assert.Matches(new Regex(@"ScriptsToProcess\s*=\s*@\('Init\.ps1'\)", RegexOptions.CultureInvariant), content);
+            Assert.DoesNotMatch(new Regex(@"\n\n\s*ScriptsToProcess\s*=", RegexOptions.CultureInvariant), content);
         }
         finally
         {
