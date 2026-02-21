@@ -75,6 +75,7 @@ public static partial class WebSiteBuilder
         var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
         var generatedPath = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath);
         var routeForSlug = BuildSocialRouteLabel(item);
+        var routeLabel = BuildSocialRouteDisplayLabel(routeForSlug);
         var routeSlug = Slugify(routeForSlug.Replace('/', '-'));
         if (string.IsNullOrWhiteSpace(routeSlug))
             routeSlug = "page";
@@ -93,14 +94,13 @@ public static partial class WebSiteBuilder
         if (!IsPathWithinRoot(normalizedOutputRoot, fullPath))
             return string.Empty;
 
-        var badge = string.IsNullOrWhiteSpace(item.Collection)
-            ? "PAGE"
-            : item.Collection.ToUpperInvariant();
+        var badge = ResolveSocialBadge(item, routeForSlug);
         var bytes = WebSocialCardGenerator.RenderPng(
             title,
             description,
             siteName,
             badge,
+            routeLabel,
             spec.Social.GeneratedCardWidth,
             spec.Social.GeneratedCardHeight);
         if (bytes is null || bytes.Length == 0)
@@ -130,6 +130,40 @@ public static partial class WebSiteBuilder
 
         var normalized = NormalizePath(route).Trim('/');
         return string.IsNullOrWhiteSpace(normalized) ? "index" : normalized;
+    }
+
+    private static string BuildSocialRouteDisplayLabel(string? route)
+    {
+        var normalized = NormalizePath(route).Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized) ||
+            string.Equals(normalized, "index", StringComparison.OrdinalIgnoreCase))
+            return "/";
+
+        return "/" + normalized;
+    }
+
+    private static string ResolveSocialBadge(ContentItem item, string route)
+    {
+        if (item.Kind == PageKind.Home)
+            return "HOME";
+
+        if (!string.IsNullOrWhiteSpace(item.Collection))
+        {
+            var collection = item.Collection.Trim();
+            if (string.Equals(collection, "pages", StringComparison.OrdinalIgnoreCase))
+                return "PAGES";
+            if (string.Equals(collection, "docs", StringComparison.OrdinalIgnoreCase))
+                return "DOCS";
+            if (string.Equals(collection, "blog", StringComparison.OrdinalIgnoreCase))
+                return "BLOG";
+            return collection.ToUpperInvariant();
+        }
+
+        var normalizedRoute = NormalizePath(route).Trim('/');
+        if (normalizedRoute.StartsWith("docs", StringComparison.OrdinalIgnoreCase))
+            return "DOCS";
+
+        return "PAGE";
     }
 
     private static string ComputeSocialHash(string input)
@@ -182,6 +216,9 @@ public static partial class WebSiteBuilder
         if (item.Kind == PageKind.Home || item.Kind == PageKind.Section)
             return true;
 
+        if (ShouldGenerateSocialCardForDocsEntry(item))
+            return true;
+
         if (string.Equals(item.Collection, "pages", StringComparison.OrdinalIgnoreCase))
             return true;
 
@@ -189,6 +226,29 @@ public static partial class WebSiteBuilder
             return true;
 
         return false;
+    }
+
+    private static bool ShouldGenerateSocialCardForDocsEntry(ContentItem item)
+    {
+        if (!string.Equals(item.Collection, "docs", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var route = BuildSocialRouteLabel(item);
+        var normalized = NormalizePath(route).Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return false;
+
+        if (string.Equals(normalized, "docs", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "docs/index", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!normalized.StartsWith("docs/", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var segments = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+        return segments <= 2;
     }
 
     private static string TryExtractFirstBodyImage(string? sourcePath)

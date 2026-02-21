@@ -72,6 +72,7 @@ internal static class WebSocialCardGenerator
         string? description,
         string? eyebrow,
         string? badge,
+        string? footerLabel,
         int width,
         int height)
     {
@@ -90,12 +91,16 @@ internal static class WebSocialCardGenerator
         var primaryBadge = string.IsNullOrWhiteSpace(badge)
             ? "PAGE"
             : badge!;
+        var primaryFooterLabel = string.IsNullOrWhiteSpace(footerLabel)
+            ? "/"
+            : footerLabel!;
 
         var safeEyebrow = EscapeXml(TrimSingleLine(primaryEyebrow, 56));
-        var safeBadge = EscapeXml(TrimSingleLine(primaryBadge, 48));
-        var safeBadgeUpper = safeBadge.ToUpperInvariant();
-        var seed = string.Join("|", primaryTitle, primaryDescription, primaryEyebrow, primaryBadge, width, height);
-        var palette = SelectPalette(seed);
+        var safeBadgeUpper = EscapeXml(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24));
+        var safeFooter = EscapeXml(TrimSingleLine(primaryFooterLabel, 64));
+        var styleKey = ClassifyStyle(primaryBadge, primaryFooterLabel);
+        var seed = string.Join("|", styleKey, primaryTitle, primaryDescription, primaryEyebrow, primaryBadge, primaryFooterLabel, width, height);
+        var palette = SelectPalette(styleKey, seed);
         var frameInset = GetScaledPixels(width, height, basePixels: 36, minimum: 22);
         var panelInset = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
         var panelWidth = width - (panelInset * 2);
@@ -127,16 +132,16 @@ internal static class WebSocialCardGenerator
         var eyebrowFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
         var titleFontSize = GetScaledPixels(width, height, basePixels: 60, minimum: 32);
         var descriptionFontSize = GetScaledPixels(width, height, basePixels: 32, minimum: 18);
-        var badgeFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
-        var badgeRectHeight = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
-        var badgeRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
-        var badgeRectY = safeBottom - badgeRectHeight;
-        var badgeRectX = safeLeft;
-        var badgeRectWidth = Math.Max(
-            GetScaledPixels(width, height, basePixels: 220, minimum: 160),
-            Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 760, minimum: 420)));
-        var badgeTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
-        var badgeTextY = badgeRectY + (badgeRectHeight / 2);
+        var footerFontSize = GetScaledPixels(width, height, basePixels: 22, minimum: 13);
+        var footerRectHeight = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
+        var footerRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
+        var footerRectY = safeBottom - footerRectHeight;
+        var footerRectX = safeLeft;
+        var footerTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
+        var footerTextWidth = EstimateTextWidth(TrimSingleLine(primaryFooterLabel, 64), footerFontSize, glyphFactor: 0.52);
+        var footerRectMinWidth = GetScaledPixels(width, height, basePixels: 180, minimum: 120);
+        var footerRectWidth = Math.Clamp(footerTextWidth + (footerTextInsetX * 2), footerRectMinWidth, safeWidth);
+        var footerTextY = footerRectY + (footerRectHeight / 2);
         var pillPaddingX = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
         var pillHeight = GetScaledPixels(width, height, basePixels: 40, minimum: 26);
         var pillRadius = GetScaledPixels(width, height, basePixels: 20, minimum: 13);
@@ -161,7 +166,7 @@ internal static class WebSocialCardGenerator
         var descriptionLineHeight = GetScaledPixels(width, height, basePixels: 34, minimum: 20);
         var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(safeWidth, titleFontSize), maxLines: 3);
         var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(width, height, basePixels: 24, minimum: 16);
-        var descriptionBottomY = badgeRectY - GetScaledPixels(width, height, basePixels: 24, minimum: 16);
+        var descriptionBottomY = footerRectY - GetScaledPixels(width, height, basePixels: 24, minimum: 16);
         var maxDescriptionLines = Math.Max(
             1,
             (descriptionBottomY - descriptionY) / descriptionLineHeight);
@@ -169,7 +174,7 @@ internal static class WebSocialCardGenerator
             primaryDescription,
             maxChars: GetDescriptionWrapWidth(safeWidth, descriptionFontSize),
             maxLines: Math.Min(3, maxDescriptionLines));
-        var accentLineY = badgeRectY - GetScaledPixels(width, height, basePixels: 36, minimum: 22);
+        var accentLineY = footerRectY - GetScaledPixels(width, height, basePixels: 36, minimum: 22);
         var accentLineX = safeLeft;
         var accentLineWidth = Math.Max(GetScaledPixels(width, height, basePixels: 160, minimum: 120), safeWidth);
 
@@ -225,8 +230,8 @@ internal static class WebSocialCardGenerator
             svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextSecondary}"" font-size=""{descriptionFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""500"">{EscapeXml(descriptionLines[i])}</text>");
         }
 
-        svg.AppendLine($@"  <rect x=""{badgeRectX}"" y=""{badgeRectY}"" rx=""{badgeRectRadius}"" ry=""{badgeRectRadius}"" width=""{badgeRectWidth}"" height=""{badgeRectHeight}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.68"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.58""/>");
-        svg.AppendLine($@"  <text x=""{badgeRectX + badgeTextInsetX}"" y=""{badgeTextY}"" fill=""{palette.AccentSoft}"" font-size=""{badgeFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeBadge}</text>");
+        svg.AppendLine($@"  <rect x=""{footerRectX}"" y=""{footerRectY}"" rx=""{footerRectRadius}"" ry=""{footerRectRadius}"" width=""{footerRectWidth}"" height=""{footerRectHeight}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.68"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.58""/>");
+        svg.AppendLine($@"  <text x=""{footerRectX + footerTextInsetX}"" y=""{footerTextY}"" fill=""{palette.AccentSoft}"" font-size=""{footerFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeFooter}</text>");
         svg.AppendLine(@"</svg>");
 
         try
@@ -362,7 +367,7 @@ internal static class WebSocialCardGenerator
         return (int)Math.Ceiling(text.Length * fontSize * glyphFactor);
     }
 
-    private static SocialPalette SelectPalette(string seed)
+    private static SocialPalette SelectPalette(string styleKey, string seed)
     {
         if (Palettes.Length == 0)
             return new SocialPalette(
@@ -382,8 +387,30 @@ internal static class WebSocialCardGenerator
 
         var input = Encoding.UTF8.GetBytes(seed ?? string.Empty);
         var hash = SHA256.HashData(input);
-        var index = hash[0] % Palettes.Length;
-        return Palettes[index];
+        var candidates = styleKey switch
+        {
+            "api" => new[] { 0, 2 },
+            "docs" => new[] { 2, 0 },
+            "editorial" => new[] { 3, 1 },
+            _ => new[] { 1, 0 }
+        };
+        var candidate = candidates[hash[0] % candidates.Length];
+        return Palettes[candidate % Palettes.Length];
+    }
+
+    private static string ClassifyStyle(string badge, string footerLabel)
+    {
+        var combined = string.Concat(badge ?? string.Empty, " ", footerLabel ?? string.Empty).ToLowerInvariant();
+        if (combined.Contains("api", StringComparison.Ordinal))
+            return "api";
+        if (combined.Contains("doc", StringComparison.Ordinal))
+            return "docs";
+        if (combined.Contains("blog", StringComparison.Ordinal) ||
+            combined.Contains("post", StringComparison.Ordinal) ||
+            combined.Contains("news", StringComparison.Ordinal) ||
+            combined.Contains("article", StringComparison.Ordinal))
+            return "editorial";
+        return "default";
     }
 
     private static string EscapeXml(string value)
