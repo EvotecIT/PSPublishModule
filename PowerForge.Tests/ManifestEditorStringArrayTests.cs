@@ -117,4 +117,28 @@ public sealed class ManifestEditorStringArrayTests
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Fact]
+    public void TrySetTopLevelStringArray_InsertDoesNotAddExtraBlankLineBeforeNewKey()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var psd1Path = Path.Combine(tempRoot.FullName, "Test.psd1");
+            File.WriteAllText(psd1Path,
+                "@{\n" +
+                "    RootModule = 'Test.psm1'\n" +
+                "}\n");
+
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(psd1Path, "ScriptsToProcess", Array.Empty<string>()));
+
+            var content = File.ReadAllText(psd1Path).Replace("\r\n", "\n");
+            Assert.Contains("RootModule = 'Test.psm1'\n    ScriptsToProcess = @()", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("RootModule = 'Test.psm1'\n\n    ScriptsToProcess = @()", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }

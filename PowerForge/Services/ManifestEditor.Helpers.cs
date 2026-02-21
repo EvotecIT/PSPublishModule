@@ -331,12 +331,21 @@ public static partial class ManifestEditor
             var col = first.Item1.Extent.StartColumnNumber - 1;
             indent = new string(' ', Math.Max(0, col));
         }
-        var insertText = NewLine + indent + key + " = " + valueExpression + NewLine;
         // Insert before closing '}' of the hashtable
         var end = topHash.Extent.EndOffset; // points just after '}'
         // try to insert just before '}'
         int closingPos = end - 1;
         if (closingPos < 0 || closingPos >= content.Length) return false;
+
+        var needsLeadingNewLine =
+            closingPos > 0 &&
+            content[closingPos - 1] != '\r' &&
+            content[closingPos - 1] != '\n';
+
+        var insertText =
+            (needsLeadingNewLine ? NewLine : string.Empty) +
+            indent + key + " = " + valueExpression + NewLine;
+
         var newContent = content.Substring(0, closingPos) + insertText + content.Substring(closingPos);
         File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
         return true;
