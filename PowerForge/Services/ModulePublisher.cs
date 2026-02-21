@@ -42,7 +42,8 @@ public sealed class ModulePublisher
         PublishConfiguration publish,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        IReadOnlyList<ArtefactBuildResult> artefactResults)
+        IReadOnlyList<ArtefactBuildResult> artefactResults,
+        bool includeScriptFolders = true)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -65,13 +66,13 @@ public sealed class ModulePublisher
 
         return publish.Destination switch
         {
-            PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult),
+            PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult, includeScriptFolders),
             PublishDestination.GitHub => PublishToGitHub(publish, plan, artefactResults),
             _ => throw new NotSupportedException($"Unsupported publish destination: {publish.Destination}")
         };
     }
 
-    private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult, bool includeScriptFolders)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
         var isPsGallery = string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase);
@@ -92,15 +93,15 @@ public sealed class ModulePublisher
         {
             try
             {
-                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig);
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig);
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
             }
         }
 
-        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig);
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
     }
 
     private ModulePublishResult PublishToRepositoryWithTool(
@@ -109,13 +110,21 @@ public sealed class ModulePublisher
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        bool includeScriptFolders)
     {
         var credential = repoConfig?.Credential;
         bool createdRepository = false;
+        string? temporaryPublishPath = null;
 
         try
         {
+            temporaryPublishPath = PrepareModulePackageForRepositoryPublish(
+                stagingPath: buildResult.StagingPath,
+                moduleName: plan.ModuleName,
+                information: plan.Information,
+                includeScriptFolders: includeScriptFolders);
+
             if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
                 createdRepository = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
@@ -126,7 +135,7 @@ public sealed class ModulePublisher
 
             _logger.Info($"Publishing {plan.ModuleName} {FormatSemVer(plan.ResolvedVersion, plan.PreRelease)} to repository '{repositoryName}' using {tool}");
 
-            var modulePath = Path.GetFullPath(buildResult.StagingPath);
+            var modulePath = Path.GetFullPath(temporaryPublishPath);
 
             if (tool == PublishTool.PowerShellGet)
             {
@@ -139,6 +148,8 @@ public sealed class ModulePublisher
             }
             else
             {
+                ValidateRequiredModulesForRepositoryPublish(repositoryName, credential, plan, buildResult);
+
                 _psResourceGet.Publish(
                     new PSResourcePublishOptions(
                         path: modulePath,
@@ -146,13 +157,19 @@ public sealed class ModulePublisher
                         repository: repositoryName,
                         apiKey: string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
                         destinationPath: null,
-                        skipDependenciesCheck: false,
+                        skipDependenciesCheck: true,
                         skipModuleManifestValidate: false,
                         credential: credential));
             }
+
+            CleanupTemporaryPublishPath(temporaryPublishPath);
+            temporaryPublishPath = null;
         }
         finally
         {
+            if (!string.IsNullOrWhiteSpace(temporaryPublishPath))
+                CleanupTemporaryPublishPath(temporaryPublishPath);
+
             if (createdRepository && repoConfig is not null && repoConfig.UnregisterAfterUse)
             {
                 try
@@ -176,6 +193,248 @@ public sealed class ModulePublisher
             releaseUrl: null,
             succeeded: true,
             errorMessage: null);
+    }
+
+    internal static string PrepareModulePackageForRepositoryPublish(
+        string stagingPath,
+        string moduleName,
+        InformationConfiguration? information,
+        bool includeScriptFolders)
+    {
+        if (string.IsNullOrWhiteSpace(stagingPath))
+            throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
+        if (string.IsNullOrWhiteSpace(moduleName))
+            throw new ArgumentException("ModuleName is required.", nameof(moduleName));
+
+        var source = Path.GetFullPath(stagingPath);
+        if (!Directory.Exists(source))
+            throw new DirectoryNotFoundException($"Staging directory not found: {source}");
+
+        var publishPath = Path.Combine(Path.GetTempPath(), "PowerForge", "publish", $"{moduleName}_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(publishPath);
+
+        ArtefactBuilder.CopyModulePackageForInstall(
+            stagingRoot: source,
+            destinationModuleRoot: publishPath,
+            information: information,
+            includeScriptFolders: includeScriptFolders);
+
+        return publishPath;
+    }
+
+    internal static void CleanupTemporaryPublishPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
+    private void ValidateRequiredModulesForRepositoryPublish(
+        string repositoryName,
+        RepositoryCredential? credential,
+        ModulePipelinePlan plan,
+        ModuleBuildResult buildResult)
+    {
+        var requiredModules = GetRequiredModulesForPublish(buildResult, plan);
+        if (requiredModules.Length == 0)
+            return;
+        var externalModuleDependencies = GetExternalModulesForPublish(buildResult, plan);
+
+        var missing = new List<string>();
+
+        foreach (var requiredModule in requiredModules)
+        {
+            if (ShouldSkipRepositoryDependencyValidation(requiredModule, externalModuleDependencies))
+            {
+                _logger.Info($"Skipping repository dependency verification for required module '{requiredModule.ModuleName}' because it is listed in ExternalModuleDependencies.");
+                continue;
+            }
+
+            IReadOnlyList<string> versions;
+            try
+            {
+                versions = _psResourceGet.Find(
+                        new PSResourceFindOptions(
+                            names: new[] { requiredModule.ModuleName },
+                            version: null,
+                            prerelease: true,
+                            repositories: new[] { repositoryName },
+                            credential: credential),
+                        timeout: TimeSpan.FromMinutes(2))
+                    .Where(r => string.Equals(r.Name, requiredModule.ModuleName, StringComparison.OrdinalIgnoreCase))
+                    .Select(r => r.Version)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to verify required dependency '{requiredModule.ModuleName}' in repository '{repositoryName}' before publish. {ex.Message}");
+            }
+
+            if (!HasMatchingRequiredModuleVersion(requiredModule, versions))
+            {
+                missing.Add($"{requiredModule.ModuleName} [{FormatRequiredModuleConstraint(requiredModule)}]");
+            }
+        }
+
+        if (missing.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Required module dependency check failed for repository '{repositoryName}'. Missing or incompatible: {string.Join(", ", missing)}.");
+        }
+    }
+
+    private static HashSet<string> GetExternalModulesForPublish(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
+    {
+        if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
+            File.Exists(buildResult.ManifestPath) &&
+            ManifestEditor.TryGetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", out var manifestExternalModules) &&
+            manifestExternalModules is { Length: > 0 })
+        {
+            return manifestExternalModules
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return (plan.ExternalModuleDependencies ?? Array.Empty<string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static ManifestEditor.RequiredModule[] GetRequiredModulesForPublish(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
+    {
+        if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
+            File.Exists(buildResult.ManifestPath) &&
+            ManifestEditor.TryGetRequiredModules(buildResult.ManifestPath, out var manifestModules) &&
+            manifestModules is { Length: > 0 })
+        {
+            return manifestModules
+                .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
+                .ToArray()!;
+        }
+
+        var planned = plan.RequiredModules ?? Array.Empty<ManifestEditor.RequiredModule>();
+        if (planned.Length == 0)
+            return Array.Empty<ManifestEditor.RequiredModule>();
+
+        return planned
+            .Where(m => m is not null && !string.IsNullOrWhiteSpace(m.ModuleName))
+            .ToArray()!;
+    }
+
+    internal static bool HasMatchingRequiredModuleVersion(
+        ManifestEditor.RequiredModule requiredModule,
+        IReadOnlyList<string> repositoryVersions)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+
+        if (repositoryVersions is null || repositoryVersions.Count == 0)
+            return false;
+
+        foreach (var candidateVersion in repositoryVersions)
+        {
+            if (DoesVersionMatchRequiredModule(requiredModule, candidateVersion))
+                return true;
+        }
+
+        return false;
+    }
+
+    internal static bool ShouldSkipRepositoryDependencyValidation(
+        ManifestEditor.RequiredModule requiredModule,
+        ISet<string> externalModuleDependencies)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+
+        if (externalModuleDependencies is null || externalModuleDependencies.Count == 0)
+            return false;
+
+        return externalModuleDependencies.Contains(requiredModule.ModuleName.Trim());
+    }
+
+    internal static bool DoesVersionMatchRequiredModule(ManifestEditor.RequiredModule requiredModule, string candidateVersion)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+        if (string.IsNullOrWhiteSpace(candidateVersion))
+            return false;
+
+        var hasConstraints =
+            !string.IsNullOrWhiteSpace(requiredModule.ModuleVersion) ||
+            !string.IsNullOrWhiteSpace(requiredModule.RequiredVersion) ||
+            !string.IsNullOrWhiteSpace(requiredModule.MaximumVersion);
+
+        if (!TryParseSemVer(candidateVersion, out var candidate))
+        {
+            if (!hasConstraints)
+                return true;
+
+            if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+                return string.Equals(candidateVersion.Trim(), requiredModule.RequiredVersion!.Trim(), StringComparison.OrdinalIgnoreCase);
+
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+        {
+            var requiredVersion = requiredModule.RequiredVersion!.Trim();
+            if (!TryParseSemVer(requiredVersion, out var required))
+                return string.Equals(candidateVersion.Trim(), requiredVersion, StringComparison.OrdinalIgnoreCase);
+
+            return candidate.CompareTo(required) == 0;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.ModuleVersion))
+        {
+            if (!TryParseSemVer(requiredModule.ModuleVersion!, out var minimum))
+                return false;
+
+            if (candidate.CompareTo(minimum) < 0)
+                return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredModule.MaximumVersion))
+        {
+            if (!TryParseSemVer(requiredModule.MaximumVersion!, out var maximum))
+                return false;
+
+            if (candidate.CompareTo(maximum) > 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    internal static string FormatRequiredModuleConstraint(ManifestEditor.RequiredModule requiredModule)
+    {
+        if (!string.IsNullOrWhiteSpace(requiredModule.RequiredVersion))
+            return $"RequiredVersion = {requiredModule.RequiredVersion}";
+        if (!string.IsNullOrWhiteSpace(requiredModule.ModuleVersion) && !string.IsNullOrWhiteSpace(requiredModule.MaximumVersion))
+            return $"ModuleVersion >= {requiredModule.ModuleVersion}, MaximumVersion <= {requiredModule.MaximumVersion}";
+        if (!string.IsNullOrWhiteSpace(requiredModule.ModuleVersion))
+            return $"ModuleVersion >= {requiredModule.ModuleVersion}";
+        if (!string.IsNullOrWhiteSpace(requiredModule.MaximumVersion))
+            return $"MaximumVersion <= {requiredModule.MaximumVersion}";
+        return "Any version";
     }
 
     private void EnsureVersionIsGreaterThanRepository(

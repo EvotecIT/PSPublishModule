@@ -29,6 +29,7 @@ public sealed partial class ModulePipelineRunner
 
         var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
+        var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
 
         var reporter = progress ?? NullModulePipelineProgressReporter.Instance;
         var steps = ModulePipelineStep.Create(plan);
@@ -97,33 +98,14 @@ public sealed partial class ModulePipelineRunner
                 throw;
             }
 
-            var mergedScripts = ApplyMerge(plan, buildResult);
-            ApplyPlaceholders(plan, buildResult);
+            var mergedScripts = plan.BuildSpec.RefreshManifestOnly ? false : ApplyMerge(plan, buildResult);
+            if (!plan.BuildSpec.RefreshManifestOnly)
+                ApplyPlaceholders(plan, buildResult);
 
             SafeStart(reporter, startedKeys, manifestStep);
             try
             {
-                if (plan.CompatiblePSEditions is { Length: > 0 })
-                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
-
-                if (manifestRequiredModules is { Length: > 0 })
-                    ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
-                if (plan.ExternalModuleDependencies is { Length: > 0 })
-                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
-                if (plan.ExternalModuleDependencies is { Length: > 0 })
-                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
-
-                if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
-                    !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
-                {
-                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", Array.Empty<string>());
-                }
-
-                if (plan.CommandModuleDependencies is { Count: > 0 })
-                    ManifestEditor.TrySetTopLevelHashtableStringArray(buildResult.ManifestPath, "CommandModuleDependencies", plan.CommandModuleDependencies);
-
-                if (!string.IsNullOrWhiteSpace(plan.PreRelease))
-                    ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
 
                 if (plan.Delivery is not null && plan.Delivery.Enable)
                 {
@@ -155,7 +137,7 @@ public sealed partial class ModulePipelineRunner
                     }
                 }
 
-                if (!mergedScripts)
+                if (!mergedScripts && !plan.BuildSpec.RefreshManifestOnly)
                     TryRegenerateBootstrapperFromManifest(buildResult, plan.ModuleName, plan.BuildSpec.ExportAssemblies);
 
                 SafeDone(reporter, manifestStep);
@@ -281,20 +263,16 @@ public sealed partial class ModulePipelineRunner
 
             try
             {
-                if (manifestRequiredModules is { Length: > 0 })
-                    ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
-
-                if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
-                    !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
-                {
-                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", Array.Empty<string>());
-                }
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
             }
             catch (Exception ex)
             {
                 _logger.Warn($"Post-format manifest patch failed. {ex.Message}");
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
+
+            if (plan.BuildSpec.RefreshManifestOnly)
+                SyncRefreshOnlyOutputsToProjectRoot(plan, buildResult, formattingStagingResults);
 
             if (plan.SignModule)
             {
@@ -696,7 +674,7 @@ public sealed partial class ModulePipelineRunner
                 SafeStart(reporter, startedKeys, step);
                 try
                 {
-                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults));
+                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults, includeScriptFolders: !mergedScripts));
                     SafeDone(reporter, step);
                 }
                 catch (Exception ex)

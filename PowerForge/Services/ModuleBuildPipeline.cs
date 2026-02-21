@@ -79,6 +79,7 @@ public sealed class ModuleBuildPipeline
 
         _logger.Info($"Staging module '{spec.Name}' from '{source}' to '{staging}'");
         CopyDirectoryFiltered(source, staging, excluded, excludedFiles);
+        NormalizeMixedPowerShellLineEndings(staging, excluded, excludedFiles);
 
         return new StagingResult(source, staging);
     }
@@ -98,7 +99,7 @@ public sealed class ModuleBuildPipeline
         {
             ProjectRoot = staging,
             ModuleName = spec.Name,
-            CsprojPath = string.IsNullOrWhiteSpace(spec.CsprojPath) ? string.Empty : Path.GetFullPath(spec.CsprojPath),
+            CsprojPath = spec.RefreshManifestOnly || string.IsNullOrWhiteSpace(spec.CsprojPath) ? string.Empty : Path.GetFullPath(spec.CsprojPath),
             ModuleVersion = spec.Version,
             Configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration,
             Frameworks = tfms,
@@ -120,7 +121,14 @@ public sealed class ModuleBuildPipeline
 
         // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
-        ModuleBootstrapperGenerator.Generate(staging, spec.Name, exports, spec.ExportAssemblies);
+        if (!spec.RefreshManifestOnly)
+        {
+            ModuleBootstrapperGenerator.Generate(staging, spec.Name, exports, spec.ExportAssemblies);
+        }
+        else
+        {
+            _logger.Info("RefreshPSD1Only enabled: skipping bootstrapper/libraries regeneration.");
+        }
 
         return new ModuleBuildResult(staging, psd1, exports);
     }
@@ -259,6 +267,45 @@ public sealed class ModuleBuildPipeline
         => new(ReadStringOrArray(psd1Path, "FunctionsToExport"),
             ReadStringOrArray(psd1Path, "CmdletsToExport"),
             ReadStringOrArray(psd1Path, "AliasesToExport"));
+
+    private void NormalizeMixedPowerShellLineEndings(string stagingPath, ISet<string> excludedDirectoryNames, ISet<string> excludedFileNames)
+    {
+        try
+        {
+            var excludes = new HashSet<string>(excludedDirectoryNames, StringComparer.OrdinalIgnoreCase)
+            {
+                ".git", ".vs", ".vscode", "bin", "obj", "packages", "node_modules", "Artefacts", "Modules", "Ignore"
+            };
+
+            var enumeration = new ProjectEnumeration(
+                rootPath: stagingPath,
+                kind: ProjectKind.PowerShell,
+                customExtensions: null,
+                excludeDirectories: excludes,
+                excludeFiles: excludedFileNames);
+
+            var converter = new LineEndingConverter();
+            var result = converter.Convert(new LineEndingConversionOptions(
+                enumeration: enumeration,
+                target: LineEnding.CRLF,
+                createBackups: false,
+                backupDirectory: null,
+                force: true,
+                onlyMixed: false,
+                ensureFinalNewline: false,
+                onlyMissingNewline: false,
+                preferUtf8BomForPowerShell: true));
+
+            if (result.Converted > 0)
+                _logger.Info($"Normalized staged line endings to CRLF ({result.Converted} file(s)).");
+            if (result.Errors > 0)
+                _logger.Warn($"Failed to normalize line endings for {result.Errors} staged file(s).");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"Mixed line-ending normalization in staging failed: {ex.Message}");
+        }
+    }
 
     private static string[] ReadStringOrArray(string psd1Path, string key)
     {

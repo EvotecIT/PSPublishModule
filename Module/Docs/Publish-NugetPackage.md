@@ -44,6 +44,7 @@ API key used to authenticate against the NuGet feed.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -59,6 +60,7 @@ Directory to search for NuGet packages.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -75,6 +77,7 @@ This makes repeated publishing runs idempotent when the package already exists.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -90,6 +93,7 @@ NuGet feed URL.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

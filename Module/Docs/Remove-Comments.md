@@ -48,6 +48,7 @@ Raw file content to process.
 Type: String
 Parameter Sets: Content
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -63,6 +64,7 @@ File path to the destination file. If not provided, the content is returned.
 Type: String
 Parameter Sets: FilePath, Content
 Aliases: Destination, OutputFile, OutputFilePath
+Possible values: 
 
 Required: False
 Position: named
@@ -78,6 +80,7 @@ Do not remove a signature block, if present.
 Type: SwitchParameter
 Parameter Sets: FilePath, Content
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -93,6 +96,7 @@ Remove all empty lines from the content.
 Type: SwitchParameter
 Parameter Sets: FilePath, Content
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -108,6 +112,7 @@ Remove comments before the param block. By default comments before the param blo
 Type: SwitchParameter
 Parameter Sets: FilePath, Content
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -123,6 +128,7 @@ Remove comments in the param block. By default comments in the param block are n
 Type: SwitchParameter
 Parameter Sets: FilePath, Content
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -138,6 +144,7 @@ Remove empty lines if more than one empty line is found.
 Type: SwitchParameter
 Parameter Sets: FilePath, Content
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -153,6 +160,7 @@ File path to the source file.
 Type: String
 Parameter Sets: FilePath
 Aliases: FilePath, Path, LiteralPath
+Possible values: 
 
 Required: True
 Position: named

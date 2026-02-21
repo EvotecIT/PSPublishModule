@@ -56,6 +56,7 @@ GUID of the dependency module (or 'Auto').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -71,6 +72,7 @@ Minimum version of the dependency module (preferred over -Version).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -86,6 +88,7 @@ Name of the PowerShell module(s) that your module depends on.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -101,6 +104,7 @@ Required version of the dependency module (exact match).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -116,6 +120,7 @@ Choose between RequiredModule, ExternalModule and ApprovedModule.
 Type: ModuleDependencyKind
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: RequiredModule, ExternalModule, ApprovedModule
 
 Required: False
 Position: named
@@ -131,6 +136,7 @@ Minimum version of the dependency module (or 'Auto'/'Latest').
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

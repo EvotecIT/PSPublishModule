@@ -43,6 +43,7 @@ Enable test execution in the build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -58,6 +59,7 @@ Force running tests even if caching would skip them.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -73,6 +75,7 @@ Path to the folder containing Pester tests.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named

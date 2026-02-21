@@ -32,6 +32,7 @@ public sealed partial class ModulePipelineRunner
         string? expectedVersion = null;
         string[] compatible = Array.Empty<string>();
         string? preRelease = null;
+        ManifestConfiguration? manifestConfiguration = null;
 
         string? author = null;
         string? companyName = null;
@@ -57,6 +58,7 @@ public sealed partial class ModulePipelineRunner
         bool mergeModuleSet = false;
         bool mergeMissing = false;
         bool mergeMissingSet = false;
+        bool refreshPsd1Only = false;
         SigningOptionsConfiguration? signing = null;
 
         string? dotnetConfigFromSegments = null;
@@ -96,6 +98,30 @@ public sealed partial class ModulePipelineRunner
         var externalModules = new List<string>();
         var externalIndex = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var manifestBaseline = TryReadProjectManifestBaseline(projectRoot, moduleName);
+        if (manifestBaseline is not null)
+        {
+            manifestConfiguration = manifestBaseline.Manifest;
+
+            if (manifestBaseline.Manifest.CompatiblePSEditions is { Length: > 0 })
+                compatible = manifestBaseline.Manifest.CompatiblePSEditions;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Prerelease))
+                preRelease = manifestBaseline.Manifest.Prerelease;
+
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Author))
+                author = manifestBaseline.Manifest.Author;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.CompanyName))
+                companyName = manifestBaseline.Manifest.CompanyName;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.Description))
+                description = manifestBaseline.Manifest.Description;
+            if (manifestBaseline.Manifest.Tags is { Length: > 0 })
+                tags = manifestBaseline.Manifest.Tags;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.IconUri))
+                iconUri = manifestBaseline.Manifest.IconUri;
+            if (!string.IsNullOrWhiteSpace(manifestBaseline.Manifest.ProjectUri))
+                projectUri = manifestBaseline.Manifest.ProjectUri;
+        }
+
         foreach (var segment in (spec.Segments ?? Array.Empty<IConfigurationSegment>()).Where(s => s is not null))
         {
             switch (segment)
@@ -103,6 +129,29 @@ public sealed partial class ModulePipelineRunner
                 case ConfigurationManifestSegment manifest:
                 {
                     var m = manifest.Configuration;
+                    manifestConfiguration = new ManifestConfiguration
+                    {
+                        ModuleVersion = m.ModuleVersion,
+                        CompatiblePSEditions = m.CompatiblePSEditions ?? Array.Empty<string>(),
+                        Guid = m.Guid,
+                        Author = m.Author,
+                        CompanyName = m.CompanyName,
+                        Copyright = m.Copyright,
+                        Description = m.Description,
+                        PowerShellVersion = m.PowerShellVersion,
+                        Tags = m.Tags,
+                        IconUri = m.IconUri,
+                        ProjectUri = m.ProjectUri,
+                        DotNetFrameworkVersion = m.DotNetFrameworkVersion,
+                        LicenseUri = m.LicenseUri,
+                        RequireLicenseAcceptance = m.RequireLicenseAcceptance,
+                        Prerelease = m.Prerelease,
+                        FunctionsToExport = m.FunctionsToExport,
+                        CmdletsToExport = m.CmdletsToExport,
+                        AliasesToExport = m.AliasesToExport,
+                        FormatsToProcess = m.FormatsToProcess
+                    };
+
                     if (!string.IsNullOrWhiteSpace(m.ModuleVersion)) expectedVersion = m.ModuleVersion;
                     if (m.CompatiblePSEditions is { Length: > 0 }) compatible = m.CompatiblePSEditions;
                     if (!string.IsNullOrWhiteSpace(m.Prerelease)) preRelease = m.Prerelease;
@@ -136,6 +185,7 @@ public sealed partial class ModulePipelineRunner
                     if (!string.IsNullOrWhiteSpace(b.InstallMissingModulesRepository)) installMissingModulesRepository = b.InstallMissingModulesRepository;
                     if (b.InstallMissingModulesCredential is not null) installMissingModulesCredential = b.InstallMissingModulesCredential;
                     if (b.SignMerged.HasValue) signModule = b.SignMerged.Value;
+                    if (b.RefreshPSD1Only.HasValue) refreshPsd1Only = b.RefreshPSD1Only.Value;
                     if (b.Merge.HasValue)
                     {
                         mergeModule = b.Merge.Value;
@@ -179,6 +229,23 @@ public sealed partial class ModulePipelineRunner
                         {
                             externalIndex.Add(name);
                             externalModules.Add(name);
+                        }
+                        var externalDraft = new RequiredModuleDraft(
+                            moduleName: name,
+                            moduleVersion: md.ModuleVersion,
+                            minimumVersion: md.MinimumVersion,
+                            requiredVersion: md.RequiredVersion,
+                            guid: md.Guid);
+
+                        // Legacy behavior compatibility: external dependencies are mirrored into RequiredModules
+                        // so Import-Module honors runtime prerequisites, but they are not included in
+                        // RequiredModulesForPackaging (so artefacts do not bundle inbox/platform modules).
+                        if (requiredIndex.TryGetValue(name, out var externalIdx))
+                            requiredModulesDraft[externalIdx] = externalDraft;
+                        else
+                        {
+                            requiredIndex[name] = requiredModulesDraft.Count;
+                            requiredModulesDraft.Add(externalDraft);
                         }
                         break;
                     }
@@ -398,7 +465,7 @@ public sealed partial class ModulePipelineRunner
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
-            CsprojPath = csproj,
+            CsprojPath = refreshPsd1Only ? string.Empty : csproj,
             Version = resolved,
             Configuration = dotnetConfig,
             Frameworks = frameworks,
@@ -412,7 +479,8 @@ public sealed partial class ModulePipelineRunner
             ExcludeFiles = spec.Build.ExcludeFiles ?? Array.Empty<string>(),
             ExportAssemblies = exportAssemblies,
             DisableBinaryCmdletScan = disableBinaryCmdletScanFromSegments ?? spec.Build.DisableBinaryCmdletScan,
-            KeepStaging = spec.Build.KeepStaging
+            KeepStaging = spec.Build.KeepStaging,
+            RefreshManifestOnly = refreshPsd1Only
         };
 
         var stagingWasGenerated = string.IsNullOrWhiteSpace(spec.Build.StagingPath);
@@ -472,7 +540,17 @@ public sealed partial class ModulePipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (!mergeModuleSet)
+        if (refreshPsd1Only)
+        {
+            if (!string.IsNullOrWhiteSpace(csproj))
+                _logger.Info("RefreshPSD1Only enabled: skipping .NET publish/binary rebuild for this run.");
+
+            if (mergeModule)
+                _logger.Info("RefreshPSD1Only enabled: disabling merge for this run.");
+            mergeModule = false;
+            mergeMissing = false;
+        }
+        else if (!mergeModuleSet)
         {
             mergeModule = true;
             _logger.Info("MergeModule not explicitly set; enabling by default for legacy compatibility.");
@@ -512,6 +590,36 @@ public sealed partial class ModulePipelineRunner
             .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
 
+        if (formatting is not null &&
+            formatting.Options is not null &&
+            !formatting.Options.UpdateProjectRoot &&
+            HasStandardFormattingConfiguration(formatting))
+        {
+            formatting.Options.UpdateProjectRoot = true;
+            _logger.Info("UpdateProjectRoot not explicitly set; enabling because Default* formatting targets are configured (legacy compatibility).");
+        }
+
+        if (refreshPsd1Only)
+        {
+            if (signModule)
+                _logger.Info("RefreshPSD1Only enabled: disabling signing for this run.");
+
+            signModule = false;
+            installEnabled = false;
+            installMissingModules = false;
+            installMissingModulesForce = false;
+            installMissingModulesPrerelease = false;
+            documentation = null;
+            documentationBuild = null;
+            compatibilitySettings = null;
+            fileConsistencySettings = null;
+            validationSettings = null;
+            importModules = null;
+            testsAfterMerge.Clear();
+            enabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
+            enabledPublishes = Array.Empty<ConfigurationPublishSegment>();
+        }
+
         var commandDeps = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in commandDependencies)
         {
@@ -534,6 +642,7 @@ public sealed partial class ModulePipelineRunner
             expectedVersion: expectedVersionResolved,
             resolvedVersion: resolved,
             preRelease: preRelease,
+            manifest: manifestConfiguration,
             buildSpec: buildSpec,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,

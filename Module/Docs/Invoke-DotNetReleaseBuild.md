@@ -52,6 +52,7 @@ Optional certificate thumbprint used to sign assemblies and packages. When omitt
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -67,6 +68,7 @@ Certificate store location used when searching for the signing certificate. Defa
 Type: CertificateStoreLocation
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: CurrentUser, LocalMachine
 
 Required: False
 Position: named
@@ -82,6 +84,7 @@ When enabled, also packs all project dependencies that have their own .csproj fi
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -97,6 +100,7 @@ Path to the folder containing the project (*.csproj) file (or the csproj file it
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -112,6 +116,7 @@ Timestamp server URL used while signing. Default: http://timestamp.digicert.com.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

@@ -52,6 +52,7 @@ Custom file extensions to analyze when ProjectType is Custom (e.g., *.ps1, *.cs)
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -67,6 +68,7 @@ Directory names to exclude from analysis (e.g., .git, bin, obj).
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -82,6 +84,7 @@ Export the detailed report to a CSV file at the specified path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -97,6 +100,7 @@ Path to the project directory to analyze.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -112,6 +116,7 @@ Type of project to analyze. Determines which file extensions are included.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: PowerShell, CSharp, Mixed, All, Custom
 
 Required: False
 Position: named
@@ -127,6 +132,7 @@ The encoding standard you want to achieve (optional).
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -142,6 +148,7 @@ The line ending standard you want to achieve (optional).
 Type: Nullable`1
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -157,6 +164,7 @@ Include detailed file-by-file analysis in the output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

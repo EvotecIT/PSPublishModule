@@ -46,6 +46,7 @@ Path fragments (or folder names) to exclude from the search (in addition to defa
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -61,6 +62,7 @@ Optional module name to filter .csproj and .psd1 results.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -76,6 +78,7 @@ The root path to search for project files. Defaults to current directory.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

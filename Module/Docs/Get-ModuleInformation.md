@@ -46,6 +46,7 @@ The path to the directory containing the module manifest file.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named

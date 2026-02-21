@@ -43,6 +43,7 @@ For PSAlignAssignmentStatement: align hashtable assignments.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -58,6 +59,7 @@ Enable PSAlignAssignmentStatement rule and optionally check hashtable alignment.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -73,6 +75,7 @@ Targets to apply formatting to (OnMergePSM1, OnMergePSD1, DefaultPS1, DefaultPSM
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: OnMergePSM1, OnMergePSD1, DefaultPS1, DefaultPSM1, DefaultPSD1
 
 Required: True
 Position: named
@@ -88,6 +91,7 @@ Enables formatting for the chosen ApplyTo targets even if no specific rule switc
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -103,6 +107,7 @@ Enable PSPlaceCloseBrace rule and configure its behavior.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -118,6 +123,7 @@ For PSPlaceCloseBrace: ignore single-line blocks.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -133,6 +139,7 @@ For PSPlaceCloseBrace: enforce a new line after the closing brace.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -148,6 +155,7 @@ For PSPlaceCloseBrace: do not allow an empty line before a closing brace.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -163,6 +171,7 @@ Enable PSPlaceOpenBrace rule and configure its behavior.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -178,6 +187,7 @@ For PSPlaceOpenBrace: ignore single-line blocks.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -193,6 +203,7 @@ For PSPlaceOpenBrace: enforce a new line after the opening brace.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -208,6 +219,7 @@ For PSPlaceOpenBrace: place opening brace on the same line.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -223,6 +235,7 @@ Style for generated manifests (PSD1) for the selected ApplyTo targets.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Minimal, Native
 
 Required: False
 Position: named
@@ -238,6 +251,7 @@ Remove all empty lines (more aggressive than RemoveEmptyLines).
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -253,6 +267,7 @@ Remove comments in the formatted output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -268,6 +283,7 @@ Remove comments that appear immediately before the param() block.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -283,6 +299,7 @@ Remove comments within the param() block.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -298,6 +315,7 @@ Remove empty lines while preserving readability.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -313,6 +331,7 @@ Optional ordering hint for internal processing. Accepts None, Asc, or Desc.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: None, Asc, Desc
 
 Required: False
 Position: named
@@ -328,6 +347,7 @@ When set, formats PowerShell sources in the project root in addition to staging 
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -343,6 +363,7 @@ Enable PSUseConsistentIndentation rule and configure its behavior.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -358,6 +379,7 @@ Number of spaces for indentation when Kind is space.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -373,6 +395,7 @@ Indentation style for PSUseConsistentIndentation: space or tab.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: space, tab
 
 Required: False
 Position: named
@@ -388,6 +411,7 @@ Pipeline indentation mode for PSUseConsistentIndentation.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: IncreaseIndentationAfterEveryPipeline, NoIndentation
 
 Required: False
 Position: named
@@ -403,6 +427,7 @@ For PSUseConsistentWhitespace: check inner brace spacing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -418,6 +443,7 @@ For PSUseConsistentWhitespace: check open brace spacing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -433,6 +459,7 @@ For PSUseConsistentWhitespace: check open parenthesis spacing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -448,6 +475,7 @@ For PSUseConsistentWhitespace: check operator spacing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -463,6 +491,7 @@ For PSUseConsistentWhitespace: check pipeline operator spacing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -478,6 +507,7 @@ For PSUseConsistentWhitespace: check separator (comma) spacing.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -493,6 +523,7 @@ Enable PSUseConsistentWhitespace rule and configure which elements to check.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -508,6 +539,7 @@ Enable PSUseCorrectCasing rule.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

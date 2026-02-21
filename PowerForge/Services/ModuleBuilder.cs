@@ -397,18 +397,15 @@ public sealed class ModuleBuilder
     private PublishCopyPlan CreateCopyPlan(string publishDir, string tfm)
     {
         var plan = TryCreateCopyPlanFromDeps(publishDir, tfm);
-        if (plan is not null) return plan;
-
-        // Fallback: copy only top-level binaries, excluding PowerShell host assemblies.
-        var fallback = new PublishCopyPlan();
-        foreach (var file in Directory.EnumerateFiles(publishDir, "*", SearchOption.TopDirectoryOnly))
+        if (plan is not null)
         {
-            var fileName = Path.GetFileName(file);
-            if (!IsBinaryFileName(fileName)) continue;
-            if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
-            fallback.RootFileNames.Add(fileName);
+            IncludeTopLevelBinaryFiles(plan.RootFileNames, publishDir);
+            return plan;
         }
 
+        // Fallback: copy top-level binaries, excluding known PowerShell host assemblies.
+        var fallback = new PublishCopyPlan();
+        IncludeTopLevelBinaryFiles(fallback.RootFileNames, publishDir);
         return fallback;
     }
 
@@ -474,6 +471,13 @@ public sealed class ModuleBuilder
                id.StartsWith("Microsoft.WSMan", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static string GetLibraryIdFromTargetKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return key;
+        var slash = key.IndexOf('/');
+        return slash > 0 ? key.Substring(0, slash) : key;
+    }
+
     private static HashSet<string> ComputeExcludedLibraries(JsonElement targets)
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -486,8 +490,7 @@ public sealed class ModuleBuilder
             foreach (var lib in target.Value.EnumerateObject())
             {
                 var key = lib.Name;
-                var slash = key.IndexOf('/');
-                var id = slash > 0 ? key.Substring(0, slash) : key;
+                var id = GetLibraryIdFromTargetKey(key);
                 if (IsPowerShellRuntimeLibraryId(id))
                     roots.Add(key);
 
@@ -520,11 +523,25 @@ public sealed class ModuleBuilder
 
             foreach (var depKey in deps)
             {
+                var depId = GetLibraryIdFromTargetKey(depKey);
+                if (!IsPowerShellRuntimeLibraryId(depId)) continue;
+
                 if (excluded.Add(depKey)) queue.Enqueue(depKey);
             }
         }
 
         return excluded;
+    }
+
+    private static void IncludeTopLevelBinaryFiles(HashSet<string> rootFileNames, string publishDir)
+    {
+        foreach (var file in Directory.EnumerateFiles(publishDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(file);
+            if (!IsBinaryFileName(fileName)) continue;
+            if (AlwaysExcludedRootFiles.Contains(fileName)) continue;
+            rootFileNames.Add(fileName);
+        }
     }
 
     private static void AddRuntimeAssetFileNames(HashSet<string> rootFileNames, JsonElement libEntry, string propertyName)

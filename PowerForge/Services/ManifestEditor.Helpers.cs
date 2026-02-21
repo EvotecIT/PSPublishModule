@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Management.Automation.Language;
 
 namespace PowerForge;
@@ -331,15 +332,74 @@ public static partial class ManifestEditor
             var col = first.Item1.Extent.StartColumnNumber - 1;
             indent = new string(' ', Math.Max(0, col));
         }
-        var insertText = NewLine + indent + key + " = " + valueExpression + NewLine;
         // Insert before closing '}' of the hashtable
         var end = topHash.Extent.EndOffset; // points just after '}'
         // try to insert just before '}'
         int closingPos = end - 1;
         if (closingPos < 0 || closingPos >= content.Length) return false;
-        var newContent = content.Substring(0, closingPos) + insertText + content.Substring(closingPos);
+
+        // Keep one deterministic newline before inserted keys and collapse any extra trailing
+        // blank lines that may have been left behind by previous remove/insert normalization.
+        var prefix = content.Substring(0, closingPos);
+        var normalizedPrefix = Regex.Replace(prefix, @"(?:\r?\n[ \t]*)+$", NewLine);
+        if (!normalizedPrefix.EndsWith(NewLine, StringComparison.Ordinal))
+            normalizedPrefix += NewLine;
+
+        // Match established alignment in the hashtable by padding up to the widest key.
+        var maxKeyLength = Math.Max(
+            key.Length,
+            topHash.KeyValuePairs
+                .Select(kv => GetKeyName(kv.Item1))
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name!.Length)
+                .DefaultIfEmpty(0)
+                .Max());
+        var keyPadding = new string(' ', Math.Max(1, (maxKeyLength - key.Length) + 1));
+        var insertText = indent + key + keyPadding + "= " + valueExpression + NewLine;
+
+        var newContent = normalizedPrefix + insertText + content.Substring(closingPos);
         File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
         return true;
+    }
+
+    private static bool RemoveKeyValue(HashtableAst hash, string content, string filePath, string key)
+    {
+        foreach (var kv in hash.KeyValuePairs)
+        {
+            var keyName = GetKeyName(kv.Item1);
+            if (!string.Equals(keyName, key, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var start = kv.Item1.Extent.StartOffset;
+            var end = kv.Item2.Extent.EndOffset;
+            if (start < 0 || end <= start || end > content.Length) return false;
+
+            // Remove the whole line containing the key and include trailing newline when present.
+            var removeStart = start;
+            while (removeStart > 0)
+            {
+                var ch = content[removeStart - 1];
+                if (ch == '\r' || ch == '\n') break;
+                removeStart--;
+            }
+
+            var removeEnd = end;
+            while (removeEnd < content.Length)
+            {
+                var ch = content[removeEnd];
+                if (ch == '\r' || ch == '\n') break;
+                removeEnd++;
+            }
+            if (removeEnd < content.Length && content[removeEnd] == '\r') removeEnd++;
+            if (removeEnd < content.Length && content[removeEnd] == '\n') removeEnd++;
+
+            var newContent = content.Remove(removeStart, removeEnd - removeStart);
+            if (string.Equals(content, newContent, StringComparison.Ordinal)) return false;
+
+            File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+            return true;
+        }
+
+        return false;
     }
 
 }

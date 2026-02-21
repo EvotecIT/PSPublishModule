@@ -41,6 +41,7 @@ File names allowed to use banned commands.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -56,6 +57,7 @@ Allow wildcard exports for binary checks.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -71,6 +73,7 @@ Allow wildcard exports (skip export validation if FunctionsToExport='*').
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -86,6 +89,7 @@ Commands that should not appear in scripts.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -101,6 +105,7 @@ Severity for binary export checks.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -116,6 +121,7 @@ Severity for csproj validation checks.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -131,6 +137,7 @@ Severity for documentation checks.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -146,6 +153,7 @@ Enable module validation checks during build.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -161,6 +169,7 @@ Enable PSScriptAnalyzer checks during validation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -176,6 +185,7 @@ Enable test execution during validation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -191,6 +201,7 @@ Command names to exclude from documentation checks.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -206,6 +217,7 @@ Check for PowerShell syntax errors.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -221,6 +233,7 @@ Check for trailing whitespace in scripts.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -236,6 +249,7 @@ Directories to exclude from file integrity checks.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -251,6 +265,7 @@ Severity for file integrity checks.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -266,6 +281,7 @@ Relative paths to internal function files (default: "internal\\functions").
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -281,6 +297,7 @@ Minimum description coverage percentage (default 100).
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -296,6 +313,7 @@ Minimum examples per command (default 1).
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -311,6 +329,7 @@ Minimum synopsis coverage percentage (default 100).
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -326,6 +345,7 @@ Relative paths to public function files (default: "functions").
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -341,6 +361,7 @@ Require OutputType=Library in csproj (when specified).
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -356,6 +377,7 @@ Require TargetFramework/TargetFrameworks in csproj.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -371,6 +393,7 @@ Directories to exclude from PSScriptAnalyzer checks.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -386,6 +409,7 @@ PSScriptAnalyzer rules to exclude.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -401,6 +425,7 @@ Severity for PSScriptAnalyzer checks.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -416,6 +441,7 @@ Skip PSScriptAnalyzer checks if the module is not installed.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -431,6 +457,7 @@ ScriptAnalyzer timeout, in seconds (default 300).
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -446,6 +473,7 @@ Severity for module structure checks.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -461,6 +489,7 @@ Additional modules to install for tests.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -476,6 +505,7 @@ Force dependency reinstall and module reimport during tests.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -491,6 +521,7 @@ Skip dependency installation during tests.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -506,6 +537,7 @@ Skip importing the module during tests.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -521,6 +553,7 @@ Module names to skip during test dependency installation.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -536,6 +569,7 @@ Path to tests (defaults to Tests under project root).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -551,6 +585,7 @@ Severity for test failures.
 Type: ValidationSeverity
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Off, Warning, Error
 
 Required: False
 Position: named
@@ -566,6 +601,7 @@ Test timeout, in seconds (default 600).
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -581,6 +617,7 @@ Validate that binary assemblies exist.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -596,6 +633,7 @@ Validate binary exports against CmdletsToExport/AliasesToExport.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -611,6 +649,7 @@ Validate that FunctionsToExport matches public functions.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -626,6 +665,7 @@ Validate that internal functions are not exported.
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -641,6 +681,7 @@ Validate manifest file references (RootModule/Formats/Types/RequiredAssemblies).
 Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

@@ -52,6 +52,7 @@ Additional modules to install beyond those specified in the manifest.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -67,6 +68,7 @@ Enable CI/CD mode with optimized settings and output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -82,6 +84,7 @@ Enable code coverage analysis during tests.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -97,6 +100,7 @@ Set a non-zero process exit code when tests fail.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -112,6 +116,7 @@ Format for failure summary display.
 Type: ModuleTestSuiteFailureSummaryFormat
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Summary, Detailed
 
 Required: False
 Position: named
@@ -127,6 +132,7 @@ Force reinstall of modules and reimport of the target module.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -142,6 +148,7 @@ Test output format.
 Type: ModuleTestSuiteOutputFormat
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Detailed, Normal, Minimal
 
 Required: False
 Position: named
@@ -157,6 +164,7 @@ Return the test suite result object.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -172,6 +180,7 @@ Path to the PowerShell module project directory.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -187,6 +196,7 @@ Display detailed failure analysis when tests fail.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -202,6 +212,7 @@ Skip dependency checking and installation.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -217,6 +228,7 @@ Skip module import step.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -232,6 +244,7 @@ Array of module names to skip during installation.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -247,6 +260,7 @@ Custom path to test files (defaults to Tests folder in project).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -262,6 +276,7 @@ Timeout for the out-of-process test execution, in seconds.
 Type: Int32
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

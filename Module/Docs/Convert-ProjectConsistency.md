@@ -52,6 +52,7 @@ Backup root folder (mirrors the project structure).
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -67,6 +68,7 @@ Create backup files before modifying content.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -82,6 +84,7 @@ Custom file extensions to include when ProjectType is Custom (e.g., *.ps1, *.cs)
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -97,6 +100,7 @@ Per-path encoding overrides (hashtable of pattern => encoding).
 Type: IDictionary
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -112,6 +116,7 @@ Ensure a final newline exists after line ending conversion.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -127,6 +132,7 @@ Directory names to exclude from conversion (e.g., .git, bin, obj).
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -142,6 +148,7 @@ File patterns to exclude from conversion.
 Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -157,6 +164,7 @@ Export the detailed report to a CSV file at the specified path.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -172,6 +180,7 @@ Convert encoding inconsistencies.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -187,6 +196,7 @@ Convert line ending inconsistencies.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -202,6 +212,7 @@ Force conversion even when the file already matches the target.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -217,6 +228,7 @@ Per-path line ending overrides (hashtable of pattern => line ending).
 Type: IDictionary
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -232,6 +244,7 @@ Do not rollback from backup if verification mismatch occurs during encoding conv
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -247,6 +260,7 @@ Only fix files missing the final newline.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -262,6 +276,7 @@ Only convert files that have mixed line endings.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -277,6 +292,7 @@ Path to the project directory to convert.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -292,6 +308,7 @@ Type of project to analyze. Determines which file extensions are included.
 Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: PowerShell, CSharp, Mixed, All, Custom
 
 Required: False
 Position: named
@@ -307,6 +324,7 @@ Target encoding to enforce when fixing encoding consistency.
 Type: FileConsistencyEncoding
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: ASCII, UTF8, UTF8BOM, Unicode, BigEndianUnicode, UTF7, UTF32
 
 Required: False
 Position: named
@@ -322,6 +340,7 @@ Target line ending style to enforce when fixing line endings.
 Type: FileConsistencyLineEnding
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: CRLF, LF
 
 Required: False
 Position: named
@@ -337,6 +356,7 @@ Include detailed file-by-file analysis in the output.
 Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -352,6 +372,7 @@ Source encoding filter. When Any, any non-target encoding may be converted.
 Type: TextEncodingKind
 Parameter Sets: __AllParameterSets
 Aliases: None
+Possible values: Ascii, BigEndianUnicode, Unicode, UTF7, UTF8, UTF8BOM, UTF32, Default, OEM, Any
 
 Required: False
 Position: named

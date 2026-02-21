@@ -292,6 +292,23 @@ public static partial class ManifestEditor
         return InsertKeyValue(topHash, content, filePath, key, $"'{newValue.Replace("'", "''")}'");
     }
 
+    /// <summary>Removes a top-level key from the manifest hashtable.</summary>
+    public static bool TryRemoveTopLevelKey(string filePath, string key)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+
+        var content = File.ReadAllText(filePath);
+        Token[] tokens; ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+
+        var topHash = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (topHash == null) return false;
+
+        return RemoveKeyValue(topHash, content, filePath, key);
+    }
+
     /// <summary>Gets a top-level string array by key. Returns true if found.</summary>
     public static bool TryGetTopLevelStringArray(string filePath, string key, out string[]? values)
     {

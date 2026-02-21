@@ -33,6 +33,11 @@ public sealed class ModulePipelinePlan
     public string? PreRelease { get; }
 
     /// <summary>
+    /// Manifest configuration resolved from <c>Manifest</c> segments (last-wins).
+    /// </summary>
+    public ManifestConfiguration? Manifest { get; }
+
+    /// <summary>
     /// Final build spec used for <see cref="ModuleBuildPipeline.BuildToStaging"/>.
     /// </summary>
     public ModuleBuildSpec BuildSpec { get; }
@@ -236,6 +241,7 @@ public sealed class ModulePipelinePlan
         string expectedVersion,
         string resolvedVersion,
         string? preRelease,
+        ManifestConfiguration? manifest,
         ModuleBuildSpec buildSpec,
         string[] compatiblePSEditions,
         ManifestEditor.RequiredModule[] requiredModules,
@@ -281,6 +287,7 @@ public sealed class ModulePipelinePlan
         ExpectedVersion = expectedVersion;
         ResolvedVersion = resolvedVersion;
         PreRelease = preRelease;
+        Manifest = manifest;
         BuildSpec = buildSpec;
         CompatiblePSEditions = compatiblePSEditions;
         RequiredModules = requiredModules;

@@ -173,6 +173,22 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
+    private static bool HasStandardFormattingConfiguration(ConfigurationFormattingSegment formatting)
+    {
+        if (formatting is null) return false;
+        var options = formatting.Options;
+        if (options is null) return false;
+
+        var standard = options.Standard;
+        if (standard is null) return false;
+
+        if (standard.FormatCodePS1?.Enabled == true) return true;
+        if (standard.FormatCodePSM1?.Enabled == true) return true;
+        if (standard.FormatCodePSD1?.Enabled == true) return true;
+
+        return !string.IsNullOrWhiteSpace(standard.Style?.PSD1);
+    }
+
     private static void DirectoryCopy(string sourceDir, string destDir)
     {
         var source = Path.GetFullPath(sourceDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

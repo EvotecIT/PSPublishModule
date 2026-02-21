@@ -76,4 +76,9 @@ public sealed class ModuleBuildSpec
     /// When true, keeps the staging directory after a successful build.
     /// </summary>
     public bool KeepStaging { get; set; }
+
+    /// <summary>
+    /// When true, only refreshes the manifest (PSD1) and skips binary publish/merge operations.
+    /// </summary>
+    public bool RefreshManifestOnly { get; set; }
 }

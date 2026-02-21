@@ -47,6 +47,7 @@ API key to be used for publishing in clear text.
 Type: String
 Parameter Sets: ApiKey
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -62,6 +63,7 @@ Publish GitHub release as a release even if module prerelease is set.
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -77,6 +79,7 @@ Enable publishing to the chosen destination.
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -92,6 +95,7 @@ When true, registers/updates the repository before publishing. Default: true.
 Type: Boolean
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -107,6 +111,7 @@ API key to be used for publishing in clear text in a file.
 Type: String
 Parameter Sets: ApiFromFile
 Aliases: None
+Possible values: 
 
 Required: True
 Position: named
@@ -122,6 +127,7 @@ Allow publishing lower version of a module on a PowerShell repository.
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -137,6 +143,7 @@ When set, asks GitHub to generate release notes automatically.
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -152,6 +159,7 @@ Optional ID of the artefact used for publishing.
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -167,6 +175,7 @@ Override tag name used for GitHub publishing.
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -182,6 +191,7 @@ Repository API version for PSResourceGet registration (v2/v3).
 Type: RepositoryApiVersion
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: Auto, V2, V3
 
 Required: False
 Position: named
@@ -197,6 +207,7 @@ Repository credential secret (password/token) in clear text.
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -212,6 +223,7 @@ Repository credential secret (password/token) in a clear-text file.
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -227,6 +239,7 @@ Repository credential username (basic auth).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -242,6 +255,7 @@ Repository name override (GitHub or PowerShell repository name).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -257,6 +271,7 @@ Repository priority for PSResourceGet (lower is higher priority).
 Type: Nullable`1
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -272,6 +287,7 @@ Repository publish URI (PowerShellGet PublishLocation).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -287,6 +303,7 @@ Repository source URI (PowerShellGet SourceLocation).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -302,6 +319,7 @@ Whether to mark the repository as trusted (avoids prompts). Default: true.
 Type: Boolean
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -317,6 +335,7 @@ Repository base URI (used for both source and publish unless overridden).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -332,6 +351,7 @@ Publishing tool/provider used for repository publishing. Ignored for GitHub publ
 Type: PublishTool
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: Auto, PSResourceGet, PowerShellGet
 
 Required: False
 Position: named
@@ -347,6 +367,7 @@ Choose between PowerShellGallery and GitHub.
 Type: PublishDestination
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: PowerShellGallery, GitHub
 
 Required: True
 Position: named
@@ -362,6 +383,7 @@ When set, unregisters the repository after publish if it was created by this run
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named
@@ -377,6 +399,7 @@ GitHub username (required for GitHub publishing).
 Type: String
 Parameter Sets: ApiFromFile, ApiKey
 Aliases: None
+Possible values: 
 
 Required: False
 Position: named

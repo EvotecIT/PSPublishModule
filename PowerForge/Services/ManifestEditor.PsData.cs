@@ -9,6 +9,55 @@ namespace PowerForge;
 
 public static partial class ManifestEditor
 {
+    /// <summary>Gets a PSData string array value from PrivateData.PSData.</summary>
+    public static bool TryGetPsDataStringArray(string filePath, string key, out string[]? values)
+    {
+        values = null;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+
+        var top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (top == null) return false;
+
+        var privateData = FindChildHashtable(top, "PrivateData");
+        if (privateData == null) return false;
+
+        var psData = FindChildHashtable(privateData, "PSData");
+        if (psData == null) return false;
+
+        foreach (var kv in psData.KeyValuePairs)
+        {
+            var name = GetKeyName(kv.Item1);
+            if (!string.Equals(name, key, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var parsed = ExtractStringArray(kv.Item2);
+            if (parsed != null)
+            {
+                values = parsed;
+                return true;
+            }
+
+            var expr = AsExpression(kv.Item2);
+            if (expr is StringConstantExpressionAst s)
+            {
+                values = new[] { s.Value };
+                return true;
+            }
+            if (expr is ConstantExpressionAst c && c.Value is string str)
+            {
+                values = new[] { str };
+                return true;
+            }
+            return false;
+        }
+
+        return false;
+    }
+
     /// <summary>Sets a PSData string value under PrivateData.PSData, creating missing hashtables as needed.</summary>
     public static bool TrySetPsDataString(string filePath, string key, string value)
         => TrySetPsDataValue(filePath, key, EscapeAndQuote(value ?? string.Empty));
@@ -21,6 +70,28 @@ public static partial class ManifestEditor
     public static bool TrySetPsDataBool(string filePath, string key, bool value)
         => TrySetPsDataValue(filePath, key, value ? "$true" : "$false");
 
+    /// <summary>Removes a PSData key from PrivateData.PSData.</summary>
+    public static bool TryRemovePsDataKey(string filePath, string key)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+        if (string.IsNullOrWhiteSpace(key)) return false;
+
+        var content = File.ReadAllText(filePath);
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+
+        var top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (top == null) return false;
+        var privateData = FindChildHashtable(top, "PrivateData");
+        if (privateData == null) return false;
+        var psData = FindChildHashtable(privateData, "PSData");
+        if (psData == null) return false;
+
+        return RemoveKeyValue(psData, content, filePath, key);
+    }
+
     /// <summary>Sets a PSData sub-hashtable string (e.g., Repository.Branch).</summary>
     public static bool TrySetPsDataSubString(string filePath, string parentKey, string key, string value)
         => TrySetPsDataSubValue(filePath, parentKey, key, EscapeAndQuote(value ?? string.Empty));
@@ -32,6 +103,30 @@ public static partial class ManifestEditor
     /// <summary>Sets a PSData sub-hashtable boolean value (e.g., Delivery.Enable).</summary>
     public static bool TrySetPsDataSubBool(string filePath, string parentKey, string key, bool value)
         => TrySetPsDataSubValue(filePath, parentKey, key, value ? "$true" : "$false");
+
+    /// <summary>Removes a key from a PSData sub-hashtable (for example, Repository.Branch).</summary>
+    public static bool TryRemovePsDataSubKey(string filePath, string parentKey, string key)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+        if (string.IsNullOrWhiteSpace(parentKey) || string.IsNullOrWhiteSpace(key)) return false;
+
+        var content = File.ReadAllText(filePath);
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+
+        var top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (top == null) return false;
+        var privateData = FindChildHashtable(top, "PrivateData");
+        if (privateData == null) return false;
+        var psData = FindChildHashtable(privateData, "PSData");
+        if (psData == null) return false;
+        var parent = FindChildHashtable(psData, parentKey);
+        if (parent == null) return false;
+
+        return RemoveKeyValue(parent, content, filePath, key);
+    }
 
     private static bool TrySetPsDataValue(string filePath, string key, string valueExpression)
     {
