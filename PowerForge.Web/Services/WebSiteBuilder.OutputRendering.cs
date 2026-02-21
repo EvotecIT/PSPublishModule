@@ -97,6 +97,7 @@ public static partial class WebSiteBuilder
             Site = spec,
             Page = item,
             Items = listItems,
+            AllItems = allItems,
             Data = data,
             Project = projectSpec,
             Navigation = BuildNavigation(spec, item, menuSpecs),

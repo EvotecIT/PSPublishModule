@@ -75,6 +75,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         pf.Add("menu_tree", new PfMenuTreeFunction(helpers));
         pf.Add("editorial_cards", new PfEditorialCardsFunction(helpers));
         pf.Add("editorial_pager", new PfEditorialPagerFunction(helpers));
+        pf.Add("editorial_post_nav", new PfEditorialPostNavFunction(helpers));
         globals.Add("pf", pf);
 
         var templateContext = new TemplateContext
@@ -173,7 +174,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 0;
-        public int ParameterCount => 11;
+        public int ParameterCount => 13;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -187,11 +188,13 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 3 => new ScriptParameterInfo(typeof(bool), "show_date", true),
                 4 => new ScriptParameterInfo(typeof(bool), "show_tags", true),
                 5 => new ScriptParameterInfo(typeof(bool), "show_image", true),
-                6 => new ScriptParameterInfo(typeof(string), "image_aspect", "16/9"),
+                6 => new ScriptParameterInfo(typeof(string), "image_aspect", string.Empty),
                 7 => new ScriptParameterInfo(typeof(string), "fallback_image", string.Empty),
-                8 => new ScriptParameterInfo(typeof(string), "variant", "default"),
+                8 => new ScriptParameterInfo(typeof(string), "variant", string.Empty),
                 9 => new ScriptParameterInfo(typeof(string), "grid_class", string.Empty),
                 10 => new ScriptParameterInfo(typeof(string), "card_class", string.Empty),
+                11 => new ScriptParameterInfo(typeof(object), "show_categories", null),
+                12 => new ScriptParameterInfo(typeof(object), "link_taxonomy", null),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -204,12 +207,71 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var showDate = arguments.Count > 3 ? ScribanThemeHelpers.ParseBool(arguments[3], true) : true;
             var showTags = arguments.Count > 4 ? ScribanThemeHelpers.ParseBool(arguments[4], true) : true;
             var showImage = arguments.Count > 5 ? ScribanThemeHelpers.ParseBool(arguments[5], true) : true;
-            var imageAspect = arguments.Count > 6 ? arguments[6]?.ToString() : "16/9";
-            var fallbackImage = arguments.Count > 7 ? arguments[7]?.ToString() : string.Empty;
-            var variant = arguments.Count > 8 ? arguments[8]?.ToString() : "default";
-            var gridClass = arguments.Count > 9 ? arguments[9]?.ToString() : string.Empty;
-            var cardClass = arguments.Count > 10 ? arguments[10]?.ToString() : string.Empty;
-            return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage, variant, gridClass, cardClass);
+            var imageAspect = arguments.Count > 6 ? arguments[6]?.ToString() : null;
+            var fallbackImage = arguments.Count > 7 ? arguments[7]?.ToString() : null;
+            var variant = arguments.Count > 8 ? arguments[8]?.ToString() : null;
+            var gridClass = arguments.Count > 9 ? arguments[9]?.ToString() : null;
+            var cardClass = arguments.Count > 10 ? arguments[10]?.ToString() : null;
+            var showCategoriesArg = arguments.Count > 11 ? arguments[11] : null;
+            var linkTaxonomyArg = arguments.Count > 12 ? arguments[12] : null;
+            bool? showCategories = showCategoriesArg is null
+                ? null
+                : ScribanThemeHelpers.ParseBool(showCategoriesArg, false);
+            bool? linkTaxonomy = linkTaxonomyArg is null
+                ? null
+                : ScribanThemeHelpers.ParseBool(linkTaxonomyArg, false);
+            return _helpers.EditorialCards(maxItems, excerptLength, showCollection, showDate, showTags, showImage, imageAspect, fallbackImage, variant, gridClass, cardClass, showCategories, linkTaxonomy);
+        }
+
+        public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            return new ValueTask<object>(Invoke(context, callerContext, arguments, blockStatement));
+        }
+    }
+
+    private sealed class PfEditorialPostNavFunction : IScriptCustomFunction
+    {
+        private readonly ScribanThemeHelpers _helpers;
+
+        public PfEditorialPostNavFunction(ScribanThemeHelpers helpers)
+        {
+            _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
+        }
+
+        public int RequiredParameterCount => 0;
+        public int ParameterCount => 6;
+        public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
+        public Type ReturnType => typeof(string);
+
+        public ScriptParameterInfo GetParameterInfo(int index)
+        {
+            return index switch
+            {
+                0 => new ScriptParameterInfo(typeof(string), "back_label", "Back to list"),
+                1 => new ScriptParameterInfo(typeof(string), "newer_label", "Newer post"),
+                2 => new ScriptParameterInfo(typeof(string), "older_label", "Older post"),
+                3 => new ScriptParameterInfo(typeof(string), "related_heading", "Related posts"),
+                4 => new ScriptParameterInfo(typeof(int), "related_count", 3),
+                5 => new ScriptParameterInfo(typeof(string), "css_class", "pf-post-nav"),
+                _ => new ScriptParameterInfo(typeof(object), "arg")
+            };
+        }
+
+        public object Invoke(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)
+        {
+            var backLabel = arguments.Count > 0 ? arguments[0]?.ToString() : "Back to list";
+            var newerLabel = arguments.Count > 1 ? arguments[1]?.ToString() : "Newer post";
+            var olderLabel = arguments.Count > 2 ? arguments[2]?.ToString() : "Older post";
+            var relatedHeading = arguments.Count > 3 ? arguments[3]?.ToString() : "Related posts";
+            var relatedCount = arguments.Count > 4 ? ScribanThemeHelpers.ParseInt(arguments[4], 3) : 3;
+            var cssClass = arguments.Count > 5 ? arguments[5]?.ToString() : "pf-post-nav";
+            return _helpers.EditorialPostNav(
+                backLabel ?? "Back to list",
+                newerLabel ?? "Newer post",
+                olderLabel ?? "Older post",
+                relatedHeading ?? "Related posts",
+                relatedCount,
+                cssClass ?? "pf-post-nav");
         }
 
         public ValueTask<object> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement blockStatement)

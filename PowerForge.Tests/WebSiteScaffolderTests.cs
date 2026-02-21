@@ -31,10 +31,22 @@ public class WebSiteScaffolderTests
             Assert.Contains("news", featureList, StringComparer.OrdinalIgnoreCase);
 
             var collections = spec.GetProperty("collections").EnumerateArray()
-                .Select(element => element.GetProperty("name").GetString() ?? string.Empty)
+                .Select(element => new
+                {
+                    Name = element.GetProperty("name").GetString() ?? string.Empty,
+                    Element = element
+                })
                 .ToArray();
-            Assert.Contains("blog", collections, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("news", collections, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(collections, collection => collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(collections, collection => collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase));
+
+            var blogCollection = collections.First(collection => collection.Name.Equals("blog", StringComparison.OrdinalIgnoreCase)).Element;
+            Assert.Equal("hero", blogCollection.GetProperty("editorialCards").GetProperty("variant").GetString());
+            Assert.Equal("16/9", blogCollection.GetProperty("editorialCards").GetProperty("imageAspect").GetString());
+
+            var newsCollection = collections.First(collection => collection.Name.Equals("news", StringComparison.OrdinalIgnoreCase)).Element;
+            Assert.Equal("compact", newsCollection.GetProperty("editorialCards").GetProperty("variant").GetString());
+            Assert.Equal("16/9", newsCollection.GetProperty("editorialCards").GetProperty("imageAspect").GetString());
 
             var taxonomies = spec.GetProperty("taxonomies").EnumerateArray()
                 .Select(element => element.GetProperty("name").GetString() ?? string.Empty)
@@ -111,7 +123,10 @@ public class WebSiteScaffolderTests
             var listTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "list.html"));
             Assert.Contains("pf.editorial_cards", listTemplate, StringComparison.Ordinal);
             Assert.Contains("pf.editorial_pager", listTemplate, StringComparison.Ordinal);
-            Assert.Contains("\"hero\"", listTemplate, StringComparison.Ordinal);
+            Assert.DoesNotContain("\"hero\"", listTemplate, StringComparison.Ordinal);
+
+            var postTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "post.html"));
+            Assert.Contains("pf.editorial_post_nav", postTemplate, StringComparison.Ordinal);
 
             var termTemplate = File.ReadAllText(Path.Combine(layoutsRoot, "term.html"));
             Assert.Contains("\"compact\"", termTemplate, StringComparison.Ordinal);

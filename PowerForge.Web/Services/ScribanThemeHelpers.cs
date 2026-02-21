@@ -15,6 +15,7 @@ internal sealed class ScribanThemeHelpers
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex AspectRatioRegex = new("^\\s*(?<w>\\d+(?:\\.\\d+)?)\\s*(?:/|:)\\s*(?<h>\\d+(?:\\.\\d+)?)\\s*$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex ObjectPositionTokenRegex = new("^-?(?:\\d+(?:\\.\\d+)?)(?:%|px|rem|em|vw|vh)?$", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
 
     public ScribanThemeHelpers(ThemeRenderContext context)
     {
@@ -149,23 +150,29 @@ internal sealed class ScribanThemeHelpers
         bool showDate = true,
         bool showTags = true,
         bool showImage = true,
-        string? imageAspect = "16/9",
+        string? imageAspect = null,
         string? fallbackImage = null,
-        string? variant = "default",
+        string? variant = null,
         string? gridClass = null,
-        string? cardClass = null)
+        string? cardClass = null,
+        bool? showCategories = null,
+        bool? linkTaxonomy = null)
     {
         var items = _context.Items ?? Array.Empty<ContentItem>();
         if (items.Count == 0)
             return string.Empty;
 
+        var currentCollection = ResolveCurrentCollection();
+        var collectionCards = currentCollection?.EditorialCards;
         var take = maxItems > 0 ? maxItems : int.MaxValue;
         var maxExcerptLength = Math.Clamp(excerptLength, 40, 600);
-        var normalizedAspect = NormalizeAspectRatio(imageAspect);
-        var normalizedVariant = NormalizeEditorialVariant(variant);
-        var defaultFallbackImage = string.IsNullOrWhiteSpace(fallbackImage)
-            ? (_context.Site?.Social?.Image ?? string.Empty)
-            : fallbackImage.Trim();
+        var normalizedAspect = NormalizeAspectRatio(CoalesceTrimmed(imageAspect, collectionCards?.ImageAspect));
+        var normalizedVariant = NormalizeEditorialVariant(CoalesceTrimmed(variant, collectionCards?.Variant));
+        var resolvedGridClass = CoalesceTrimmed(gridClass, collectionCards?.GridClass);
+        var resolvedCardClass = CoalesceTrimmed(cardClass, collectionCards?.CardClass);
+        var resolvedShowCategories = showCategories ?? collectionCards?.ShowCategories ?? false;
+        var resolvedLinkTaxonomy = linkTaxonomy ?? collectionCards?.LinkTaxonomy ?? false;
+        var defaultFallbackImage = CoalesceTrimmed(fallbackImage, collectionCards?.Image, _context.Site?.Social?.Image) ?? string.Empty;
 
         var selected = items
             .Where(static item => item is not null && !item.Draft && !string.IsNullOrWhiteSpace(item.OutputPath))
@@ -175,22 +182,31 @@ internal sealed class ScribanThemeHelpers
             return string.Empty;
 
         var sb = new StringBuilder();
-        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant, gridClass))).Append("\">");
+        sb.Append("<div class=\"").Append(Html(BuildEditorialGridClass(normalizedVariant, resolvedGridClass))).Append("\">");
         for (var index = 0; index < selected.Length; index++)
         {
             var item = selected[index];
             var title = string.IsNullOrWhiteSpace(item.Title) ? item.OutputPath : item.Title;
             var summary = ResolveSummary(item, maxExcerptLength);
             var image = showImage ? ResolveCardImage(item.Meta, defaultFallbackImage) : string.Empty;
+            var imageAlt = ResolveCardImageAlt(item.Meta, title);
+            var imageFitRaw = ResolveCardImageFit(item.Meta, collectionCards?.ImageFit);
+            var imagePositionRaw = ResolveCardImagePosition(item.Meta, collectionCards?.ImagePosition);
+            var imageFit = NormalizeObjectFit(imageFitRaw);
+            var imagePosition = NormalizeObjectPosition(imagePositionRaw);
+            var imageStyle = BuildCardImageStyle(imageFitRaw, imageFit, imagePositionRaw, imagePosition);
 
-            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, cardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
+            sb.Append("<a class=\"").Append(Html(BuildEditorialCardClass(normalizedVariant, index, resolvedCardClass))).Append("\" href=\"").Append(Html(item.OutputPath)).Append("\">");
             if (!string.IsNullOrWhiteSpace(image))
             {
                 sb.Append("<span class=\"pf-editorial-card-media\"");
                 if (!string.IsNullOrWhiteSpace(normalizedAspect))
                     sb.Append(" style=\"aspect-ratio: ").Append(Html(normalizedAspect)).Append(";\"");
                 sb.Append(">");
-                sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"\" loading=\"lazy\" decoding=\"async\" />");
+                sb.Append("<img class=\"pf-editorial-card-image\" src=\"").Append(Html(image)).Append("\" alt=\"").Append(Html(imageAlt)).Append("\"");
+                if (!string.IsNullOrWhiteSpace(imageStyle))
+                    sb.Append(" style=\"").Append(Html(imageStyle)).Append("\"");
+                sb.Append(" loading=\"lazy\" decoding=\"async\" />");
                 sb.Append("</span>");
             }
 
@@ -210,12 +226,32 @@ internal sealed class ScribanThemeHelpers
             if (!string.IsNullOrWhiteSpace(summary))
                 sb.Append("<p class=\"pf-editorial-summary\">").Append(Html(summary)).Append("</p>");
 
-            if (showTags && item.Tags is { Length: > 0 })
+            if (showTags || resolvedShowCategories)
             {
-                sb.Append("<div class=\"pf-editorial-tags\">");
-                foreach (var tag in item.Tags.Where(static tag => !string.IsNullOrWhiteSpace(tag)).Take(6))
-                    sb.Append("<span class=\"pf-chip\">").Append(Html(tag)).Append("</span>");
-                sb.Append("</div>");
+                var tags = showTags
+                    ? (item.Tags ?? Array.Empty<string>())
+                        .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+                        .Select(static tag => tag.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(6)
+                        .ToArray()
+                    : Array.Empty<string>();
+                var categories = resolvedShowCategories
+                    ? ResolveTaxonomyValues(item, "categories")
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(6)
+                        .ToArray()
+                    : Array.Empty<string>();
+
+                if (tags.Length > 0 || categories.Length > 0)
+                {
+                    sb.Append("<div class=\"pf-editorial-tags\">");
+                    foreach (var category in categories)
+                        AppendTaxonomyChip(sb, "categories", category, "pf-chip pf-chip--category", resolvedLinkTaxonomy);
+                    foreach (var tag in tags)
+                        AppendTaxonomyChip(sb, "tags", tag, "pf-chip pf-chip--tag", resolvedLinkTaxonomy);
+                    sb.Append("</div>");
+                }
             }
 
             sb.Append("</a>");
@@ -254,6 +290,114 @@ internal sealed class ScribanThemeHelpers
         }
         sb.Append("</div>");
         sb.Append("</nav>");
+        return sb.ToString();
+    }
+
+    public string EditorialPostNav(
+        string backLabel = "Back to list",
+        string newerLabel = "Newer post",
+        string olderLabel = "Older post",
+        string relatedHeading = "Related posts",
+        int relatedCount = 3,
+        string cssClass = "pf-post-nav")
+    {
+        var page = _context.Page;
+        if (page is null || string.IsNullOrWhiteSpace(page.OutputPath) || string.IsNullOrWhiteSpace(page.Collection))
+            return string.Empty;
+
+        var collection = ResolveCurrentCollection();
+        var collectionHref = ResolveCollectionHref(collection, page.Collection);
+        var backText = string.IsNullOrWhiteSpace(backLabel) ? "Back to list" : backLabel.Trim();
+        var newerText = string.IsNullOrWhiteSpace(newerLabel) ? "Newer post" : newerLabel.Trim();
+        var olderText = string.IsNullOrWhiteSpace(olderLabel) ? "Older post" : olderLabel.Trim();
+        var relatedTitle = string.IsNullOrWhiteSpace(relatedHeading) ? "Related posts" : relatedHeading.Trim();
+        var classes = string.IsNullOrWhiteSpace(cssClass) ? "pf-post-nav" : cssClass.Trim();
+
+        var sourceItems = _context.AllItems.Count > 0
+            ? _context.AllItems
+            : _context.Items;
+        var posts = sourceItems
+            .Where(item =>
+                item is not null &&
+                !item.Draft &&
+                string.Equals(item.Collection, page.Collection, StringComparison.OrdinalIgnoreCase) &&
+                item.Kind == PageKind.Page &&
+                !string.IsNullOrWhiteSpace(item.OutputPath))
+            .OrderByDescending(item => item.Date ?? DateTime.MinValue)
+            .ThenBy(item => item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (posts.Length == 0)
+            return string.Empty;
+
+        var currentIndex = Array.FindIndex(posts, candidate =>
+            string.Equals(NormalizePath(candidate.OutputPath), NormalizePath(page.OutputPath), StringComparison.OrdinalIgnoreCase));
+
+        ContentItem? newer = null;
+        ContentItem? older = null;
+        if (currentIndex >= 0)
+        {
+            if (currentIndex > 0)
+                newer = posts[currentIndex - 1];
+            if (currentIndex < posts.Length - 1)
+                older = posts[currentIndex + 1];
+        }
+
+        var related = ResolveRelatedPosts(posts, page, currentIndex, Math.Clamp(relatedCount, 1, 8));
+        if (string.IsNullOrWhiteSpace(collectionHref) && newer is null && older is null && related.Length == 0)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+        sb.Append("<section class=\"").Append(Html(classes)).Append("\">");
+
+        sb.Append("<div class=\"pf-post-nav-top\">");
+        if (!string.IsNullOrWhiteSpace(collectionHref))
+        {
+            sb.Append("<a class=\"pf-post-nav-back\" href=\"").Append(Html(collectionHref)).Append("\">")
+              .Append(Html(backText))
+              .Append("</a>");
+        }
+        sb.Append("<nav class=\"pf-post-nav-links\" aria-label=\"Post navigation\">");
+        if (newer is not null)
+        {
+            var newerTitle = string.IsNullOrWhiteSpace(newer.Title) ? newer.OutputPath : newer.Title;
+            sb.Append("<a class=\"pf-post-nav-newer\" href=\"").Append(Html(newer.OutputPath)).Append("\">")
+              .Append(Html(newerText))
+              .Append(": ")
+              .Append(Html(newerTitle))
+              .Append("</a>");
+        }
+        if (older is not null)
+        {
+            var olderTitle = string.IsNullOrWhiteSpace(older.Title) ? older.OutputPath : older.Title;
+            sb.Append("<a class=\"pf-post-nav-older\" href=\"").Append(Html(older.OutputPath)).Append("\">")
+              .Append(Html(olderText))
+              .Append(": ")
+              .Append(Html(olderTitle))
+              .Append("</a>");
+        }
+        sb.Append("</nav>");
+        sb.Append("</div>");
+
+        if (related.Length > 0)
+        {
+            sb.Append("<div class=\"pf-post-nav-related\">");
+            sb.Append("<h2>").Append(Html(relatedTitle)).Append("</h2>");
+            sb.Append("<ul>");
+            foreach (var candidate in related)
+            {
+                var relatedTextValue = string.IsNullOrWhiteSpace(candidate.Title) ? candidate.OutputPath : candidate.Title;
+                sb.Append("<li><a href=\"")
+                  .Append(Html(candidate.OutputPath))
+                  .Append("\">")
+                  .Append(Html(relatedTextValue))
+                  .Append("</a></li>");
+            }
+            sb.Append("</ul>");
+            sb.Append("</div>");
+        }
+
+        sb.Append("</section>");
         return sb.ToString();
     }
 
@@ -427,19 +571,260 @@ internal sealed class ScribanThemeHelpers
         return Truncate(plain, maxLength);
     }
 
+    private CollectionSpec? ResolveCurrentCollection()
+    {
+        var collectionName = _context.Page?.Collection;
+        if (string.IsNullOrWhiteSpace(collectionName))
+            return null;
+
+        var collections = _context.Site?.Collections;
+        if (collections is null || collections.Length == 0)
+            return null;
+
+        var match = collections.FirstOrDefault(collection =>
+            collection is not null &&
+            !string.IsNullOrWhiteSpace(collection.Name) &&
+            collection.Name.Equals(collectionName, StringComparison.OrdinalIgnoreCase));
+
+        return match is null ? null : CollectionPresetDefaults.Apply(match);
+    }
+
+    private ContentItem[] ResolveRelatedPosts(
+        IReadOnlyList<ContentItem> orderedCollectionItems,
+        ContentItem page,
+        int currentIndex,
+        int maxItems)
+    {
+        if (orderedCollectionItems is null || orderedCollectionItems.Count == 0 || maxItems <= 0)
+            return Array.Empty<ContentItem>();
+
+        var currentTags = (page.Tags ?? Array.Empty<string>())
+            .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+            .Select(static tag => tag.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var candidates = orderedCollectionItems
+            .Where((candidate, index) => index != currentIndex && !string.IsNullOrWhiteSpace(candidate.OutputPath))
+            .Select(candidate => new
+            {
+                Item = candidate,
+                Score = currentTags.Count == 0
+                    ? 0
+                    : (candidate.Tags ?? Array.Empty<string>())
+                        .Where(static tag => !string.IsNullOrWhiteSpace(tag))
+                        .Select(static tag => tag.Trim())
+                        .Count(tag => currentTags.Contains(tag))
+            })
+            .OrderByDescending(entry => entry.Score)
+            .ThenByDescending(entry => entry.Item.Date ?? DateTime.MinValue)
+            .ThenBy(entry => entry.Item.Title ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => entry.Item)
+            .Take(maxItems)
+            .ToArray();
+
+        return candidates;
+    }
+
+    private string ResolveCollectionHref(CollectionSpec? collection, string? collectionName)
+    {
+        if (collection is not null && !string.IsNullOrWhiteSpace(collection.Output))
+            return EnsureTrailingSlash(collection.Output);
+
+        if (string.IsNullOrWhiteSpace(collectionName))
+            return string.Empty;
+
+        var normalized = collectionName.Trim();
+        return EnsureTrailingSlash("/" + normalized.Trim('/'));
+    }
+
+    private void AppendTaxonomyChip(
+        StringBuilder sb,
+        string taxonomyName,
+        string value,
+        string cssClass,
+        bool linkTaxonomy)
+    {
+        if (sb is null || string.IsNullOrWhiteSpace(value))
+            return;
+
+        var text = value.Trim();
+        if (!linkTaxonomy)
+        {
+            sb.Append("<span class=\"").Append(Html(cssClass)).Append("\">").Append(Html(text)).Append("</span>");
+            return;
+        }
+
+        var href = BuildTaxonomyTermHref(taxonomyName, text);
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            sb.Append("<span class=\"").Append(Html(cssClass)).Append("\">").Append(Html(text)).Append("</span>");
+            return;
+        }
+
+        sb.Append("<a class=\"").Append(Html(cssClass)).Append("\" href=\"").Append(Html(href)).Append("\">")
+          .Append(Html(text))
+          .Append("</a>");
+    }
+
+    private IEnumerable<string> ResolveTaxonomyValues(ContentItem item, string taxonomyName)
+    {
+        if (item is null || string.IsNullOrWhiteSpace(taxonomyName))
+            return Array.Empty<string>();
+
+        if (string.Equals(taxonomyName, "tags", StringComparison.OrdinalIgnoreCase))
+            return item.Tags ?? Array.Empty<string>();
+
+        if (item.Meta is null || item.Meta.Count == 0)
+            return Array.Empty<string>();
+
+        if (!item.Meta.TryGetValue(taxonomyName, out var value) || value is null)
+            return Array.Empty<string>();
+
+        if (value is string single)
+        {
+            if (single.Contains(',', StringComparison.Ordinal))
+                return single
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(static token => !string.IsNullOrWhiteSpace(token))
+                    .ToArray();
+            return string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single.Trim() };
+        }
+
+        if (value is IEnumerable<object?> values)
+        {
+            return values
+                .Select(static entry => entry?.ToString() ?? string.Empty)
+                .Where(static entry => !string.IsNullOrWhiteSpace(entry))
+                .Select(static entry => entry.Trim())
+                .ToArray();
+        }
+
+        var text = value.ToString();
+        return string.IsNullOrWhiteSpace(text) ? Array.Empty<string>() : new[] { text.Trim() };
+    }
+
+    private string BuildTaxonomyTermHref(string taxonomyName, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var basePath = ResolveTaxonomyBasePath(taxonomyName);
+        if (string.IsNullOrWhiteSpace(basePath))
+            return string.Empty;
+
+        var slug = Slugify(value);
+        if (string.IsNullOrWhiteSpace(slug))
+            return EnsureTrailingSlash(basePath);
+
+        return EnsureTrailingSlash($"{basePath.TrimEnd('/')}/{slug}");
+    }
+
+    private string ResolveTaxonomyBasePath(string taxonomyName)
+    {
+        if (string.IsNullOrWhiteSpace(taxonomyName))
+            return string.Empty;
+
+        var configured = _context.Site?.Taxonomies?
+            .FirstOrDefault(taxonomy =>
+                taxonomy is not null &&
+                !string.IsNullOrWhiteSpace(taxonomy.Name) &&
+                taxonomy.Name.Equals(taxonomyName, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(configured?.BasePath))
+            return EnsureLeadingSlash(configured.BasePath);
+
+        if (taxonomyName.Equals("tags", StringComparison.OrdinalIgnoreCase))
+            return "/tags";
+        if (taxonomyName.Equals("categories", StringComparison.OrdinalIgnoreCase))
+            return "/categories";
+        return "/" + taxonomyName.Trim().Trim('/');
+    }
+
+    private static string EnsureLeadingSlash(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "/";
+        return path.StartsWith("/", StringComparison.Ordinal) ? path : "/" + path.Trim();
+    }
+
+    private static string EnsureTrailingSlash(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "/";
+
+        var trimmed = EnsureLeadingSlash(path).TrimEnd('/');
+        if (trimmed.Length == 0)
+            return "/";
+        return trimmed + "/";
+    }
+
+    private static string NormalizePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "/";
+
+        var normalized = value.Replace('\\', '/').Trim();
+        if (!normalized.StartsWith("/", StringComparison.Ordinal))
+            normalized = "/" + normalized;
+        return normalized;
+    }
+
+    private static string Slugify(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        var lower = input.Trim().ToLowerInvariant();
+        var sb = new StringBuilder(lower.Length);
+        foreach (var ch in lower)
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                sb.Append(ch);
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_')
+                sb.Append('-');
+        }
+
+        var slug = sb.ToString();
+        while (slug.Contains("--", StringComparison.Ordinal))
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        return slug.Trim('-');
+    }
+
+    private static string? CoalesceTrimmed(params string?[] values)
+    {
+        if (values is null || values.Length == 0)
+            return null;
+
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return null;
+    }
+
     private static string ResolveCardImage(IReadOnlyDictionary<string, object?>? meta, string? fallbackImage)
     {
         if (meta is not null && meta.Count > 0)
         {
             var candidates = new[]
             {
-                "social_image",
-                "social.image",
+                "card_image",
+                "card.image",
+                "cardImage",
+                "cardImage.src",
+                "card.image.src",
                 "image",
                 "cover",
                 "thumbnail",
-                "card_image",
-                "card.image"
+                "social_image",
+                "social.image",
+                "socialImage"
             };
 
             foreach (var key in candidates)
@@ -451,6 +836,91 @@ internal sealed class ScribanThemeHelpers
         }
 
         return string.IsNullOrWhiteSpace(fallbackImage) ? string.Empty : fallbackImage.Trim();
+    }
+
+    private static string ResolveCardImageAlt(IReadOnlyDictionary<string, object?>? meta, string fallbackText)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_alt",
+                "card.image.alt",
+                "cardImageAlt",
+                "cardImage.alt",
+                "image_alt",
+                "imageAlt",
+                "social_image_alt",
+                "social.image.alt"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackText) ? string.Empty : fallbackText.Trim();
+    }
+
+    private static string? ResolveCardImageFit(IReadOnlyDictionary<string, object?>? meta, string? fallbackValue)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_fit",
+                "card.image.fit",
+                "cardImageFit",
+                "image_fit",
+                "imageFit"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackValue) ? null : fallbackValue.Trim();
+    }
+
+    private static string? ResolveCardImagePosition(IReadOnlyDictionary<string, object?>? meta, string? fallbackValue)
+    {
+        if (meta is not null && meta.Count > 0)
+        {
+            var candidates = new[]
+            {
+                "card_image_position",
+                "card.image.position",
+                "cardImagePosition",
+                "image_position",
+                "imagePosition"
+            };
+
+            foreach (var key in candidates)
+            {
+                var value = TryGetMetaString(meta, key);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallbackValue) ? null : fallbackValue.Trim();
+    }
+
+    private static string BuildCardImageStyle(string? fitRaw, string normalizedFit, string? positionRaw, string normalizedPosition)
+    {
+        var declarations = new List<string>();
+        if (!string.IsNullOrWhiteSpace(fitRaw))
+            declarations.Add($"object-fit: {normalizedFit};");
+        if (!string.IsNullOrWhiteSpace(positionRaw))
+            declarations.Add($"object-position: {normalizedPosition};");
+        return declarations.Count == 0 ? string.Empty : string.Join(" ", declarations);
     }
 
     private static string? TryGetMetaString(IReadOnlyDictionary<string, object?> meta, string key)
@@ -536,6 +1006,53 @@ internal sealed class ScribanThemeHelpers
             "featured" => "featured",
             _ => "default"
         };
+    }
+
+    private static string NormalizeObjectFit(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "cover";
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "fill" => "fill",
+            "contain" => "contain",
+            "cover" => "cover",
+            "none" => "none",
+            "scale-down" => "scale-down",
+            _ => "cover"
+        };
+    }
+
+    private static string NormalizeObjectPosition(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "center";
+
+        var collapsed = WhitespaceRegex.Replace(value.Trim(), " ");
+        if (string.IsNullOrWhiteSpace(collapsed))
+            return "center";
+
+        var tokens = collapsed.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0 || tokens.Length > 4)
+            return "center";
+
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            var token = tokens[i];
+            var lower = token.ToLowerInvariant();
+            if (lower is "left" or "right" or "center" or "top" or "bottom")
+            {
+                tokens[i] = lower;
+                continue;
+            }
+
+            if (!ObjectPositionTokenRegex.IsMatch(token))
+                return "center";
+        }
+
+        return string.Join(" ", tokens);
     }
 
     private static string BuildEditorialGridClass(string variant, string? additionalClass)

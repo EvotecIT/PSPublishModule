@@ -322,6 +322,38 @@ when no non-draft `_index.md`/`slug:index` page exists:
 
 This removes the need to manually maintain a blog/news landing page file just to expose latest posts.
 
+### Collection-level editorial card defaults
+You can define default card rendering behavior for a collection, so themes can call
+`{{ pf.editorial_cards }}` without repeating image and class arguments everywhere:
+
+```json
+{
+  "Name": "blog",
+  "Preset": "blog",
+  "Input": "content/blog",
+  "Output": "/blog",
+  "EditorialCards": {
+    "Image": "/images/blog-fallback.png",
+    "ImageAspect": "3:2",
+    "ImageFit": "contain",
+    "ImagePosition": "top center",
+    "Variant": "featured",
+    "GridClass": "blog-grid",
+    "CardClass": "blog-card"
+  }
+}
+```
+
+Supported `EditorialCards` fields:
+- `Image`: fallback card image when a post has no image metadata
+- `ImageAspect`: default aspect ratio (for example `16/9`, `4:3`, `3:2`)
+- `ImageFit`: default `object-fit` (`cover`, `contain`, `fill`, `none`, `scale-down`)
+- `ImagePosition`: default `object-position` (for example `center`, `top center`, `20% 30%`)
+- `Variant`: default helper variant (`default`, `compact`, `hero`, `featured`)
+- `GridClass`, `CardClass`: default CSS class overrides for wrapper/card elements
+- `ShowCategories`: default `show_categories` helper behavior when argument is omitted
+- `LinkTaxonomy`: default `link_taxonomy` helper behavior when argument is omitted
+
 ### Collection sorting
 `SortBy` and `SortOrder` apply to section list item ordering:
 - Supported `SortBy`: `order`, `date`, `title`, `slug`, `route` (`path`/`url` aliases)
@@ -539,18 +571,34 @@ Best practice (theme rendering):
     - `max_items` (default `0` = all)
     - `excerpt_length` (default `160`)
     - `show_collection`, `show_date`, `show_tags`, `show_image` (defaults `true`)
-    - `image_aspect` (default `"16/9"`, accepts `/` or `:` like `"4:3"`)
-    - `fallback_image` (default empty; if omitted, helper falls back to `site.social.image` when set)
-    - `variant` (default `"default"`, options: `"default"`, `"compact"`, `"hero"`, `"featured"`; controls helper-emitted CSS classes)
-    - `grid_class` (optional extra classes appended to the wrapper grid container)
-    - `card_class` (optional extra classes appended to each rendered card)
-    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" }}`
+    - `image_aspect` (optional; when omitted, helper uses `collection.EditorialCards.ImageAspect`, then `16/9`)
+    - `fallback_image` (optional; when omitted, helper uses `collection.EditorialCards.Image`, then `site.social.image`)
+    - `variant` (optional; when omitted, helper uses `collection.EditorialCards.Variant`, then `"default"`; options: `"default"`, `"compact"`, `"hero"`, `"featured"`)
+    - `grid_class` (optional; when omitted, helper uses `collection.EditorialCards.GridClass`)
+    - `card_class` (optional; when omitted, helper uses `collection.EditorialCards.CardClass`)
+    - `show_categories` (optional; when omitted, helper uses `collection.EditorialCards.ShowCategories`, then `false`; reads `categories` taxonomy/meta values)
+    - `link_taxonomy` (optional; when omitted, helper uses `collection.EditorialCards.LinkTaxonomy`, then `false`; renders tag/category chips as links to taxonomy term pages)
+    - Example: `{{ pf.editorial_cards 12 180 true true true true "4:3" "/images/fallback.png" "hero" "news-grid custom-grid" "news-card custom-card" true true }}`
+    - Per-item front matter metadata (stored under `meta`) supported by helper:
+      - `cardImage` / `card_image` / `card.image`
+      - `cardImageAlt` / `card_image_alt` / `card.image.alt`
+      - `cardImageFit` / `card_image_fit` / `card.image.fit`
+      - `cardImagePosition` / `card_image_position` / `card.image.position`
+    - Image fallback priority: card-specific image keys → generic image keys (`image`/`cover`/`thumbnail`) → social image keys → collection/site fallback.
     - Verify integration: if the theme defines `featureContracts.blog/news`, verify checks that variant and override selectors used by `pf.editorial_cards` are declared in `requiredCssSelectors`, with copy/paste contract hints (including likely `cssHrefs` candidates when detectable) when missing.
   - `{{ pf.editorial_pager }}` renders previous/next pagination links from runtime `pagination`:
     - `newer_label` (default `"Newer posts"`)
     - `older_label` (default `"Older posts"`)
     - `css_class` (default `"pf-pagination"`)
     - Example: `{{ pf.editorial_pager "Newer" "Older" }}`
+  - `{{ pf.editorial_post_nav }}` renders post-level navigation for editorial collections (back to list, newer/older links, related posts):
+    - `back_label` (default `"Back to list"`)
+    - `newer_label` (default `"Newer post"`)
+    - `older_label` (default `"Older post"`)
+    - `related_heading` (default `"Related posts"`)
+    - `related_count` (default `3`, max `8`)
+    - `css_class` (default `"pf-post-nav"`)
+    - Example: `{{ pf.editorial_post_nav "Back to blog" "Newer" "Older" "You may also like" 4 "post-nav" }}`
 
 ### Navigation surfaces (stable projections)
 The runtime `navigation` object exposes `navigation.surfaces` as named projections.
@@ -728,6 +776,8 @@ Notes:
 - substring matches (case-insensitive)
 - wildcard patterns (`*`, `?`)
 - regex patterns prefixed with `re:`
+
+See `Docs/PowerForge.Web.WarningCodes.md` for the current code catalog.
 
 ## Redirects + aliases
 Use `aliases` in front matter for old URLs.  

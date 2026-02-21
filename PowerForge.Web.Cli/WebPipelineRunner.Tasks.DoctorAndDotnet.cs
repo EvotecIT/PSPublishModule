@@ -49,8 +49,7 @@ internal static partial class WebPipelineRunner
         {
             verify = WebSiteVerifier.Verify(spec, plan);
             var isDev = string.Equals(effectiveMode, "dev", StringComparison.OrdinalIgnoreCase) || fast;
-            var isCi = ConsoleEnvironment.IsCI;
-            var ciStrictDefaults = isCi && !isDev;
+            var ciStrictDefaults = UseCiStrictDefaults(effectiveMode, fast);
             var verifyWarningPreviewCount = GetInt(step, "verifyWarningPreviewCount") ?? GetInt(step, "verify-warning-preview") ?? (isDev ? 2 : 5);
             var verifyErrorPreviewCount = GetInt(step, "verifyErrorPreviewCount") ?? GetInt(step, "verify-error-preview") ?? (isDev ? 2 : 5);
 

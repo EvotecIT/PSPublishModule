@@ -152,6 +152,7 @@ Notes:
 - By default fails only when errors are found.
 - `failOnWarnings`, `failOnNavLint`, and `failOnThemeContract` can enforce stricter quality gates.
 - `suppressWarnings` (array of strings) filters warnings before printing and before policy evaluation (use codes like `PFWEB.NAV.LINT` or `re:...`).
+- Warning code catalog: `Docs/PowerForge.Web.WarningCodes.md`.
 - Baselines:
   - `baseline`: path to a baseline file (must resolve under the site root)
   - `baselineGenerate`: write a baseline from current warnings
@@ -274,6 +275,7 @@ Notes:
   - default: `true` in CI (when `CI=true`) unless running `mode: dev` / `--fast`
 - `suppressWarnings`: array of warning suppressions (same matching rules as `verify`)
   - useful codes: `[PFWEB.APIDOCS.CSS.CONTRACT]`, `[PFWEB.APIDOCS.NAV.FALLBACK]`, `[PFWEB.APIDOCS.INPUT.*]`, `[PFWEB.APIDOCS.SOURCE]`, `[PFWEB.APIDOCS.XREF]`, `[PFWEB.APIDOCS.DISPLAY]`, `[PFWEB.APIDOCS.MEMBER.SIGNATURES]`
+- Full warning code catalog: `Docs/PowerForge.Web.WarningCodes.md`.
 - If `nav` is provided but your custom `headerHtml`/`footerHtml` fragments do not contain `{{NAV_LINKS}}` / `{{NAV_ACTIONS}}`, the generator emits `[PFWEB.APIDOCS.NAV]` warnings.
 - Source-link diagnostics emit `[PFWEB.APIDOCS.SOURCE]` warnings for mapping issues (for example unmatched `sourceUrlMappings.pathPrefix` or likely duplicated GitHub path prefixes causing 404 source/edit links).
 - Source URL templates are validated preflight:

@@ -805,10 +805,34 @@ public static partial class WebSitemapGenerator
             var slashAlias = ToSlashAliasRoute(htmlKey);
             if (string.IsNullOrWhiteSpace(slashAlias))
                 continue;
-            if (!entries.TryGetValue(slashAlias, out var canonicalEntry))
+
+            if (entries.TryGetValue(slashAlias, out var canonicalEntry))
+            {
+                MergeEntryMetadata(canonicalEntry, htmlEntry);
+                entries.Remove(htmlKey);
+                continue;
+            }
+
+            // API docs generated in docs mode can still surface legacy *.html aliases
+            // (for backward-compatible redirects/bookmarks). Prefer slash canonical URLs
+            // in sitemap output even when only the alias route was merged.
+            if (!IsApiLegacyHtmlAliasRoute(htmlKey))
                 continue;
 
-            MergeEntryMetadata(canonicalEntry, htmlEntry);
+            entries[slashAlias] = new WebSitemapEntry
+            {
+                Path = slashAlias,
+                Title = htmlEntry.Title,
+                Description = htmlEntry.Description,
+                Section = htmlEntry.Section,
+                ChangeFrequency = htmlEntry.ChangeFrequency,
+                Priority = htmlEntry.Priority,
+                LastModified = htmlEntry.LastModified,
+                Alternates = htmlEntry.Alternates,
+                ImageUrls = htmlEntry.ImageUrls,
+                VideoUrls = htmlEntry.VideoUrls,
+                NoIndex = htmlEntry.NoIndex
+            };
             entries.Remove(htmlKey);
         }
     }
@@ -827,6 +851,31 @@ public static partial class WebSitemapGenerator
             withoutExtension += "/";
 
         return NormalizeRoute(withoutExtension);
+    }
+
+    private static bool IsApiLegacyHtmlAliasRoute(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route) ||
+            !route.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var normalized = NormalizeRoute(route).ToLowerInvariant();
+        if (normalized.EndsWith("/index.html", StringComparison.Ordinal) ||
+            normalized.EndsWith("/404.html", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (normalized.IndexOf("/api/", StringComparison.Ordinal) < 0)
+            return false;
+
+        // Keep simple-template API routes (/api/types/*.html) untouched.
+        if (normalized.Contains("/types/", StringComparison.Ordinal))
+            return false;
+
+        return true;
     }
 
     private static void MergeEntryMetadata(WebSitemapEntry destination, WebSitemapEntry source)
