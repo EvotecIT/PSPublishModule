@@ -29,7 +29,7 @@ public sealed partial class ModulePipelineRunner
 
         var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
         var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
-        var shouldPatchRequiredModules = plan.RequiredModules is { Length: > 0 };
+        var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
 
         var reporter = progress ?? NullModulePipelineProgressReporter.Instance;
         var steps = ModulePipelineStep.Create(plan);
@@ -108,12 +108,9 @@ public sealed partial class ModulePipelineRunner
                 if (plan.CompatiblePSEditions is { Length: > 0 })
                     ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
 
-                if (shouldPatchRequiredModules)
-                    ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
-                if (plan.ExternalModuleDependencies is { Length: > 0 })
-                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
-                if (plan.ExternalModuleDependencies is { Length: > 0 })
-                    ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", plan.ExternalModuleDependencies);
+                // Keep manifest dependency fields deterministic and avoid leaking stale values from source PSD1.
+                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
+                ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", manifestExternalModuleDependencies);
 
                 if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
                     !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
@@ -283,8 +280,8 @@ public sealed partial class ModulePipelineRunner
 
             try
             {
-                if (shouldPatchRequiredModules)
-                    ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
+                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
+                ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", manifestExternalModuleDependencies);
 
                 if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
                     !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))

@@ -154,6 +154,59 @@ public sealed class ModulePipelineApprovedModulesTests
         }
     }
 
+    [Fact]
+    public void Run_ClearsStaleManifestDependencies_WhenNoModuleDependencySegmentsAreConfigured()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var manifestPath = Path.Combine(root.FullName, $"{moduleName}.psd1");
+            Assert.True(ManifestEditor.TrySetRequiredModules(
+                manifestPath,
+                new[]
+                {
+                    new ManifestEditor.RequiredModule("LegacyOnly", moduleVersion: "1.0.0"),
+                    new ManifestEditor.RequiredModule("Microsoft.PowerShell.Utility")
+                }));
+            Assert.True(ManifestEditor.TrySetPsDataStringArray(
+                manifestPath,
+                "ExternalModuleDependencies",
+                new[] { "Microsoft.PowerShell.Utility", "Microsoft.PowerShell.Management" }));
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
+            Assert.Empty(requiredNames);
+
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var externalDeps));
+            Assert.NotNull(externalDeps);
+            Assert.Empty(externalDeps!);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     private static ModulePipelineSpec BuildSpec(string sourcePath, string moduleName, bool mergeMissing)
     {
         return new ModulePipelineSpec
