@@ -130,9 +130,18 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
             Assert.Contains("<pre class=\"member-signature language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("<pre class=\"language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("window.Prism=window.Prism||{};window.Prism.manual=true;", html, StringComparison.Ordinal);
             Assert.Contains("prism-core.min.js", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("setTimeout(run,delayMs)", html, StringComparison.OrdinalIgnoreCase);
+
+            var bootstrapIndex = html.IndexOf("window.Prism=window.Prism||{};window.Prism.manual=true;", StringComparison.Ordinal);
+            var coreIndex = html.IndexOf("prism-core.min.js", StringComparison.OrdinalIgnoreCase);
+            var autoloaderIndex = html.IndexOf("prism-autoloader.min.js", StringComparison.OrdinalIgnoreCase);
+            Assert.True(bootstrapIndex >= 0, "Expected Prism bootstrap script.");
+            Assert.True(coreIndex > bootstrapIndex, "Prism core should load after Prism manual bootstrap.");
+            Assert.True(autoloaderIndex > coreIndex, "Prism autoloader should load after Prism core.");
             Assert.Contains("[&lt;CommonParameters&gt;]", html, StringComparison.Ordinal);
             Assert.Contains("Common Parameters", html, StringComparison.Ordinal);
             Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);
@@ -198,6 +207,7 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.DoesNotContain("prism-core", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("prism-autoloader", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("plugins.autoloader.languages_path", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("window.Prism=window.Prism||{};window.Prism.manual=true;", html, StringComparison.Ordinal);
         }
         finally
         {

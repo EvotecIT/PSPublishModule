@@ -69,12 +69,7 @@ public static partial class WebSiteBuilder
             : BuildPrismCdnCss(meta, prismSpec);
 
         var scripts = useLocal
-            ? string.Join(Environment.NewLine, new[]
-            {
-                $"<script src=\"{localAssets.core}\"></script>",
-                $"<script src=\"{localAssets.autoloader}\"></script>",
-                BuildPrismInitScript(localAssets.langPath)
-            })
+            ? BuildPrismScriptBundle(localAssets.core, localAssets.autoloader, localAssets.langPath)
             : BuildPrismCdnScripts(meta, prismSpec);
 
         AppendMetaHtml(meta, "extra_css", css);
@@ -141,12 +136,26 @@ public static partial class WebSiteBuilder
     {
         var cdn = GetMetaStringOrNull(meta, "prism_cdn") ?? prismSpec?.CdnBase ?? "https://cdn.jsdelivr.net/npm/prismjs@1.29.0";
         cdn = cdn.TrimEnd('/');
+        return BuildPrismScriptBundle(
+            $"{cdn}/components/prism-core.min.js",
+            $"{cdn}/plugins/autoloader/prism-autoloader.min.js",
+            $"{cdn}/components/");
+    }
+
+    private static string BuildPrismScriptBundle(string coreScript, string autoloaderScript, string languagesPath)
+    {
         return string.Join(Environment.NewLine, new[]
         {
-            $"<script src=\"{cdn}/components/prism-core.min.js\"></script>",
-            $"<script src=\"{cdn}/plugins/autoloader/prism-autoloader.min.js\"></script>",
-            BuildPrismInitScript($"{cdn}/components/")
+            BuildPrismManualScript(),
+            $"<script src=\"{coreScript}\"></script>",
+            $"<script src=\"{autoloaderScript}\"></script>",
+            BuildPrismInitScript(languagesPath)
         });
+    }
+
+    private static string BuildPrismManualScript()
+    {
+        return "<script>(function(){window.Prism=window.Prism||{};window.Prism.manual=true;})();</script>";
     }
 
     private static string BuildPrismInitScript(string languagesPath)
@@ -154,11 +163,25 @@ public static partial class WebSiteBuilder
         var safePath = (languagesPath ?? string.Empty).Replace("'", "\\'");
         return
             "<script>(function(){" +
+            "var targetPath='" + safePath + "';" +
+            "var attempts=0;" +
+            "var maxAttempts=8;" +
+            "var delayMs=40;" +
+            "var warned=false;" +
+            "var hasCode=function(root){return !!(root&&root.querySelector&&root.querySelector('code[class*=\\\"language-\\\"]'));};" +
+            "var hasTokens=function(root){return !!(root&&root.querySelector&&root.querySelector('code[class*=\\\"language-\\\"] .token'));};" +
+            "var run=function(){" +
+            "attempts++;" +
+            "var root=document;" +
             "var p=window.Prism;" +
-            "if(!p){return;}" +
-            "if(p.plugins&&p.plugins.autoloader){p.plugins.autoloader.languages_path='" + safePath + "';}" +
-            "var run=function(){if(!document.querySelector('code[class*=\\\"language-\\\"] .token')){p.highlightAll();}};" +
-            "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded', run);}" +
+            "if(!p||!hasCode(root)){return;}" +
+            "if(p.plugins&&p.plugins.autoloader){p.plugins.autoloader.languages_path=targetPath;}" +
+            "if(hasTokens(root)){return;}" +
+            "try{if(p.highlightAll){p.highlightAll();}}" +
+            "catch(e){if(!warned&&window.console&&console.warn){warned=true;console.warn('Prism highlighting failed.',e);}}" +
+            "if(!hasTokens(root)&&attempts<maxAttempts){setTimeout(run,delayMs);}" +
+            "};" +
+            "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}" +
             "else{run();}" +
             "})();</script>";
     }
