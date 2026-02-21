@@ -32,6 +32,7 @@ public sealed partial class ModulePipelineRunner
         string? expectedVersion = null;
         string[] compatible = Array.Empty<string>();
         string? preRelease = null;
+        ManifestConfiguration? manifestConfiguration = null;
 
         string? author = null;
         string? companyName = null;
@@ -104,6 +105,29 @@ public sealed partial class ModulePipelineRunner
                 case ConfigurationManifestSegment manifest:
                 {
                     var m = manifest.Configuration;
+                    manifestConfiguration = new ManifestConfiguration
+                    {
+                        ModuleVersion = m.ModuleVersion,
+                        CompatiblePSEditions = m.CompatiblePSEditions ?? Array.Empty<string>(),
+                        Guid = m.Guid,
+                        Author = m.Author,
+                        CompanyName = m.CompanyName,
+                        Copyright = m.Copyright,
+                        Description = m.Description,
+                        PowerShellVersion = m.PowerShellVersion,
+                        Tags = m.Tags,
+                        IconUri = m.IconUri,
+                        ProjectUri = m.ProjectUri,
+                        DotNetFrameworkVersion = m.DotNetFrameworkVersion,
+                        LicenseUri = m.LicenseUri,
+                        RequireLicenseAcceptance = m.RequireLicenseAcceptance,
+                        Prerelease = m.Prerelease,
+                        FunctionsToExport = m.FunctionsToExport,
+                        CmdletsToExport = m.CmdletsToExport,
+                        AliasesToExport = m.AliasesToExport,
+                        FormatsToProcess = m.FormatsToProcess
+                    };
+
                     if (!string.IsNullOrWhiteSpace(m.ModuleVersion)) expectedVersion = m.ModuleVersion;
                     if (m.CompatiblePSEditions is { Length: > 0 }) compatible = m.CompatiblePSEditions;
                     if (!string.IsNullOrWhiteSpace(m.Prerelease)) preRelease = m.Prerelease;
@@ -585,6 +609,7 @@ public sealed partial class ModulePipelineRunner
             expectedVersion: expectedVersionResolved,
             resolvedVersion: resolved,
             preRelease: preRelease,
+            manifest: manifestConfiguration,
             buildSpec: buildSpec,
             compatiblePSEditions: compatible,
             requiredModules: requiredModules,

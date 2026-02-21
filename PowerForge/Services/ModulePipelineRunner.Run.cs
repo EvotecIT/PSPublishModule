@@ -105,24 +105,7 @@ public sealed partial class ModulePipelineRunner
             SafeStart(reporter, startedKeys, manifestStep);
             try
             {
-                if (plan.CompatiblePSEditions is { Length: > 0 })
-                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "CompatiblePSEditions", plan.CompatiblePSEditions);
-
-                // Keep manifest dependency fields deterministic and avoid leaking stale values from source PSD1.
-                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
-                ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", manifestExternalModuleDependencies);
-
-                if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
-                    !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
-                {
-                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", Array.Empty<string>());
-                }
-
-                if (plan.CommandModuleDependencies is { Count: > 0 })
-                    ManifestEditor.TrySetTopLevelHashtableStringArray(buildResult.ManifestPath, "CommandModuleDependencies", plan.CommandModuleDependencies);
-
-                if (!string.IsNullOrWhiteSpace(plan.PreRelease))
-                    ManifestEditor.TrySetTopLevelString(buildResult.ManifestPath, "Prerelease", plan.PreRelease!);
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
 
                 if (plan.Delivery is not null && plan.Delivery.Enable)
                 {
@@ -280,14 +263,7 @@ public sealed partial class ModulePipelineRunner
 
             try
             {
-                ManifestEditor.TrySetRequiredModules(buildResult.ManifestPath, manifestRequiredModules);
-                ManifestEditor.TrySetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", manifestExternalModuleDependencies);
-
-                if (!ManifestEditor.TryGetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", out _) &&
-                    !ManifestEditor.TryGetTopLevelString(buildResult.ManifestPath, "ScriptsToProcess", out _))
-                {
-                    ManifestEditor.TrySetTopLevelStringArray(buildResult.ManifestPath, "ScriptsToProcess", Array.Empty<string>());
-                }
+                RefreshManifestFromPlan(plan, buildResult, manifestRequiredModules, manifestExternalModuleDependencies);
             }
             catch (Exception ex)
             {

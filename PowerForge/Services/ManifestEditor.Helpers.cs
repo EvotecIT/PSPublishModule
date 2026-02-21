@@ -342,4 +342,44 @@ public static partial class ManifestEditor
         return true;
     }
 
+    private static bool RemoveKeyValue(HashtableAst hash, string content, string filePath, string key)
+    {
+        foreach (var kv in hash.KeyValuePairs)
+        {
+            var keyName = GetKeyName(kv.Item1);
+            if (!string.Equals(keyName, key, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var start = kv.Item1.Extent.StartOffset;
+            var end = kv.Item2.Extent.EndOffset;
+            if (start < 0 || end <= start || end > content.Length) return false;
+
+            // Remove the whole line containing the key and include trailing newline when present.
+            var removeStart = start;
+            while (removeStart > 0)
+            {
+                var ch = content[removeStart - 1];
+                if (ch == '\r' || ch == '\n') break;
+                removeStart--;
+            }
+
+            var removeEnd = end;
+            while (removeEnd < content.Length)
+            {
+                var ch = content[removeEnd];
+                if (ch == '\r' || ch == '\n') break;
+                removeEnd++;
+            }
+            if (removeEnd < content.Length && content[removeEnd] == '\r') removeEnd++;
+            if (removeEnd < content.Length && content[removeEnd] == '\n') removeEnd++;
+
+            var newContent = content.Remove(removeStart, removeEnd - removeStart);
+            if (string.Equals(content, newContent, StringComparison.Ordinal)) return false;
+
+            File.WriteAllText(filePath, newContent, new UTF8Encoding(true));
+            return true;
+        }
+
+        return false;
+    }
+
 }
