@@ -189,11 +189,18 @@ public sealed class ModulePublisher
         var requiredModules = GetRequiredModulesForPublish(buildResult, plan);
         if (requiredModules.Length == 0)
             return;
+        var externalModuleDependencies = GetExternalModulesForPublish(buildResult, plan);
 
         var missing = new List<string>();
 
         foreach (var requiredModule in requiredModules)
         {
+            if (ShouldSkipRepositoryDependencyValidation(requiredModule, externalModuleDependencies))
+            {
+                _logger.Info($"Skipping repository dependency verification for required module '{requiredModule.ModuleName}' because it is listed in ExternalModuleDependencies.");
+                continue;
+            }
+
             IReadOnlyList<string> versions;
             try
             {
@@ -228,6 +235,27 @@ public sealed class ModulePublisher
             throw new InvalidOperationException(
                 $"Required module dependency check failed for repository '{repositoryName}'. Missing or incompatible: {string.Join(", ", missing)}.");
         }
+    }
+
+    private static HashSet<string> GetExternalModulesForPublish(
+        ModuleBuildResult buildResult,
+        ModulePipelinePlan plan)
+    {
+        if (!string.IsNullOrWhiteSpace(buildResult.ManifestPath) &&
+            File.Exists(buildResult.ManifestPath) &&
+            ManifestEditor.TryGetPsDataStringArray(buildResult.ManifestPath, "ExternalModuleDependencies", out var manifestExternalModules) &&
+            manifestExternalModules is { Length: > 0 })
+        {
+            return manifestExternalModules
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return (plan.ExternalModuleDependencies ?? Array.Empty<string>())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static ManifestEditor.RequiredModule[] GetRequiredModulesForPublish(
@@ -270,6 +298,19 @@ public sealed class ModulePublisher
         }
 
         return false;
+    }
+
+    internal static bool ShouldSkipRepositoryDependencyValidation(
+        ManifestEditor.RequiredModule requiredModule,
+        ISet<string> externalModuleDependencies)
+    {
+        if (requiredModule is null || string.IsNullOrWhiteSpace(requiredModule.ModuleName))
+            return false;
+
+        if (externalModuleDependencies is null || externalModuleDependencies.Count == 0)
+            return false;
+
+        return externalModuleDependencies.Contains(requiredModule.ModuleName.Trim());
     }
 
     internal static bool DoesVersionMatchRequiredModule(ManifestEditor.RequiredModule requiredModule, string candidateVersion)

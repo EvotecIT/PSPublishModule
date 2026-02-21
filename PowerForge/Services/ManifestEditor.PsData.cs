@@ -9,6 +9,55 @@ namespace PowerForge;
 
 public static partial class ManifestEditor
 {
+    /// <summary>Gets a PSData string array value from PrivateData.PSData.</summary>
+    public static bool TryGetPsDataStringArray(string filePath, string key, out string[]? values)
+    {
+        values = null;
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return false;
+
+        Token[] tokens;
+        ParseError[] errors;
+        var ast = Parser.ParseFile(filePath, out tokens, out errors);
+        if (errors != null && errors.Length > 0) return false;
+
+        var top = (HashtableAst?)ast.Find(a => a is HashtableAst h && !HasHashtableAncestor(h), true);
+        if (top == null) return false;
+
+        var privateData = FindChildHashtable(top, "PrivateData");
+        if (privateData == null) return false;
+
+        var psData = FindChildHashtable(privateData, "PSData");
+        if (psData == null) return false;
+
+        foreach (var kv in psData.KeyValuePairs)
+        {
+            var name = GetKeyName(kv.Item1);
+            if (!string.Equals(name, key, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var parsed = ExtractStringArray(kv.Item2);
+            if (parsed != null)
+            {
+                values = parsed;
+                return true;
+            }
+
+            var expr = AsExpression(kv.Item2);
+            if (expr is StringConstantExpressionAst s)
+            {
+                values = new[] { s.Value };
+                return true;
+            }
+            if (expr is ConstantExpressionAst c && c.Value is string str)
+            {
+                values = new[] { str };
+                return true;
+            }
+            return false;
+        }
+
+        return false;
+    }
+
     /// <summary>Sets a PSData string value under PrivateData.PSData, creating missing hashtables as needed.</summary>
     public static bool TrySetPsDataString(string filePath, string key, string value)
         => TrySetPsDataValue(filePath, key, EscapeAndQuote(value ?? string.Empty));

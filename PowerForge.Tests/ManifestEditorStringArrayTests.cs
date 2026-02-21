@@ -35,5 +35,29 @@ public sealed class ManifestEditorStringArrayTests
             try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
-}
 
+    [Fact]
+    public void TryGetPsDataStringArray_ReadsExternalModuleDependencies()
+    {
+        var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var psd1Path = Path.Combine(tempRoot.FullName, "Test.psd1");
+            File.WriteAllText(psd1Path,
+                "@{\n" +
+                "    PrivateData = @{\n" +
+                "        PSData = @{\n" +
+                "            ExternalModuleDependencies = @('Microsoft.PowerShell.Utility', 'ActiveDirectory')\n" +
+                "        }\n" +
+                "    }\n" +
+                "}\n");
+
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(psd1Path, "ExternalModuleDependencies", out var externalDependencies));
+            Assert.Equal(new[] { "Microsoft.PowerShell.Utility", "ActiveDirectory" }, externalDependencies);
+        }
+        finally
+        {
+            try { tempRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+}
