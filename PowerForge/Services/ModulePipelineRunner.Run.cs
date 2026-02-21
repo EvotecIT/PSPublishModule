@@ -271,6 +271,9 @@ public sealed partial class ModulePipelineRunner
                 if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
             }
 
+            if (plan.BuildSpec.RefreshManifestOnly)
+                SyncRefreshOnlyOutputsToProjectRoot(plan, buildResult, formattingStagingResults);
+
             if (plan.SignModule)
             {
                 SafeStart(reporter, startedKeys, signStep);
