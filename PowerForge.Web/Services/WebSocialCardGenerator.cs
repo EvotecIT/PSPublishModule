@@ -1,12 +1,27 @@
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using ImageMagick;
 
 namespace PowerForge.Web;
 
 internal static class WebSocialCardGenerator
 {
+    private static readonly TimeSpan SocialRegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex CamelCaseBoundaryRegex = new(
+        "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+    private static readonly Regex SymbolBreakRegex = new(
+        "(?<=[/\\\\|_.:+-])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+    private static readonly Regex WhitespaceRegex = new(
+        "\\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+
     private static readonly SocialPalette[] Palettes =
     [
         new(
@@ -72,8 +87,11 @@ internal static class WebSocialCardGenerator
         string? description,
         string? eyebrow,
         string? badge,
+        string? footerLabel,
         int width,
-        int height)
+        int height,
+        string? styleKey = null,
+        string? variantKey = null)
     {
         width = Math.Clamp(width, 600, 2400);
         height = Math.Clamp(height, 315, 1400);
@@ -90,12 +108,22 @@ internal static class WebSocialCardGenerator
         var primaryBadge = string.IsNullOrWhiteSpace(badge)
             ? "PAGE"
             : badge!;
+        var primaryFooterLabel = string.IsNullOrWhiteSpace(footerLabel)
+            ? "/"
+            : footerLabel!;
+
+        var normalizedStyle = NormalizeStyle(styleKey) ?? ClassifyStyle(primaryBadge, primaryFooterLabel);
+        var normalizedVariant = NormalizeVariant(variantKey) ?? ClassifyVariant(normalizedStyle, primaryBadge, primaryFooterLabel);
+        var isHero = string.Equals(normalizedVariant, "hero", StringComparison.Ordinal);
+        var isCompact = string.Equals(normalizedVariant, "compact", StringComparison.Ordinal);
+        var normalizedBadge = NormalizeBadgeLabel(primaryBadge, primaryFooterLabel, normalizedStyle, normalizedVariant);
+        var normalizedFooterLabel = NormalizeFooterLabel(primaryFooterLabel, normalizedBadge, normalizedStyle);
 
         var safeEyebrow = EscapeXml(TrimSingleLine(primaryEyebrow, 56));
-        var safeBadge = EscapeXml(TrimSingleLine(primaryBadge, 48));
-        var safeBadgeUpper = safeBadge.ToUpperInvariant();
-        var seed = string.Join("|", primaryTitle, primaryDescription, primaryEyebrow, primaryBadge, width, height);
-        var palette = SelectPalette(seed);
+        var safeBadgeUpper = EscapeXml(TrimSingleLine(normalizedBadge.ToUpperInvariant(), 20));
+        var safeFooter = EscapeXml(TrimSingleLine(normalizedFooterLabel, isHero ? 42 : (isCompact ? 40 : 44)));
+        var seed = string.Join("|", normalizedStyle, normalizedVariant, primaryTitle, primaryDescription, primaryEyebrow, normalizedBadge, normalizedFooterLabel, width, height);
+        var palette = SelectPalette(normalizedStyle, seed);
         var frameInset = GetScaledPixels(width, height, basePixels: 36, minimum: 22);
         var panelInset = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
         var panelWidth = width - (panelInset * 2);
@@ -123,27 +151,30 @@ internal static class WebSocialCardGenerator
         }
 
         var safeWidth = Math.Max(120, safeRight - safeLeft);
-        var topBandHeight = GetScaledPixels(width, height, basePixels: 9, minimum: 5);
-        var eyebrowFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
-        var titleFontSize = GetScaledPixels(width, height, basePixels: 60, minimum: 32);
-        var descriptionFontSize = GetScaledPixels(width, height, basePixels: 32, minimum: 18);
-        var badgeFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
-        var badgeRectHeight = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
-        var badgeRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
-        var badgeRectY = safeBottom - badgeRectHeight;
-        var badgeRectX = safeLeft;
-        var badgeRectWidth = Math.Max(
-            GetScaledPixels(width, height, basePixels: 220, minimum: 160),
-            Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 760, minimum: 420)));
-        var badgeTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
-        var badgeTextY = badgeRectY + (badgeRectHeight / 2);
+        var topBandHeight = GetScaledPixels(width, height, basePixels: isHero ? 11 : (isCompact ? 8 : 9), minimum: 5);
+        var eyebrowFontSize = GetScaledPixels(width, height, basePixels: isHero ? 26 : (isCompact ? 22 : 24), minimum: 14);
+        var titleFontSize = GetScaledPixels(width, height, basePixels: isHero ? 70 : (isCompact ? 52 : 60), minimum: isCompact ? 28 : 32);
+        var descriptionFontSize = GetScaledPixels(width, height, basePixels: isHero ? 34 : (isCompact ? 28 : 32), minimum: isCompact ? 16 : 18);
+        var footerFontSize = GetScaledPixels(width, height, basePixels: isHero ? 24 : (isCompact ? 20 : 22), minimum: 13);
+        var footerRectHeight = GetScaledPixels(width, height, basePixels: isHero ? 50 : (isCompact ? 42 : 48), minimum: 30);
+        var footerRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
+        var footerRectY = safeBottom - footerRectHeight;
+        var footerRectX = safeLeft;
+        var footerTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
+        var footerTextWidth = EstimateTextWidth(TrimSingleLine(normalizedFooterLabel, 64), footerFontSize, glyphFactor: 0.52);
+        var footerRectMinWidth = GetScaledPixels(width, height, basePixels: 180, minimum: 120);
+        var footerRectMaxWidth = Math.Min(
+            safeWidth,
+            GetScaledPixels(width, height, basePixels: isHero ? 440 : (isCompact ? 460 : 520), minimum: 220));
+        var footerRectWidth = Math.Clamp(footerTextWidth + (footerTextInsetX * 2), footerRectMinWidth, footerRectMaxWidth);
+        var footerTextY = footerRectY + (footerRectHeight / 2);
         var pillPaddingX = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
-        var pillHeight = GetScaledPixels(width, height, basePixels: 40, minimum: 26);
+        var pillHeight = GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 36 : 40), minimum: 26);
         var pillRadius = GetScaledPixels(width, height, basePixels: 20, minimum: 13);
-        var pillFontSize = GetScaledPixels(width, height, basePixels: 18, minimum: 12);
+        var pillFontSize = GetScaledPixels(width, height, basePixels: isHero ? 19 : (isCompact ? 16 : 18), minimum: 12);
         var pillMaxWidth = Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 320, minimum: 192));
         var pillMinWidth = GetScaledPixels(width, height, basePixels: 148, minimum: 112);
-        var pillTextWidth = EstimateTextWidth(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24), pillFontSize);
+        var pillTextWidth = EstimateTextWidth(TrimSingleLine(normalizedBadge.ToUpperInvariant(), 24), pillFontSize);
         var pillWidth = Math.Clamp(pillTextWidth + (pillPaddingX * 2), pillMinWidth, pillMaxWidth);
         var pillX = safeRight - pillWidth;
         var pillY = safeTop;
@@ -156,20 +187,22 @@ internal static class WebSocialCardGenerator
         var leftGlowX = GetScaledPixels(width, height, basePixels: 180, minimum: 108);
         var leftGlowY = height - GetScaledPixels(width, height, basePixels: 104, minimum: 66);
         var eyebrowY = safeTop + GetScaledPixels(width, height, basePixels: 26, minimum: 18);
-        var titleY = eyebrowY + GetScaledPixels(width, height, basePixels: 94, minimum: 56);
-        var titleLineHeight = GetScaledPixels(width, height, basePixels: 62, minimum: 30);
-        var descriptionLineHeight = GetScaledPixels(width, height, basePixels: 34, minimum: 20);
-        var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(safeWidth, titleFontSize), maxLines: 3);
+        var titleY = eyebrowY + GetScaledPixels(width, height, basePixels: isHero ? 106 : (isCompact ? 82 : 94), minimum: 56);
+        var titleLineHeight = GetScaledPixels(width, height, basePixels: isHero ? 66 : (isCompact ? 54 : 62), minimum: 30);
+        var descriptionLineHeight = GetScaledPixels(width, height, basePixels: isHero ? 36 : (isCompact ? 31 : 34), minimum: 20);
+        var titleMaxLines = isHero ? 2 : 3;
+        var descriptionMaxLines = isHero ? 2 : (isCompact ? 4 : 3);
+        var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(safeWidth, titleFontSize), maxLines: titleMaxLines);
         var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(width, height, basePixels: 24, minimum: 16);
-        var descriptionBottomY = badgeRectY - GetScaledPixels(width, height, basePixels: 24, minimum: 16);
+        var descriptionBottomY = footerRectY - GetScaledPixels(width, height, basePixels: 24, minimum: 16);
         var maxDescriptionLines = Math.Max(
             1,
             (descriptionBottomY - descriptionY) / descriptionLineHeight);
         var descriptionLines = WrapText(
             primaryDescription,
             maxChars: GetDescriptionWrapWidth(safeWidth, descriptionFontSize),
-            maxLines: Math.Min(3, maxDescriptionLines));
-        var accentLineY = badgeRectY - GetScaledPixels(width, height, basePixels: 36, minimum: 22);
+            maxLines: Math.Min(descriptionMaxLines, maxDescriptionLines));
+        var accentLineY = footerRectY - GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 32 : 36), minimum: 22);
         var accentLineX = safeLeft;
         var accentLineWidth = Math.Max(GetScaledPixels(width, height, basePixels: 160, minimum: 120), safeWidth);
 
@@ -225,8 +258,8 @@ internal static class WebSocialCardGenerator
             svg.AppendLine($@"  <text x=""{safeLeft}"" y=""{y}"" fill=""{palette.TextSecondary}"" font-size=""{descriptionFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""500"">{EscapeXml(descriptionLines[i])}</text>");
         }
 
-        svg.AppendLine($@"  <rect x=""{badgeRectX}"" y=""{badgeRectY}"" rx=""{badgeRectRadius}"" ry=""{badgeRectRadius}"" width=""{badgeRectWidth}"" height=""{badgeRectHeight}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.68"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.58""/>");
-        svg.AppendLine($@"  <text x=""{badgeRectX + badgeTextInsetX}"" y=""{badgeTextY}"" fill=""{palette.AccentSoft}"" font-size=""{badgeFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeBadge}</text>");
+        svg.AppendLine($@"  <rect x=""{footerRectX}"" y=""{footerRectY}"" rx=""{footerRectRadius}"" ry=""{footerRectRadius}"" width=""{footerRectWidth}"" height=""{footerRectHeight}"" fill=""{palette.ChipBackground}"" fill-opacity=""0.68"" stroke=""{palette.ChipBorder}"" stroke-opacity=""0.58""/>");
+        svg.AppendLine($@"  <text x=""{footerRectX + footerTextInsetX}"" y=""{footerTextY}"" fill=""{palette.AccentSoft}"" font-size=""{footerFontSize}"" font-family=""Segoe UI, Arial, sans-serif"" font-weight=""700"" dominant-baseline=""middle"" alignment-baseline=""middle"">{safeFooter}</text>");
         svg.AppendLine(@"</svg>");
 
         try
@@ -256,7 +289,7 @@ internal static class WebSocialCardGenerator
         maxChars = Math.Max(8, maxChars);
         maxLines = Math.Max(1, maxLines);
 
-        var input = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        var input = NormalizeWrapInput(value);
         if (string.IsNullOrWhiteSpace(input))
             return new List<string> { string.Empty };
 
@@ -319,10 +352,10 @@ internal static class WebSocialCardGenerator
         }
 
         var remaining = token;
-        var chunkSize = Math.Max(2, maxChars - 1);
+        var chunkSize = Math.Max(3, maxChars);
         while (remaining.Length > maxChars)
         {
-            yield return remaining[..chunkSize] + "-";
+            yield return remaining[..chunkSize];
             remaining = remaining[chunkSize..];
         }
 
@@ -362,7 +395,27 @@ internal static class WebSocialCardGenerator
         return (int)Math.Ceiling(text.Length * fontSize * glyphFactor);
     }
 
-    private static SocialPalette SelectPalette(string seed)
+    private static string NormalizeWrapInput(string? value)
+    {
+        var input = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        try
+        {
+            input = CamelCaseBoundaryRegex.Replace(input, " ");
+            input = SymbolBreakRegex.Replace(input, " ");
+            input = WhitespaceRegex.Replace(input, " ").Trim();
+        }
+        catch
+        {
+            // Best effort only; fallback to raw text.
+        }
+
+        return input;
+    }
+
+    private static SocialPalette SelectPalette(string styleKey, string seed)
     {
         if (Palettes.Length == 0)
             return new SocialPalette(
@@ -382,8 +435,260 @@ internal static class WebSocialCardGenerator
 
         var input = Encoding.UTF8.GetBytes(seed ?? string.Empty);
         var hash = SHA256.HashData(input);
-        var index = hash[0] % Palettes.Length;
-        return Palettes[index];
+        var candidates = styleKey switch
+        {
+            "api" => new[] { 0, 2 },
+            "docs" => new[] { 2, 0 },
+            "editorial" => new[] { 3, 1 },
+            _ => new[] { 1, 0 }
+        };
+        var candidate = candidates[hash[0] % candidates.Length];
+        return Palettes[candidate % Palettes.Length];
+    }
+
+    private static string ClassifyStyle(string badge, string footerLabel)
+    {
+        var combined = string.Concat(badge ?? string.Empty, " ", footerLabel ?? string.Empty).ToLowerInvariant();
+        if (combined.Contains("api", StringComparison.Ordinal))
+            return "api";
+        if (combined.Contains("doc", StringComparison.Ordinal))
+            return "docs";
+        if (combined.Contains("blog", StringComparison.Ordinal) ||
+            combined.Contains("post", StringComparison.Ordinal) ||
+            combined.Contains("news", StringComparison.Ordinal) ||
+            combined.Contains("article", StringComparison.Ordinal))
+            return "editorial";
+        return "default";
+    }
+
+    private static string ClassifyVariant(string styleKey, string badge, string footerLabel)
+    {
+        var normalizedBadge = (badge ?? string.Empty).Trim();
+        var normalizedFooter = (footerLabel ?? string.Empty).Trim();
+        if (normalizedBadge.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
+            normalizedFooter.Equals("/", StringComparison.OrdinalIgnoreCase))
+            return "hero";
+
+        if (styleKey.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
+            styleKey.Equals("editorial", StringComparison.OrdinalIgnoreCase))
+            return "compact";
+
+        return "standard";
+    }
+
+    private static string? NormalizeStyle(string? style)
+    {
+        if (string.IsNullOrWhiteSpace(style))
+            return null;
+
+        return style.Trim().ToLowerInvariant() switch
+        {
+            "default" => "default",
+            "platform" => "default",
+            "product" => "default",
+            "docs" => "docs",
+            "documentation" => "docs",
+            "knowledge" => "docs",
+            "api" => "api",
+            "reference" => "api",
+            "editorial" => "editorial",
+            "blog" => "editorial",
+            "news" => "editorial",
+            "marketing" => "editorial",
+            _ => null
+        };
+    }
+
+    private static string? NormalizeVariant(string? variant)
+    {
+        if (string.IsNullOrWhiteSpace(variant))
+            return null;
+
+        return variant.Trim().ToLowerInvariant() switch
+        {
+            "standard" => "standard",
+            "default" => "standard",
+            "compact" => "compact",
+            "hero" => "hero",
+            "featured" => "hero",
+            _ => null
+        };
+    }
+
+    private static string NormalizeBadgeLabel(string badge, string footerLabel, string styleKey, string variantKey)
+    {
+        var candidate = TrimSingleLine(badge, 80).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+            candidate = DefaultBadgeForStyle(styleKey, variantKey);
+
+        if (IsRouteLike(candidate))
+            candidate = DefaultBadgeForStyle(styleKey, variantKey);
+
+        var footer = TrimSingleLine(footerLabel, 120).Trim();
+        if (candidate.Length > 16)
+        {
+            if (LooksLikeApiReferenceLabel(candidate) || LooksLikeApiReferenceLabel(footer))
+                candidate = "API";
+            else if (LooksLikeDocsLabel(candidate) || LooksLikeDocsLabel(footer))
+                candidate = "DOCS";
+            else if (LooksLikeBlogLabel(candidate) || LooksLikeBlogLabel(footer))
+                candidate = "BLOG";
+            else
+                candidate = DefaultBadgeForStyle(styleKey, variantKey);
+        }
+
+        return string.IsNullOrWhiteSpace(candidate)
+            ? DefaultBadgeForStyle(styleKey, variantKey)
+            : candidate;
+    }
+
+    private static string NormalizeFooterLabel(string footerLabel, string badge, string styleKey)
+    {
+        var candidate = TrimSingleLine(footerLabel, 180).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+            return DefaultRouteForStyle(styleKey);
+
+        if (IsRouteLike(candidate))
+            return AbbreviateRouteLabel(NormalizeRouteLabel(candidate));
+
+        if (string.Equals(candidate, badge, StringComparison.OrdinalIgnoreCase))
+            return DefaultRouteForStyle(styleKey);
+
+        if (LooksLikeApiReferenceLabel(candidate))
+            return "/api";
+        if (LooksLikeDocsLabel(candidate))
+            return "/docs";
+        if (LooksLikeBlogLabel(candidate))
+            return "/blog";
+        if (string.Equals(candidate, "home", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(candidate, "index", StringComparison.OrdinalIgnoreCase))
+            return "/";
+
+        var slug = SlugifyRouteLabel(candidate);
+        if (string.IsNullOrWhiteSpace(slug))
+            return DefaultRouteForStyle(styleKey);
+        return AbbreviateRouteLabel("/" + slug);
+    }
+
+    private static string DefaultBadgeForStyle(string styleKey, string variantKey)
+    {
+        if (string.Equals(variantKey, "hero", StringComparison.OrdinalIgnoreCase))
+            return "HOME";
+
+        return styleKey switch
+        {
+            "api" => "API",
+            "docs" => "DOCS",
+            "editorial" => "BLOG",
+            _ => "PAGES"
+        };
+    }
+
+    private static string DefaultRouteForStyle(string styleKey)
+    {
+        return styleKey switch
+        {
+            "api" => "/api",
+            "docs" => "/docs",
+            "editorial" => "/blog",
+            _ => "/"
+        };
+    }
+
+    private static bool IsRouteLike(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        return trimmed.StartsWith("/", StringComparison.Ordinal) ||
+               trimmed.Contains('/', StringComparison.Ordinal) ||
+               trimmed.Contains('\\', StringComparison.Ordinal);
+    }
+
+    private static string NormalizeRouteLabel(string value)
+    {
+        var trimmed = value.Replace('\\', '/').Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return "/";
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed;
+        return trimmed;
+    }
+
+    private static string AbbreviateRouteLabel(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        var normalized = NormalizeRouteLabel(route);
+        if (normalized.Length <= 40)
+            return normalized;
+
+        var segments = normalized
+            .Trim('/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length <= 1)
+            return normalized[..37] + "...";
+
+        var first = segments[0];
+        var last = segments[^1];
+        if (segments.Length >= 3 &&
+            string.Equals(first, "api", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(segments[1], "powershell", StringComparison.OrdinalIgnoreCase))
+            return $"/api/powershell/.../{last}";
+
+        return $"/{first}/.../{last}";
+    }
+
+    private static bool LooksLikeApiReferenceLabel(string value)
+    {
+        return ContainsToken(value, "api") && ContainsToken(value, "reference");
+    }
+
+    private static bool LooksLikeDocsLabel(string value)
+    {
+        return ContainsToken(value, "docs") || ContainsToken(value, "documentation");
+    }
+
+    private static bool LooksLikeBlogLabel(string value)
+    {
+        return ContainsToken(value, "blog") || ContainsToken(value, "post") || ContainsToken(value, "news");
+    }
+
+    private static bool ContainsToken(string value, string token)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(token))
+            return false;
+        return value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string SlugifyRouteLabel(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var sb = new StringBuilder(value.Length);
+        var lastDash = false;
+        foreach (var ch in value.Trim())
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                sb.Append(char.ToLowerInvariant(ch));
+                lastDash = false;
+                continue;
+            }
+
+            if (lastDash)
+                continue;
+
+            sb.Append('-');
+            lastDash = true;
+        }
+
+        return sb
+            .ToString()
+            .Trim('-');
     }
 
     private static string EscapeXml(string value)

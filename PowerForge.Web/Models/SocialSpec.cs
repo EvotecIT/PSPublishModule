@@ -27,4 +27,12 @@ public sealed class SocialSpec
     public int GeneratedCardWidth { get; set; } = 1200;
     /// <summary>Height of generated social card PNG files.</summary>
     public int GeneratedCardHeight { get; set; } = 630;
+    /// <summary>Optional default style key for generated social cards (default/docs/api/editorial).</summary>
+    public string? GeneratedCardStyle { get; set; }
+    /// <summary>Optional default layout variant for generated social cards (standard/hero/compact).</summary>
+    public string? GeneratedCardVariant { get; set; }
+    /// <summary>Optional per-collection style overrides for generated social cards.</summary>
+    public Dictionary<string, string>? GeneratedCardStylesByCollection { get; set; }
+    /// <summary>Optional per-collection variant overrides for generated social cards.</summary>
+    public Dictionary<string, string>? GeneratedCardVariantsByCollection { get; set; }
 }

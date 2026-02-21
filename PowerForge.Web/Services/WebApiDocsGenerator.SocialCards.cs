@@ -37,14 +37,15 @@ public static partial class WebApiDocsGenerator
             return string.Empty;
 
         var cardPath = NormalizeApiSocialCardPath(options.SocialCardPath);
-        var routeLabel = NormalizeApiRouteLabel(route);
-        var slug = Slugify(routeLabel.Replace('/', '-'));
+        var routeKey = NormalizeApiRouteKey(route);
+        var routeLabel = BuildApiRouteDisplayLabel(routeKey);
+        var slug = Slugify(routeKey.Replace('/', '-'));
         if (string.IsNullOrWhiteSpace(slug))
             slug = "api";
 
         var hashInput = string.Join("|", new[]
         {
-            routeLabel,
+            routeKey,
             title ?? string.Empty,
             description ?? string.Empty,
             siteName ?? string.Empty,
@@ -61,9 +62,12 @@ public static partial class WebApiDocsGenerator
             title,
             description,
             siteName,
-            options.Title,
+            "API",
+            routeLabel,
             options.SocialCardWidth,
-            options.SocialCardHeight);
+            options.SocialCardHeight,
+            "api",
+            "standard");
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
 
@@ -106,7 +110,7 @@ public static partial class WebApiDocsGenerator
         return normalized.TrimEnd('/');
     }
 
-    private static string NormalizeApiRouteLabel(string route)
+    private static string NormalizeApiRouteKey(string route)
     {
         var value = route ?? string.Empty;
         if (Uri.TryCreate(value, UriKind.Absolute, out var absolute))
@@ -118,6 +122,34 @@ public static partial class WebApiDocsGenerator
         if (!value.StartsWith("/", StringComparison.Ordinal))
             value = "/" + value;
         return value.Trim('/');
+    }
+
+    private static string BuildApiRouteDisplayLabel(string routeKey)
+    {
+        if (string.IsNullOrWhiteSpace(routeKey))
+            return "/api";
+
+        var segments = routeKey
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            return "/api";
+
+        if (segments.Length == 1)
+            return "/" + segments[0];
+
+        if (string.Equals(segments[0], "api", StringComparison.OrdinalIgnoreCase))
+        {
+            if (segments.Length == 2)
+                return $"/api/{segments[1]}";
+            if (segments.Length >= 3 &&
+                string.Equals(segments[1], "powershell", StringComparison.OrdinalIgnoreCase))
+                return $"/api/powershell/{segments[^1]}";
+            return $"/api/{segments[^1]}";
+        }
+
+        return segments.Length > 2
+            ? $"/{segments[0]}/.../{segments[^1]}"
+            : "/" + string.Join("/", segments);
     }
 
     private static string ComputeApiSocialHash(string input)

@@ -848,9 +848,29 @@ public static partial class WebSiteBuilder
 
     private static string BuildSnippet(string html, int maxLength)
     {
-        var text = StripTags(html);
-        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        text = WhitespaceRegex.Replace(text, " ").Trim();
+        if (string.IsNullOrWhiteSpace(html))
+            return string.Empty;
+
+        var snippetSource = html;
+        var paragraphMatches = SnippetParagraphRegex.Matches(html);
+        if (paragraphMatches.Count > 0)
+        {
+            var fragments = paragraphMatches
+                .Cast<Match>()
+                .Select(match => match.Groups["text"].Value)
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Take(2)
+                .ToArray();
+            if (fragments.Length > 0)
+                snippetSource = string.Join(" ", fragments);
+        }
+
+        var withoutTags = StripTagsRegex.Replace(snippetSource, " ");
+        var decoded = System.Web.HttpUtility.HtmlDecode(withoutTags) ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(decoded))
+            return string.Empty;
+
+        var text = WhitespaceRegex.Replace(decoded, " ").Trim();
         if (text.Length <= maxLength) return text;
         return text.Substring(0, maxLength).Trim() + "...";
     }
