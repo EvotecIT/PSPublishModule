@@ -698,7 +698,7 @@ public sealed partial class ModulePipelineRunner
                 SafeStart(reporter, startedKeys, step);
                 try
                 {
-                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults));
+                    publishResults.Add(publisher.Publish(publish.Configuration, plan, buildResult, artefactResults, includeScriptFolders: !mergedScripts));
                     SafeDone(reporter, step);
                 }
                 catch (Exception ex)

@@ -42,7 +42,8 @@ public sealed class ModulePublisher
         PublishConfiguration publish,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        IReadOnlyList<ArtefactBuildResult> artefactResults)
+        IReadOnlyList<ArtefactBuildResult> artefactResults,
+        bool includeScriptFolders = true)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
@@ -65,13 +66,13 @@ public sealed class ModulePublisher
 
         return publish.Destination switch
         {
-            PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult),
+            PublishDestination.PowerShellGallery => PublishToRepository(publish, plan, buildResult, includeScriptFolders),
             PublishDestination.GitHub => PublishToGitHub(publish, plan, artefactResults),
             _ => throw new NotSupportedException($"Unsupported publish destination: {publish.Destination}")
         };
     }
 
-    private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    private ModulePublishResult PublishToRepository(PublishConfiguration publish, ModulePipelinePlan plan, ModuleBuildResult buildResult, bool includeScriptFolders)
     {
         var (repositoryName, repoConfig) = ResolveRepository(publish);
         var isPsGallery = string.Equals(repositoryName, "PSGallery", StringComparison.OrdinalIgnoreCase);
@@ -92,15 +93,15 @@ public sealed class ModulePublisher
         {
             try
             {
-                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig);
+                return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
             }
             catch (PowerShellToolNotAvailableException)
             {
-                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig);
+                return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
             }
         }
 
-        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig);
+        return PublishToRepositoryWithTool(tool, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders);
     }
 
     private ModulePublishResult PublishToRepositoryWithTool(
@@ -109,13 +110,21 @@ public sealed class ModulePublisher
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         string repositoryName,
-        PublishRepositoryConfiguration? repoConfig)
+        PublishRepositoryConfiguration? repoConfig,
+        bool includeScriptFolders)
     {
         var credential = repoConfig?.Credential;
         bool createdRepository = false;
+        string? temporaryPublishPath = null;
 
         try
         {
+            temporaryPublishPath = PrepareModulePackageForRepositoryPublish(
+                stagingPath: buildResult.StagingPath,
+                moduleName: plan.ModuleName,
+                information: plan.Information,
+                includeScriptFolders: includeScriptFolders);
+
             if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
                 createdRepository = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
@@ -126,7 +135,7 @@ public sealed class ModulePublisher
 
             _logger.Info($"Publishing {plan.ModuleName} {FormatSemVer(plan.ResolvedVersion, plan.PreRelease)} to repository '{repositoryName}' using {tool}");
 
-            var modulePath = Path.GetFullPath(buildResult.StagingPath);
+            var modulePath = Path.GetFullPath(temporaryPublishPath);
 
             if (tool == PublishTool.PowerShellGet)
             {
@@ -152,9 +161,15 @@ public sealed class ModulePublisher
                         skipModuleManifestValidate: false,
                         credential: credential));
             }
+
+            CleanupTemporaryPublishPath(temporaryPublishPath);
+            temporaryPublishPath = null;
         }
         finally
         {
+            if (!string.IsNullOrWhiteSpace(temporaryPublishPath))
+                CleanupTemporaryPublishPath(temporaryPublishPath);
+
             if (createdRepository && repoConfig is not null && repoConfig.UnregisterAfterUse)
             {
                 try
@@ -178,6 +193,49 @@ public sealed class ModulePublisher
             releaseUrl: null,
             succeeded: true,
             errorMessage: null);
+    }
+
+    internal static string PrepareModulePackageForRepositoryPublish(
+        string stagingPath,
+        string moduleName,
+        InformationConfiguration? information,
+        bool includeScriptFolders)
+    {
+        if (string.IsNullOrWhiteSpace(stagingPath))
+            throw new ArgumentException("StagingPath is required.", nameof(stagingPath));
+        if (string.IsNullOrWhiteSpace(moduleName))
+            throw new ArgumentException("ModuleName is required.", nameof(moduleName));
+
+        var source = Path.GetFullPath(stagingPath);
+        if (!Directory.Exists(source))
+            throw new DirectoryNotFoundException($"Staging directory not found: {source}");
+
+        var publishPath = Path.Combine(Path.GetTempPath(), "PowerForge", "publish", $"{moduleName}_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(publishPath);
+
+        ArtefactBuilder.CopyModulePackageForInstall(
+            stagingRoot: source,
+            destinationModuleRoot: publishPath,
+            information: information,
+            includeScriptFolders: includeScriptFolders);
+
+        return publishPath;
+    }
+
+    internal static void CleanupTemporaryPublishPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // best effort
+        }
     }
 
     private void ValidateRequiredModulesForRepositoryPublish(
