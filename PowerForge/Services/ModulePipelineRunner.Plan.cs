@@ -566,6 +566,15 @@ public sealed partial class ModulePipelineRunner
             .Where(p => p is not null && p.Configuration?.Enabled == true)
             .ToArray();
 
+        if (formatting is not null &&
+            formatting.Options is not null &&
+            !formatting.Options.UpdateProjectRoot &&
+            HasStandardFormattingConfiguration(formatting))
+        {
+            formatting.Options.UpdateProjectRoot = true;
+            _logger.Info("UpdateProjectRoot not explicitly set; enabling because Default* formatting targets are configured (legacy compatibility).");
+        }
+
         if (refreshPsd1Only)
         {
             if (signModule)
