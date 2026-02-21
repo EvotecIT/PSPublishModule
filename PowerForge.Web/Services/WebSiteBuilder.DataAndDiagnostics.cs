@@ -851,7 +851,21 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
 
-        var withoutTags = StripTagsRegex.Replace(html, " ");
+        var snippetSource = html;
+        var paragraphMatches = SnippetParagraphRegex.Matches(html);
+        if (paragraphMatches.Count > 0)
+        {
+            var fragments = paragraphMatches
+                .Cast<Match>()
+                .Select(match => match.Groups["text"].Value)
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Take(2)
+                .ToArray();
+            if (fragments.Length > 0)
+                snippetSource = string.Join(" ", fragments);
+        }
+
+        var withoutTags = StripTagsRegex.Replace(snippetSource, " ");
         var decoded = System.Web.HttpUtility.HtmlDecode(withoutTags) ?? string.Empty;
         if (string.IsNullOrWhiteSpace(decoded))
             return string.Empty;

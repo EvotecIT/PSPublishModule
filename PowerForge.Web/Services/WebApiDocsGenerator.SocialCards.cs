@@ -64,7 +64,9 @@ public static partial class WebApiDocsGenerator
             "API",
             routeLabel,
             options.SocialCardWidth,
-            options.SocialCardHeight);
+            options.SocialCardHeight,
+            "api",
+            "standard");
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
 

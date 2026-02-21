@@ -75,7 +75,7 @@ public static partial class WebSiteBuilder
         var normalizedOutputRoot = NormalizeRootPathForSink(outputRoot);
         var generatedPath = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath);
         var routeForSlug = BuildSocialRouteLabel(item);
-        var routeLabel = BuildSocialRouteDisplayLabel(routeForSlug);
+        var routeLabel = ResolveSocialRouteLabel(item, routeForSlug);
         var routeSlug = Slugify(routeForSlug.Replace('/', '-'));
         if (string.IsNullOrWhiteSpace(routeSlug))
             routeSlug = "page";
@@ -95,6 +95,8 @@ public static partial class WebSiteBuilder
             return string.Empty;
 
         var badge = ResolveSocialBadge(item, routeForSlug);
+        var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug);
+        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug);
         var bytes = WebSocialCardGenerator.RenderPng(
             title,
             description,
@@ -102,7 +104,9 @@ public static partial class WebSiteBuilder
             badge,
             routeLabel,
             spec.Social.GeneratedCardWidth,
-            spec.Social.GeneratedCardHeight);
+            spec.Social.GeneratedCardHeight,
+            styleKey,
+            variantKey);
         if (bytes is null || bytes.Length == 0)
             return string.Empty;
 
@@ -132,6 +136,17 @@ public static partial class WebSiteBuilder
         return string.IsNullOrWhiteSpace(normalized) ? "index" : normalized;
     }
 
+    private static string ResolveSocialRouteLabel(ContentItem item, string? route)
+    {
+        var routeOverride =
+            GetMetaString(item.Meta, "social_card_route") ??
+            GetMetaString(item.Meta, "social.route");
+        if (!string.IsNullOrWhiteSpace(routeOverride))
+            return routeOverride!.Trim();
+
+        return BuildSocialRouteDisplayLabel(route);
+    }
+
     private static string BuildSocialRouteDisplayLabel(string? route)
     {
         var normalized = NormalizePath(route).Trim('/');
@@ -144,6 +159,12 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSocialBadge(ContentItem item, string route)
     {
+        var metaBadge =
+            GetMetaString(item.Meta, "social_card_badge") ??
+            GetMetaString(item.Meta, "social.badge");
+        if (!string.IsNullOrWhiteSpace(metaBadge))
+            return metaBadge!.Trim().ToUpperInvariant();
+
         if (item.Kind == PageKind.Home)
             return "HOME";
 
@@ -164,6 +185,112 @@ public static partial class WebSiteBuilder
             return "DOCS";
 
         return "PAGE";
+    }
+
+    private static string ResolveSocialCardStyle(
+        SiteSpec spec,
+        ContentItem item,
+        string badge,
+        string route)
+    {
+        var styleOverride =
+            GetMetaString(item.Meta, "social_card_style") ??
+            GetMetaString(item.Meta, "social.style");
+        if (!string.IsNullOrWhiteSpace(styleOverride))
+            return styleOverride!.Trim();
+
+        var collection = item.Collection?.Trim();
+        if (!string.IsNullOrWhiteSpace(collection) &&
+            TryResolveCollectionCardPreset(spec.Social?.GeneratedCardStylesByCollection, collection!, out var collectionStyle))
+            return collectionStyle;
+
+        if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardStyle))
+            return spec.Social.GeneratedCardStyle!.Trim();
+
+        return InferSocialCardStyle(badge, route);
+    }
+
+    private static string ResolveSocialCardVariant(
+        SiteSpec spec,
+        ContentItem item,
+        string styleKey,
+        string route)
+    {
+        var variantOverride =
+            GetMetaString(item.Meta, "social_card_variant") ??
+            GetMetaString(item.Meta, "social.variant");
+        if (!string.IsNullOrWhiteSpace(variantOverride))
+            return variantOverride!.Trim();
+
+        var collection = item.Collection?.Trim();
+        if (!string.IsNullOrWhiteSpace(collection) &&
+            TryResolveCollectionCardPreset(spec.Social?.GeneratedCardVariantsByCollection, collection!, out var collectionVariant))
+            return collectionVariant;
+
+        if (!string.IsNullOrWhiteSpace(spec.Social?.GeneratedCardVariant))
+            return spec.Social.GeneratedCardVariant!.Trim();
+
+        return InferSocialCardVariant(item, styleKey, route);
+    }
+
+    private static bool TryResolveCollectionCardPreset(
+        Dictionary<string, string>? map,
+        string collection,
+        out string value)
+    {
+        value = string.Empty;
+        if (map is null || map.Count == 0 || string.IsNullOrWhiteSpace(collection))
+            return false;
+
+        if (map.TryGetValue(collection, out var direct) && !string.IsNullOrWhiteSpace(direct))
+        {
+            value = direct.Trim();
+            return true;
+        }
+
+        foreach (var kvp in map)
+        {
+            if (string.Equals(kvp.Key, collection, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(kvp.Value))
+            {
+                value = kvp.Value.Trim();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string InferSocialCardStyle(string badge, string route)
+    {
+        var combined = string.Concat(badge ?? string.Empty, " ", route ?? string.Empty).ToLowerInvariant();
+        if (combined.Contains("api", StringComparison.Ordinal))
+            return "api";
+        if (combined.Contains("doc", StringComparison.Ordinal))
+            return "docs";
+        if (combined.Contains("blog", StringComparison.Ordinal) ||
+            combined.Contains("post", StringComparison.Ordinal) ||
+            combined.Contains("news", StringComparison.Ordinal) ||
+            combined.Contains("article", StringComparison.Ordinal))
+            return "editorial";
+        return "default";
+    }
+
+    private static string InferSocialCardVariant(ContentItem item, string styleKey, string route)
+    {
+        if (item.Kind == PageKind.Home)
+            return "hero";
+
+        var normalizedRoute = NormalizePath(route).Trim('/');
+        if (string.IsNullOrWhiteSpace(normalizedRoute) ||
+            string.Equals(normalizedRoute, "index", StringComparison.OrdinalIgnoreCase))
+            return "hero";
+
+        if (string.Equals(styleKey, "docs", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(styleKey, "editorial", StringComparison.OrdinalIgnoreCase))
+            return "compact";
+
+        return "standard";
     }
 
     private static string ComputeSocialHash(string input)

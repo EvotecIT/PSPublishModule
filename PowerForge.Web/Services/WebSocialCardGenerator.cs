@@ -74,7 +74,9 @@ internal static class WebSocialCardGenerator
         string? badge,
         string? footerLabel,
         int width,
-        int height)
+        int height,
+        string? styleKey = null,
+        string? variantKey = null)
     {
         width = Math.Clamp(width, 600, 2400);
         height = Math.Clamp(height, 315, 1400);
@@ -95,12 +97,16 @@ internal static class WebSocialCardGenerator
             ? "/"
             : footerLabel!;
 
+        var normalizedStyle = NormalizeStyle(styleKey) ?? ClassifyStyle(primaryBadge, primaryFooterLabel);
+        var normalizedVariant = NormalizeVariant(variantKey) ?? ClassifyVariant(normalizedStyle, primaryBadge, primaryFooterLabel);
+        var isHero = string.Equals(normalizedVariant, "hero", StringComparison.Ordinal);
+        var isCompact = string.Equals(normalizedVariant, "compact", StringComparison.Ordinal);
+
         var safeEyebrow = EscapeXml(TrimSingleLine(primaryEyebrow, 56));
         var safeBadgeUpper = EscapeXml(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24));
-        var safeFooter = EscapeXml(TrimSingleLine(primaryFooterLabel, 64));
-        var styleKey = ClassifyStyle(primaryBadge, primaryFooterLabel);
-        var seed = string.Join("|", styleKey, primaryTitle, primaryDescription, primaryEyebrow, primaryBadge, primaryFooterLabel, width, height);
-        var palette = SelectPalette(styleKey, seed);
+        var safeFooter = EscapeXml(TrimSingleLine(primaryFooterLabel, isHero ? 56 : (isCompact ? 68 : 64)));
+        var seed = string.Join("|", normalizedStyle, normalizedVariant, primaryTitle, primaryDescription, primaryEyebrow, primaryBadge, primaryFooterLabel, width, height);
+        var palette = SelectPalette(normalizedStyle, seed);
         var frameInset = GetScaledPixels(width, height, basePixels: 36, minimum: 22);
         var panelInset = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
         var panelWidth = width - (panelInset * 2);
@@ -128,12 +134,12 @@ internal static class WebSocialCardGenerator
         }
 
         var safeWidth = Math.Max(120, safeRight - safeLeft);
-        var topBandHeight = GetScaledPixels(width, height, basePixels: 9, minimum: 5);
-        var eyebrowFontSize = GetScaledPixels(width, height, basePixels: 24, minimum: 14);
-        var titleFontSize = GetScaledPixels(width, height, basePixels: 60, minimum: 32);
-        var descriptionFontSize = GetScaledPixels(width, height, basePixels: 32, minimum: 18);
-        var footerFontSize = GetScaledPixels(width, height, basePixels: 22, minimum: 13);
-        var footerRectHeight = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
+        var topBandHeight = GetScaledPixels(width, height, basePixels: isHero ? 11 : (isCompact ? 8 : 9), minimum: 5);
+        var eyebrowFontSize = GetScaledPixels(width, height, basePixels: isHero ? 26 : (isCompact ? 22 : 24), minimum: 14);
+        var titleFontSize = GetScaledPixels(width, height, basePixels: isHero ? 70 : (isCompact ? 52 : 60), minimum: isCompact ? 28 : 32);
+        var descriptionFontSize = GetScaledPixels(width, height, basePixels: isHero ? 34 : (isCompact ? 28 : 32), minimum: isCompact ? 16 : 18);
+        var footerFontSize = GetScaledPixels(width, height, basePixels: isHero ? 24 : (isCompact ? 20 : 22), minimum: 13);
+        var footerRectHeight = GetScaledPixels(width, height, basePixels: isHero ? 50 : (isCompact ? 42 : 48), minimum: 30);
         var footerRectRadius = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
         var footerRectY = safeBottom - footerRectHeight;
         var footerRectX = safeLeft;
@@ -143,9 +149,9 @@ internal static class WebSocialCardGenerator
         var footerRectWidth = Math.Clamp(footerTextWidth + (footerTextInsetX * 2), footerRectMinWidth, safeWidth);
         var footerTextY = footerRectY + (footerRectHeight / 2);
         var pillPaddingX = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
-        var pillHeight = GetScaledPixels(width, height, basePixels: 40, minimum: 26);
+        var pillHeight = GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 36 : 40), minimum: 26);
         var pillRadius = GetScaledPixels(width, height, basePixels: 20, minimum: 13);
-        var pillFontSize = GetScaledPixels(width, height, basePixels: 18, minimum: 12);
+        var pillFontSize = GetScaledPixels(width, height, basePixels: isHero ? 19 : (isCompact ? 16 : 18), minimum: 12);
         var pillMaxWidth = Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 320, minimum: 192));
         var pillMinWidth = GetScaledPixels(width, height, basePixels: 148, minimum: 112);
         var pillTextWidth = EstimateTextWidth(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24), pillFontSize);
@@ -161,10 +167,12 @@ internal static class WebSocialCardGenerator
         var leftGlowX = GetScaledPixels(width, height, basePixels: 180, minimum: 108);
         var leftGlowY = height - GetScaledPixels(width, height, basePixels: 104, minimum: 66);
         var eyebrowY = safeTop + GetScaledPixels(width, height, basePixels: 26, minimum: 18);
-        var titleY = eyebrowY + GetScaledPixels(width, height, basePixels: 94, minimum: 56);
-        var titleLineHeight = GetScaledPixels(width, height, basePixels: 62, minimum: 30);
-        var descriptionLineHeight = GetScaledPixels(width, height, basePixels: 34, minimum: 20);
-        var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(safeWidth, titleFontSize), maxLines: 3);
+        var titleY = eyebrowY + GetScaledPixels(width, height, basePixels: isHero ? 106 : (isCompact ? 82 : 94), minimum: 56);
+        var titleLineHeight = GetScaledPixels(width, height, basePixels: isHero ? 66 : (isCompact ? 54 : 62), minimum: 30);
+        var descriptionLineHeight = GetScaledPixels(width, height, basePixels: isHero ? 36 : (isCompact ? 31 : 34), minimum: 20);
+        var titleMaxLines = isHero ? 2 : 3;
+        var descriptionMaxLines = isHero ? 2 : (isCompact ? 4 : 3);
+        var titleLines = WrapText(primaryTitle, maxChars: GetTitleWrapWidth(safeWidth, titleFontSize), maxLines: titleMaxLines);
         var descriptionY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(width, height, basePixels: 24, minimum: 16);
         var descriptionBottomY = footerRectY - GetScaledPixels(width, height, basePixels: 24, minimum: 16);
         var maxDescriptionLines = Math.Max(
@@ -173,8 +181,8 @@ internal static class WebSocialCardGenerator
         var descriptionLines = WrapText(
             primaryDescription,
             maxChars: GetDescriptionWrapWidth(safeWidth, descriptionFontSize),
-            maxLines: Math.Min(3, maxDescriptionLines));
-        var accentLineY = footerRectY - GetScaledPixels(width, height, basePixels: 36, minimum: 22);
+            maxLines: Math.Min(descriptionMaxLines, maxDescriptionLines));
+        var accentLineY = footerRectY - GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 32 : 36), minimum: 22);
         var accentLineX = safeLeft;
         var accentLineWidth = Math.Max(GetScaledPixels(width, height, basePixels: 160, minimum: 120), safeWidth);
 
@@ -411,6 +419,60 @@ internal static class WebSocialCardGenerator
             combined.Contains("article", StringComparison.Ordinal))
             return "editorial";
         return "default";
+    }
+
+    private static string ClassifyVariant(string styleKey, string badge, string footerLabel)
+    {
+        var normalizedBadge = (badge ?? string.Empty).Trim();
+        var normalizedFooter = (footerLabel ?? string.Empty).Trim();
+        if (normalizedBadge.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
+            normalizedFooter.Equals("/", StringComparison.OrdinalIgnoreCase))
+            return "hero";
+
+        if (styleKey.Equals("docs", StringComparison.OrdinalIgnoreCase) ||
+            styleKey.Equals("editorial", StringComparison.OrdinalIgnoreCase))
+            return "compact";
+
+        return "standard";
+    }
+
+    private static string? NormalizeStyle(string? style)
+    {
+        if (string.IsNullOrWhiteSpace(style))
+            return null;
+
+        return style.Trim().ToLowerInvariant() switch
+        {
+            "default" => "default",
+            "platform" => "default",
+            "product" => "default",
+            "docs" => "docs",
+            "documentation" => "docs",
+            "knowledge" => "docs",
+            "api" => "api",
+            "reference" => "api",
+            "editorial" => "editorial",
+            "blog" => "editorial",
+            "news" => "editorial",
+            "marketing" => "editorial",
+            _ => null
+        };
+    }
+
+    private static string? NormalizeVariant(string? variant)
+    {
+        if (string.IsNullOrWhiteSpace(variant))
+            return null;
+
+        return variant.Trim().ToLowerInvariant() switch
+        {
+            "standard" => "standard",
+            "default" => "standard",
+            "compact" => "compact",
+            "hero" => "hero",
+            "featured" => "hero",
+            _ => null
+        };
     }
 
     private static string EscapeXml(string value)

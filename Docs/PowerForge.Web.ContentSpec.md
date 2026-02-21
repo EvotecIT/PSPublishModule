@@ -99,6 +99,11 @@ Supported fields:
   - `meta.format` = `html` (skip markdown rendering)
   - `meta.body_class` (optional body class)
   - `meta.social` (enable social tags for this page when configured)
+  - `meta.social_card` (force/skip generated social card for this page)
+  - `meta.social_card_badge` (generated card top-right badge text)
+  - `meta.social_card_route` (generated card bottom route label text)
+  - `meta.social_card_style` (generated card style: `default`/`docs`/`api`/`editorial`)
+  - `meta.social_card_variant` (generated card layout variant: `standard`/`hero`/`compact`)
   - `meta.structured_data` (enable JSON‑LD breadcrumbs for this page when configured)
   - `meta.head_html` (raw HTML appended into `<head>`)
   - `meta.head_file` (path to a file appended into `<head>`)
@@ -867,7 +872,19 @@ themes/nova/assets/app.css
     "AutoGenerateCards": true,
     "GeneratedCardsPath": "/assets/social/generated",
     "GeneratedCardWidth": 1200,
-    "GeneratedCardHeight": 630
+    "GeneratedCardHeight": 630,
+    "GeneratedCardStyle": "default",
+    "GeneratedCardVariant": "standard",
+    "GeneratedCardStylesByCollection": {
+      "docs": "docs",
+      "blog": "editorial",
+      "pages": "default"
+    },
+    "GeneratedCardVariantsByCollection": {
+      "pages": "hero",
+      "docs": "compact",
+      "blog": "compact"
+    }
   },
   "StructuredData": {
     "Enabled": true,
@@ -889,6 +906,18 @@ page title/description and uses them for `og:image`/`twitter:image` (unless a pa
 By default this applies to share-priority pages (`home`, section pages, `pages` collection, editorial collections like `blog`/`news`).
 Per-page override:
 `meta.social_card: true` to force generation, `meta.social_card: false` to skip.
+You can also control generated card presentation:
+- `meta.social_card_badge`: top-right category badge text
+- `meta.social_card_route`: bottom route label text
+- `meta.social_card_style`: style key (`default`, `docs`, `api`, `editorial`)
+- `meta.social_card_variant`: layout variant (`standard`, `hero`, `compact`)
+
+Preset precedence for generated social cards:
+1. per-page `meta.social_card_*` overrides
+2. `Social.GeneratedCard*ByCollection` for the page collection
+3. `Social.GeneratedCardStyle` / `Social.GeneratedCardVariant`
+4. built-in heuristics (for example: home -> `hero`, docs/blog -> `compact`)
+
 If `meta.social_image` is not set, blog posts also try to use the first markdown image in the post body
 before falling back to generated/default site image.
 Pages can opt out using front matter:
@@ -949,6 +978,10 @@ meta.social_image_width: 1200
 meta.social_image_height: 630
 meta.social_twitter_site: "@productx"
 meta.social_twitter_creator: "@author"
+meta.social_card_badge: "GUIDE"
+meta.social_card_route: "/docs/getting-started"
+meta.social_card_style: "docs"
+meta.social_card_variant: "compact"
 ```
 Image aliases also accepted as explicit social overrides: `meta.image`, `meta.cover_image`, `meta.thumbnail`, `meta.og_image`, `meta.twitter_image`.
 
