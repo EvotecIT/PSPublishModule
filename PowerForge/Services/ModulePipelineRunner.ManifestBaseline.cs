@@ -56,7 +56,11 @@ public sealed partial class ModulePipelineRunner
         if (!ManifestEditor.TryGetTopLevelString(manifestPath, key, out var value))
             return null;
 
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (value is null)
+            return null;
+
+        var normalized = value.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 
     private static string[] ReadTopLevelStringArray(string manifestPath, string key)

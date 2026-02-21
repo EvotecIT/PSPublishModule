@@ -92,7 +92,9 @@ public sealed partial class ModulePipelineRunner
         else if (ManifestEditor.TryGetTopLevelString(manifestPath, "ScriptsToProcess", out var singleScript) &&
                  !string.IsNullOrWhiteSpace(singleScript))
         {
-            scriptsToProcess = new[] { singleScript.Trim() };
+            var normalizedScript = singleScript;
+            if (normalizedScript is not null)
+                scriptsToProcess = new[] { normalizedScript.Trim() };
         }
 
         // Normalize ScriptsToProcess layout by rewriting the key once using the current value.
