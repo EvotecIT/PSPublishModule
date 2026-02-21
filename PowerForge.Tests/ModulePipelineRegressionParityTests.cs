@@ -10,6 +10,145 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineRegressionParityTests
 {
     [Fact]
+    public void Plan_MirrorsExternalModulesToRequiredModules_ButKeepsPackagingListEmpty()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Utility"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Management"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Diagnostics"
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+
+            Assert.Contains("Microsoft.PowerShell.Utility", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Management", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Diagnostics", plan.ExternalModuleDependencies, StringComparer.OrdinalIgnoreCase);
+
+            Assert.Contains(plan.RequiredModules, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.RequiredModules, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Management", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(plan.RequiredModules, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Diagnostics", StringComparison.OrdinalIgnoreCase));
+
+            Assert.DoesNotContain(plan.RequiredModulesForPackaging, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(plan.RequiredModulesForPackaging, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Management", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(plan.RequiredModulesForPackaging, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Diagnostics", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Run_WritesExternalModulesToRequiredModulesAndPsData()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null,
+                    KeepStaging = true
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Utility"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Management"
+                        }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ExternalModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = "Microsoft.PowerShell.Diagnostics"
+                        }
+                    }
+                }
+            };
+
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var plan = runner.Plan(spec);
+            var result = runner.Run(spec, plan);
+
+            Assert.True(ManifestEditor.TryGetRequiredModules(result.BuildResult.ManifestPath, out var required));
+            Assert.NotNull(required);
+            Assert.Contains(required!, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Utility", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(required!, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Management", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(required!, m => string.Equals(m.ModuleName, "Microsoft.PowerShell.Diagnostics", StringComparison.OrdinalIgnoreCase));
+
+            Assert.True(ManifestEditor.TryGetPsDataStringArray(result.BuildResult.ManifestPath, "ExternalModuleDependencies", out var external));
+            Assert.NotNull(external);
+            Assert.Contains("Microsoft.PowerShell.Utility", external!, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Management", external!, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Microsoft.PowerShell.Diagnostics", external!, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_EmitsGuidAutoWarningOnlyOnce_WhenPackagingAndManifestDraftsMatch()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

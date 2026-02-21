@@ -182,6 +182,23 @@ public sealed partial class ModulePipelineRunner
                             externalIndex.Add(name);
                             externalModules.Add(name);
                         }
+                        var externalDraft = new RequiredModuleDraft(
+                            moduleName: name,
+                            moduleVersion: md.ModuleVersion,
+                            minimumVersion: md.MinimumVersion,
+                            requiredVersion: md.RequiredVersion,
+                            guid: md.Guid);
+
+                        // Legacy behavior compatibility: external dependencies are mirrored into RequiredModules
+                        // so Import-Module honors runtime prerequisites, but they are not included in
+                        // RequiredModulesForPackaging (so artefacts do not bundle inbox/platform modules).
+                        if (requiredIndex.TryGetValue(name, out var externalIdx))
+                            requiredModulesDraft[externalIdx] = externalDraft;
+                        else
+                        {
+                            requiredIndex[name] = requiredModulesDraft.Count;
+                            requiredModulesDraft.Add(externalDraft);
+                        }
                         break;
                     }
 
