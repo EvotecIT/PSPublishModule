@@ -1,12 +1,27 @@
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using ImageMagick;
 
 namespace PowerForge.Web;
 
 internal static class WebSocialCardGenerator
 {
+    private static readonly TimeSpan SocialRegexTimeout = TimeSpan.FromSeconds(1);
+    private static readonly Regex CamelCaseBoundaryRegex = new(
+        "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+    private static readonly Regex SymbolBreakRegex = new(
+        "(?<=[/\\\\|_.:+-])",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+    private static readonly Regex WhitespaceRegex = new(
+        "\\s+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        SocialRegexTimeout);
+
     private static readonly SocialPalette[] Palettes =
     [
         new(
@@ -101,11 +116,13 @@ internal static class WebSocialCardGenerator
         var normalizedVariant = NormalizeVariant(variantKey) ?? ClassifyVariant(normalizedStyle, primaryBadge, primaryFooterLabel);
         var isHero = string.Equals(normalizedVariant, "hero", StringComparison.Ordinal);
         var isCompact = string.Equals(normalizedVariant, "compact", StringComparison.Ordinal);
+        var normalizedBadge = NormalizeBadgeLabel(primaryBadge, primaryFooterLabel, normalizedStyle, normalizedVariant);
+        var normalizedFooterLabel = NormalizeFooterLabel(primaryFooterLabel, normalizedBadge, normalizedStyle);
 
         var safeEyebrow = EscapeXml(TrimSingleLine(primaryEyebrow, 56));
-        var safeBadgeUpper = EscapeXml(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24));
-        var safeFooter = EscapeXml(TrimSingleLine(primaryFooterLabel, isHero ? 56 : (isCompact ? 68 : 64)));
-        var seed = string.Join("|", normalizedStyle, normalizedVariant, primaryTitle, primaryDescription, primaryEyebrow, primaryBadge, primaryFooterLabel, width, height);
+        var safeBadgeUpper = EscapeXml(TrimSingleLine(normalizedBadge.ToUpperInvariant(), 20));
+        var safeFooter = EscapeXml(TrimSingleLine(normalizedFooterLabel, isHero ? 42 : (isCompact ? 40 : 44)));
+        var seed = string.Join("|", normalizedStyle, normalizedVariant, primaryTitle, primaryDescription, primaryEyebrow, normalizedBadge, normalizedFooterLabel, width, height);
         var palette = SelectPalette(normalizedStyle, seed);
         var frameInset = GetScaledPixels(width, height, basePixels: 36, minimum: 22);
         var panelInset = GetScaledPixels(width, height, basePixels: 48, minimum: 30);
@@ -144,9 +161,12 @@ internal static class WebSocialCardGenerator
         var footerRectY = safeBottom - footerRectHeight;
         var footerRectX = safeLeft;
         var footerTextInsetX = GetScaledPixels(width, height, basePixels: 20, minimum: 12);
-        var footerTextWidth = EstimateTextWidth(TrimSingleLine(primaryFooterLabel, 64), footerFontSize, glyphFactor: 0.52);
+        var footerTextWidth = EstimateTextWidth(TrimSingleLine(normalizedFooterLabel, 64), footerFontSize, glyphFactor: 0.52);
         var footerRectMinWidth = GetScaledPixels(width, height, basePixels: 180, minimum: 120);
-        var footerRectWidth = Math.Clamp(footerTextWidth + (footerTextInsetX * 2), footerRectMinWidth, safeWidth);
+        var footerRectMaxWidth = Math.Min(
+            safeWidth,
+            GetScaledPixels(width, height, basePixels: isHero ? 440 : (isCompact ? 460 : 520), minimum: 220));
+        var footerRectWidth = Math.Clamp(footerTextWidth + (footerTextInsetX * 2), footerRectMinWidth, footerRectMaxWidth);
         var footerTextY = footerRectY + (footerRectHeight / 2);
         var pillPaddingX = GetScaledPixels(width, height, basePixels: 14, minimum: 8);
         var pillHeight = GetScaledPixels(width, height, basePixels: isHero ? 42 : (isCompact ? 36 : 40), minimum: 26);
@@ -154,7 +174,7 @@ internal static class WebSocialCardGenerator
         var pillFontSize = GetScaledPixels(width, height, basePixels: isHero ? 19 : (isCompact ? 16 : 18), minimum: 12);
         var pillMaxWidth = Math.Min(safeWidth, GetScaledPixels(width, height, basePixels: 320, minimum: 192));
         var pillMinWidth = GetScaledPixels(width, height, basePixels: 148, minimum: 112);
-        var pillTextWidth = EstimateTextWidth(TrimSingleLine(primaryBadge.ToUpperInvariant(), 24), pillFontSize);
+        var pillTextWidth = EstimateTextWidth(TrimSingleLine(normalizedBadge.ToUpperInvariant(), 24), pillFontSize);
         var pillWidth = Math.Clamp(pillTextWidth + (pillPaddingX * 2), pillMinWidth, pillMaxWidth);
         var pillX = safeRight - pillWidth;
         var pillY = safeTop;
@@ -269,7 +289,7 @@ internal static class WebSocialCardGenerator
         maxChars = Math.Max(8, maxChars);
         maxLines = Math.Max(1, maxLines);
 
-        var input = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        var input = NormalizeWrapInput(value);
         if (string.IsNullOrWhiteSpace(input))
             return new List<string> { string.Empty };
 
@@ -332,10 +352,10 @@ internal static class WebSocialCardGenerator
         }
 
         var remaining = token;
-        var chunkSize = Math.Max(2, maxChars - 1);
+        var chunkSize = Math.Max(3, maxChars);
         while (remaining.Length > maxChars)
         {
-            yield return remaining[..chunkSize] + "-";
+            yield return remaining[..chunkSize];
             remaining = remaining[chunkSize..];
         }
 
@@ -373,6 +393,26 @@ internal static class WebSocialCardGenerator
         if (string.IsNullOrWhiteSpace(text) || fontSize <= 0)
             return 0;
         return (int)Math.Ceiling(text.Length * fontSize * glyphFactor);
+    }
+
+    private static string NormalizeWrapInput(string? value)
+    {
+        var input = (value ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
+
+        try
+        {
+            input = CamelCaseBoundaryRegex.Replace(input, " ");
+            input = SymbolBreakRegex.Replace(input, " ");
+            input = WhitespaceRegex.Replace(input, " ").Trim();
+        }
+        catch
+        {
+            // Best effort only; fallback to raw text.
+        }
+
+        return input;
     }
 
     private static SocialPalette SelectPalette(string styleKey, string seed)
@@ -473,6 +513,182 @@ internal static class WebSocialCardGenerator
             "featured" => "hero",
             _ => null
         };
+    }
+
+    private static string NormalizeBadgeLabel(string badge, string footerLabel, string styleKey, string variantKey)
+    {
+        var candidate = TrimSingleLine(badge, 80).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+            candidate = DefaultBadgeForStyle(styleKey, variantKey);
+
+        if (IsRouteLike(candidate))
+            candidate = DefaultBadgeForStyle(styleKey, variantKey);
+
+        var footer = TrimSingleLine(footerLabel, 120).Trim();
+        if (candidate.Length > 16)
+        {
+            if (LooksLikeApiReferenceLabel(candidate) || LooksLikeApiReferenceLabel(footer))
+                candidate = "API";
+            else if (LooksLikeDocsLabel(candidate) || LooksLikeDocsLabel(footer))
+                candidate = "DOCS";
+            else if (LooksLikeBlogLabel(candidate) || LooksLikeBlogLabel(footer))
+                candidate = "BLOG";
+            else
+                candidate = DefaultBadgeForStyle(styleKey, variantKey);
+        }
+
+        return string.IsNullOrWhiteSpace(candidate)
+            ? DefaultBadgeForStyle(styleKey, variantKey)
+            : candidate;
+    }
+
+    private static string NormalizeFooterLabel(string footerLabel, string badge, string styleKey)
+    {
+        var candidate = TrimSingleLine(footerLabel, 180).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+            return DefaultRouteForStyle(styleKey);
+
+        if (IsRouteLike(candidate))
+            return AbbreviateRouteLabel(NormalizeRouteLabel(candidate));
+
+        if (string.Equals(candidate, badge, StringComparison.OrdinalIgnoreCase))
+            return DefaultRouteForStyle(styleKey);
+
+        if (LooksLikeApiReferenceLabel(candidate))
+            return "/api";
+        if (LooksLikeDocsLabel(candidate))
+            return "/docs";
+        if (LooksLikeBlogLabel(candidate))
+            return "/blog";
+        if (string.Equals(candidate, "home", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(candidate, "index", StringComparison.OrdinalIgnoreCase))
+            return "/";
+
+        var slug = SlugifyRouteLabel(candidate);
+        if (string.IsNullOrWhiteSpace(slug))
+            return DefaultRouteForStyle(styleKey);
+        return AbbreviateRouteLabel("/" + slug);
+    }
+
+    private static string DefaultBadgeForStyle(string styleKey, string variantKey)
+    {
+        if (string.Equals(variantKey, "hero", StringComparison.OrdinalIgnoreCase))
+            return "HOME";
+
+        return styleKey switch
+        {
+            "api" => "API",
+            "docs" => "DOCS",
+            "editorial" => "BLOG",
+            _ => "PAGES"
+        };
+    }
+
+    private static string DefaultRouteForStyle(string styleKey)
+    {
+        return styleKey switch
+        {
+            "api" => "/api",
+            "docs" => "/docs",
+            "editorial" => "/blog",
+            _ => "/"
+        };
+    }
+
+    private static bool IsRouteLike(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var trimmed = value.Trim();
+        return trimmed.StartsWith("/", StringComparison.Ordinal) ||
+               trimmed.Contains('/', StringComparison.Ordinal) ||
+               trimmed.Contains('\\', StringComparison.Ordinal);
+    }
+
+    private static string NormalizeRouteLabel(string value)
+    {
+        var trimmed = value.Replace('\\', '/').Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            return "/";
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
+            trimmed = "/" + trimmed;
+        return trimmed;
+    }
+
+    private static string AbbreviateRouteLabel(string route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return "/";
+
+        var normalized = NormalizeRouteLabel(route);
+        if (normalized.Length <= 40)
+            return normalized;
+
+        var segments = normalized
+            .Trim('/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length <= 1)
+            return normalized[..37] + "...";
+
+        var first = segments[0];
+        var last = segments[^1];
+        if (segments.Length >= 3 &&
+            string.Equals(first, "api", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(segments[1], "powershell", StringComparison.OrdinalIgnoreCase))
+            return $"/api/powershell/.../{last}";
+
+        return $"/{first}/.../{last}";
+    }
+
+    private static bool LooksLikeApiReferenceLabel(string value)
+    {
+        return ContainsToken(value, "api") && ContainsToken(value, "reference");
+    }
+
+    private static bool LooksLikeDocsLabel(string value)
+    {
+        return ContainsToken(value, "docs") || ContainsToken(value, "documentation");
+    }
+
+    private static bool LooksLikeBlogLabel(string value)
+    {
+        return ContainsToken(value, "blog") || ContainsToken(value, "post") || ContainsToken(value, "news");
+    }
+
+    private static bool ContainsToken(string value, string token)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(token))
+            return false;
+        return value.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static string SlugifyRouteLabel(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var sb = new StringBuilder(value.Length);
+        var lastDash = false;
+        foreach (var ch in value.Trim())
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                sb.Append(char.ToLowerInvariant(ch));
+                lastDash = false;
+                continue;
+            }
+
+            if (lastDash)
+                continue;
+
+            sb.Append('-');
+            lastDash = true;
+        }
+
+        return sb
+            .ToString()
+            .Trim('-');
     }
 
     private static string EscapeXml(string value)
