@@ -19,8 +19,7 @@ Emits module dependency configuration segments. These are later used to patch th
 install/package dependencies during a build.
 
 RequiredModule entries are written to the manifest RequiredModules. ExternalModule entries are written to
-PrivateData.PSData.ExternalModuleDependencies and are also mirrored into RequiredModules for runtime import
-compatibility. External modules are not added to packaging dependency bundles.
+PrivateData.PSData.ExternalModuleDependencies (not packaged into artefacts).
 
 Version/Guid values set to Auto or Latest are resolved from installed modules; when
 ResolveMissingModulesOnline is enabled, repository results are used without installing.
