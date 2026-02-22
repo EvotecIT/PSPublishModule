@@ -47,4 +47,55 @@ public class ModuleScaffoldServiceTests
                 Directory.Delete(root, true);
         }
     }
+
+    [Fact]
+    public void EnsureScaffold_UsingRepoTemplates_SeedsReadmeWithDocumentationGuidance()
+    {
+        var repoRoot = FindRepoRoot();
+        var templateRoot = Path.Combine(repoRoot, "Module", "Data");
+        Assert.True(Directory.Exists(templateRoot), $"Template root not found: {templateRoot}");
+
+        var root = Path.Combine(Path.GetTempPath(), "pf-module-scaffold-readme-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var projectRoot = Path.Combine(root, "DocsModule");
+        try
+        {
+            var service = new ModuleScaffoldService(new NullLogger());
+            var result = service.EnsureScaffold(new ModuleScaffoldSpec
+            {
+                ModuleName = "DocsModule",
+                ProjectRoot = projectRoot,
+                TemplateRootPath = templateRoot
+            });
+
+            Assert.True(result.Created);
+
+            var readmePath = Path.Combine(projectRoot, "README.MD");
+            Assert.True(File.Exists(readmePath));
+            var readme = File.ReadAllText(readmePath);
+            Assert.Contains("Documentation Workflow", readme);
+            Assert.Contains("Help\\About\\about_*.help.txt", readme);
+            Assert.Contains("New-ModuleAboutTopic", readme);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    private static string FindRepoRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        for (var i = 0; i < 12 && current is not null; i++)
+        {
+            var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
+            if (File.Exists(marker))
+                return current.FullName;
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate repository root.");
+    }
 }
