@@ -343,8 +343,10 @@ public static partial class WebSiteBuilder
         if (item.Kind == PageKind.Home || item.Kind == PageKind.Section)
             return true;
 
-        if (ShouldGenerateSocialCardForDocsEntry(item))
-            return true;
+        // Docs pages default to the site-level social image unless explicitly overridden
+        // with front matter (meta.social_card: true/false).
+        if (string.Equals(item.Collection, "docs", StringComparison.OrdinalIgnoreCase))
+            return false;
 
         if (string.Equals(item.Collection, "pages", StringComparison.OrdinalIgnoreCase))
             return true;
