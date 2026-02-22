@@ -238,6 +238,36 @@ SHORT DESCRIPTION
     }
 
     [Fact]
+    public void AboutTopicTemplateGenerator_WritesMarkdownTemplateFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-about-template-md-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var output = AboutTopicTemplateGenerator.WriteTemplateFile(
+                outputDirectory: root,
+                topicName: "Troubleshooting",
+                force: false,
+                shortDescription: "Markdown troubleshooting summary.",
+                format: AboutTopicTemplateFormat.Markdown);
+
+            Assert.True(File.Exists(output));
+            Assert.EndsWith("about_Troubleshooting.md", output, StringComparison.OrdinalIgnoreCase);
+
+            var text = File.ReadAllText(output);
+            Assert.Contains("topic: about_Troubleshooting", text);
+            Assert.Contains("# about_Troubleshooting", text);
+            Assert.Contains("Markdown troubleshooting summary.", text);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void AboutTopicWriter_UsesAdditionalSourcePaths_RelativeToStaging()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-about-extra-paths-" + Guid.NewGuid().ToString("N"));

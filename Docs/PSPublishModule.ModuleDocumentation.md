@@ -55,6 +55,12 @@ You can overwrite an existing template with:
 New-ModuleAboutTopic -TopicName 'about_Troubleshooting' -OutputPath '.\Help\About' -Force
 ```
 
+Create a markdown about source template:
+
+```powershell
+New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown
+```
+
 ## Build Outputs
 
 During docs generation:

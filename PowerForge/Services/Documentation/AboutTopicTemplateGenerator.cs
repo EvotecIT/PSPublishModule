@@ -5,6 +5,22 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
+/// Supported output formats for about topic templates.
+/// </summary>
+public enum AboutTopicTemplateFormat
+{
+    /// <summary>
+    /// Legacy about help text format (<c>about_*.help.txt</c>).
+    /// </summary>
+    HelpText = 0,
+
+    /// <summary>
+    /// Markdown format (<c>about_*.md</c>).
+    /// </summary>
+    Markdown = 1
+}
+
+/// <summary>
 /// Creates <c>about_*.help.txt</c> template files for module documentation authoring.
 /// </summary>
 public static class AboutTopicTemplateGenerator
@@ -56,9 +72,47 @@ public static class AboutTopicTemplateGenerator
     }
 
     /// <summary>
+    /// Creates markdown template text for an about topic source file.
+    /// </summary>
+    public static string CreateMarkdownTemplateText(string topicName, string? shortDescription = null)
+    {
+        var normalizedTopic = NormalizeTopicName(topicName);
+        var summary = string.IsNullOrWhiteSpace(shortDescription)
+            ? "Explain what this topic covers."
+            : shortDescription!.Trim();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("---");
+        sb.AppendLine($"topic: {normalizedTopic}");
+        sb.AppendLine("schema: 1.0.0");
+        sb.AppendLine("---");
+        sb.AppendLine($"# {normalizedTopic}");
+        sb.AppendLine();
+        sb.AppendLine("## Short Description");
+        sb.AppendLine();
+        sb.AppendLine(summary);
+        sb.AppendLine();
+        sb.AppendLine("## Long Description");
+        sb.AppendLine();
+        sb.AppendLine("Add detailed usage guidance, context, and caveats.");
+        sb.AppendLine();
+        sb.AppendLine("## Examples");
+        sb.AppendLine();
+        sb.AppendLine("```powershell");
+        sb.AppendLine($"Get-Help {normalizedTopic} -Detailed");
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Writes a template file and returns the full path.
     /// </summary>
-    public static string WriteTemplateFile(string outputDirectory, string topicName, bool force, string? shortDescription = null)
+    public static string WriteTemplateFile(
+        string outputDirectory,
+        string topicName,
+        bool force,
+        string? shortDescription = null,
+        AboutTopicTemplateFormat format = AboutTopicTemplateFormat.HelpText)
     {
         if (string.IsNullOrWhiteSpace(outputDirectory))
             throw new ArgumentException("Output directory is required.", nameof(outputDirectory));
@@ -67,11 +121,14 @@ public static class AboutTopicTemplateGenerator
         Directory.CreateDirectory(fullOutputDirectory);
 
         var normalizedTopic = NormalizeTopicName(topicName);
-        var outputFile = Path.Combine(fullOutputDirectory, normalizedTopic + ".help.txt");
+        var extension = format == AboutTopicTemplateFormat.Markdown ? ".md" : ".help.txt";
+        var outputFile = Path.Combine(fullOutputDirectory, normalizedTopic + extension);
         if (File.Exists(outputFile) && !force)
             throw new IOException($"About topic already exists: {outputFile}");
 
-        var template = CreateTemplateText(normalizedTopic, shortDescription);
+        var template = format == AboutTopicTemplateFormat.Markdown
+            ? CreateMarkdownTemplateText(normalizedTopic, shortDescription)
+            : CreateTemplateText(normalizedTopic, shortDescription);
         File.WriteAllText(outputFile, template, Utf8NoBom);
         return outputFile;
     }

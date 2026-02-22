@@ -22,6 +22,10 @@ namespace PSPublishModule;
 /// <summary>Overwrite an existing topic template</summary>
 /// <code>New-ModuleAboutTopic -TopicName 'about_Configuration' -OutputPath '.\Help\About' -Force</code>
 /// </example>
+/// <example>
+/// <summary>Create markdown about topic source</summary>
+/// <code>New-ModuleAboutTopic -TopicName 'Troubleshooting' -OutputPath '.\Help\About' -Format Markdown</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ModuleAboutTopic", SupportsShouldProcess = true)]
 public sealed class NewModuleAboutTopicCommand : PSCmdlet
 {
@@ -45,6 +49,13 @@ public sealed class NewModuleAboutTopicCommand : PSCmdlet
     public string ShortDescription { get; set; } = "Explain what this topic covers.";
 
     /// <summary>
+    /// Output format for the scaffolded about topic file.
+    /// </summary>
+    [Parameter]
+    public AboutTopicTemplateFormat Format { get; set; } =
+        AboutTopicTemplateFormat.HelpText;
+
+    /// <summary>
     /// Overwrite existing file if it already exists.
     /// </summary>
     [Parameter]
@@ -64,7 +75,8 @@ public sealed class NewModuleAboutTopicCommand : PSCmdlet
         var root = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory;
         var outputDirectory = ResolveOutputDirectory(root, OutputPath);
         var normalizedTopic = AboutTopicTemplateGenerator.NormalizeTopicName(TopicName);
-        var filePath = Path.Combine(outputDirectory, normalizedTopic + ".help.txt");
+        var extension = Format == AboutTopicTemplateFormat.Markdown ? ".md" : ".help.txt";
+        var filePath = Path.Combine(outputDirectory, normalizedTopic + extension);
 
         var action = File.Exists(filePath) ? "Overwrite about topic template" : "Create about topic template";
         if (!ShouldProcess(filePath, action))
@@ -76,7 +88,8 @@ public sealed class NewModuleAboutTopicCommand : PSCmdlet
                 outputDirectory: outputDirectory,
                 topicName: normalizedTopic,
                 force: Force.IsPresent,
-                shortDescription: ShortDescription);
+                shortDescription: ShortDescription,
+                format: Format);
 
             if (PassThru.IsPresent)
                 WriteObject(created);
