@@ -43,7 +43,7 @@ public sealed class ModuleScaffoldService
         _logger.Info($"Preparing module structure for {moduleName} in {basePath}");
 
         Directory.CreateDirectory(projectRoot);
-        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build" })
+        foreach (var folder in new[] { "Private", "Public", "Examples", "Ignore", "Build", Path.Combine("Help", "About") })
             Directory.CreateDirectory(Path.Combine(projectRoot, folder));
 
         var guid = Guid.NewGuid().ToString();
@@ -69,6 +69,8 @@ public sealed class ModuleScaffoldService
                 PatchInitialModuleTemplate(f.Dest, moduleName, guid);
         }
 
+        EnsureAboutTopicSeed(projectRoot, moduleName);
+
         _logger.Success($"Preparing module structure for {moduleName} in {basePath}. Completed.");
         return new ModuleScaffoldResult(projectRoot, created: true, moduleGuid: guid);
     }
@@ -78,6 +80,29 @@ public sealed class ModuleScaffoldService
         var content = File.ReadAllText(filePath);
         content = content.Replace("`$GUID", guid).Replace("`$ModuleName", moduleName);
         File.WriteAllText(filePath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+    }
+
+    private void EnsureAboutTopicSeed(string projectRoot, string moduleName)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot) || string.IsNullOrWhiteSpace(moduleName))
+            return;
+
+        var aboutDir = Path.Combine(projectRoot, "Help", "About");
+        Directory.CreateDirectory(aboutDir);
+
+        var topicName = $"about_{moduleName}_Overview";
+        try
+        {
+            AboutTopicTemplateGenerator.WriteTemplateFile(
+                outputDirectory: aboutDir,
+                topicName: topicName,
+                force: false,
+                shortDescription: $"Overview for {moduleName} module.");
+        }
+        catch (IOException)
+        {
+            // Existing seed file is fine.
+        }
     }
 
     private static string ResolveTemplateRoot(string? explicitRoot)

@@ -24,6 +24,8 @@ Because `-StartClean` and `-UpdateWhenNew` are enabled, manual edits in `Module/
 Recommended source layout in module repos:
 
 - `Help/About/about_<Topic>.help.txt`
+- New scaffolds created via `Build-Module -ModuleName ...` now seed:
+  - `Help/About/about_<ModuleName>_Overview.help.txt`
 
 Use build configuration to include extra about-topic roots:
 
