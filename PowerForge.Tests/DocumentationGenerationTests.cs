@@ -315,6 +315,71 @@ SHORT DESCRIPTION
         }
     }
 
+    [Fact]
+    public void XmlDocCommentEnricher_SimplifiesCrefTokensInDescriptions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-xmldoc-cref-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var assemblyPath = Path.Combine(root, "DemoModule.dll");
+            var xmlPath = Path.ChangeExtension(assemblyPath, ".xml");
+            File.WriteAllText(assemblyPath, string.Empty);
+
+            File.WriteAllText(xmlPath, """
+<doc>
+  <members>
+    <member name="T:Demo.Namespace.MyCommand">
+      <summary>Output path used with <see cref="P:PSPublishModule.InvokeDotNetPublishCommand.JsonOnly"/>.</summary>
+      <remarks>Accepts <see cref="T:PowerForge.ArtefactCopyMapping[]"/> entries.</remarks>
+    </member>
+    <member name="P:Demo.Namespace.MyCommand.ConfigPath">
+      <summary>See <see cref="P:Demo.Namespace.MyCommand.ConfigPath"/> for configuration path.</summary>
+    </member>
+  </members>
+</doc>
+""");
+
+            var payload = new DocumentationExtractionPayload
+            {
+                Commands = new List<DocumentationCommandHelp>
+                {
+                    new()
+                    {
+                        Name = "Invoke-Demo",
+                        CommandType = "Cmdlet",
+                        ImplementingType = "Demo.Namespace.MyCommand",
+                        AssemblyPath = assemblyPath,
+                        Synopsis = string.Empty,
+                        Description = string.Empty,
+                        Parameters = new List<DocumentationParameterHelp>
+                        {
+                            new() { Name = "ConfigPath", Description = string.Empty }
+                        }
+                    }
+                }
+            };
+
+            new XmlDocCommentEnricher(new NullLogger()).Enrich(payload);
+
+            var cmd = Assert.Single(payload.Commands);
+            Assert.Contains("JsonOnly", cmd.Synopsis);
+            Assert.DoesNotContain("P:PSPublishModule.InvokeDotNetPublishCommand.JsonOnly", cmd.Synopsis);
+            Assert.Contains("ArtefactCopyMapping[]", cmd.Description);
+            Assert.DoesNotContain("T:PowerForge.ArtefactCopyMapping[]", cmd.Description);
+
+            var parameter = Assert.Single(cmd.Parameters);
+            Assert.Contains("ConfigPath", parameter.Description);
+            Assert.DoesNotContain("P:Demo.Namespace.MyCommand.ConfigPath", parameter.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     private static bool HasIsolatedLf(string text)
     {
         if (string.IsNullOrEmpty(text)) return false;

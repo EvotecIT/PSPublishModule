@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -184,6 +185,10 @@ internal sealed class XmlDocCommentEnricher
 
     private sealed class XmlDocFile
     {
+        private static readonly Regex CrefTokenRegex = new(
+            @"\b([A-Z]):([A-Za-z_][A-Za-z0-9_`]*(?:\.[A-Za-z_][A-Za-z0-9_`]*)*(?:\[\])?)\b",
+            RegexOptions.CultureInvariant);
+
         private readonly Dictionary<string, XmlDocMember> _members;
 
         private XmlDocFile(Dictionary<string, XmlDocMember> members) => _members = members;
@@ -256,6 +261,8 @@ internal sealed class XmlDocCommentEnricher
 
                 if (string.IsNullOrWhiteSpace(text))
                     text = !string.IsNullOrWhiteSpace(cref) ? cref! : string.Empty;
+                if (!string.IsNullOrWhiteSpace(text))
+                    text = NormalizeCrefLikeTokens(text);
 
                 if (string.IsNullOrWhiteSpace(text) && string.IsNullOrWhiteSpace(uri))
                     continue;
@@ -333,7 +340,7 @@ internal sealed class XmlDocCommentEnricher
                 var text = element.Value;
                 if (!string.IsNullOrWhiteSpace(text)) return text;
                 if (!string.IsNullOrWhiteSpace(href)) return href!;
-                if (!string.IsNullOrWhiteSpace(cref)) return cref!;
+                if (!string.IsNullOrWhiteSpace(cref)) return SimplifyCrefToken(cref!);
                 return string.Empty;
             }
 
@@ -349,7 +356,39 @@ internal sealed class XmlDocCommentEnricher
                 .Select(l => l.Trim())
                 .Where(l => l.Length > 0)
                 .ToArray();
-            return string.Join(Environment.NewLine, lines);
+            return NormalizeCrefLikeTokens(string.Join(Environment.NewLine, lines));
+        }
+
+        private static string NormalizeCrefLikeTokens(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+            return CrefTokenRegex.Replace(input, match =>
+            {
+                var token = match.Value;
+                var simplified = SimplifyCrefToken(token);
+                return string.IsNullOrWhiteSpace(simplified) ? token : simplified;
+            });
+        }
+
+        private static string SimplifyCrefToken(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return string.Empty;
+
+            var trimmed = token.Trim();
+            if (trimmed.Length < 4 || trimmed[1] != ':')
+                return trimmed;
+
+            var body = trimmed.Substring(2);
+            var methodSigIndex = body.IndexOf('(');
+            if (methodSigIndex >= 0)
+                body = body.Substring(0, methodSigIndex);
+
+            var lastDot = body.LastIndexOf('.');
+            if (lastDot >= 0 && lastDot < body.Length - 1)
+                body = body.Substring(lastDot + 1);
+
+            return string.IsNullOrWhiteSpace(body) ? trimmed : body;
         }
     }
 
